@@ -1,0 +1,350 @@
+{
+  "AegisPolicy": {
+    "Cohesion": {
+      "MaxMembersPerClass": 35,
+      "MaxMethodFieldRatio": 5.0
+    },
+    "ErrorHandling": {
+      "AllowEmptyCatch": false,
+      "AllowGenericCatch": false,
+      "RequireLoggingOrRethrow": true
+    },
+    "ApiConsistency": {
+      "EnforceLowercaseRoutes": true,
+      "EnforceNoTrailingSlash": true,
+      "CheckPluralization": true
+    },
+    "DependencyGraph": {
+      "MaxDependenciesPerModule": 8
+    },
+    "Complexity": {
+      "MaxCyclomaticComplexity": 8,
+      "MaxLinesPerMethod": 40
+    },
+    "Maintainability": {
+      "MinMaintainabilityIndex": 80,
+      "RequireCommentDensityCheck": true,
+      "MinCommentDensity": 8.0,
+      "MaxLinesPerFile": 400,
+      "ComplexityWeight": 2.5,
+      "LineWeight": 0.015,
+      "IncludeDocCommentsInScore": true
+    },
+    "Security": {
+      "ScanForHardcodedSecrets": true,
+      "EnforceSafeCryptography": true,
+      "DetectWeakSSLProtocols": true
+    },
+    "Coupling": {
+      "MaxImportsPerFile": 20,
+      "MaxInternalModuleRefs": 10,
+      "MaxExternalDependencies": 30,
+      "DeepDependencyScan": true,
+      "DetectCircularDependencies": true
+    },
+    "Repository": {
+      "RequiredFiles": [ "README.md", "LICENSE", ".editorconfig" ],
+      "CiPaths": [ ".github/workflows", "azure-pipelines.yml" ],
+      "MaxFileSizeBytes": 10485760,
+      "MaxTodoDensity": 3,
+      "MaxProjectsPerRepo": 8,
+      "RequireSingleRootSolution": true,
+      "EnforceGovernanceFiles": true,
+      "EnforceCiPresence": true,
+      "CheckLargeFiles": true,
+      "CheckTodoDensity": true
+    },
+    "Architecture": {
+      "EnforceLayerBoundaries": true,
+      "AllowedDependencies": {
+        "Api": [ "App", "Domain" ],
+        "App": [ "Domain" ],
+        "Domain": [],
+        "Infrastructure": [ "Domain" ]
+      },
+      "LayerHints": {
+        "Api": [ "Api", "Controllers" ],
+        "App": [ "Application", "Services" ],
+        "Domain": [ "Domain", "Models", "Entities" ],
+        "Infrastructure": [ "Infrastructure", "Data", "Persistence" ]
+      },
+      "EnforcementByLanguage": {
+        "CSharp": "Strict",
+        "Java": "Strict",
+        "Python": "Advisory",
+        "TypeScript": "Strict"
+      },
+      "Node": {
+        "DisallowEval": true,
+        "DisallowChildProcess": true,
+        "CheckUnhandledPromises": true,
+        "ValidatePackageJsonScripts": true,
+        "EnforceESModules": true,
+        "EnforceRequireUsage": true
+      },
+      "CircularDependency": {
+        "Enabled": true,
+        "MaxDependencyDepth": 8,
+        "TreatAsError": true,
+        "CrossLanguageDetection": true
+      },
+      "Configuration": {
+        "Enabled": true,
+        "RequiredFiles": [
+          "appsettings.json",
+          "appsettings.Development.json",
+          ".env"
+        ],
+        "EnforceEnvVariables": true,
+        "ForbiddenKeys": [
+          "password",
+          "secret",
+          "apikey",
+          "connectionstring",
+          "token"
+        ],
+        "DetectDuplicates": true,
+        "EnforceKeyCasing": true,
+        "ValidateSyntax": true,
+        "MaxFileSizeBytes": 2097152,
+        "RequirementsFiles": [ "requirements.txt", "requirements-dev.txt" ]
+      },
+      "Transaction": {
+        "Enabled": true,
+        "FrameworkHints": {
+          "CSharp": [ "TransactionScope", "BeginTransaction", "DbContextTransaction" ],
+          "Java": [
+            "@Transactional",
+            "EntityManager.getTransaction()",
+            "Connection.setAutoCommit(false)"
+          ],
+          "Python": [
+            "session.begin()",
+            "with session:",
+            "with transaction.atomic()"
+          ],
+          "Node": [ "sequelize.transaction", "mongoose.startSession" ]
+        },
+        "RequireExplicitCommit": true,
+        "RequireRollbackOnFailure": true,
+        "WarnReadOnlyTransactions": true,
+        "DetectRawSqlConcatenation": true,
+        "AllowParameterizedQueriesOnly": true,
+        "MaxTransactionBlockLines": 100,
+        "DetectNestedTransactions": true
+      },
+      "Performance": {
+        "Enabled": true,
+        "MaxNestedLoopDepth": 3,
+        "MaxLoopBodyLength": 80,
+        "RequireAsyncForIOMethods": true,
+        "DisallowBlockingCalls": true,
+        "CheckThreadSleepUsage": true,
+        "DetectStringConcatenationInLoops": true,
+        "DetectLargeCollectionsInitialization": true,
+        "LargeCollectionThreshold": 1000,
+        "WarnThreadCreationInHotPaths": true,
+        "DetectSynchronousWaits": true,
+        "SuggestAsyncStreams": true
+      },
+      "DesignPatterns": {
+        "EnforceRepositoryPattern": true,
+        "RequireRepositoryInterface": true,
+        "EnforceSingletonPattern": true,
+        "RequireThreadSafety": true,
+        "RequireLazyInitialization": true,
+        "AllowMultipleSingletons": false,
+        "EnforceFactoryPattern": true,
+        "RequireFactoryInterface": false,
+        "MaxFactoryInstantiations": 3,
+        "EnforceBuilderPattern": true,
+        "RequireFluentInterface": true,
+        "RequireBuildMethod": true,
+        "SuggestImmutability": true,
+        "EnforceMediatorPattern": true,
+        "RequireMediatorInterface": true,
+        "MediatorSuffix": "Mediator",
+        "MaxHandlersPerFile": 5,
+        "MaxMediatorCallsPerFile": 10,
+        "EnforceCommandPattern": true,
+        "RequireCommandHandlerPair": true,
+        "DetectGodCommandObjects": true,
+        "MaxMethodsPerCommand": 3,
+        "ForbiddenInCommand": [ "DbContext", "HttpClient", "Repository", "Service" ],
+        "EnforceStrategyPattern": true,
+        "RequireStrategyInterface": true,
+        "DetectConditionalStrategySwitch": true,
+        "WarnMultipleStrategiesPerClass": true,
+        "EnforceObserverPattern": true,
+        "RequireObserverInterface": true,
+        "DetectLeakingSubscriptions": true,
+        "DisallowManualPolling": true,
+        "DetectGodClass": true,
+        "GodClassMethodThreshold": 20,
+        "GodClassLineThreshold": 600,
+        "DetectCircularDependencies": true,
+        "DetectAnemicDomainModel": true,
+        "AnemicPropertyRatioThreshold": 70,
+        "RequirePatternSuffix": true,
+        "AllowedSuffixes": [
+          "Repository",
+          "Service",
+          "Factory",
+          "Handler",
+          "Strategy",
+          "Mediator",
+          "Observer",
+          "Builder"
+        ],
+        "EnablePatternHints": true,
+        "AllowPatternOverlap": false,
+        "DetectGodClasses": true,
+        "MaxMethodsPerClass": 20,
+        "MaxLinesPerClass": 600,
+        "DetectAnemicDomainModels": true,
+        "MinPropertiesForDomainClass": 3,
+        "MaxAllowedMethodsForAnemic": 1,
+        "CheckEncapsulation": true,
+        "LayerScaling": {
+          "Domain": 1.0,
+          "Application": 1.25,
+          "Infrastructure": 1.5,
+          "Api": 1.2
+        },
+        "EnforceDecoratorPattern": true,
+        "RequireDecoratorConstructorInjection": true,
+        "RequireDecoratorDelegation": true,
+        "EnforceFacadePattern": true,
+        "MaxDependenciesPerFacade": 4,
+        "MaxPublicMethodsPerFacade": 8,
+        "MaxServiceCallsPerFacade": 10,
+        "MediatorFrameworkHints": {
+          "FranzMediator": [
+            "IDispatcher",
+            "ICommandHandler",
+            "IEventHandler",
+            "IQueryHandler",
+            "INotificationHandler"
+          ],
+          "MediatR": [
+            "IMediator",
+            "IRequestHandler",
+            "INotificationHandler",
+            "IRequest"
+          ]
+        },
+        "MediatorMethodHints": [
+          "Send",
+          "SendAsync",
+          "Publish",
+          "PublishAsync",
+          "Dispatch"
+        ],
+        "MediatorApplicableLanguages": {
+          "CSharp": true,
+          "Java": false,
+          "TypeScript": false,
+          "Python": false
+        }
+      }
+    },
+
+    "Naming": {
+      "Enabled": true,
+      "EnforcePascalCase": true,
+      "RequireInterfacePrefix": true,
+      "EnforceSuffixForModels": true,
+      "AllowedModelSuffixes": [ "Dto", "ViewModel", "Model" ],
+      "EnforceComponentSuffix": true,
+      "AllowedComponentSuffixes": [
+        "Controller",
+        "Service",
+        "Repository",
+        "Manager",
+        "Handler",
+        "Adapter"
+      ],
+      "EnforceCamelCaseForMethods": true,
+      "AllowedMethodPrefixes": [
+        "Get",
+        "Set",
+        "Load",
+        "Create",
+        "Update",
+        "Delete",
+        "Add",
+        "Remove",
+        "Find",
+        "Calculate",
+        "Handle",
+        "Resolve"
+      ],
+      "StaticMethodsPascalCase": true,
+      "AllowSnakeCase": false,
+      "AllowAllCapsConstants": true,
+      "EnforceCamelCaseForVariables": true,
+      "EnforcePascalCaseForProperties": true,
+      "EnforceFileNameMatch": true,
+      "EnforcePluralization": true,
+      "EnforceNamespaceStructure": true,
+      "AllowLowercaseNamespaces": false,
+      "MinOverallCompliance": 95,
+      "MinCategoryCompliance": 95,
+      "DetectAcronymViolations": true,
+      "EnforceAcronymNormalization": true,
+      "DisallowTestOrTempPrefixes": true,
+      "ForbiddenPrefixes": [
+        "Tmp",
+        "Temp",
+        "Foo",
+        "Bar",
+        "Test",
+        "Dummy",
+        "Sample",
+        "Old",
+        "Legacy"
+      ],
+      "DetectRedundantSuffixes": true
+    },
+
+    "Dependency": {
+      "Enabled": true,
+      "CheckOutdatedPackages": true,
+      "MinDependencyFreshness": 95,
+      "DetectVersionDriftAcrossProjects": true,
+      "DisallowUnpinnedVersions": true,
+      "DisallowLocalFileReferences": true,
+      "DisallowGitDependencies": true,
+      "DisallowWildcardVersions": true,
+      "CheckUnusedReferences": true,
+      "MaxUnusedReferences": 0,
+      "DetectDuplicateDependencies": true,
+      "DetectUnreferencedTransitiveDependencies": true,
+      "MaxDependencyDepth": 5,
+      "WarnOnCrossModuleDependencies": true,
+      "DetectCircularProjectReferences": false,
+      "EnforceDependencyScopeIsolation": true,
+      "AllowedPackageManagers": [ "nuget", "npm", "pip" ],
+      "DisallowedDependencies": [
+        "left-pad",
+        "lodash-es",
+        "Newtonsoft.Json"
+      ],
+      "RequireLockFiles": true,
+      "AllowedLockFiles": [
+        "packages.lock.json",
+        "package-lock.json",
+        "poetry.lock",
+        "Pipfile.lock"
+      ],
+      "WarnIfMultipleLockFiles": true,
+      "MinDependencyHealthScore": 90,
+      "MaxTotalDependencies": 150,
+      "MaxPerModuleDependencies": 40,
+      "MaxOutdatedPercentage": 5,
+      "FailOnCriticalDependencyIssues": true,
+      "FailOnUnpinnedVersions": true,
+      "FailOnHighRiskDependencies": true
+    }
+  }
+}

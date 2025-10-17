@@ -1,0 +1,169 @@
+# ========================================
+# 🧠 PRODUCTION-GRADE .GITIGNORE for Visual Studio
+# Compatible with .NET 6–10, SDK-style projects, MAUI, WPF, WinUI, ASP.NET, etc.
+# ========================================
+
+## Ignore build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+[Tt]est[Rr]esults/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+[Bb]uild/
+[Bb]uild[Rr]elease/
+[Bb]uild[Dd]ebug/
+artifacts/
+.publish/
+.publishprofiles/
+_ReSharper.Caches/
+
+## Rider / ReSharper / VS settings
+.idea/
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Build tools and coverage
+*.ncb
+*.obj
+*.pdb
+*.idb
+*.tlog
+*.log
+*.vspscc
+*.vssscc
+*.tmp
+*.tmp_proj
+*.cache
+*.ilk
+*.aps
+*.pch
+*.ipch
+*.vsp
+*.vsix
+*.tlog
+*.lastcodeanalysissucceeded
+*.codeanalysis*
+*.coverage
+*.coveragexml
+*.VisualState.xml
+TestResult.xml
+*.TestResults/
+*.trx
+
+## NuGet
+*.nupkg
+*.snupkg
+*.nuspec
+*.nuget.props
+*.nuget.targets
+packages/
+.nuget/
+# Keep package reference lock for reproducible builds
+!packages.config
+!*.deps.json
+!*.runtimeconfig.json
+*.lock.json
+
+## Azure / CI/CD
+[Aa]zure[Pp]ipelines/
+[Aa]zureDevOps/
+*.publishsettings
+*.azurePubxml
+.env
+.env.local
+.env.*.local
+
+## User secrets and keys
+**/secrets.json
+*.pfx
+*.key
+*.cer
+*.snk
+
+## Generated files
+Generated_Code/
+_ServiceReferences/
+*_i.c
+*_p.c
+*_h.h
+*.g.*
+*.designer.cs
+*.AssemblyInfo.cs
+*_i.h
+*.g.cs
+*.AssemblyAttributes.cs
+
+## Entity Framework / Migrations cache
+Migrations/
+efpt.*
+*.dbmdl
+*.bak
+*.sqlproj.user
+
+## OS generated
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+## Tooling
+*.psess
+*.vspx
+*.sap
+*.tss
+*.opendb
+*.sdf
+*.sqlite
+*.sqlite3
+*.db
+*.mdf
+*.ldf
+
+## DotNet Tools
+dotnet-tools.json
+.localhistory/
+*.rsuser
+
+## JetBrains Rider
+.idea/
+*.DotSettings.user
+
+## Logs / Profiling
+*.etl
+*.log
+*.trace
+*.svclog
+*.bak
+*.old
+
+## Build metadata
+Directory.Build.props.user
+Directory.Build.targets.user
+global.json.user
+
+## Temporary publish folders
+publish/
+obj/**/project.assets.json
+project.lock.json
+
+# ========================================
+# ✅ Keep essential metadata
+# ========================================
+!.editorconfig
+!.gitattributes
+!.gitignore
+!.github/
+!.azure-pipelines.yml
+!Directory.Build.props
+!Directory.Packages.props
+!global.json
+

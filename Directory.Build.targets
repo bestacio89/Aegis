@@ -1,0 +1,29 @@
+﻿<Project>
+  <!-- ===============================
+       Post-Build Targets
+       =============================== -->
+
+  <!-- 1️⃣  Generate build banner -->
+  <Target Name="PrintBuildBanner" BeforeTargets="Build">
+    <Message Text="🔨 Building $(MSBuildProjectName) ($(Configuration)) under Aegis governance..." Importance="High" />
+  </Target>
+
+  <!-- 2️⃣  Copy XML docs to artifacts folder -->
+  <Target Name="CopyDocsToArtifacts" AfterTargets="Build">
+    <ItemGroup>
+      <DocFiles Include="$(TargetDir)*.xml" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DocFiles)" DestinationFolder="$(SolutionDir)artifacts\docs\" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- 3️⃣  Generate Source Link PDBs (if public builds) -->
+  <Target Name="GenerateSourceLink" AfterTargets="Pack">
+    <Message Text="Generating SourceLink metadata for $(PackageId)" Importance="Low" />
+  </Target>
+
+  <!-- 4️⃣  Optional: enforce architecture tests on build -->
+  <Target Name="RunArchitectureTests" AfterTargets="Build"
+          Condition="'$(Configuration)'=='Release' AND Exists('$(SolutionDir)tests\Aegis.Tests.Architecture\bin\$(Configuration)\net9.0\Aegis.Tests.Architecture.dll')">
+    <Exec Command="dotnet test $(SolutionDir)tests\Aegis.Tests.Architecture\ --no-build --verbosity minimal" />
+  </Target>
+</Project>

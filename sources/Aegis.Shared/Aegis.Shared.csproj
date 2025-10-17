@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared build configuration -->
+
+ 
+
+  <!-- =============================================
+       AEGIS SHARED — Common Models & Utilities
+       ============================================= -->
+  <PropertyGroup>
+    <AssemblyName>Aegis.Shared</AssemblyName>
+    <RootNamespace>Aegis.Shared</RootNamespace>
+    <Description>
+      Shared models, DTOs, and utilities used across Aegis modules.
+    </Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <UserSecretsId>90fc8dbd-435a-424a-aec2-dbf55b46add1</UserSecretsId>
+  </PropertyGroup>
+
+  <!-- =============================================
+       Dependencies (minimal & fundamental)
+       ============================================= -->
+  <ItemGroup>
+    <!-- Base Franz framework abstractions -->
+    <PackageReference Include="Franz.Common" Version="1.6.14" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="6.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.10" />
+  </ItemGroup>
+
+</Project>

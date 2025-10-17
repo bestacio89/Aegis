@@ -1,0 +1,56 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared build configuration -->
+
+
+
+  <!-- =============================================
+       AEGIS SDK — Extensibility & Plugin Contracts
+       ============================================= -->
+  <PropertyGroup>
+    <AssemblyName>Aegis.SDK</AssemblyName>
+    <RootNamespace>Aegis.SDK</RootNamespace>
+    <Description>
+      Extensibility SDK for Aegis.
+      Defines contracts for rules, analyzers, and plugin modules.
+    </Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- NuGet Metadata -->
+    <PackageId>Aegis.SDK</PackageId>
+    <Authors>Bernardo Estacio Abreu</Authors>
+    <Company>AjnaTellus Systems</Company>
+    <Product>Aegis</Product>
+    <RepositoryUrl>https://dev.azure.com/Ajna/Aegis</RepositoryUrl>
+    <Copyright>© 2025 AjnaTellus Systems</Copyright>
+
+    <!-- SDK assemblies are usually library-only -->
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <!-- =============================================
+       Folder Structure
+       ============================================= -->
+
+  <!-- =============================================
+       Project References
+       ============================================= -->
+  <ItemGroup>
+    <ProjectReference Include="..\Aegis.Core\Aegis.Core.csproj" />
+    <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />
+  </ItemGroup>
+
+  <!-- =============================================
+       Dependencies (explicit, minimal)
+       ============================================= -->
+  <ItemGroup>
+    <!-- Franz DI enables plugin/service registration -->
+    <PackageReference Include="Franz.Common.DependencyInjection" Version="1.6.14" />
+    <PackageReference Include="Franz.Common.Logging" Version="1.6.14" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="9.0.10" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Cli\" />
+  </ItemGroup>
+
+</Project>

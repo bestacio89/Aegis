@@ -1,0 +1,61 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared build configuration -->
+
+
+
+  <!-- =============================================
+       AEGIS WPF FRONTEND — Desktop Dashboard
+       ============================================= -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+
+    <!-- Inherit base TargetFramework from Directory.Build.props -->
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+
+    <AssemblyName>Aegis.App.Wpf</AssemblyName>
+    <RootNamespace>Aegis.App.Wpf</RootNamespace>
+    <Description>
+      WPF Dashboard for Aegis — visualization of architecture audits, rule results, and reports.
+    </Description>
+  </PropertyGroup>
+
+  <!-- =============================================
+       UI / Views
+       ============================================= -->
+  <ItemGroup>
+    <Folder Include="Views\" />
+    <Folder Include="ViewModels\" />
+    <Folder Include="Resources\" />
+  </ItemGroup>
+
+  <!-- =============================================
+       Dependencies (explicit now)
+       ============================================= -->
+  <ItemGroup>
+    <!-- WPF UI framework -->
+    <PackageReference Include="MahApps.Metro" Version="2.4.11" />
+
+    <!-- MVVM support -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+
+    <!-- Logging -->
+    <PackageReference Include="Franz.Common.Logging" Version="1.6.14" />
+
+
+    <!-- Dependency injection -->
+    <PackageReference Include="Franz.Common.DependencyInjection" Version="1.6.14" />
+  </ItemGroup>
+
+  <!-- =============================================
+       Internal References
+       ============================================= -->
+  <ItemGroup>
+    <ProjectReference Include="..\Aegis.Core\Aegis.Core.csproj" />
+    <ProjectReference Include="..\Aegis.Infrastructure\Aegis.Infrastructure.csproj" />
+    <ProjectReference Include="..\Aegis.Sdk\Aegis.Sdk.csproj" />
+    <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,4 +1,5 @@
 ﻿using Aegis.Sdk.Contracts;
+using Aegis.Shared.Contracts;
 using Aegis.Shared.Models.Policies;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,17 +18,11 @@ public static class PluginRegistrationExtensions
         return services;
     }
 
-    public static IServiceCollection AddAegisScanner<TScanner>(this IServiceCollection services)
-        where TScanner : class, IScanner
-    {
-        services.AddSingleton<IScanner, TScanner>();
-        return services;
-    }
 
-    public static IServiceCollection AddAegisReportWriter<TWriter>(this IServiceCollection services)
-        where TWriter : class, IReportWriter
+    public static IServiceCollection AddAegisReportExporter<TExporter>(this IServiceCollection services)
+        where TExporter : class, IReportExporter
     {
-        services.AddSingleton<IReportWriter, TWriter>();
+        services.AddSingleton<IReportExporter, TExporter>();
         return services;
     }
 

@@ -1,5 +1,4 @@
 ﻿using Aegis.Sdk.Contracts;
-using Aegis.SDK.RuleContracts;
 using Aegis.Shared.Contracts;
 using Franz.Common.DependencyInjection;
 using Franz.Common.DependencyInjection.Extensions;
@@ -35,10 +34,7 @@ public static class PluginRegistrar
             .AddClasses(c => c.AssignableTo<IEvaluator>())
                 .AsImplementedInterfaces()
                 .WithScopedLifetime()
-            .AddClasses(c => c.AssignableTo<IRule>())
-                .AsImplementedInterfaces()
-                .WithScopedLifetime()
-            .AddClasses(c => c.AssignableTo<IReportWriter>())
+            .AddClasses(c => c.AssignableTo<IReportExporter>())
                 .AsImplementedInterfaces()
                 .WithScopedLifetime()
             .AddClasses(c => c.AssignableTo<IPlugin>())

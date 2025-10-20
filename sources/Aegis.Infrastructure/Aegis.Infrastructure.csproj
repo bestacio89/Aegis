@@ -1,0 +1,58 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared build configuration -->
+
+  
+
+  <!-- =============================================
+       AEGIS INFRASTRUCTURE — Persistence & Reporting Layer
+       ============================================= -->
+  <PropertyGroup>
+    <AssemblyName>Aegis.Infrastructure</AssemblyName>
+    <RootNamespace>Aegis.Infrastructure</RootNamespace>
+    <Description>
+      Infrastructure components for Aegis.
+      Handles persistence, reporting, and external integrations.
+    </Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- =============================================
+       Folder Structure (for clarity in Solution Explorer)
+       ============================================= -->
+  <ItemGroup>
+    <Folder Include="Integration\" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Franz.Common" Version="1.6.14" />
+    <PackageReference Include="Franz.Common.Business" Version="1.6.14" />
+    <PackageReference Include="Franz.Common.DependencyInjection" Version="1.6.14" />
+    <PackageReference Include="Franz.Common.EntityFramework" Version="1.6.14" />
+    <PackageReference Include="Franz.Common.Errors" Version="1.6.14" />
+    <PackageReference Include="Franz.Common.Http.EntityFramework" Version="1.6.14" />
+    <PackageReference Include="Franz.Common.Mediator" Version="1.6.14" />
+    <PackageReference Include="Franz.Common.Reflection" Version="1.6.14" />
+  </ItemGroup>
+
+  <!-- =============================================
+       Project References
+       ============================================= -->
+  <ItemGroup>
+    <ProjectReference Include="..\Aegis.Core\Aegis.Core.csproj" />
+    <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />
+  </ItemGroup>
+
+  <!-- =============================================
+       Dependencies (explicit, fine-grained)
+       ============================================= -->
+  
+  
+  
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0' Or '$(TargetFramework)' == 'net9.0-windows10.0.19041.0'">
+    <PackageReference Include="QuestPDF" Version="2025.7.3" />
+    <PackageReference Include="RazorLight" Version="2.3.1" />
+    <PackageReference Include="Franz.Common.Logging" Version="1.6.14" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+</Project>

@@ -28,19 +28,25 @@
       "MaxLinesPerFile": 400,
       "ComplexityWeight": 2.5,
       "LineWeight": 0.015,
-      "IncludeDocCommentsInScore": true
+      "IncludeDocCommentsInScore": true,
+      "Factor": 1.0,
+      "HealthImpactWeight": 0.5,
+      "CriticalThresshold": 50
     },
     "Security": {
       "ScanForHardcodedSecrets": true,
       "EnforceSafeCryptography": true,
-      "DetectWeakSSLProtocols": true
+      "DetectWeakSSLProtocols": true,
+      "Enabled": true,
+      "minimumScore": 75.0
     },
     "Coupling": {
       "MaxImportsPerFile": 20,
       "MaxInternalModuleRefs": 10,
       "MaxExternalDependencies": 30,
       "DeepDependencyScan": true,
-      "DetectCircularDependencies": true
+      "DetectCircularDependencies": true,
+      "MaxCouplingRatio": 0.75
     },
     "Repository": {
       "RequiredFiles": [ "README.md", "LICENSE", ".editorconfig" ],

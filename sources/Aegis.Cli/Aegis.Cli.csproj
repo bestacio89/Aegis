@@ -17,6 +17,7 @@
 
 
   <ItemGroup>
+    <ProjectReference Include="..\Aegis.Infrastructure\Aegis.Infrastructure.csproj" />
     <ProjectReference Include="..\Aegis.Sdk\Aegis.Sdk.csproj" />
   </ItemGroup>
 

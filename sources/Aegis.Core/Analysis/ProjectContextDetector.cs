@@ -1,417 +1,339 @@
-﻿using Aegis.Core.Diagnostics;
-using Aegis.Shared.Diagnostics;
+﻿using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Xml.Linq;
+using System.Text.RegularExpressions;
 using Aegis.Shared.Enums;
 using Aegis.Shared.Models;
-using Franz.Common.Errors;
-using System.IO;
-using System.Text.Json;
-using Aegis.Shared.Utilities;
 
 namespace Aegis.Core.Analysis;
 
 /// <summary>
-/// Automatically detects the language, framework, and architectural layer
-/// of a given project path, caching results to accelerate future scans.
+/// 🔍 Detects and infers the structural, architectural, and technological
+/// profile of a project deterministically, prior to evaluation.
 /// </summary>
 public static class ProjectContextDetector
 {
-    private const string CacheFile = "aegis.context.cache.json";
-    private static readonly string CachePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "Aegis",
-        CacheFile
-    );
-
-    private static readonly Dictionary<string, ProjectContext> _cache = LoadCache();
-
-    public static ProjectContext Detect(string projectPath)
+    public static ProjectContext Detect(string rootPath)
     {
-        if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath))
-            throw new TechnicalException($"Invalid project path '{projectPath}'.");
+        var now = DateTime.UtcNow;
 
-        // 🔁 Step 1: Check cached context
-        if (_cache.TryGetValue(projectPath, out var cached))
+        // Initialize detection context
+        var ctx = new ProjectContext
         {
-            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Loaded cached context for {projectPath}");
-            return cached;
+            DetectedAt = now,
+            DetectorVersion = "1.3.0",
+            DetectionStrategy = "Hybrid",
+            RootPath = rootPath
+        };
+
+        // ────────────────────────────────────────────────────────────────
+        // Collect project files (excluding build/cache/system folders)
+        // ────────────────────────────────────────────────────────────────
+        var files = Directory.EnumerateFiles(rootPath, "*.*", SearchOption.AllDirectories)
+                             .Where(f => !IsExcluded(f))
+                             .ToList();
+
+        ctx.FileCount = files.Count;
+        ctx.IsMultiModule = files.Count(f =>
+            f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
+            f.EndsWith("package.json", StringComparison.OrdinalIgnoreCase) ||
+            f.EndsWith("pom.xml", StringComparison.OrdinalIgnoreCase)) > 1;
+
+        // 1️⃣ Detect language & build system
+        DetectLanguageAndBuildSystem(files, ctx);
+
+        // 2️⃣ Detect frameworks & dependencies
+        var dependencies = DetectFrameworksAndDependencies(files, ctx);
+        ctx.DetectedDependencies.AddRange(dependencies);
+
+        // 3️⃣ Determine domain type & backend layer
+        DetectDomainAndLayer(files, ctx);
+
+        // 4️⃣ Detect deployability (Docker/Kubernetes)
+        DetectDeployability(files, ctx);
+
+        // 5️⃣ Detect nature (Service, SDK, Library, TestSuite)
+        DetectNature(files, ctx);
+
+        // 6️⃣ Infer architecture style
+        DetectArchitectureStyle(ctx);
+
+        // 7️⃣ Guess entry point file
+        ctx.EntryPointFile = GuessEntryPoint(files, ctx);
+
+        // 8️⃣ Compute global confidence score
+        ComputeConfidence(ctx);
+
+        // 9️⃣ Generate static ProjectMetadata (immutable)
+        var projectName = Path.GetFileName(rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var frameworkVersion = ctx.TargetRuntime ?? ctx.DetectedFrameworks.FirstOrDefault() ?? "N/A";
+        var lastModified = files.Select(f => File.GetLastWriteTimeUtc(f)).DefaultIfEmpty(now).Max();
+
+        ctx.Metadata = new ProjectMetadata(
+            Name: projectName,
+            Path: rootPath,
+            Language: ctx.Language,
+            Framework: ctx.Framework ?? "Unknown",
+            Version: frameworkVersion,
+            LastModified: lastModified
+        );
+
+        return ctx;
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // 🔧 Detection Logic — ordered by inference dependency
+    // ────────────────────────────────────────────────────────────────
+
+    private static void DetectLanguageAndBuildSystem(List<string> files, ProjectContext ctx)
+    {
+        bool hasCs = files.Any(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase));
+        bool hasTs = files.Any(f => f.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".tsx", StringComparison.OrdinalIgnoreCase));
+        bool hasJs = files.Any(f => f.EndsWith(".js", StringComparison.OrdinalIgnoreCase));
+        bool hasPy = files.Any(f => f.EndsWith(".py", StringComparison.OrdinalIgnoreCase));
+        bool hasJava = files.Any(f => f.EndsWith(".java", StringComparison.OrdinalIgnoreCase));
+
+        ctx.Language = hasCs ? "C#" :
+                       hasTs ? "TypeScript" :
+                       hasJs ? "JavaScript" :
+                       hasJava ? "Java" :
+                       hasPy ? "Python" : "Unknown";
+
+        if (files.Any(f => f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".sln", StringComparison.OrdinalIgnoreCase)))
+            ctx.BuildSystem = BuildSystem.DotNet;
+        else if (files.Any(f => Path.GetFileName(f).Equals("pom.xml", StringComparison.OrdinalIgnoreCase)))
+            ctx.BuildSystem = BuildSystem.Maven;
+        else if (files.Any(f => f.EndsWith(".gradle", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".gradle.kts", StringComparison.OrdinalIgnoreCase)))
+            ctx.BuildSystem = BuildSystem.Gradle;
+        else if (files.Any(f => Path.GetFileName(f).Equals("package.json", StringComparison.OrdinalIgnoreCase)))
+        {
+            ctx.BuildSystem = files.Any(f => Path.GetFileName(f).Equals("yarn.lock", StringComparison.OrdinalIgnoreCase))
+                ? BuildSystem.Yarn
+                : files.Any(f => Path.GetFileName(f).Equals("pnpm-lock.yaml", StringComparison.OrdinalIgnoreCase))
+                    ? BuildSystem.Pnpm
+                    : BuildSystem.Npm;
         }
+        else ctx.BuildSystem = BuildSystem.Unknown;
+    }
 
-        // 🧩 Step 2: Inspect repository
-        var files = Directory.GetFiles(projectPath, "*.*", SearchOption.AllDirectories);
+    private static IEnumerable<string> DetectFrameworksAndDependencies(List<string> files, ProjectContext ctx)
+    {
+        var deps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var context =
-            DetectDotNet(files) ??
-            DetectJavaScript(files) ??
-            DetectJava(files) ??
-            DetectPython(files) ??
-            new ProjectContext("Unknown", null, 0.0)
+        // 🟦 .NET projects
+        foreach (var proj in files.Where(f => f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
             {
-                Layer = DetectLayer(projectPath),
-                Nature = DetectNature(projectPath)
-            };
+                var xml = XDocument.Load(proj);
+                var tfm = xml.Descendants("TargetFramework").Select(e => e.Value).FirstOrDefault()
+                         ?? xml.Descendants("TargetFrameworks").Select(e => e.Value).FirstOrDefault();
 
-        // 💾 Step 3: Cache result
-        context.Layer ??= DetectLayer(projectPath);
-        context.Nature ??= DetectNature(projectPath);
+                if (!string.IsNullOrWhiteSpace(tfm))
+                {
+                    ctx.Framework = ".NET " + tfm;
+                    ctx.TargetRuntime = tfm;
+                    ctx.DetectedFrameworks.Add(tfm);
+                }
 
-        _cache[projectPath] = context;
-        SaveCache();
-
-        AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Info,
-            $"Detected {context.Language}/{context.Framework} → Layer: {context.Layer} Nature: {context.Nature}");
-
-        return context;
-    }
-
-    // =======================================================================
-    // 🟦 .NET / C# DETECTION
-    // =======================================================================
-    private static ProjectContext? DetectDotNet(string[] files)
-    {
-        if (!files.Any(f => f.EndsWith(".csproj") || f.EndsWith(".sln")))
-            return null;
-
-        string framework = "Generic .NET";
-        double confidence = 0.9;
-
-        if (files.Any(f => f.Contains("MAUI", StringComparison.OrdinalIgnoreCase))) framework = "MAUI";
-        else if (files.Any(f => f.Contains("WPF", StringComparison.OrdinalIgnoreCase))) framework = "WPF";
-        else if (files.Any(f => f.Contains("AspNet", StringComparison.OrdinalIgnoreCase))) framework = "ASP.NET";
-        else if (files.Any(f => f.Contains("Blazor", StringComparison.OrdinalIgnoreCase))) framework = "Blazor";
-        else if (files.Any(f => f.Contains("Unity", StringComparison.OrdinalIgnoreCase))) framework = "Unity";
-
-        return new ProjectContext("CSharp", framework, confidence);
-    }
-
-    // =======================================================================
-    // 🟨 JAVASCRIPT / TYPESCRIPT DETECTION
-    // =======================================================================
-    private static ProjectContext? DetectJavaScript(string[] files)
-    {
-        if (!files.Any(f => f.EndsWith("package.json")))
-            return null;
-
-        string framework = "Node";
-        double confidence = 0.9;
-
-        if (files.Any(f => f.Contains("angular.json"))) framework = "Angular";
-        else if (files.Any(f => f.Contains("react", StringComparison.OrdinalIgnoreCase))) framework = "React";
-        else if (files.Any(f => f.Contains("vue", StringComparison.OrdinalIgnoreCase))) framework = "Vue";
-        else if (files.Any(f => f.Contains("next.config", StringComparison.OrdinalIgnoreCase))) framework = "Next.js";
-        else if (files.Any(f => f.Contains("nuxt", StringComparison.OrdinalIgnoreCase))) framework = "Nuxt.js";
-        else if (files.Any(f => f.Contains("nest-cli.json"))) framework = "NestJS";
-
-        return new ProjectContext("TypeScript", framework, confidence);
-    }
-
-    // =======================================================================
-    // ☕ JAVA DETECTION
-    // =======================================================================
-    private static ProjectContext? DetectJava(string[] files)
-    {
-        if (!files.Any(f => f.EndsWith(".java") || f.EndsWith("pom.xml") || f.EndsWith("build.gradle")))
-            return null;
-
-        string framework = "Generic Java";
-        double confidence = 0.85;
-
-        if (files.Any(f => f.EndsWith("pom.xml")))
-        {
-            framework = "Spring Boot";
-            confidence = 0.95;
-        }
-        else if (files.Any(f => f.EndsWith("build.gradle") || f.EndsWith("build.gradle.kts")))
-        {
-            framework = "Gradle Project";
-            confidence = 0.9;
+                foreach (var pkg in xml.Descendants("PackageReference"))
+                {
+                    var name = (string?)pkg.Attribute("Include") ?? (string?)pkg.Attribute("Update");
+                    if (!string.IsNullOrWhiteSpace(name))
+                        deps.Add(name!);
+                }
+            }
+            catch { /* ignore parse errors */ }
         }
 
-        if (files.Any(f => f.Contains("quarkus", StringComparison.OrdinalIgnoreCase))) framework = "Quarkus";
-        else if (files.Any(f => f.Contains("micronaut", StringComparison.OrdinalIgnoreCase))) framework = "Micronaut";
-        else if (files.Any(f => f.Contains("jakarta", StringComparison.OrdinalIgnoreCase))) framework = "Jakarta EE";
-        else if (files.Any(f => f.Contains("playframework", StringComparison.OrdinalIgnoreCase))) framework = "Play Framework";
+        // 🟨 Node.js / TypeScript
+        foreach (var pkg in files.Where(f => Path.GetFileName(f).Equals("package.json", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                var json = JsonNode.Parse(File.ReadAllText(pkg))?.AsObject();
+                if (json == null) continue;
 
-        return new ProjectContext("Java", framework, confidence);
+                foreach (var set in new[] { "dependencies", "devDependencies" })
+                {
+                    if (json[set] is JsonObject obj)
+                        foreach (var kv in obj)
+                            deps.Add(kv.Key);
+                }
+
+                if (deps.Contains("@angular/core")) ctx.Framework = "Angular";
+                else if (deps.Contains("react")) ctx.Framework = "React";
+                else if (deps.Contains("vue")) ctx.Framework = "Vue";
+            }
+            catch { /* ignore */ }
+        }
+
+        // 🟩 Java / Maven
+        foreach (var pom in files.Where(f => Path.GetFileName(f).Equals("pom.xml", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                var xml = XDocument.Load(pom);
+                var spring = xml.Descendants().Any(e =>
+                    e.Name.LocalName == "groupId" && e.Value.Contains("org.springframework", StringComparison.OrdinalIgnoreCase));
+                if (spring)
+                    ctx.Framework = "Spring Boot";
+
+                foreach (var dep in xml.Descendants().Where(e => e.Name.LocalName == "dependency"))
+                {
+                    var gid = dep.Elements().FirstOrDefault(e => e.Name.LocalName == "groupId")?.Value;
+                    var aid = dep.Elements().FirstOrDefault(e => e.Name.LocalName == "artifactId")?.Value;
+                    if (!string.IsNullOrWhiteSpace(aid))
+                        deps.Add($"{gid}:{aid}");
+                }
+            }
+            catch { /* ignore */ }
+        }
+
+        return deps;
     }
 
-    // =======================================================================
-    // 🐍 PYTHON DETECTION
-    // =======================================================================
-    private static ProjectContext? DetectPython(string[] files)
+    private static void DetectDomainAndLayer(List<string> files, ProjectContext ctx)
     {
-        if (!files.Any(f => f.EndsWith(".py") || f.EndsWith("requirements.txt") || f.EndsWith("pyproject.toml")))
-            return null;
+        bool angular = files.Any(f => Path.GetFileName(f).Equals("angular.json", StringComparison.OrdinalIgnoreCase));
+        bool react = ctx.Framework == "React" || files.Any(f => f.EndsWith("next.config.js", StringComparison.OrdinalIgnoreCase));
+        bool vue = ctx.Framework == "Vue";
 
-        string framework = "Generic Python";
-        double confidence = 0.8;
+        if (angular || react || vue)
+        {
+            ctx.DomainType = "Frontend";
+            ctx.Layer = "Unknown";
+            return;
+        }
 
-        if (files.Any(f => f.Contains("fastapi", StringComparison.OrdinalIgnoreCase)))
+        // Backend inference (.NET, Java, etc.)
+        if (ctx.BuildSystem is BuildSystem.DotNet or BuildSystem.Maven or BuildSystem.Gradle)
         {
-            framework = "FastAPI";
-            confidence = 0.9;
-        }
-        else if (files.Any(f => f.Contains("flask", StringComparison.OrdinalIgnoreCase)))
-        {
-            framework = "Flask";
-            confidence = 0.9;
-        }
-        else if (files.Any(f => f.Contains("manage.py") || f.Contains("django", StringComparison.OrdinalIgnoreCase)))
-        {
-            framework = "Django";
-            confidence = 0.95;
-        }
-        else if (files.Any(f => f.Contains("pyramid", StringComparison.OrdinalIgnoreCase))) framework = "Pyramid";
-        else if (files.Any(f => f.Contains("tornado", StringComparison.OrdinalIgnoreCase))) framework = "Tornado";
-        else if (files.Any(f => f.Contains("falcon", StringComparison.OrdinalIgnoreCase))) framework = "Falcon";
+            ctx.DomainType = "Backend";
 
-        return new ProjectContext("Python", framework, confidence);
+            var dirs = files.Select(f => Path.GetDirectoryName(f) ?? "")
+                            .Distinct()
+                            .Select(d => Path.GetFileName(d)?.ToLowerInvariant() ?? "")
+                            .ToList();
+
+            if (dirs.Any(d => d.Contains("api") || d.Contains("controller"))) ctx.Layer = "Api";
+            else if (dirs.Any(d => d.Contains("application") || d.Contains("service"))) ctx.Layer = "Application";
+            else if (dirs.Any(d => d.Contains("domain") || d.Contains("core"))) ctx.Layer = "Domain";
+            else if (dirs.Any(d => d.Contains("infra") || d.Contains("repository"))) ctx.Layer = "Infrastructure";
+            else ctx.Layer = "Unknown";
+
+            return;
+        }
+
+        // Library / Infra fallback
+        if (files.Any(f => f.Contains($"{Path.DirectorySeparatorChar}lib{Path.DirectorySeparatorChar}")))
+            ctx.DomainType = "Library";
+        else if (files.Any(IsIaCFile))
+            ctx.DomainType = "Infra";
+        else
+            ctx.DomainType = "Unknown";
     }
 
-    // =======================================================================
-    // 🧱 LAYER & NATURE DETECTION
-    // =======================================================================
-    private static string DetectLayer(string projectPath)
+    private static bool IsIaCFile(string path)
     {
-        try
+        var name = Path.GetFileName(path).ToLowerInvariant();
+        return name is "dockerfile" or "docker-compose.yml" or "docker-compose.yaml"
+            || name.EndsWith(".bicep") || name.EndsWith(".tf")
+            || (name.EndsWith(".yaml") || name.EndsWith(".yml")) &&
+               (name.Contains("deployment") || name.Contains("service") || name.Contains("ingress"));
+    }
+
+    private static void DetectDeployability(List<string> files, ProjectContext ctx)
+    {
+        bool dockerfile = files.Any(f => Path.GetFileName(f).Equals("Dockerfile", StringComparison.OrdinalIgnoreCase));
+        bool compose = files.Any(f => Path.GetFileName(f).StartsWith("docker-compose", StringComparison.OrdinalIgnoreCase));
+        bool k8s = files.Any(f => Regex.IsMatch(Path.GetFileName(f), @"(deployment|statefulset|daemonset|service|ingress)\.ya?ml", RegexOptions.IgnoreCase));
+
+        if (dockerfile || compose) ctx.MetadataMap["Dockerized"] = "true";
+        if (k8s) ctx.MetadataMap["Kubernetes"] = "true";
+
+        if (ctx.IsDeployable)
+            ctx.Nature ??= "Service";
+    }
+
+    private static void DetectNature(List<string> files, ProjectContext ctx)
+    {
+        bool tests = files.Any(f => f.Contains($"{Path.DirectorySeparatorChar}test{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));
+        bool sdk = files.Any(f => f.Contains($"{Path.DirectorySeparatorChar}sdk{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)) ||
+                   ctx.DetectedDependencies.Any(d => d.Contains("Sdk", StringComparison.OrdinalIgnoreCase));
+        bool lib = files.Any(f => f.Contains($"{Path.DirectorySeparatorChar}lib{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));
+
+        if (tests) ctx.Nature = "TestSuite";
+        else if (sdk) ctx.Nature = "SDK";
+        else if (lib) ctx.Nature = "Library";
+        else if (ctx.DomainType == "Backend") ctx.Nature = "Service";
+        else if (ctx.DomainType == "Frontend") ctx.Nature = "FrontendApp";
+        else ctx.Nature ??= "Generic";
+    }
+
+    private static void DetectArchitectureStyle(ProjectContext ctx)
+    {
+        bool hasMediatR = ctx.DetectedDependencies.Any(d => d.Equals("MediatR", StringComparison.OrdinalIgnoreCase));
+        bool hasEfCore = ctx.DetectedDependencies.Any(d => d.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.OrdinalIgnoreCase));
+        bool hasMassTr = ctx.DetectedDependencies.Any(d => d.StartsWith("MassTransit", StringComparison.OrdinalIgnoreCase));
+        bool hasKafka = ctx.DetectedDependencies.Any(d => d.Contains("Confluent.Kafka", StringComparison.OrdinalIgnoreCase));
+
+        if (hasMediatR && hasEfCore) ctx.ArchitectureStyle = "CQRS";
+        else if (hasEfCore && ctx.Layer?.Equals("Domain", StringComparison.OrdinalIgnoreCase) == true) ctx.ArchitectureStyle = "Clean";
+        else if (hasMassTr || hasKafka) ctx.ArchitectureStyle = "Hexagonal";
+        else if (ctx.IsMultiModule && ctx.Nature == "Service") ctx.ArchitectureStyle = "ModularMonolith";
+        else if (ctx.DomainType == "Backend" && ctx.Layer == "Api") ctx.ArchitectureStyle = "MVC";
+        else ctx.ArchitectureStyle = "Layered";
+    }
+
+    private static string? GuessEntryPoint(List<string> files, ProjectContext ctx)
+    {
+        if (ctx.BuildSystem == BuildSystem.DotNet)
         {
-            // Gather a small, representative sample of files (avoid reading huge files unnecessarily)
-            var allFiles = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-                                    .Where(f => !PathUtils.IsExcludedDir(Path.GetDirectoryName(f) ?? string.Empty))
-                                    .ToList();
+            var program = files.FirstOrDefault(f => Path.GetFileName(f).Equals("Program.cs", StringComparison.OrdinalIgnoreCase));
+            if (program != null) return program;
+        }
 
-            // 1) Quick folder-name heuristics (fast path)
-            var folderName = Path.GetFileName(projectPath)?.ToLowerInvariant() ?? "";
-            if (folderName.Contains("domain")) return "Domain";
-            if (folderName.Contains("application") || folderName.Contains("app")) return "Application";
-            if (folderName.Contains("infrastructure") || folderName.Contains("infra")) return "Infrastructure";
-            if (folderName.Contains("api") || folderName.Contains("presentation") || folderName.Contains("web")) return "Api";
-
-            // 2) Inspect project files for explicit web SDK / controller markers (C#)
-            var csproj = allFiles.FirstOrDefault(f => f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase));
-            if (csproj != null)
+        if (ctx.BuildSystem is BuildSystem.Npm or BuildSystem.Yarn or BuildSystem.Pnpm)
+        {
+            var pkg = files.FirstOrDefault(f => Path.GetFileName(f).Equals("package.json", StringComparison.OrdinalIgnoreCase));
+            if (pkg != null)
             {
                 try
                 {
-                    var csprojText = File.ReadAllText(csproj);
-                    if (csprojText.Contains("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase) ||
-                        csprojText.Contains("Microsoft.AspNetCore", StringComparison.OrdinalIgnoreCase))
-                    {
-                        AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, "csproj indicates Web SDK -> Api layer");
-                        return "Api";
-                    }
-
-                    // If project references only domain-level libs (heuristic)
-                    if (csprojText.Contains("ProjectReference") && csprojText.Contains("Domain", StringComparison.OrdinalIgnoreCase))
-                    {
-                        AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, "csproj references Domain -> Application/Domain");
-                        return "Application";
-                    }
+                    var json = JsonNode.Parse(File.ReadAllText(pkg))?.AsObject();
+                    var main = json?["main"]?.GetValue<string>();
+                    if (!string.IsNullOrWhiteSpace(main))
+                        return Path.GetFullPath(Path.Combine(Path.GetDirectoryName(pkg)!, main));
                 }
-                catch { /* non-fatal: continue heuristics */ }
+                catch { /* ignore */ }
             }
-
-            // 3) C# heuristics: Controllers, ApiController attributes, MapControllers, AddControllers
-            var csharpSample = allFiles.FirstOrDefault(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase));
-            if (csharpSample != null)
-            {
-                try
-                {
-                    // read a small set of C# files (to avoid huge IO)
-                    var csFiles = allFiles.Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-                                          .Take(40)
-                                          .ToList();
-
-                    foreach (var f in csFiles)
-                    {
-                        var t = File.ReadAllText(f);
-                        if (t.Contains("[ApiController]", StringComparison.OrdinalIgnoreCase) ||
-                            t.Contains("class ") && t.Contains("Controller", StringComparison.Ordinal))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected Controller in {f} -> Api layer");
-                            return "Api";
-                        }
-
-                        if (t.Contains("namespace", StringComparison.OrdinalIgnoreCase) && t.Contains(".Domain", StringComparison.OrdinalIgnoreCase))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected Domain namespace in {f} -> Domain layer");
-                            return "Domain";
-                        }
-
-                        if (t.Contains("DbContext", StringComparison.OrdinalIgnoreCase) || t.Contains("Repository", StringComparison.OrdinalIgnoreCase))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected persistence references in {f} -> Infrastructure layer");
-                            return "Infrastructure";
-                        }
-                    }
-                }
-                catch { /* ignore and continue */ }
-            }
-
-            // 4) Java heuristics
-            var javaFile = allFiles.FirstOrDefault(f => f.EndsWith(".java", StringComparison.OrdinalIgnoreCase));
-            if (javaFile != null)
-            {
-                try
-                {
-                    var javaFiles = allFiles.Where(f => f.EndsWith(".java", StringComparison.OrdinalIgnoreCase)).Take(60);
-                    foreach (var f in javaFiles)
-                    {
-                        var t = File.ReadAllText(f);
-                        if (t.Contains("@RestController") || t.Contains("Controller", StringComparison.OrdinalIgnoreCase) || t.Contains("RequestMapping"))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected Java Controller in {f} -> Api layer");
-                            return "Api";
-                        }
-                        if (t.Contains("@Service") || t.Contains("Service", StringComparison.OrdinalIgnoreCase))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected Java Service in {f} -> Application layer");
-                            return "Application";
-                        }
-                        if (t.Contains(".domain.") || t.Contains("Entity", StringComparison.OrdinalIgnoreCase))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected Java domain types in {f} -> Domain layer");
-                            return "Domain";
-                        }
-                    }
-                }
-                catch { /* continue */ }
-            }
-
-            // 5) Python heuristics
-            var pyFile = allFiles.FirstOrDefault(f => f.EndsWith(".py", StringComparison.OrdinalIgnoreCase));
-            if (pyFile != null)
-            {
-                try
-                {
-                    var pyFiles = allFiles.Where(f => f.EndsWith(".py", StringComparison.OrdinalIgnoreCase)).Take(80);
-                    foreach (var f in pyFiles)
-                    {
-                        var t = File.ReadAllText(f);
-                        if (t.Contains("from fastapi import FastAPI") || t.Contains("FastAPI("))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected FastAPI in {f} -> Api layer");
-                            return "Api";
-                        }
-                        if (t.Contains("manage.py") || t.Contains("django", StringComparison.OrdinalIgnoreCase))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected Django in {f} -> Api layer");
-                            return "Api";
-                        }
-                        if (f.EndsWith("models.py", StringComparison.OrdinalIgnoreCase) || t.Contains("class ") && t.Contains("Model"))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected models in {f} -> Domain layer");
-                            return "Domain";
-                        }
-                        if (t.Contains("session") && t.Contains("commit"))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected DB transaction in {f} -> Infrastructure layer");
-                            return "Infrastructure";
-                        }
-                    }
-                }
-                catch { /* continue */ }
-            }
-
-            // 6) JS/TS heuristics (Express / Next / Nest / Angular)
-            var jsFile = allFiles.FirstOrDefault(f => f.EndsWith(".js", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".ts", StringComparison.OrdinalIgnoreCase));
-            if (jsFile != null)
-            {
-                try
-                {
-                    var jsFiles = allFiles.Where(f => f.EndsWith(".js") || f.EndsWith(".ts")).Take(80);
-                    foreach (var f in jsFiles)
-                    {
-                        var t = File.ReadAllText(f);
-                        if (t.Contains("express()") || t.Contains("app.use(") || t.Contains("router.") || t.Contains("app.get("))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected Express/Router in {f} -> Api layer");
-                            return "Api";
-                        }
-                        if (t.Contains("pages/api") || f.Contains("api/") || t.Contains("next()") || f.Contains("pages"))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected Next/Pages API in {f} -> Api layer");
-                            return "Api";
-                        }
-                        if (t.Contains("@Controller") || t.Contains("NestFactory") || t.Contains("Module"))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected NestJS/controller in {f} -> Api layer");
-                            return "Api";
-                        }
-                        if (t.Contains("class ") && t.Contains("Strategy") || t.Contains("Strategy", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Could be domain or application — don't decide prematurely
-                        }
-                        if (t.Contains("Repository") || t.Contains("DbClient") || t.Contains("prisma"))
-                        {
-                            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Debug, $"Detected persistence in {f} -> Infrastructure layer");
-                            return "Infrastructure";
-                        }
-                    }
-                }
-                catch { /* continue */ }
-            }
-
-            // 7) Fallback by file-count heuristics (project size)
-            var fileCount = allFiles.Count;
-            if (fileCount > 800) return "Platform";
-            if (fileCount > 300) return "Infrastructure";
-            if (fileCount > 100) return "Application";
-
-            // final fallback
-            return "Domain";
         }
-        catch (Exception ex)
-        {
-            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Error, "Layer detection failed, falling back to Domain.", ex);
-            return "Domain";
-        }
+
+        return null;
     }
 
-    private static string DetectNature(string projectPath)
+    private static void ComputeConfidence(ProjectContext ctx)
     {
-        var name = Path.GetFileName(projectPath).ToLowerInvariant();
+        ctx.ConfidenceMap["Language"] = ctx.Language != "Unknown" ? 1.0 : 0.4;
+        ctx.ConfidenceMap["Framework"] = !string.IsNullOrEmpty(ctx.Framework) ? 0.9 : 0.5;
+        ctx.ConfidenceMap["BuildSystem"] = ctx.BuildSystem != BuildSystem.Unknown ? 0.9 : 0.5;
+        ctx.ConfidenceMap["DomainType"] = ctx.DomainType != "Unknown" ? 0.85 : 0.5;
+        ctx.ConfidenceMap["Layer"] = ctx.Layer != "Unknown" ? 0.8 : 0.4;
+        ctx.ConfidenceMap["ArchitectureStyle"] = ctx.ArchitectureStyle != "Unknown" ? 0.75 : 0.5;
+        ctx.ConfidenceMap["Deployability"] = ctx.IsDeployable ? 0.9 : 0.5;
 
-        if (name.Contains("framework")) return "Framework";
-        if (name.Contains("sdk")) return "SDK";
-        if (name.Contains("service")) return "Service";
-        if (name.Contains("micro")) return "Microservice";
-        if (name.Contains("api")) return "API";
-        return "Generic";
+        ctx.Confidence = Math.Clamp(ctx.ConfidenceMap.Values.DefaultIfEmpty(0.6).Average(), 0, 1);
     }
 
-    // =======================================================================
-    // 💾 CACHE HANDLING
-    // =======================================================================
-    private static Dictionary<string, ProjectContext> LoadCache()
+    private static bool IsExcluded(string path)
     {
-        try
-        {
-            if (!File.Exists(CachePath))
-                return new();
-
-            var json = File.ReadAllText(CachePath);
-            return JsonSerializer.Deserialize<Dictionary<string, ProjectContext>>(json) ?? new();
-        }
-        catch
-        {
-            return new();
-        }
-    }
-
-    private static void SaveCache()
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(CachePath)!);
-            File.WriteAllText(
-                CachePath,
-                JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true })
-            );
-        }
-        catch (Exception ex)
-        {
-            AegisDiagnostics.Report("ContextDetector", DiagnosticLevel.Warning,
-                "Failed to persist project context cache.", ex);
-        }
+        var p = path.ToLowerInvariant();
+        return p.Contains("\\bin\\") ||
+               p.Contains("\\obj\\") ||
+               p.Contains("\\node_modules\\") ||
+               p.Contains("\\.git\\") ||
+               p.Contains("\\.vs\\") ||
+               p.Contains("\\.idea\\");
     }
 }

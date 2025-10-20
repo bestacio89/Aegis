@@ -12,5 +12,7 @@ namespace Aegis.Shared.Models.Policies.BackEnd
         public bool ScanForHardcodedSecrets { get; set; } = true;
         public bool EnforceSafeCryptography { get; set; } = true;
         public bool DetectWeakSSLProtocols { get; set; } = true;
+        public float MinimumScore { get; set; } = 75.0f;
+        public bool Enabled { get; set; } = true;
     }
 }

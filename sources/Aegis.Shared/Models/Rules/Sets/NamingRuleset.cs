@@ -3,6 +3,10 @@ using Aegis.Shared.Rules;
 
 namespace Aegis.Shared.Models.Rules.Sets.Naming;
 
+/// <summary>
+/// 🏷️ Enforces consistent and standardized naming conventions across classes,
+/// interfaces, methods, variables, and files to enhance readability and maintainability.
+/// </summary>
 public static class NamingRuleset
 {
     public static IEnumerable<RuleDefinition> Get() => new[]
@@ -18,7 +22,7 @@ public static class NamingRuleset
             MetricKey = "ClassNamingComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Ensure class names use PascalCase and are meaningful nouns (e.g., UserService, OrderRepository)."
         },
         new RuleDefinition
@@ -29,7 +33,7 @@ public static class NamingRuleset
             MetricKey = "InterfacePrefixViolationCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Info,
+            Severity = RuleSeverity.Low,
             Recommendation = "Prefix interface names with 'I' (e.g., IRepository, ICacheProvider)."
         },
 
@@ -44,7 +48,7 @@ public static class NamingRuleset
             MetricKey = "MethodNamingComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Use camelCase for method names (e.g., calculateTotal, getUserProfile)."
         },
 
@@ -59,7 +63,7 @@ public static class NamingRuleset
             MetricKey = "VariableNamingComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Use camelCase for variables and UPPER_CASE only for constants if explicitly allowed."
         },
 
@@ -74,7 +78,7 @@ public static class NamingRuleset
             MetricKey = "FilePluralizationViolation",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Info,
+            Severity = RuleSeverity.Low,
             Recommendation = "Avoid pluralized file names for singular services/controllers (e.g., 'UserService.cs', not 'UsersService.cs')."
         },
 

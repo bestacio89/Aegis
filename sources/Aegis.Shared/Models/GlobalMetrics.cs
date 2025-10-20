@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace Aegis.Shared.Models;
 
-namespace Aegis.Shared.Models
+public sealed class GlobalMetrics
 {
-    internal class GlobalMetrics
-    {
-    }
+    public double ProjectHealthIndex { get; set; }
+    public double MaintainabilityIndex { get; set; }
+    public double ResilienceIndex { get; set; }
+    public double WeightedCompliance { get; set; }
 }

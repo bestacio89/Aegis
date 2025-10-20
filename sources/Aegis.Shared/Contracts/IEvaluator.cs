@@ -1,10 +1,11 @@
 ﻿using Aegis.Shared.Models;
+using Aegis.Shared.Models.Policies;
 
 namespace Aegis.Shared.Contracts;
 
 /// <summary>
 /// Contract for all Aegis Evaluators.
-/// Evaluators analyze source code and produce structured metrics or facts (EvaluatorResults)
+/// Evaluators analyze source code and produce structured metrics (EvaluatorResults)
 /// that are later interpreted by the RuleEngine.
 /// </summary>
 public interface IEvaluator
@@ -23,6 +24,18 @@ public interface IEvaluator
     /// Frameworks supported by this evaluator (e.g., ["ASP.NET", "Spring", "FastAPI"]).
     /// </summary>
     string[] SupportedFrameworks { get; }
+
+    /// <summary>
+    /// Indicates whether this evaluator is currently enabled.
+    /// Can be toggled dynamically via the active <see cref="AegisPolicy"/>.
+    /// </summary>
+    bool IsEnabled { get; set; }
+
+    /// <summary>
+    /// Weight factor applied to this evaluator’s contribution to the global compliance score.
+    /// Default = 1.0 (neutral). Higher values increase the evaluator’s impact.
+    /// </summary>
+    double WeightFactor { get; set; }
 
     /// <summary>
     /// Executes the evaluator on the given project using the provided contextual information.

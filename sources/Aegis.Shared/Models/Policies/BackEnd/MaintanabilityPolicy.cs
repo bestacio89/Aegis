@@ -1,51 +1,82 @@
-﻿namespace Aegis.Shared.Models.Policies.BackEnd;
-
-/// <summary>
-/// Governs maintainability requirements and documentation density thresholds.
-/// </summary>
-public sealed class MaintainabilityPolicy
+﻿namespace Aegis.Shared.Models.Policies.BackEnd
 {
     /// <summary>
-    /// Minimum acceptable maintainability index (0-100 scale).
-    /// Default: 70 (values below trigger warnings or errors).
+    /// Governs maintainability requirements, complexity weighting,
+    /// and documentation density thresholds.
     /// </summary>
-    public int MinMaintainabilityIndex { get; set; } = 70;
+    public sealed class MaintainabilityPolicy
+    {
+        // =========================================================
+        // ⚙️ Core maintainability thresholds
+        // =========================================================
 
-    /// <summary>
-    /// Whether to check for comment density in each source file.
-    /// </summary>
-    public bool RequireCommentDensityCheck { get; set; } = true;
+        /// <summary>
+        /// Minimum acceptable maintainability index (0-100 scale).
+        /// Default: 70 (values below trigger warnings or errors).
+        /// </summary>
+        public int MinMaintainabilityIndex { get; set; } = 70;
 
-    /// <summary>
-    /// Minimum percentage of comments vs. total lines
-    /// required when <see cref="RequireCommentDensityCheck"/> is true.
-    /// Default: 5 %.
-    /// </summary>
-    public double MinCommentDensity { get; set; } = 5.0;
+        /// <summary>
+        /// Whether to check for comment density in each source file.
+        /// </summary>
+        public bool RequireCommentDensityCheck { get; set; } = true;
 
-    /// <summary>
-    /// Maximum allowed lines per file before additional penalties apply.
-    /// Helps identify oversized, monolithic files.
-    /// Default: 500.
-    /// </summary>
-    public int MaxLinesPerFile { get; set; } = 500;
+        /// <summary>
+        /// Minimum percentage of comments vs. total lines required when
+        /// <see cref="RequireCommentDensityCheck"/> is true.
+        /// Default: 5 %.
+        /// </summary>
+        public double MinCommentDensity { get; set; } = 5.0;
 
-    /// <summary>
-    /// Weight factor applied to cyclomatic complexity in maintainability score.
-    /// Allows tuning between complexity and size impact.
-    /// Default: 2.
-    /// </summary>
-    public double ComplexityWeight { get; set; } = 2.0;
+        /// <summary>
+        /// Maximum allowed lines per file before additional penalties apply.
+        /// Helps identify oversized, monolithic files.
+        /// Default: 500.
+        /// </summary>
+        public int MaxLinesPerFile { get; set; } = 500;
 
-    /// <summary>
-    /// Weight factor applied to file length when computing maintainability.
-    /// Default: 0.02 (≈ 2 % penalty per 50 lines).
-    /// </summary>
-    public double LineWeight { get; set; } = 0.02;
+        /// <summary>
+        /// Weight factor applied to cyclomatic complexity in the maintainability score.
+        /// Allows tuning between complexity and file size impact.
+        /// Default: 2.
+        /// </summary>
+        public double ComplexityWeight { get; set; } = 2.0;
 
-    /// <summary>
-    /// Optional flag to include documentation comment lines
-    /// (/// or docstrings) in the maintainability score.
-    /// </summary>
-    public bool IncludeDocCommentsInScore { get; set; } = true;
+        /// <summary>
+        /// Weight factor applied to file length when computing maintainability.
+        /// Default: 0.02 (≈ 2 % penalty per 50 lines).
+        /// </summary>
+        public double LineWeight { get; set; } = 0.02;
+
+        /// <summary>
+        /// Optional flag to include documentation comment lines
+        /// (/// or docstrings) in the maintainability score.
+        /// </summary>
+        public bool IncludeDocCommentsInScore { get; set; } = true;
+
+        // =========================================================
+        // 🧭 Macro-level scoring & aggregation modifiers
+        // =========================================================
+
+        /// <summary>
+        /// Global factor applied when integrating maintainability into
+        /// cross-domain metrics (e.g., global health computation).
+        /// Default: 1.0 (no amplification or reduction).
+        /// </summary>
+        public double Factor { get; set; } = 1.0;
+
+        /// <summary>
+        /// Determines how heavily maintainability affects the
+        /// <see cref="GlobalMetrics.ProjectHealthIndex"/>.
+        /// Default: 0.5 (balanced with performance).
+        /// </summary>
+        public double HealthImpactWeight { get; set; } = 0.5;
+
+        /// <summary>
+        /// Minimum maintainability threshold below which
+        /// violations are considered critical.
+        /// Default: 50.
+        /// </summary>
+        public int CriticalThreshold { get; set; } = 50;
+    }
 }

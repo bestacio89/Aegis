@@ -2,10 +2,17 @@
 
 namespace Aegis.Shared.Rules.Sets.FrontEnd;
 
+/// <summary>
+/// 🎨 Frontend maintainability and best practices ruleset.
+/// Enforces component structure, hook correctness, and naming conventions across major frontend frameworks.
+/// </summary>
 public static class FrontendRuleset
 {
     public static IEnumerable<RuleDefinition> Get() => new[]
     {
+        // ==========================================================
+        // 🅰️ Angular
+        // ==========================================================
         new RuleDefinition
         {
             Id = "AEG-FRONT-R1",
@@ -14,9 +21,13 @@ public static class FrontendRuleset
             MetricKey = "AngularSelectorCompliance",
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
-            Severity = RuleSeverity.Warning,
-            Recommendation = "Ensure selectors use approved prefixes and consistent casing."
+            Severity = RuleSeverity.Medium,
+            Recommendation = "Ensure selectors use approved prefixes and consistent casing (e.g., app-, core-, shared-)."
         },
+
+        // ==========================================================
+        // ⚛️ React
+        // ==========================================================
         new RuleDefinition
         {
             Id = "AEG-FRONT-R2",
@@ -25,9 +36,13 @@ public static class FrontendRuleset
             MetricKey = "ReactHookUsageIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = RuleSeverity.Warning,
-            Recommendation = "Avoid calling hooks in conditionals or loops. Respect React’s hook rules."
+            Severity = RuleSeverity.High,
+            Recommendation = "Avoid calling hooks inside loops or conditionals. Respect React’s Hook rules and lifecycle order."
         },
+
+        // ==========================================================
+        // 🧩 General Frontend Architecture
+        // ==========================================================
         new RuleDefinition
         {
             Id = "AEG-FRONT-R3",
@@ -36,8 +51,8 @@ public static class FrontendRuleset
             MetricKey = "ComponentComplexityIndex",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 50,
-            Severity = RuleSeverity.Info,
-            Recommendation = "Split large components or templates into smaller, focused units."
+            Severity = RuleSeverity.Low,
+            Recommendation = "Split large components into smaller, reusable ones. Keep template logic minimal."
         }
     };
 }

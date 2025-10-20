@@ -1,12 +1,21 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace Aegis.Shared.Enums;
 
-namespace Aegis.Shared.Enums
+/// <summary>
+/// Represents the build or package management system detected in the project.
+/// </summary>
+public enum BuildSystem
 {
-    internal class BuildSystem
-    {
-    }
+    Unknown = 0,
+    DotNet = 1,      // .NET SDK (csproj/sln)
+    Maven = 2,       // Java Maven
+    Gradle = 3,      // Java Gradle
+    Npm = 4,         // Node.js / JavaScript / TypeScript
+    Yarn = 5,        // Alternative JS package manager
+    Pnpm = 6,        // Performance-optimized Node package manager
+    Pip = 7,         // Python pip
+    Poetry = 8,      // Python Poetry
+    Cargo = 9,       // Rust Cargo
+    Make = 10,       // C/C++ Makefile or CMake
+    Bazel = 11,      // Polyglot build system
+    Custom = 99      // Anything non-standard or proprietary
 }

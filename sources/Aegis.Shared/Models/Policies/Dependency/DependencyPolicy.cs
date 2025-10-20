@@ -22,4 +22,6 @@ public sealed class DependencyPolicy
 
     /// <summary>Maximum allowed version drift (major version difference tolerance).</summary>
     public int MaxMajorVersionDrift { get; set; } = 1;
+
+    public int MaxDependencyDepth { get; set; } = 5;
 }

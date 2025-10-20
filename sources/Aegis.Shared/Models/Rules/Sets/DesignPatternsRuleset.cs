@@ -6,7 +6,6 @@ namespace Aegis.Shared.Rules.Sets.DesignPatterns;
 /// <summary>
 /// 🧩 Comprehensive rule set for design pattern governance across all structural,
 /// behavioral, and creational patterns.
-/// Each rule maps to EvaluatorResult metrics produced by pattern evaluators.
 /// </summary>
 public static class DesignPatternRuleset
 {
@@ -15,7 +14,6 @@ public static class DesignPatternRuleset
         // =========================================================
         // 🧱 STRUCTURAL PATTERNS
         // =========================================================
-
         new RuleDefinition
         {
             Id = "AEG-DES-DEC001",
@@ -24,7 +22,7 @@ public static class DesignPatternRuleset
             MetricKey = "DecoratorPatternComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Ensure decorators delegate calls to the wrapped component and respect interface boundaries."
         },
         new RuleDefinition
@@ -35,10 +33,9 @@ public static class DesignPatternRuleset
             MetricKey = "DecoratorSelfReferenceCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Error,
+            Severity = RuleSeverity.High,
             Recommendation = "Avoid decorators referencing themselves or causing recursive loops."
         },
-
         new RuleDefinition
         {
             Id = "AEG-DES-FAC001",
@@ -47,7 +44,7 @@ public static class DesignPatternRuleset
             MetricKey = "FacadePublicMethodCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 20,
-            Severity = RuleSeverity.Info,
+            Severity = RuleSeverity.Low,
             Recommendation = "Simplify Facades exposing too many operations; group sub-facades or apply CQRS."
         },
         new RuleDefinition
@@ -58,10 +55,9 @@ public static class DesignPatternRuleset
             MetricKey = "FacadePatternComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 80,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Ensure the Facade properly hides subsystem complexity and external dependencies."
         },
-
         new RuleDefinition
         {
             Id = "AEG-DES-REPO001",
@@ -70,7 +66,7 @@ public static class DesignPatternRuleset
             MetricKey = "RepositoryInterfaceComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Define interfaces for repositories and separate persistence from domain logic."
         },
         new RuleDefinition
@@ -81,10 +77,9 @@ public static class DesignPatternRuleset
             MetricKey = "RepositoryIOOperationCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Error,
+            Severity = RuleSeverity.High,
             Recommendation = "Repositories should not perform file/network operations directly. Delegate to infrastructure services."
         },
-
         new RuleDefinition
         {
             Id = "AEG-DES-BLD001",
@@ -93,7 +88,7 @@ public static class DesignPatternRuleset
             MetricKey = "BuilderPatternComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Ensure all builders expose a Build() method and follow fluent chaining conventions."
         },
         new RuleDefinition
@@ -104,10 +99,9 @@ public static class DesignPatternRuleset
             MetricKey = "BuilderMutabilityViolationCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Info,
+            Severity = RuleSeverity.Low,
             Recommendation = "Builder steps should return new immutable states or self for fluent usage."
         },
-
         new RuleDefinition
         {
             Id = "AEG-DES-FACR001",
@@ -116,7 +110,7 @@ public static class DesignPatternRuleset
             MetricKey = "FactoryPatternComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Ensure factory classes centralize object creation and avoid business logic within factories."
         },
         new RuleDefinition
@@ -127,14 +121,13 @@ public static class DesignPatternRuleset
             MetricKey = "FactoryDirectInstantiationCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Avoid new() calls outside of factory methods; delegate object creation properly."
         },
 
         // =========================================================
         // ⚡ BEHAVIORAL PATTERNS
         // =========================================================
-
         new RuleDefinition
         {
             Id = "AEG-DES-CMD001",
@@ -143,7 +136,7 @@ public static class DesignPatternRuleset
             MetricKey = "CommandHandlerPairingIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Each Command should have a dedicated Handler; ensure one-to-one mapping."
         },
         new RuleDefinition
@@ -154,10 +147,9 @@ public static class DesignPatternRuleset
             MetricKey = "CommandHandlerOverloadCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 1,
-            Severity = RuleSeverity.Info,
+            Severity = RuleSeverity.Low,
             Recommendation = "Handlers should remain focused; split overloaded handlers into smaller units."
         },
-
         new RuleDefinition
         {
             Id = "AEG-DES-MEDI001",
@@ -166,7 +158,7 @@ public static class DesignPatternRuleset
             MetricKey = "MediatorCouplingIndex",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.6,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Mediator should not become a God Object; delegate responsibilities appropriately."
         },
         new RuleDefinition
@@ -177,10 +169,9 @@ public static class DesignPatternRuleset
             MetricKey = "MediatorDirectCallCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Error,
+            Severity = RuleSeverity.High,
             Recommendation = "Handlers should be invoked indirectly through mediator dispatch, not directly."
         },
-
         new RuleDefinition
         {
             Id = "AEG-DES-STRAT001",
@@ -189,7 +180,7 @@ public static class DesignPatternRuleset
             MetricKey = "StrategyConditionalCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Use polymorphism to replace conditional strategy selection logic."
         },
         new RuleDefinition
@@ -200,10 +191,9 @@ public static class DesignPatternRuleset
             MetricKey = "StrategyPatternComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = RuleSeverity.Info,
+            Severity = RuleSeverity.Low,
             Recommendation = "Ensure consistent strategy injection and interface segregation."
         },
-
         new RuleDefinition
         {
             Id = "AEG-DES-OBS001",
@@ -212,7 +202,7 @@ public static class DesignPatternRuleset
             MetricKey = "ObserverUnsubscribeMissingCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Error,
+            Severity = RuleSeverity.High,
             Recommendation = "Ensure observers can detach safely; always provide Unsubscribe or Dispose methods."
         },
         new RuleDefinition
@@ -223,14 +213,13 @@ public static class DesignPatternRuleset
             MetricKey = "ObserverCouplingIndex",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.6,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Reduce coupling between subjects and observers using event buses or weak references."
         },
 
         // =========================================================
         // 🧠 CREATIONAL PATTERNS
         // =========================================================
-
         new RuleDefinition
         {
             Id = "AEG-DES-SING001",
@@ -239,7 +228,7 @@ public static class DesignPatternRuleset
             MetricKey = "SingletonThreadSafetyIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 80,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Implement proper thread-safe initialization (e.g., Lazy<T> or double-check locking)."
         },
         new RuleDefinition
@@ -250,14 +239,13 @@ public static class DesignPatternRuleset
             MetricKey = "SingletonGlobalStateUsage",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Error,
+            Severity = RuleSeverity.High,
             Recommendation = "Avoid storing mutable global state in singletons; use dependency injection instead."
         },
 
         // =========================================================
         // 🚨 ANTI-PATTERNS / CODE SMELLS
         // =========================================================
-
         new RuleDefinition
         {
             Id = "AEG-DES-GOD001",
@@ -277,7 +265,7 @@ public static class DesignPatternRuleset
             MetricKey = "AnemicDomainModelIndex",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.3,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Move business logic into entities. Avoid passive data structures."
         },
         new RuleDefinition
@@ -288,7 +276,7 @@ public static class DesignPatternRuleset
             MetricKey = "PatternCircularReferenceCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Avoid cross-references between patterns (e.g., Decorator wrapping Mediator)."
         },
         new RuleDefinition
@@ -299,7 +287,7 @@ public static class DesignPatternRuleset
             MetricKey = "PatternOveruseIndex",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.5,
-            Severity = RuleSeverity.Info,
+            Severity = RuleSeverity.Low,
             Recommendation = "Simplify abstractions; prefer clarity and intent over excessive pattern layering."
         }
     };

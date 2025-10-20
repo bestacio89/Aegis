@@ -14,7 +14,7 @@ public static class InfrastructureRuleset
             MetricKey = "ConfigurationHealthIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Critical,
             Recommendation = "Validate config files, remove secrets, and ensure YAML/JSON syntax correctness."
         },
         new RuleDefinition
@@ -25,7 +25,7 @@ public static class InfrastructureRuleset
             MetricKey = "LoggingHygieneIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 80,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Use structured logging and avoid console or print statements."
         },
         new RuleDefinition
@@ -36,7 +36,7 @@ public static class InfrastructureRuleset
             MetricKey = "RepositoryHealthIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Critical,
             Recommendation = "Ensure presence of governance, CI/CD and changelog files."
         }
     };

@@ -1,11 +1,16 @@
 ﻿namespace Aegis.Shared.Models.Policies.Performance
 {
     /// <summary>
-    /// Governs code-level performance practices, concurrency, and resource usage across multiple languages.
+    /// Governs both micro-level code performance rules and macro-level
+    /// scoring sensitivity for resilience and health evaluation.
     /// </summary>
     public class PerformancePolicy
     {
         public bool Enabled { get; set; } = true;
+
+        // =========================================================
+        // ⚙️ Micro-level (code analysis) rules
+        // =========================================================
 
         // 🔁 Loop analysis
         public int MaxNestedLoopDepth { get; set; } = 3;
@@ -27,5 +32,40 @@
 
         // 🔍 Profiling advice
         public bool SuggestAsyncStreams { get; set; } = true;
+
+        // =========================================================
+        // 🧭 Macro-level (evaluation & aggregation tuning)
+        // =========================================================
+
+        /// <summary>
+        /// Adjusts how much the performance of each rule affects the overall
+        /// <see cref="GlobalMetrics.ProjectHealthIndex"/> (default = 1.0).
+        /// </summary>
+        public double GlobalHealthWeight { get; set; } = 1.0;
+
+        /// <summary>
+        /// Controls how strongly variance in domain scores affects
+        /// <see cref="GlobalMetrics.ResilienceIndex"/>.
+        /// Higher = more sensitive to uneven performance across modules.
+        /// </summary>
+        public double ResilienceSensitivity { get; set; } = 1.0;
+
+        /// <summary>
+        /// Optional coefficient used by the weighting engine to scale
+        /// performance-related rule severities (e.g., slow loops, blocking IO).
+        /// </summary>
+        public double PerformanceWeightScale { get; set; } = 1.0;
+
+        /// <summary>
+        /// Defines a minimum threshold below which rule impact scores
+        /// are considered negligible for global aggregation.
+        /// </summary>
+        public double MinimumPerformanceImpactThreshold { get; set; } = 0.05;
+
+        /// <summary>
+        /// Optional coefficient used when blending performance with
+        /// maintainability to calculate project-level health.
+        /// </summary>
+        public double MaintainabilityBlendFactor { get; set; } = 0.5;
     }
 }

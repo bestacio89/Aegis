@@ -31,5 +31,7 @@
         /// Whether to warn when circular dependencies are detected.
         /// </summary>
         public bool DetectCircularDependencies { get; set; } = true;
+
+        public float MaxCouplingRatio { get; set; } = 0.75f;
     }
 }

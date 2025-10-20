@@ -8,7 +8,7 @@ namespace Aegis.Shared.Rules
         public string Name { get; init; } = string.Empty;
         public string Category { get; init; } = string.Empty;
         public string MetricKey { get; init; } = string.Empty;
-        public double Threshold { get; init; }
+        public double Threshold { get; set; }
         public ComparisonOperator Operator { get; init; } = ComparisonOperator.LessThan;
         public RuleSeverity Severity { get; init; } = RuleSeverity.Info;
         public string Recommendation { get; init; } = string.Empty;

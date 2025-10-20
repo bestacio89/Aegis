@@ -21,5 +21,6 @@ public enum RuleCategory
     General,
     Dependency,
     Naming,
+    Coupling,
     Other
 }

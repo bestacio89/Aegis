@@ -22,7 +22,7 @@ public static class ArchitectureRuleset
             MetricKey = "CircularDependencyCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Critical,
+            Severity = RuleSeverity.Blocker,
             Recommendation = "Remove circular references between layers or modules using interfaces, messaging, or dependency inversion."
         },
 
@@ -37,7 +37,7 @@ public static class ArchitectureRuleset
             MetricKey = "LayerIsolationCompliance",
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Verify that API → Application → Domain → Infrastructure dependency direction is respected."
         },
         new RuleDefinition
@@ -48,7 +48,7 @@ public static class ArchitectureRuleset
             MetricKey = "ForbiddenReferenceCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Error,
+            Severity = RuleSeverity.High,
             Recommendation = "Remove direct dependencies from higher layers (e.g., Infrastructure) into Domain or Application layers."
         },
 
@@ -63,7 +63,7 @@ public static class ArchitectureRuleset
             MetricKey = "CrossDomainLeakageCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Avoid exposing internal Domain entities to external layers. Use DTOs or mappers to isolate boundaries."
         },
         new RuleDefinition
@@ -74,7 +74,7 @@ public static class ArchitectureRuleset
             MetricKey = "InfrastructureInversionCompliance",
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Ensure Domain does not depend on Infrastructure. Apply Dependency Inversion with interfaces or adapters."
         },
 
@@ -89,7 +89,7 @@ public static class ArchitectureRuleset
             MetricKey = "ControllerLogicDensity",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.35,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Reduce business logic inside controllers. Move to Application or Domain services."
         },
         new RuleDefinition
@@ -126,7 +126,7 @@ public static class ArchitectureRuleset
             MetricKey = "LayerCohesionIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 75,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Increase cohesion by consolidating related operations and minimizing cross-layer chatter."
         },
 
@@ -141,7 +141,7 @@ public static class ArchitectureRuleset
             MetricKey = "SecurityComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 80,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.High,
             Recommendation = "Review encryption policies, API key management, and secure transport (HTTPS/TLS) enforcement."
         },
         new RuleDefinition
@@ -152,7 +152,7 @@ public static class ArchitectureRuleset
             MetricKey = "DocumentationCoverage",
             Operator = ComparisonOperator.LessThan,
             Threshold = 70,
-            Severity = RuleSeverity.Info,
+            Severity = RuleSeverity.Low,
             Recommendation = "Improve architectural documentation, add UML/C4 diagrams, and ensure code-level XML/Swagger comments."
         },
         new RuleDefinition
@@ -163,7 +163,7 @@ public static class ArchitectureRuleset
             MetricKey = "NodeCouplingIndex",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.6,
-            Severity = RuleSeverity.Warning,
+            Severity = RuleSeverity.Medium,
             Recommendation = "Reduce inter-module dependencies through events, domain interfaces, or mediator patterns."
         }
     };

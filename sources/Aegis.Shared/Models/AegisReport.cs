@@ -5,84 +5,84 @@ using System.Collections.ObjectModel;
 namespace Aegis.Shared.Models;
 
 /// <summary>
-/// 🧾 Represents a full Aegis scan result — from evaluator metrics to rule evaluations and aggregated compliance insights.
+/// 🧾 Represents a full Aegis scan result — from raw evaluator outputs to
+/// aggregated compliance, domain summaries, and health indices.
 /// </summary>
 public sealed class AegisReport
 {
-    // 🔖 General metadata
-    public string ProjectName { get; init; } = string.Empty;
-    public string ProjectPath { get; init; } = string.Empty;
-    public string Language { get; init; } = string.Empty;
-    public string? Framework { get; init; } = string.Empty;
+    // 🔖 General metadata (must be mutable so AegisAnalyzer can set them post-creation)
+    public string ProjectName { get; set; } = string.Empty;
+    public string ProjectPath { get; set; } = string.Empty;
+    public string Language { get; set; } = string.Empty;
+    public string? Framework { get; set; } = string.Empty;
     public DateTimeOffset ScanDate { get; init; } = DateTimeOffset.UtcNow;
 
-    // 🧩 Raw results
+    // 🧩 Raw results (remain init-only; collections can still be modified)
     public Collection<EvaluatorResult> Facts { get; init; } = new();
     public Collection<RuleResult> Results { get; init; } = new();
 
-    // 📊 Aggregated statistics
+    // 📊 Aggregated domain summaries
+    public List<DomainSummary> Domains { get; init; } = new();
+
+    // ⚖️ Global metrics (mutable because it's recomputed)
+    public GlobalMetrics Metrics { get; set; } = new();
+
+    // 🧮 Derived counts
     public int TotalFilesScanned { get; set; }
     public int TotalFacts => Facts.Count;
-    public int TotalViolations => Results.Count;
+    public int TotalViolations => Results.Count(r => !r.IsCompliant);
 
-    // ⚖️ Compliance Scores by Category (Architecture, Naming, etc.)
-    public Dictionary<RuleCategory, double> ComplianceScores { get; init; } = new();
+    // 🧮 Backwards-compatible quick compliance dictionary
+    public Dictionary<RuleCategory, double> ComplianceScores { get; set; } = new();
 
-    // 🩺 Global project compliance health index (0–100)
-    public double ProjectHealthIndex { get; set; }
-
-    // 📚 Grouped summaries
-    public IEnumerable<IGrouping<string, RuleResult>> GroupedByRule()
-        => Results.GroupBy(r => r.RuleId);
-
-    public IEnumerable<IGrouping<RuleCategory, RuleResult>> GroupedByCategory()
-        => (IEnumerable<IGrouping<RuleCategory, RuleResult>>)Results.GroupBy(r => r.Category);
-
-    // 🧮 Recomputes overall compliance metrics
+    // 🧠 Recomputes compliance after weighting and aggregation
     public void ComputeCompliance()
     {
         if (Results.Count == 0)
         {
-            ProjectHealthIndex = 100;
+            Metrics.ProjectHealthIndex = 100;
             return;
         }
 
-        var totalRules = Results.Count;
         var grouped = Results.GroupBy(r => r.Category);
+        ComplianceScores.Clear();
 
-        foreach (var g in grouped)
+        foreach (var group in grouped)
         {
-            var weight = g.Count(r => r.Severity is RuleSeverity.Error or RuleSeverity.Critical) * 2 +
-                         g.Count(r => r.Severity == RuleSeverity.Warning);
-            var penalty = Math.Clamp(weight * 1.5, 0, 100);
-            if (Enum.TryParse<RuleCategory>(g.Key, true, out var category))
-            {
-                ComplianceScores[category] = Math.Max(0, 100 - penalty);
-            }
-            else
-            {
-                // fallback if an unknown category sneaks in
-                ComplianceScores[RuleCategory.General] = Math.Max(0, 100 - penalty);
-            }
+            var severityPenalty = group.Sum(r =>
+                r.IsCompliant ? 0 : ((int)r.Severity + 1) * 10);
+
+            var score = Math.Max(0, 100 - severityPenalty / Math.Max(1, group.Count()));
+            ComplianceScores[group.Key] = score;
         }
 
-        // Weighted average for global health
-        var totalScore = ComplianceScores.Values.DefaultIfEmpty(100).Average();
-        ProjectHealthIndex = Math.Round(totalScore, 2);
+        // Compute domain health averages if available
+        if (Domains.Any())
+        {
+            Metrics.ProjectHealthIndex = Domains.Average(d => d.HealthIndex * 100);
+        }
+        else
+        {
+            Metrics.ProjectHealthIndex = ComplianceScores.Values.DefaultIfEmpty(100).Average();
+        }
+
+        Metrics.ProjectHealthIndex = Math.Round(Metrics.ProjectHealthIndex, 2);
     }
 
-    // 🧠 Quick summary
+    // 🧾 Quick summary
     public string Summary =>
-        $"🧾 {ProjectName} ({Language}/{Framework}) — {TotalViolations} violations across {TotalFilesScanned} files. HealthIndex: {ProjectHealthIndex:0.##}%";
+        $"🧾 {ProjectName} ({Language}/{Framework}) — {TotalViolations} violations across {TotalFilesScanned} files. HealthIndex: {Metrics.ProjectHealthIndex:0.##}%";
 
-    // 🗂️ Export-friendly DTO
+    // 🧩 Export-friendly DTO (AI / report writer)
     public object ToSummaryDto() => new
     {
         Project = ProjectName,
         Language,
         Framework,
         ScanDate,
-        Health = ProjectHealthIndex,
+        Health = Metrics.ProjectHealthIndex,
+        Metrics,
+        Domains,
         TotalFiles = TotalFilesScanned,
         TotalViolations,
         ComplianceScores = ComplianceScores,

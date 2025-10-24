@@ -1,20 +1,12 @@
 ﻿using Aegis.Infrastructure.Data;
+using Franz.Common.DependencyInjection;
+using Franz.Common.Business.Domain;
 
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+namespace Aegis.Infrastructure.Persistence;
 
-namespace Aegis.Infrastructure.Persistence.Repositories;
-
-public interface IRuleResultRepository 
-    
+public interface IRuleResultRepository : IScopedDependency
 {
-
-
-    public Task<IEnumerable<RuleResultEntity>> GetViolationsBySeverityAsync(string severity, CancellationToken token = default);
-  
+    Task<IEnumerable<RuleResultEntity>> GetViolationsBySeverityAsync(string severity, CancellationToken token = default);
+    Task<IEnumerable<RuleResultEntity>> GetViolationsByReportIdAsync(int reportId, CancellationToken token = default);
+    Task<IEnumerable<RuleResultEntity>> GetCriticalViolationsAsync(int? limit = null, CancellationToken token = default);
 }

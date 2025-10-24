@@ -5,6 +5,7 @@ namespace Aegis.Infrastructure.Data;
 
 public class RuleResultEntity : Entity
 {
+    public int ReportId { get; set; }
     public string RuleId { get; set; } = string.Empty;
     public string RuleName { get; set; } = string.Empty;
 

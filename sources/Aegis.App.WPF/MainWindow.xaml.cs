@@ -1,4 +1,7 @@
-﻿using System.Text;
+﻿using Aegis.App.Wpf.ViewModels;
+using Aegis.App.Wpf.Views;
+using Microsoft.Extensions.DependencyInjection;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -9,7 +12,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 
-namespace Aegis.App.WPF
+namespace Aegis.App.Wpf
 {
     /// <summary>
     /// Interaction logic for MainWindow.xaml
@@ -20,5 +23,32 @@ namespace Aegis.App.WPF
         {
             InitializeComponent();
         }
+
+        private void OpenLayerDashboard(object sender, RoutedEventArgs e)
+        {
+            var window = new LayerDashboardWindow
+            {
+                DataContext = App.Host.Services.GetRequiredService<LayerDashboardViewModel>()
+            };
+            window.Show();
+        }
+        private void OpenSectionDashboard(object sender, RoutedEventArgs e)
+        {
+            var window = new LayerDashboardWindow
+            {
+                DataContext = App.Host.Services.GetRequiredService<SectionDashboardViewModel>()
+            };
+            window.Show();
+        }
+
+        private void OpenRuleDashboard(object sender, RoutedEventArgs e)
+        {
+            var window = new LayerDashboardWindow
+            {
+                DataContext = App.Host.Services.GetRequiredService<RuleDashboardViewModel>()
+            };
+            window.Show();
+        }
+
     }
 }

@@ -5,11 +5,11 @@
 
 
   <!-- =============================================
-       AEGIS WPF FRONTEND — Desktop Dashboard
+       AEGIS Wpf FRONTEND — Desktop Dashboard
        ============================================= -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <UseWPF>true</UseWPF>
+    <UseWpf>true</UseWpf>
 
     <!-- Inherit base TargetFramework from Directory.Build.props -->
     <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
@@ -17,7 +17,7 @@
     <AssemblyName>Aegis.App.Wpf</AssemblyName>
     <RootNamespace>Aegis.App.Wpf</RootNamespace>
     <Description>
-      WPF Dashboard for Aegis — visualization of architecture audits, rule results, and reports.
+      Wpf Dashboard for Aegis — visualization of architecture audits, rule results, and reports.
     </Description>
   </PropertyGroup>
 
@@ -25,16 +25,17 @@
        UI / Views
        ============================================= -->
   <ItemGroup>
-    <Folder Include="Views\" />
-    <Folder Include="ViewModels\" />
     <Folder Include="Resources\" />
   </ItemGroup>
-
+  
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
   <!-- =============================================
        Dependencies (explicit now)
        ============================================= -->
   <ItemGroup>
-    <!-- WPF UI framework -->
+    <!-- Wpf UI framework -->
     <PackageReference Include="MahApps.Metro" Version="2.4.11" />
 
     <!-- MVVM support -->
@@ -42,16 +43,26 @@
 
     <!-- Logging -->
     <PackageReference Include="Franz.Common.Logging" Version="1.6.14" />
+       
 
 
     <!-- Dependency injection -->
     <PackageReference Include="Franz.Common.DependencyInjection" Version="1.6.14" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.10" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3537.50" />
+    <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
+    <PackageReference Include="QuestPDF" Version="2025.7.3" />
+    <PackageReference Include="RazorLight" Version="2.3.1" />
+    <PackageReference Include="Refractored.MvvmHelpers" Version="1.6.2" />
+    <PackageReference Include="Serilog.Sinks.ObservableCollection" Version="1.0.0" />
   </ItemGroup>
 
   <!-- =============================================
        Internal References
        ============================================= -->
   <ItemGroup>
+    <ProjectReference Include="..\Aegis.Cli\Aegis.Cli.csproj" />
     <ProjectReference Include="..\Aegis.Core\Aegis.Core.csproj" />
     <ProjectReference Include="..\Aegis.Infrastructure\Aegis.Infrastructure.csproj" />
     <ProjectReference Include="..\Aegis.Sdk\Aegis.Sdk.csproj" />

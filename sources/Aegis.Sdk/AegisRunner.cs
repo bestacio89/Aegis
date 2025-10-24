@@ -2,11 +2,9 @@
 using Aegis.Core.RuleEngines;
 using Aegis.Infrastructure.Data;
 using Aegis.Infrastructure.Persistence;
-using Aegis.Infrastructure.Persistence.Repositories;
 using Aegis.Shared.Enums;
 using Aegis.Shared.Models;
 using Aegis.Shared.Models.Policies;
-using Elastic.Apm.Api;
 using Franz.Common.Business.Domain;
 using Franz.Common.Business.Repositories;
 using Franz.Common.EntityFramework.Repositories;
@@ -18,31 +16,21 @@ namespace Aegis.Sdk;
 /// <summary>
 /// Executes full deterministic Aegis analyses on projects —
 /// from context detection → evaluator execution → rule evaluation → weighted aggregation → persistence.
-/// Supports read/write + specialized repository operations.
+/// Each run creates a unique ReportEntity session stored in the database, enabling historical comparisons.
 /// </summary>
 public sealed class AegisRunner
 {
     private readonly RuleEngine _engine;
-
-    // 🧱 Generic repositories
     private readonly EntityRepository<AegisDbContext, RuleResultEntity> _ruleResultRepo;
     private readonly EntityRepository<AegisDbContext, ReportEntity> _reportRepo;
-
-    private readonly IReadRepository<RuleResultEntity> _readRuleResultRepo;
-    private readonly IReadRepository<ReportEntity> _readReportRepo;
-
-    // 🎯 Specialized repositories
     private readonly IRuleResultRepository _customRuleResultRepo;
     private readonly IReportRepository _customReportRepo;
-
     private readonly ILogger<AegisRunner> _logger;
 
     public AegisRunner(
         RuleEngine engine,
         EntityRepository<AegisDbContext, RuleResultEntity> ruleResultRepo,
         EntityRepository<AegisDbContext, ReportEntity> reportRepo,
-        IReadRepository<RuleResultEntity> readRuleResultRepo,
-        IReadRepository<ReportEntity> readReportRepo,
         IRuleResultRepository customRuleResultRepo,
         IReportRepository customReportRepo,
         ILogger<AegisRunner> logger)
@@ -50,109 +38,99 @@ public sealed class AegisRunner
         _engine = engine;
         _ruleResultRepo = ruleResultRepo;
         _reportRepo = reportRepo;
-        _readRuleResultRepo = readRuleResultRepo;
-        _readReportRepo = readReportRepo;
         _customRuleResultRepo = customRuleResultRepo;
         _customReportRepo = customReportRepo;
         _logger = logger;
     }
 
     // 🧭───────────────────────────────────────────────
-    // POLICY LOADER
+    // HIGH-LEVEL ENTRYPOINT
     // ────────────────────────────────────────────────
-    public async Task<int> RunAsync(string projectPath, string policyPath, bool exportJson = true, CancellationToken token = default)
-    {
-        try
-        {
-            if (!File.Exists(policyPath))
-            {
-                _logger.LogWarning("⚠️ Policy file not found at {Path}, using default aegis.policy.json", policyPath);
-                policyPath = Path.Combine(AppContext.BaseDirectory, "config", "aegis.policy.json");
-            }
-
-            _logger.LogInformation("📜 Loading Aegis policy from {Path}", policyPath);
-            var policyJson = await File.ReadAllTextAsync(policyPath, token);
-
-            var policy = JsonSerializer.Deserialize<AegisPolicy>(policyJson, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-                ReadCommentHandling = JsonCommentHandling.Skip,
-                AllowTrailingCommas = true
-            });
-
-            if (policy is null)
-            {
-                _logger.LogError("❌ Failed to parse the Aegis policy file.");
-                return -1;
-            }
-
-            _engine.ApplyPolicy(policy);
-            return await RunAsync(projectPath, policy.ReportDetailLevel, exportJson, token);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "❌ Failed while applying policy to Aegis engine");
-            return -1;
-        }
-    }
-
-    // ⚙️───────────────────────────────────────────────
-    // MAIN EXECUTION
-    // ────────────────────────────────────────────────
-    public async Task<int> RunAsync(
+    public async Task<int> RunSessionAsync(
         string projectPath,
-        ReportDetailLevel detailLevel = ReportDetailLevel.SummaryOnly,
+        string? policyPath = null,
         bool exportJson = true,
         CancellationToken token = default)
     {
         try
         {
+            // Load policy
+            var policy = await LoadPolicyAsync(policyPath, token);
+            _engine.ApplyPolicy(policy);
+
+            // Detect project context
             _logger.LogInformation("🔍 Detecting project context for {Path}", projectPath);
             var context = ProjectContextDetector.Detect(projectPath);
-
             _logger.LogInformation(
                 "🧭 Context detected: {Lang}/{Framework} ({Architecture}) → {Domain}/{Layer} [{Nature}]",
                 context.Language, context.Framework, context.ArchitectureStyle,
                 context.DomainType, context.Layer, context.Nature);
 
-            // Run full deterministic audit
+            // Create a new report session
+            var reportEntity = await _customReportRepo.CreateSessionAsync(projectPath, context, token);
+
+            // Execute deterministic rule engine
             var report = await _engine.RunAsync(projectPath, context, token);
 
-            // Persist results
-            await PersistResultsAsync(report, context, token);
+            // Persist rule results
+            await PersistRuleResultsAsync(reportEntity.Id, report, token);
 
-            // Optional JSON export
+            // Finalize report with aggregated metrics
+            await _customReportRepo.FinalizeReportAsync(reportEntity.Id, report, token);
+
+            // Optional export
             if (exportJson)
-                await ExportJsonAsync(report, context, detailLevel, token);
+                await ExportJsonAsync(report, context, policy.ReportDetailLevel, token);
 
-            // Compute verdict
-            var exitCode = report.TotalViolations == 0 ? 0 : 1;
-            _logger.LogInformation(
-                "📊 Final verdict for {Project}: {Result}",
-                report.ProjectName,
-                exitCode == 0 ? "✅ Clean" : "⚠️ Violations found");
+            // Compare with previous
+            await CompareWithPreviousAsync(reportEntity, token);
 
-            return exitCode;
+            _logger.LogInformation("✅ Audit session {Id} complete for {Project}.", reportEntity.Id, report.ProjectName);
+            return 0;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Aegis analysis failed for {Path}", projectPath);
+            _logger.LogError(ex, "❌ Aegis session failed for {Path}", projectPath);
             return -1;
         }
     }
 
-    // 💾───────────────────────────────────────────────
-    // PERSISTENCE LAYER
+    // 🧾───────────────────────────────────────────────
+    // POLICY LOADER
     // ────────────────────────────────────────────────
-    private async Task PersistResultsAsync(AegisReport report, ProjectContext context, CancellationToken token)
+    private async Task<AegisPolicy> LoadPolicyAsync(string? policyPath, CancellationToken token)
     {
-        try
+        if (string.IsNullOrWhiteSpace(policyPath) || !File.Exists(policyPath))
         {
-            _logger.LogInformation("💾 Persisting analysis results for {Project}", report.ProjectName);
+            _logger.LogWarning("⚠️ Policy file not found. Using default aegis.policy.json");
+            policyPath = Path.Combine(AppContext.BaseDirectory, "config", "aegis.policy.json");
+        }
 
-            // Convert RuleResults → Entities
-            var ruleEntities = report.Results.Select(r => new RuleResultEntity
+        _logger.LogInformation("📜 Loading Aegis policy from {Path}", policyPath);
+        var policyJson = await File.ReadAllTextAsync(policyPath, token);
+
+        var policy = JsonSerializer.Deserialize<AegisPolicy>(policyJson, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        }) ?? new AegisPolicy();
+
+        return policy;
+    }
+
+    // 💾───────────────────────────────────────────────
+    // RESULT PERSISTENCE
+    // ────────────────────────────────────────────────
+    private async Task PersistRuleResultsAsync(int reportId, AegisReport report, CancellationToken token)
+    {
+        _logger.LogInformation("💾 Persisting {Count} rule results for report {Id}", report.Results.Count, reportId);
+
+        foreach (var r in report.Results)
+        {
+            var entity = new RuleResultEntity
             {
+                ReportId = reportId,
                 RuleId = r.RuleId,
                 RuleName = r.RuleName,
                 Severity = r.Severity,
@@ -161,49 +139,53 @@ public sealed class AegisRunner
                 Message = r.Message,
                 ImpactScore = r.ImpactScore,
                 WeightedImpact = r.WeightedImpact,
-                DateDetected = DateTime.UtcNow,
                 Domain = r.Domain,
                 AnalyzerVersion = r.AnalyzerVersion,
-                Project = report.ProjectName
-            }).ToList();
-
-            foreach (var entity in ruleEntities)
-            {
-                _logger.LogDebug(
-                    "   - Violation: {RuleId} | {Severity} | {Target} | {Message}",
-                    entity.RuleId, entity.Severity, entity.Target, entity.Message);
-                await _ruleResultRepo.AddAsync(entity);
-            }
-            
-      
-
-            var reportEntity = new ReportEntity
-            {
-                ProjectName = report.ProjectName,
-                Language = report.Language,
-                Framework = report.Framework ?? "none",
-                ScanDate = report.ScanDate.UtcDateTime,
-                TotalViolations = report.TotalViolations,
-                HealthIndex = report.Metrics.ProjectHealthIndex,
-                WeightedCompliance = report.Metrics.WeightedCompliance,
-                FileCount = report.TotalFilesScanned,
-                DomainCount = report.Domains.Count,
-                RuleResults = ruleEntities
+                Project = report.ProjectName,
+                DateDetected = DateTime.UtcNow
             };
 
-            await _reportRepo.AddAsync(reportEntity);
-           
+            await _ruleResultRepo.AddAsync(entity);
+        }
 
-            _logger.LogInformation("✅ Report persisted successfully for {Project}", report.ProjectName);
+        _logger.LogInformation("✅ Rule results persisted for report {Id}", reportId);
+    }
 
-            // Example custom repo usage (demonstration)
-            var criticalViolations = await _customRuleResultRepo.GetViolationsBySeverityAsync("Critical", token);
-            _logger.LogInformation("🚨 Found {Count} critical violations across this and prior runs.", criticalViolations.Count());
+    // 📊───────────────────────────────────────────────
+    // COMPARISON LOGIC
+    // ────────────────────────────────────────────────
+    private async Task CompareWithPreviousAsync(ReportEntity currentReport, CancellationToken token)
+    {
+        try
+        {
+            var lastReport = await _customReportRepo.GetLatestAsync(token);
+            if (lastReport is null || lastReport.Id == currentReport.Id)
+            {
+                _logger.LogInformation("📂 No previous report to compare with.");
+                return;
+            }
 
+            var lastResults = await _customRuleResultRepo.GetViolationsByReportIdAsync(lastReport.Id, token);
+            var currentResults = await _customRuleResultRepo.GetViolationsByReportIdAsync(currentReport.Id, token);
+
+            var newViolations = currentResults
+                .Where(cr => !lastResults.Any(lr => lr.RuleId == cr.RuleId && lr.Target == cr.Target))
+                .ToList();
+
+            if (newViolations.Any())
+            {
+                _logger.LogWarning("⚠️ {Count} new violations introduced since last report.", newViolations.Count);
+                foreach (var nv in newViolations)
+                    _logger.LogWarning("   ➕ New: {RuleId} → {Target}", nv.RuleId, nv.Target);
+            }
+            else
+            {
+                _logger.LogInformation("✅ No new violations introduced since last report.");
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Failed to persist Aegis analysis results for {Project}", report.ProjectName);
+            _logger.LogError(ex, "❌ Failed during report comparison.");
         }
     }
 
@@ -236,32 +218,6 @@ public sealed class AegisRunner
         catch (Exception ex)
         {
             _logger.LogError(ex, "❌ Failed to export JSON report for {Project}", report.ProjectName);
-        }
-    }
-
-    // 🔍───────────────────────────────────────────────
-    // OPTIONAL: FETCH & COMPARE LAST REPORTS
-    // ────────────────────────────────────────────────
-    public async Task CompareWithLastReportAsync(string projectName, CancellationToken token = default)
-    {
-        try
-        {
-            var lastReport = (await _readReportRepo.GetAll(token))
-                .OrderByDescending(r => r.ScanDate)
-                .FirstOrDefault(r => r.ProjectName == projectName);
-
-            if (lastReport is null)
-            {
-                _logger.LogWarning("📂 No prior report found for {Project}", projectName);
-                return;
-            }
-
-            var fullReport = await _customReportRepo.GetFullReportAsync(lastReport.Id, token);
-            _logger.LogInformation("📈 Loaded last report for {Project} (Violations={Count})", projectName, fullReport?.TotalViolations ?? 0);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "❌ Failed to fetch last report for {Project}", projectName);
         }
     }
 }

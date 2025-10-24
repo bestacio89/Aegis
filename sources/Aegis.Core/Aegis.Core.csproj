@@ -48,6 +48,7 @@
     <Folder Include="Security\Aggregation\" />
     <Folder Include="Security\Diagnostics\" />
     <Folder Include="Security\Evaluators\" />
+    <Folder Include="Security\Analysis\" />
     <Folder Include="Security\Services\" />
     <Folder Include="Security\Scoring\" />
     <Folder Include="Security\RuleEngines\" />

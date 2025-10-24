@@ -1,12 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace Aegis.Shared.Security.Enums;
 
-namespace Aegis.Shared.Security.Enums
+public enum RiskLevel
 {
-    internal class RiskLevel
-    {
-    }
+    None,
+    Low,
+    Moderate,
+    High,
+    Severe
 }

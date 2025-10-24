@@ -1,12 +1,21 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Microsoft.Extensions.Logging;
 
-namespace Aegis.SDK
+namespace Aegis.Sdk;
+public sealed class AegisSecurityAnalysisRunner
 {
-    internal class AegisAnalysisRunner
+    private readonly ISecurityRuleRegistry _registry;
+    private readonly ILogger<AegisSecurityAnalysisRunner> _logger;
+
+    public AegisSecurityAnalysisRunner(ISecurityRuleRegistry registry, ILogger<AegisSecurityAnalysisRunner> logger)
     {
+        _registry = registry;
+        _logger = logger;
+    }
+
+    public async Task<AegisSecurityReport> ExecuteAsync(string path, CancellationToken token = default)
+    {
+        _logger.LogInformation("🔒 Running Aegis Security Analysis...");
+        var results = await _registry.ExecuteAllAsync(path, token);
+        return new AegisSecurityReport { Findings = results.ToList() };
     }
 }

@@ -29,7 +29,7 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.10" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Security\Policies\AppSec\" />
+    <Folder Include="Security\Policies\Application\" />
     <Folder Include="Security\Policies\IaC\" />
     <Folder Include="Security\Policies\Dependency\" />
     <Folder Include="Security\Policies\Network\" />

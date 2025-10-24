@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Aegis.Shared.Security.Policies
+namespace Aegis.Shared.Security.Rules
 {
     internal class SecurityRuleResult
     {

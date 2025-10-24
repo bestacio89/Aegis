@@ -1,12 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace Aegis.Shared.Security.Enums;
 
-namespace Aegis.Shared.Security.Enums
+public enum SecuritySeverity
 {
-    internal class SecuritySeverity
-    {
-    }
+    Info = 0,
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    Critical = 4
 }

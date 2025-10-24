@@ -17,5 +17,7 @@ public enum BuildSystem
     Cargo = 9,       // Rust Cargo
     Make = 10,       // C/C++ Makefile or CMake
     Bazel = 11,      // Polyglot build system
+    GoMod= 12,      // Go modules
     Custom = 99      // Anything non-standard or proprietary
+
 }

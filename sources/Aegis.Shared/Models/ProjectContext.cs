@@ -52,7 +52,7 @@ public sealed class ProjectContext
 
     // 📦 Static project identity snapshot
     public ProjectMetadata? Metadata { get; set; }
-
+    public List<InferenceTrace> InferenceHistory { get; set; } = new();
     // 🧾 Constructors
     public ProjectContext() { }
 

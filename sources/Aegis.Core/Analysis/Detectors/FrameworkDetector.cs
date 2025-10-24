@@ -1,4 +1,4 @@
-﻿using Aegis.Shared.Models;
+﻿using Aegis.Shared.Architecture.Models;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
 
@@ -6,7 +6,7 @@ namespace Aegis.Core.Analysis.Detectors;
 
 internal static class FrameworkDetector
 {
-    public static void Analyze(ProjectContext ctx, List<string> files)
+    public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
     {
         var deps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -41,14 +41,14 @@ internal static class FrameworkDetector
         }
     }
 
-    private static void DetectDotNetFramework(ProjectContext ctx, HashSet<string> deps)
+    private static void DetectDotNetFramework(ProjectArchitectureContext ctx, HashSet<string> deps)
     {
         if (deps.Any(d => d.Contains("EntityFrameworkCore"))) ctx.Framework = ".NET (EF Core)";
         else if (deps.Any(d => d.Contains("AspNetCore"))) ctx.Framework = "ASP.NET Core";
         else ctx.Framework = ".NET";
     }
 
-    private static void DetectJavaFramework(ProjectContext ctx, List<string> files, HashSet<string> deps)
+    private static void DetectJavaFramework(ProjectArchitectureContext ctx, List<string> files, HashSet<string> deps)
     {
         if (files.Any(f => f.Contains("spring", StringComparison.OrdinalIgnoreCase)))
             ctx.Framework = "Spring Boot";
@@ -56,7 +56,7 @@ internal static class FrameworkDetector
         else ctx.Framework = "Java SE";
     }
 
-    private static void DetectPythonFramework(ProjectContext ctx, List<string> files, HashSet<string> deps)
+    private static void DetectPythonFramework(ProjectArchitectureContext ctx, List<string> files, HashSet<string> deps)
     {
         var text = string.Join("\n", files.Select(File.ReadAllText));
         if (text.Contains("flask")) ctx.Framework = "Flask";
@@ -65,7 +65,7 @@ internal static class FrameworkDetector
         else ctx.Framework = "Python Standard";
     }
 
-    private static void DetectNodeFramework(ProjectContext ctx, List<string> files, HashSet<string> deps)
+    private static void DetectNodeFramework(ProjectArchitectureContext ctx, List<string> files, HashSet<string> deps)
     {
         foreach (var pkg in files.Where(f => f.EndsWith("package.json")))
         {

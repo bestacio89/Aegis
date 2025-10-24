@@ -1,5 +1,5 @@
 {
-  "AegisPolicy": {
+  "AegisArchitecturePolicy": {
     "Cohesion": {
       "MaxMembersPerClass": 35,
       "MaxMethodFieldRatio": 5.0

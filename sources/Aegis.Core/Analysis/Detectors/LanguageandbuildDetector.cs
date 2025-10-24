@@ -1,11 +1,11 @@
-﻿using Aegis.Shared.Enums;
-using Aegis.Shared.Models;
+﻿using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Enums;
 
 namespace Aegis.Core.Analysis.Detectors;
 
 internal static class LanguageAndBuildDetector
 {
-    public static void Analyze(ProjectContext ctx, List<string> files)
+    public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
     {
         if (files.Any(f => f.EndsWith(".csproj") || f.EndsWith(".sln")))
         {
@@ -44,7 +44,7 @@ internal static class LanguageAndBuildDetector
             ctx.BuildSystem = BuildSystem.Unknown;
         }
 
-        ctx.InferenceHistory.Add(new InferenceTrace
+        ctx.InferenceHistory.Add(new ArchitectureInferenceTrace
         {
             Key = "Language",
             Value = ctx.Language,

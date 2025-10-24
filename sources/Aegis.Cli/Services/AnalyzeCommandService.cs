@@ -9,10 +9,10 @@ namespace Aegis.Cli.Services;
 /// </summary>
 public sealed class AnalyzeCommandService
 {
-    private readonly AegisRunner _runner;
+    private readonly AegisArchitectureAnalysisRunner _runner;
     private readonly ILogger<AnalyzeCommandService> _logger;
 
-    public AnalyzeCommandService(AegisRunner runner, ILogger<AnalyzeCommandService> logger)
+    public AnalyzeCommandService(AegisArchitectureAnalysisRunner runner, ILogger<AnalyzeCommandService> logger)
     {
         _runner = runner;
         _logger = logger;

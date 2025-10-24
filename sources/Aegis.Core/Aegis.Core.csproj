@@ -44,5 +44,13 @@
     <PackageReference Include="FluentValidation" Version="12.0.0" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Security\Aggregation\" />
+    <Folder Include="Security\Diagnostics\" />
+    <Folder Include="Security\Evaluators\" />
+    <Folder Include="Security\Services\" />
+    <Folder Include="Security\Scoring\" />
+    <Folder Include="Security\RuleEngines\" />
+  </ItemGroup>
 
 </Project>

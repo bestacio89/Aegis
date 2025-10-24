@@ -1,4 +1,4 @@
-﻿using Aegis.Core.RuleEngines;
+﻿using Aegis.Core.Architecture.RuleEngines;
 using Franz.Common.DependencyInjection.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

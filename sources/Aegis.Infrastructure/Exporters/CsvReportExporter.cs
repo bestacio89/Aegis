@@ -1,8 +1,8 @@
 ﻿using System.Globalization;
 using System.Text;
+using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
 using Aegis.Shared.Enums;
-using Aegis.Shared.Models;
 using Aegis.Shared.Models.Rules;
 using Microsoft.Extensions.Logging;
 
@@ -23,8 +23,8 @@ public sealed class CsvReportExporter : IReportExporter
     }
 
     public async Task ExportAsync(
-        AegisReport report,
-        ProjectContext context,
+        AegisArchitectureReport report,
+        ProjectArchitectureContext context,
         string outputPath,
         ReportDetailLevel detailLevel = ReportDetailLevel.FullForensic,
         CancellationToken token = default)

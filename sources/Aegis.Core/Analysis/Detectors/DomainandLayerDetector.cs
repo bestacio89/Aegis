@@ -1,10 +1,10 @@
-﻿using Aegis.Shared.Models;
+﻿using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Core.Analysis.Detectors;
 
 internal static class DomainAndLayerDetector
 {
-    public static void Analyze(ProjectContext ctx, List<string> files)
+    public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
     {
         if (ctx.Language.Contains("TypeScript") || ctx.Language == "JavaScript")
         {
@@ -24,7 +24,7 @@ internal static class DomainAndLayerDetector
         else ctx.DomainType = "Unknown";
     }
 
-    private static void InferBackendLayer(ProjectContext ctx, List<string> files)
+    private static void InferBackendLayer(ProjectArchitectureContext ctx, List<string> files)
     {
         var dirs = files
             .Select(f => Path.GetDirectoryName(f))

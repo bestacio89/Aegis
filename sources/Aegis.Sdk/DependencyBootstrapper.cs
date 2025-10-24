@@ -1,7 +1,7 @@
-﻿using Aegis.Core.RuleEngines;
-using Aegis.Core.Evaluators;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Franz.Common.Logging;
+using Aegis.Core.Architecture.Evaluators;
+using Aegis.Core.Architecture.RuleEngines;
 
 namespace Aegis.Sdk;
 
@@ -13,7 +13,7 @@ public static class DependencyBootstrapper
         // Core components
         services.AddScoped<RuleEngine>();
         services.AddScoped<RuleEngineCore>();
-        services.AddScoped<AegisRunner>();
+        services.AddScoped<AegisArchitectureAnalysisRunner>();
         // Evaluators
         services.Scan(scan => scan
             .FromAssembliesOf(typeof(BaseEvaluator))

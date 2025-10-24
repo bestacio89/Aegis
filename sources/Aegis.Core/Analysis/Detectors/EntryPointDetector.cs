@@ -1,7 +1,7 @@
 ﻿using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Enums;
-using Aegis.Shared.Models;
 
 namespace Aegis.Core.Analysis.Detectors;
 
@@ -11,7 +11,7 @@ namespace Aegis.Core.Analysis.Detectors;
 /// </summary>
 public static class EntryPointDetector
 {
-    public static void Analyze(ProjectContext ctx, List<string> files)
+    public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
     {
         // Default value
         ctx.EntryPointFile = null;
@@ -57,7 +57,7 @@ public static class EntryPointDetector
     // ─────────────────────────────
     // 🟦 .NET Entry Point Detector
     // ─────────────────────────────
-    private static void DetectDotNetEntryPoint(ProjectContext ctx, List<string> files)
+    private static void DetectDotNetEntryPoint(ProjectArchitectureContext ctx, List<string> files)
     {
         var program = files.FirstOrDefault(f =>
             Path.GetFileName(f).Equals("Program.cs", StringComparison.OrdinalIgnoreCase));
@@ -81,7 +81,7 @@ public static class EntryPointDetector
     // ─────────────────────────────
     // 🟨 Node.js / TS Entry Point
     // ─────────────────────────────
-    private static void DetectNodeEntryPoint(ProjectContext ctx, List<string> files)
+    private static void DetectNodeEntryPoint(ProjectArchitectureContext ctx, List<string> files)
     {
         var pkg = files.FirstOrDefault(f =>
             Path.GetFileName(f).Equals("package.json", StringComparison.OrdinalIgnoreCase));
@@ -113,7 +113,7 @@ public static class EntryPointDetector
     // ─────────────────────────────
     // 🐍 Python Entry Point Detector
     // ─────────────────────────────
-    private static void DetectPythonEntryPoint(ProjectContext ctx, List<string> files)
+    private static void DetectPythonEntryPoint(ProjectArchitectureContext ctx, List<string> files)
     {
         var main = files.FirstOrDefault(f =>
             Path.GetFileName(f).Equals("main.py", StringComparison.OrdinalIgnoreCase));
@@ -142,7 +142,7 @@ public static class EntryPointDetector
     // ─────────────────────────────
     // ☕ Java Entry Point Detector
     // ─────────────────────────────
-    private static void DetectJavaEntryPoint(ProjectContext ctx, List<string> files)
+    private static void DetectJavaEntryPoint(ProjectArchitectureContext ctx, List<string> files)
     {
         foreach (var javaFile in files.Where(f => f.EndsWith(".java")))
         {

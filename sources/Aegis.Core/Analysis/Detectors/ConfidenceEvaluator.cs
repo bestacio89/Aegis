@@ -1,11 +1,11 @@
-﻿using Aegis.Shared.Enums;
-using Aegis.Shared.Models;
+﻿using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Enums;
 
 namespace Aegis.Core.Analysis.Detectors;
 
 internal static class ConfidenceEvaluator
 {
-    public static void Evaluate(ProjectContext ctx)
+    public static void Evaluate(ProjectArchitectureContext ctx)
     {
         ctx.ConfidenceMap["Language"] = ctx.Language != "Unknown" ? 1.0 : 0.4;
         ctx.ConfidenceMap["Framework"] = !string.IsNullOrEmpty(ctx.Framework) ? 0.9 : 0.5;

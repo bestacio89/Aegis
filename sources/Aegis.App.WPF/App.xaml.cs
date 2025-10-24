@@ -1,5 +1,5 @@
 ﻿using Aegis.App.Wpf.ViewModels;
-using Aegis.Core.RuleEngines;
+using Aegis.Core.Architecture.RuleEngines;
 using Aegis.Infrastructure.Data;
 using Aegis.Infrastructure.Persistence;
 using Aegis.Infrastructure.Repositories;

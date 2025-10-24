@@ -1,10 +1,10 @@
-﻿using Aegis.Shared.Models;
+﻿using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Core.Analysis.Detectors;
 
 internal static class NatureDetector
 {
-    public static void Analyze(ProjectContext ctx, List<string> files)
+    public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
     {
         bool sdk = files.Any(f => f.Contains($"{Path.DirectorySeparatorChar}sdk{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));
         bool tests = files.Any(f => f.Contains($"{Path.DirectorySeparatorChar}test{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));

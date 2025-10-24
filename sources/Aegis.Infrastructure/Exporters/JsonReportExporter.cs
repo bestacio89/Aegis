@@ -1,8 +1,8 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
 using Aegis.Shared.Enums;
-using Aegis.Shared.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Aegis.Infrastructure.Exporters;
@@ -23,8 +23,8 @@ public sealed class JsonReportExporter : IReportExporter
     }
 
     public async Task ExportAsync(
-        AegisReport report,
-        ProjectContext context,
+        AegisArchitectureReport report,
+        ProjectArchitectureContext context,
         string outputPath,
         ReportDetailLevel detailLevel = ReportDetailLevel.FullForensic,
         CancellationToken token = default)

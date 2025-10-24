@@ -13,8 +13,8 @@ public static class AnalyzeCommand
         // 🏗️ Build the CLI host with Franz logging and DI
         using var host = CliHostBuilder.Build();
 
-        var logger = host.Services.GetRequiredService<ILogger<AegisRunner>>();
-        var runner = host.Services.GetRequiredService<AegisRunner>();
+        var logger = host.Services.GetRequiredService<ILogger<AegisArchitectureAnalysisRunner>>();
+        var runner = host.Services.GetRequiredService<AegisArchitectureAnalysisRunner>();
 
         try
         {

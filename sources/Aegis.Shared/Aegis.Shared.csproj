@@ -28,5 +28,12 @@
     <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.10" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.10" />
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Security\Policies\AppSec\" />
+    <Folder Include="Security\Policies\IaC\" />
+    <Folder Include="Security\Policies\Dependency\" />
+    <Folder Include="Security\Policies\Network\" />
+    <Folder Include="Security\Policies\Secrets\" />
+  </ItemGroup>
 
 </Project>

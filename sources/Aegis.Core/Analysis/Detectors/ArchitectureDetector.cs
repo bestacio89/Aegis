@@ -1,10 +1,10 @@
-﻿using Aegis.Shared.Models;
+﻿using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Core.Analysis.Detectors;
 
 internal static class ArchitectureDetector
 {
-    public static void Analyze(ProjectContext ctx)
+    public static void Analyze(ProjectArchitectureContext ctx)
     {
         var deps = ctx.DetectedDependencies;
 

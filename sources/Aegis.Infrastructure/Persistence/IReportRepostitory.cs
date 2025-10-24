@@ -1,7 +1,7 @@
 ﻿using Aegis.Infrastructure.Data;
-using Aegis.Shared.Models;
 using Franz.Common.DependencyInjection;
 using Franz.Common.Business.Domain;
+using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Infrastructure.Persistence;
 
@@ -12,6 +12,6 @@ public interface IReportRepository : IScopedDependency
     Task<List<ReportEntity>> GetAllReportsAsync(int? limit = null, CancellationToken token = default);
 
     // Session lifecycle
-    Task<ReportEntity> CreateSessionAsync(string projectPath, ProjectContext context, CancellationToken token = default);
-    Task FinalizeReportAsync(int reportId, AegisReport report, CancellationToken token = default);
+    Task<ReportEntity> CreateSessionAsync(string projectPath, ProjectArchitectureContext context, CancellationToken token = default);
+    Task FinalizeReportAsync(int reportId, AegisArchitectureReport report, CancellationToken token = default);
 }

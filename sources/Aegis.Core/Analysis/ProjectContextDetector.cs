@@ -1,13 +1,13 @@
 ﻿using Aegis.Core.Analysis.Detectors;
-using Aegis.Shared.Models;
+using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Core.Analysis;
 
 public static class ProjectContextDetector
 {
-    public static ProjectContext Detect(string rootPath)
+    public static ProjectArchitectureContext Detect(string rootPath)
     {
-        var ctx = new ProjectContext
+        var ctx = new ProjectArchitectureContext
         {
             DetectedAt = DateTime.UtcNow,
             DetectorVersion = "1.3.0",

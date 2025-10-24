@@ -1,7 +1,7 @@
 ﻿using Aegis.Infrastructure.Data;
 using Aegis.Infrastructure.Persistence;
 using Aegis.Shared.Enums;
-using Aegis.Shared.Models;
+using Aegis.Shared.Architecture.Models;
 using Microsoft.Extensions.Logging;
 using OxyPlot;
 using OxyPlot.Axes;

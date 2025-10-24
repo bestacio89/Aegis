@@ -12,7 +12,7 @@ public static class CliHostBuilder
             .UseLog() // Franz Logging Integration
             .ConfigureServices(services =>
             {
-                services.AddSingleton<AegisRunner>(); // 👈 This line is key
+                services.AddSingleton<AegisArchitectureAnalysisRunner>(); // 👈 This line is key
             })
             .Build();
 }

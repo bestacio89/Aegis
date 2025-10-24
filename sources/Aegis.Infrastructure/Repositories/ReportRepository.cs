@@ -1,6 +1,6 @@
 ﻿using Aegis.Infrastructure.Data;
 using Aegis.Infrastructure.Persistence;
-using Aegis.Shared.Models;
+using Aegis.Shared.Architecture.Models;
 using Franz.Common.EntityFramework.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -32,7 +32,7 @@ public sealed class ReportRepository : IReportRepository
         return await query.ToListAsync(token);
     }
 
-    public async Task<ReportEntity> CreateSessionAsync(string projectPath, ProjectContext context, CancellationToken token = default)
+    public async Task<ReportEntity> CreateSessionAsync(string projectPath, ProjectArchitectureContext context, CancellationToken token = default)
     {
         var entity = new ReportEntity
         {
@@ -50,7 +50,7 @@ public sealed class ReportRepository : IReportRepository
         return entity;
     }
 
-    public async Task FinalizeReportAsync(int reportId, AegisReport report, CancellationToken token = default)
+    public async Task FinalizeReportAsync(int reportId, AegisArchitectureReport report, CancellationToken token = default)
     {
         var entity = await _db.Reports.FindAsync(new object[] { reportId }, token);
         if (entity is null) return;

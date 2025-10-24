@@ -18,7 +18,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aegis.Sdk", "sources\Aegis.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aegis.Infrastructure", "sources\Aegis.Infrastructure\Aegis.Infrastructure.csproj", "{C79D0334-7163-FC75-06ED-E77C54B8EF02}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aegis.App.WPF", "sources\Aegis.App.WPF\Aegis.App.WPF.csproj", "{9B09B9A8-5F3C-488F-4F07-5C248614E8DC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aegis.App.Wpf", "sources\Aegis.App.WPF\Aegis.App.Wpf.csproj", "{9B09B9A8-5F3C-488F-4F07-5C248614E8DC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aegis.Shared", "sources\Aegis.Shared\Aegis.Shared.csproj", "{4904089B-164A-3A3C-21CF-3F69B4DA41FB}"
 EndProject

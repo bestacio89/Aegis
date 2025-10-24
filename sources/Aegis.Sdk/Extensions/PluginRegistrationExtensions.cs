@@ -1,6 +1,6 @@
 ﻿using Aegis.Sdk.Contracts;
+using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Contracts;
-using Aegis.Shared.Models.Policies;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -40,7 +40,7 @@ public static class PluginRegistrationExtensions
         if (!aegisSection.Exists())
             throw new FileNotFoundException("Could not find the 'AegisPolicy' section in configuration or aegis.policy.json.");
 
-        services.Configure<AegisPolicy>(aegisSection);
+        services.Configure<AegisArchitecturePolicy>(aegisSection);
         return services;
     }
 

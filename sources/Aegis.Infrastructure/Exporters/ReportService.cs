@@ -1,6 +1,6 @@
-﻿using Aegis.Shared.Contracts;
+﻿using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Contracts;
 using Aegis.Shared.Enums;
-using Aegis.Shared.Models;
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -30,8 +30,8 @@ public sealed class ReportService : IScopedDependency
     /// <param name="detailLevel">The desired level of report detail.</param>
     /// <param name="token">Cancellation token.</param>
     public async Task SaveAllAsync(
-        AegisReport report,
-        ProjectContext context,
+        AegisArchitectureReport report,
+        ProjectArchitectureContext context,
         string basePath,
         ReportDetailLevel detailLevel = ReportDetailLevel.FullForensic,
         CancellationToken token = default)

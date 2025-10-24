@@ -1,7 +1,7 @@
 ﻿using Aegis.Infrastructure.Aggregation;
+using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
 using Aegis.Shared.Enums;
-using Aegis.Shared.Models;
 using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -22,8 +22,8 @@ public sealed class ForensicPdfExporter : IReportExporter
     }
 
     public async Task ExportAsync(
-        AegisReport report,
-        ProjectContext context,
+        AegisArchitectureReport report,
+        ProjectArchitectureContext context,
         string outputPath,
         ReportDetailLevel detailLevel = ReportDetailLevel.FullForensic,
         CancellationToken token = default)

@@ -1,8 +1,8 @@
 ﻿using Aegis.Core.Architecture.Evaluators;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Dependency;
-using Aegis.Shared.Enums;
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -18,7 +18,7 @@ namespace Aegis.Core.Architecture.Evaluators.Dependency;
 /// - UnusedReferenceRatio
 /// The RuleEngine will later interpret these metrics using DependencyRuleset.
 /// </summary>
-public sealed class UnusedReferenceEvaluator : BaseEvaluator, IScopedDependency
+public sealed class UnusedReferenceEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly DependencyPolicy _policy;
 
@@ -84,7 +84,7 @@ public sealed class UnusedReferenceEvaluator : BaseEvaluator, IScopedDependency
 
             var result = new ArchitectureEvaluatorResult(Name, Path.GetFileName(file))
             {
-                Category = nameof(RuleCategory.Dependency),
+                Category = nameof(ArchitectureRuleCategory.Dependency),
                 Metrics =
                 {
                     ["UnusedReferenceCount"] = unusedCount,

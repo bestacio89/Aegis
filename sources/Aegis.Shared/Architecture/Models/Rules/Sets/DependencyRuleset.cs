@@ -1,5 +1,5 @@
-﻿using Aegis.Shared.Architecture.Models.Rules;
-using Aegis.Shared.Enums;
+﻿using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models.Rules;
 
 namespace Aegis.Shared.Architecture.Models.Rules.Sets;
 
@@ -9,65 +9,65 @@ namespace Aegis.Shared.Architecture.Models.Rules.Sets;
 /// </summary>
 public static class DependencyRuleset
 {
-    public static IEnumerable<RuleDefinition> Get() => new[]
+    public static IEnumerable<ArchitectureRuleDefinition> Get() => new[]
     {
         // ==========================================================
         // 📦 Outdated Dependencies
         // ==========================================================
-        new RuleDefinition
+        new ArchitectureRuleDefinition
         {
             Id = "AEG-DEPS-R1",
             Name = "Outdated Package Ratio Too High",
-            Category = nameof(RuleCategory.Dependency),
+            Category = nameof(ArchitectureRuleCategory.Dependency),
             MetricKey = "OutdatedPackageRatio",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.15,
-            Severity = RuleSeverity.High,
+            Severity = ArchitectureRuleSeverity.High,
             Recommendation = "Update outdated packages to maintain compatibility and security."
         },
 
         // ==========================================================
         // ⏱️ Dependency Freshness
         // ==========================================================
-        new RuleDefinition
+        new ArchitectureRuleDefinition
         {
             Id = "AEG-DEPS-R2",
             Name = "Dependency Freshness Too Low",
-            Category = nameof(RuleCategory.Dependency),
+            Category = nameof(ArchitectureRuleCategory.Dependency),
             MetricKey = "DependencyFreshness",
             Operator = ComparisonOperator.LessThan,
             Threshold = 80,
-            Severity = RuleSeverity.Medium,
+            Severity = ArchitectureRuleSeverity.Medium,
             Recommendation = "Ensure dependencies are updated regularly. Aim for 80+ freshness score."
         },
 
         // ==========================================================
         // 🧹 Unused References
         // ==========================================================
-        new RuleDefinition
+        new ArchitectureRuleDefinition
         {
             Id = "AEG-DEPS-R3",
             Name = "Unused References Detected",
-            Category = nameof(RuleCategory.Dependency),
+            Category = nameof(ArchitectureRuleCategory.Dependency),
             MetricKey = "UnusedReferenceCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 3,
-            Severity = RuleSeverity.Low,
+            Severity = ArchitectureRuleSeverity.Low,
             Recommendation = "Remove unused dependencies to reduce attack surface and build size."
         },
 
         // ==========================================================
         // ⚖️ Version Drift
         // ==========================================================
-        new RuleDefinition
+        new ArchitectureRuleDefinition
         {
             Id = "AEG-DEPS-R4",
             Name = "Version Drift Too Large",
-            Category = nameof(RuleCategory.Dependency),
+            Category = nameof(ArchitectureRuleCategory.Dependency),
             MetricKey = "MajorVersionDrift",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 1,
-            Severity = RuleSeverity.Medium,
+            Severity = ArchitectureRuleSeverity.Medium,
             Recommendation = "Align package major versions across projects to prevent runtime mismatches."
         }
     };

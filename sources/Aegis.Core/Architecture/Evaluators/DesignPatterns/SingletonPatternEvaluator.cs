@@ -14,7 +14,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// Computes a SingletonComplianceScore (0–100) based on thread safety, initialization strategy,
 /// and pattern adherence consistency.
 /// </summary>
-public sealed class SingletonPatternEvaluator : BaseEvaluator
+public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 

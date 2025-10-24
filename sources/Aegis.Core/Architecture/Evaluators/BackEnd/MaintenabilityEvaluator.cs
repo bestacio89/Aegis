@@ -17,7 +17,7 @@ namespace Aegis.Core.Architecture.Evaluators.BackEnd;
 /// cyclomatic complexity, comment density, and maintainability index.
 /// Emits EvaluatorResults consumed by the Rule Engine for governance.
 /// </summary>
-public sealed class MaintainabilityEvaluator : BaseEvaluator, IScopedDependency
+public sealed class MaintainabilityEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly MaintainabilityPolicy _policy;
 

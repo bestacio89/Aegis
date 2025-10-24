@@ -14,7 +14,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// Detects **Anemic Domain Models** — classes with excessive state and little to no behavior.
 /// Emits structured metrics for RuleEngine pattern intelligence.
 /// </summary>
-public sealed class AnemicDomainModelEvaluator : BaseEvaluator
+public sealed class AnemicDomainModelEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 

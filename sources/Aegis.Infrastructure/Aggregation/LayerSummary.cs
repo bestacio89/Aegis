@@ -1,5 +1,5 @@
-﻿using Aegis.Shared.Architecture.Models.Rules;
-using Aegis.Shared.Enums;
+﻿using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models.Rules;
 
 namespace Aegis.Infrastructure.Aggregation;
 
@@ -9,8 +9,8 @@ public sealed class LayerSummary
     public int TotalFiles { get; set; }
     public int Violations { get; set; }
     public double HealthIndex { get; set; }
-    public Dictionary<RuleSeverity, int> SeverityBreakdown { get; set; } = new();
-    public List<RuleResult> TopViolations { get; set; } = new();
+    public Dictionary<ArchitectureRuleSeverity, int> SeverityBreakdown { get; set; } = new();
+    public List<ArchitectureRuleresult> TopViolations { get; set; } = new();
     public List<string> Recommendations { get; set; } = new();
 
     public override string ToString() =>

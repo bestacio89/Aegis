@@ -1,9 +1,9 @@
 ﻿using System.Text.RegularExpressions;
 using Aegis.Core.Architecture.Evaluators;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Naming;
-using Aegis.Shared.Enums;
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,7 +14,7 @@ namespace Aegis.Core.Architecture.Evaluators.Naming;
 /// 🧭 Evaluates naming consistency, style conformity, and semantic coherence
 /// across classes, methods, variables, and files according to the NamingPolicy.
 /// </summary>
-public sealed class NamingEvaluator : BaseEvaluator, IScopedDependency
+public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly NamingPolicy _policy;
 
@@ -59,7 +59,7 @@ public sealed class NamingEvaluator : BaseEvaluator, IScopedDependency
 
             var result = new ArchitectureEvaluatorResult(Name, Path.GetFileName(file))
             {
-                Category = nameof(RuleCategory.Naming),
+                Category = nameof(ArchitectureRuleCategory.Naming),
                 Metrics = new Dictionary<string, double>(),
                 Metadata = new Dictionary<string, string> { ["FilePath"] = file }
             };

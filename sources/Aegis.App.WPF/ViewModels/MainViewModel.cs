@@ -14,7 +14,7 @@ namespace Aegis.App.Wpf.ViewModels;
 
 public sealed class MainViewModel : BaseViewModel
 {
-    private readonly AegisRunner _runner;
+    private readonly AegisArchitectureAnalysisRunner _runner;
     private readonly ILogger<MainViewModel> _logger;
 
     public ObservableCollection<string> Logs { get; } = new();
@@ -32,7 +32,7 @@ public sealed class MainViewModel : BaseViewModel
     public MainViewModel()
     {
         // ✅ Resolve dependencies through the DI container (App.Host configured in App.xaml.cs)
-        _runner = App.Host.Services.GetRequiredService<AegisRunner>();
+        _runner = App.Host.Services.GetRequiredService<AegisArchitectureAnalysisRunner>();
         _logger = App.Host.Services.GetRequiredService<ILogger<MainViewModel>>();
 
         // ✅ Setup commands

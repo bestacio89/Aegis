@@ -1,5 +1,4 @@
 ﻿using System.Text.RegularExpressions;
-using Aegis.Shared.Enums;
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -7,6 +6,7 @@ using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Dependency;
 using Aegis.Core.Architecture.Evaluators;
+using Aegis.Shared.Architecture.Enums;
 
 namespace Aegis.Core.Architecture.Evaluators.Dependency;
 
@@ -15,7 +15,7 @@ namespace Aegis.Core.Architecture.Evaluators.Dependency;
 /// such as freshness score, outdated ratio, and version drift.
 /// Produces EvaluatorResults — the RuleEngine will interpret thresholds later.
 /// </summary>
-public sealed class PackageVersionEvaluator : BaseEvaluator, IScopedDependency
+public sealed class PackageVersionEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly DependencyPolicy _policy;
     private static readonly Regex VersionRx = new(@"(\d+)\.(\d+)\.(\d+)", RegexOptions.Compiled);
@@ -73,7 +73,7 @@ public sealed class PackageVersionEvaluator : BaseEvaluator, IScopedDependency
 
             var result = new ArchitectureEvaluatorResult(Name, Path.GetFileName(file))
             {
-                Category = nameof(RuleCategory.Dependency),
+                Category = nameof(ArchitectureRuleCategory.Dependency),
                 Metrics =
                 {
                     ["DependencyFreshness"] = freshness,

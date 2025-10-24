@@ -14,7 +14,7 @@ namespace Aegis.Core.Architecture.Evaluators.Infrastructure;
 /// Produces quantitative metrics for log hygiene, structured logging compliance,
 /// and observability maturity (LoggingIntegrityScore - ObservabilityHealthIndex).
 /// </summary>
-public sealed class LoggingEvaluator : BaseEvaluator
+public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 {
     private readonly LoggingPolicy _policy;
 

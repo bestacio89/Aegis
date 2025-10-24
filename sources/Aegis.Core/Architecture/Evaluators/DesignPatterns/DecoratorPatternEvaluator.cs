@@ -17,7 +17,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// - Checks delegation to wrapped components
 /// Emits structured metrics for rule evaluation.
 /// </summary>
-public sealed class DecoratorPatternEvaluator : BaseEvaluator
+public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 

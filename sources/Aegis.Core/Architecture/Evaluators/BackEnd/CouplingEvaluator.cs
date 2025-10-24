@@ -16,7 +16,7 @@ namespace Aegis.Core.Architecture.Evaluators.BackEnd;
 /// Evaluates inter-module and external coupling across multi-language projects.
 /// Emits structured EvaluatorResults with import and dependency metrics.
 /// </summary>
-public sealed class CouplingEvaluator : BaseEvaluator, IScopedDependency
+public sealed class CouplingEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly CouplingPolicy _policy;
 

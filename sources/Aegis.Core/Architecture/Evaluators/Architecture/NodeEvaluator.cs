@@ -17,7 +17,7 @@ namespace Aegis.Core.Architecture.Evaluators.Architecture;
 /// Produces structured EvaluatorResults describing risky constructs and metrics
 /// for policy enforcement by the RuleEngine.
 /// </summary>
-public sealed class NodeEvaluator : BaseEvaluator, IScopedDependency
+public sealed class NodeEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     public override string Name => "NodeEvaluator";
 

@@ -1,5 +1,5 @@
-﻿using Aegis.Core.Analysis;
-using Aegis.Core.Architecture.Aggregation;
+﻿using Aegis.Core.Architecture.Aggregation;
+using Aegis.Core.Architecture.Analysis;
 using Aegis.Core.Architecture.Scoring;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
@@ -35,7 +35,7 @@ public sealed class AegisArchitectureAnalyzer
     {
         // 1) Detect project context
         _logger.LogInformation("🔍 Detecting project context for {Path}", projectPath);
-        var context = ProjectContextDetector.Detect(projectPath);
+        var context = ProjectArchitectureContextDetector.Detect(projectPath);
         _logger.LogInformation("🧭 Detected context: {Lang}/{Framework} [{DomainType}/{Layer}] ({Architecture})",
             context.Language, context.Framework, context.DomainType, context.Layer, context.ArchitectureStyle);
 

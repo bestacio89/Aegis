@@ -13,7 +13,7 @@ namespace Aegis.Core.Architecture.Evaluators.Performance;
 /// Evaluates performance, concurrency, and async best practices across .NET, Java, Python, and Node ecosystems.
 /// Produces PerformanceHealthIndex and sub-metrics for algorithmic efficiency and async maturity.
 /// </summary>
-public sealed class PerformanceEvaluator : BaseEvaluator
+public sealed class PerformanceEvaluator : BaseArchitectureEvaluator
 {
     private readonly PerformancePolicy _policy;
 

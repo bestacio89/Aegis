@@ -1,4 +1,5 @@
-﻿using Aegis.Shared.Architecture.Models.Policies.Architecture;
+﻿using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models.Policies.Architecture;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
 using Aegis.Shared.Architecture.Models.Policies.Dependency;
 using Aegis.Shared.Architecture.Models.Policies.FrontEnd;
@@ -6,7 +7,6 @@ using Aegis.Shared.Architecture.Models.Policies.Infrastructure;
 using Aegis.Shared.Architecture.Models.Policies.Naming;
 using Aegis.Shared.Architecture.Models.Policies.Performance;
 using Aegis.Shared.Architecture.Models.Policies.Persistence;
-using Aegis.Shared.Enums;
 
 namespace Aegis.Shared.Architecture.Models.Policies
 {
@@ -15,7 +15,7 @@ namespace Aegis.Shared.Architecture.Models.Policies
         // 🧭 Metadata
         public string? Name { get; set; } = "Default Aegis Policy";
         public string? Version { get; set; } = "1.0";
-        public ReportDetailLevel ReportDetailLevel { get; set; } = ReportDetailLevel.SummaryOnly;
+        public ArchitectureReportDetailLevel ReportDetailLevel { get; set; } = ArchitectureReportDetailLevel.SummaryOnly;
         public bool EnableGlobalWeighting { get; set; } = true;
 
         // 🔧 Domain-specific policy groups

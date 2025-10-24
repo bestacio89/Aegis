@@ -1,8 +1,8 @@
 ﻿using System.Globalization;
 using System.Text;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
-using Aegis.Shared.Enums;
 using Aegis.Shared.Models.Rules;
 using Microsoft.Extensions.Logging;
 
@@ -26,7 +26,7 @@ public sealed class CsvReportExporter : IReportExporter
         AegisArchitectureReport report,
         ProjectArchitectureContext context,
         string outputPath,
-        ReportDetailLevel detailLevel = ReportDetailLevel.FullForensic,
+        ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
         CancellationToken token = default)
     {
         var sb = new StringBuilder();

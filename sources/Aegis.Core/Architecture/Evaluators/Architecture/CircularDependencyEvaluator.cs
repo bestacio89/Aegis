@@ -17,7 +17,7 @@ namespace Aegis.Core.Architecture.Evaluators.Architecture;
 /// Works across languages (.cs, .ts, .js, .java) and outputs structured EvaluatorResults
 /// for the RuleEngine to interpret.
 /// </summary>
-public sealed class CircularDependencyEvaluator : BaseEvaluator, IScopedDependency
+public sealed class CircularDependencyEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     public override string Name => "CircularDependencyEvaluator";
 

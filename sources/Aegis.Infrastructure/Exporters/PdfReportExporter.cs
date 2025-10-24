@@ -1,6 +1,6 @@
-﻿using Aegis.Shared.Architecture.Models;
+﻿using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
-using Aegis.Shared.Enums;
 using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -25,7 +25,7 @@ public sealed class PdfReportExporter : IReportExporter
           AegisArchitectureReport report,
           ProjectArchitectureContext context,
           string outputPath,
-          ReportDetailLevel detailLevel = ReportDetailLevel.FullForensic,
+          ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
           CancellationToken token = default)
     {
         try
@@ -131,8 +131,8 @@ public sealed class PdfReportExporter : IReportExporter
                                 .FontSize(10)
                                 .FontColor(v.Severity switch
                                 {
-                                    RuleSeverity.Critical => Colors.Red.Medium,
-                                    RuleSeverity.High => Colors.Orange.Medium,
+                                    ArchitectureRuleSeverity.Critical => Colors.Red.Medium,
+                                    ArchitectureRuleSeverity.High => Colors.Orange.Medium,
                                     _ => Colors.Grey.Darken2
                                 });
                         }

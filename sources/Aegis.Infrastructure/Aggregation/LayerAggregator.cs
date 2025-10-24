@@ -5,7 +5,7 @@ namespace Aegis.Infrastructure.Aggregation;
 
 public sealed class LayerAggregator
 {
-    public Dictionary<string, CategorySummary> BuildCategorySummaries(IEnumerable<RuleResult> results)
+    public Dictionary<string, CategorySummary> BuildCategorySummaries(IEnumerable<ArchitectureRuleresult> results)
     {
         var categories = new Dictionary<string, CategorySummary>(StringComparer.OrdinalIgnoreCase);
 
@@ -27,7 +27,7 @@ public sealed class LayerAggregator
         return categories;
     }
 
-    public Dictionary<string, LayerSummary> BuildLayerSummaries(IEnumerable<RuleResult> results)
+    public Dictionary<string, LayerSummary> BuildLayerSummaries(IEnumerable<ArchitectureRuleresult> results)
     {
         var layers = new Dictionary<string, LayerSummary>(StringComparer.OrdinalIgnoreCase);
 
@@ -52,7 +52,7 @@ public sealed class LayerAggregator
         return layers;
     }
 
-    private static double ComputeHealth(IEnumerable<RuleResult> rules)
+    private static double ComputeHealth(IEnumerable<ArchitectureRuleresult> rules)
     {
         if (!rules.Any()) return 100;
         var penalty = rules.Sum(r => (int)r.Severity * 5);

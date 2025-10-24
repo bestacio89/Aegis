@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Windows.Data;
 using System.Windows.Media;
-using Aegis.Shared.Enums;
+using Aegis.Shared.Architecture.Enums;
 
 namespace Aegis.App.Wpf.ViewModels;
 
@@ -22,7 +22,7 @@ public class LogColorConverter : IValueConverter
         if (match.Success)
         {
             var severityName = match.Value;
-            if (Enum.TryParse<RuleSeverity>(severityName, true, out var severity))
+            if (Enum.TryParse<ArchitectureRuleSeverity>(severityName, true, out var severity))
                 return MapSeverityToBrush(severity);
         }
 
@@ -45,14 +45,14 @@ public class LogColorConverter : IValueConverter
         return Brushes.White;
     }
 
-    private static Brush MapSeverityToBrush(RuleSeverity severity) => severity switch
+    private static Brush MapSeverityToBrush(ArchitectureRuleSeverity severity) => severity switch
     {
-        RuleSeverity.Info => Brushes.LightGray,
-        RuleSeverity.Low => Brushes.LightGreen,
-        RuleSeverity.Medium => Brushes.Gold,
-        RuleSeverity.High => Brushes.Orange,
-        RuleSeverity.Critical => Brushes.IndianRed,
-        RuleSeverity.Blocker => Brushes.MediumVioletRed,
+        ArchitectureRuleSeverity.Info => Brushes.LightGray,
+        ArchitectureRuleSeverity.Low => Brushes.LightGreen,
+        ArchitectureRuleSeverity.Medium => Brushes.Gold,
+        ArchitectureRuleSeverity.High => Brushes.Orange,
+        ArchitectureRuleSeverity.Critical => Brushes.IndianRed,
+        ArchitectureRuleSeverity.Blocker => Brushes.MediumVioletRed,
         _ => Brushes.White
     };
 

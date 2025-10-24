@@ -1,6 +1,6 @@
 ﻿using Aegis.Infrastructure.Data;
 using Aegis.Infrastructure.Persistence;
-using Aegis.Shared.Enums;
+using Aegis.Shared.Architecture.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -21,7 +21,7 @@ public sealed class RuleResultRepository : IRuleResultRepository
     {
         _logger.LogDebug("Fetching rule results with severity {Severity}", severity);
 
-        if (!Enum.TryParse<RuleSeverity>(severity, true, out var parsedSeverity))
+        if (!Enum.TryParse<ArchitectureRuleSeverity>(severity, true, out var parsedSeverity))
         {
             _logger.LogWarning("Invalid severity string '{Severity}' provided. Returning empty set.", severity);
             return Enumerable.Empty<RuleResultEntity>();
@@ -51,7 +51,7 @@ public sealed class RuleResultRepository : IRuleResultRepository
 
         var query = _db.RuleResults
             .AsNoTracking()
-            .Where(r => r.Severity == RuleSeverity.Critical)
+            .Where(r => r.Severity == ArchitectureRuleSeverity.Critical)
             .OrderByDescending(r => r.DateDetected);
 
         if (limit.HasValue)

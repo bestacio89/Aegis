@@ -1,5 +1,5 @@
-﻿using Aegis.Shared.Architecture.Models.Rules;
-using Aegis.Shared.Enums;
+﻿using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models.Rules;
 
 namespace Aegis.Shared.Architecture.Models;
 
@@ -25,7 +25,7 @@ public sealed class ArchitectureEvaluatorResult
     public Dictionary<string, string>? Metadata { get; set; } // e.g. line numbers, function names, file paths
 
     // 🧩 Evaluated rules (core to aggregation)
-    public List<RuleResult> RuleResults { get; set; } = new();
+    public List<ArchitectureRuleresult> RuleResults { get; set; } = new();
 
     // ⚖️ Evaluator influence (policy-level weighting)
     /// <summary>
@@ -54,7 +54,7 @@ public sealed class ArchitectureEvaluatorResult
     public string? Summary { get; set; }                      // Short textual summary of domain findings
     public List<string> Recommendations { get; set; } = new(); // Localized or AI-generated recommendations
     public List<string> Anomalies { get; set; } = new();       // Detected anomalies (used in reports)
-    public bool ContainsCriticalViolations => RuleResults.Any(r => r.Severity >= RuleSeverity.Critical);
+    public bool ContainsCriticalViolations => RuleResults.Any(r => r.Severity >= ArchitectureRuleSeverity.Critical);
 
     // 🧾 Constructors
     public ArchitectureEvaluatorResult() { }
@@ -69,10 +69,10 @@ public sealed class ArchitectureEvaluatorResult
     // 🧩 Methods
     public void AddMetric(string name, double value) => Metrics[name] = value;
 
-    public void AddRuleResult(RuleResult rule)
+    public void AddRuleResult(ArchitectureRuleresult rule)
     {
         RuleResults.Add(rule);
-        if (rule.Severity == RuleSeverity.Blocker)
+        if (rule.Severity == ArchitectureRuleSeverity.Blocker)
             Anomalies.Add($"Blocker rule triggered: {rule.RuleId} ({rule.RuleName})");
     }
 

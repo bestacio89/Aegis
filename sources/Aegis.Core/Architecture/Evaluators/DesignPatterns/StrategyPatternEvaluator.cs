@@ -14,7 +14,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// Measures adherence to polymorphism, interface abstraction, class isolation,
 /// and naming convention. Produces a StrategyComplianceScore (0–100).
 /// </summary>
-public sealed class StrategyPatternEvaluator : BaseEvaluator
+public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 

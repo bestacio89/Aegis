@@ -17,7 +17,7 @@ namespace Aegis.Core.Architecture.Evaluators.Architecture;
 /// Produces normalized EvaluatorResults representing cross-layer references.
 /// The RuleEngine later interprets policy violations.
 /// </summary>
-public sealed class ArchitecturalEvaluator : BaseEvaluator, IScopedDependency
+public sealed class ArchitecturalEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly ArchitecturePolicy _policy;
 

@@ -16,7 +16,7 @@ namespace Aegis.Core.Architecture.Evaluators.Architecture;
 /// Evaluates REST API route and endpoint consistency across controllers and services.
 /// Produces metrics such as lowercase compliance, trailing slashes, and pluralization conflicts.
 /// </summary>
-public sealed class ApiConsistencyEvaluator : BaseEvaluator, IScopedDependency
+public sealed class ApiConsistencyEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly ApiConsistencyPolicy _policy;
 

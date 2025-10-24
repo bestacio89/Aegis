@@ -1,5 +1,5 @@
 ﻿using Franz.Common.Business.Domain;
-using Aegis.Shared.Enums;
+using Aegis.Shared.Architecture.Enums;
 
 namespace Aegis.Infrastructure.Data;
 
@@ -10,7 +10,7 @@ public class RuleResultEntity : Entity
     public string RuleName { get; set; } = string.Empty;
 
     // 💡 Serialize Enum as string (EF-friendly)
-    public RuleSeverity Severity { get; set; }
+    public ArchitectureRuleSeverity Severity { get; set; }
 
     public string Category { get; set; } = string.Empty;
     public string Target { get; set; } = string.Empty;

@@ -17,7 +17,7 @@ namespace Aegis.Core.Architecture.Evaluators.BackEnd;
 /// Collects metrics on empty, generic, or unlogged catch blocks
 /// according to <see cref="ErrorHandlingPolicy"/> thresholds.
 /// </summary>
-public sealed class ErrorHandlingEvaluator : BaseEvaluator, IScopedDependency
+public sealed class ErrorHandlingEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly ErrorHandlingPolicy _policy;
 

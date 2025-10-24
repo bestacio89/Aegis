@@ -14,7 +14,7 @@ namespace Aegis.Core.Architecture.Evaluators.Persistence;
 /// Produces quantitative metrics (CommitScore, RollbackScore, IsolationScore, SafetyScore)
 /// aggregated into a TransactionIntegrityIndex.
 /// </summary>
-public sealed class TransactionEvaluator : BaseEvaluator
+public sealed class TransactionEvaluator : BaseArchitectureEvaluator
 {
     private readonly TransactionPolicy _policy;
 

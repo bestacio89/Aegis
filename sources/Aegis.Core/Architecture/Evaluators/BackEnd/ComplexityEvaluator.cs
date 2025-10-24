@@ -16,7 +16,7 @@ namespace Aegis.Core.Architecture.Evaluators.BackEnd;
 /// Analyzes cyclomatic complexity and method length across source files.
 /// Emits EvaluatorResults with raw metrics, interpreted later by the RuleEngine.
 /// </summary>
-public sealed class ComplexityEvaluator : BaseEvaluator, IScopedDependency
+public sealed class ComplexityEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly ComplexityPolicy _policy;
 

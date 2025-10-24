@@ -16,7 +16,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// - Flags concrete return types and dependency leaks
 /// Produces quantitative metrics for architecture analysis.
 /// </summary>
-public sealed class FactoryPatternEvaluator : BaseEvaluator
+public sealed class FactoryPatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 

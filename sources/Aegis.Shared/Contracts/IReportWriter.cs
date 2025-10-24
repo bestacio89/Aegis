@@ -1,5 +1,5 @@
-﻿using Aegis.Shared.Enums;
-using Aegis.Shared.Architecture.Models;
+﻿using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Enums;
 
 namespace Aegis.Shared.Contracts;
 
@@ -11,6 +11,6 @@ public interface IReportExporter
         AegisArchitectureReport report,
         ProjectArchitectureContext context,
         string outputPath,
-        ReportDetailLevel detailLevel = ReportDetailLevel.FullForensic,
+        ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
         CancellationToken token = default);
 }

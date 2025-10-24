@@ -1,5 +1,5 @@
-﻿using Aegis.Shared.Architecture.Models.Rules;
-using Aegis.Shared.Enums;
+﻿using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models.Rules;
 
 namespace Aegis.Shared.Architecture.Models.Rules.Sets;
 
@@ -9,20 +9,20 @@ namespace Aegis.Shared.Architecture.Models.Rules.Sets;
 /// </summary>
 public static class PerformanceRuleset
 {
-    public static IEnumerable<RuleDefinition> Get() => new[]
+    public static IEnumerable<ArchitectureRuleDefinition> Get() => new[]
     {
         // ==========================================================
         // 🧮 General Efficiency
         // ==========================================================
-        new RuleDefinition
+        new ArchitectureRuleDefinition
         {
             Id = "AEG-PERF-R1",
             Name = "Performance Efficiency Below Threshold",
-            Category = nameof(RuleCategory.Performance),
+            Category = nameof(ArchitectureRuleCategory.Performance),
             MetricKey = "PerformanceHealthIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 80,
-            Severity = RuleSeverity.High,
+            Severity = ArchitectureRuleSeverity.High,
             Recommendation = "Optimize nested loops, prefer data projections, and eliminate redundant computations. " +
                              "Use profiling tools to identify hot paths and minimize blocking operations."
         },
@@ -30,15 +30,15 @@ public static class PerformanceRuleset
         // ==========================================================
         // 🧵 Async & Threading Behavior
         // ==========================================================
-        new RuleDefinition
+        new ArchitectureRuleDefinition
         {
             Id = "AEG-PERF-R2",
             Name = "Threading or Async Misuse",
-            Category = nameof(RuleCategory.Performance),
+            Category = nameof(ArchitectureRuleCategory.Performance),
             MetricKey = "AsyncUsageCompliance",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = RuleSeverity.High,
+            Severity = ArchitectureRuleSeverity.High,
             Recommendation = "Avoid Thread.Sleep(), Task.Wait(), or .Result on async operations. " +
                              "Use awaitable patterns and proper cancellation tokens to maintain responsiveness."
         },
@@ -46,26 +46,26 @@ public static class PerformanceRuleset
         // ==========================================================
         // 🧠 Optional Future Metrics (for AI integration or future detectors)
         // ==========================================================
-        new RuleDefinition
+        new ArchitectureRuleDefinition
         {
             Id = "AEG-PERF-R3",
             Name = "Memory Allocation Excessive",
-            Category = nameof(RuleCategory.Performance),
+            Category = nameof(ArchitectureRuleCategory.Performance),
             MetricKey = "MemoryAllocationRate",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.7,
-            Severity = RuleSeverity.Medium,
+            Severity = ArchitectureRuleSeverity.Medium,
             Recommendation = "Reduce heap allocations and prefer object pooling or stack-based structures where possible."
         },
-        new RuleDefinition
+        new ArchitectureRuleDefinition
         {
             Id = "AEG-PERF-R4",
             Name = "Blocking I/O Detected",
-            Category = nameof(RuleCategory.Performance),
+            Category = nameof(ArchitectureRuleCategory.Performance),
             MetricKey = "BlockingIOCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
-            Severity = RuleSeverity.High,
+            Severity = ArchitectureRuleSeverity.High,
             Recommendation = "Avoid blocking I/O on UI or API threads. Replace with async I/O or background processing patterns."
         }
     };

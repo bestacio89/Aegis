@@ -18,7 +18,7 @@ namespace Aegis.Core.Architecture.Evaluators.BackEnd;
 /// Collects metrics across hardcoded secrets, dependency pinning, unsafe project options,
 /// and weak cryptography/TLS configurations.
 /// </summary>
-public sealed class SecurityEvaluator : BaseEvaluator, IScopedDependency
+public sealed class SecurityEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly SecurityPolicy _policy;
 

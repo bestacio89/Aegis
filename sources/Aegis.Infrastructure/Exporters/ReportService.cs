@@ -1,6 +1,6 @@
-﻿using Aegis.Shared.Architecture.Models;
+﻿using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
-using Aegis.Shared.Enums;
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -33,7 +33,7 @@ public sealed class ReportService : IScopedDependency
         AegisArchitectureReport report,
         ProjectArchitectureContext context,
         string basePath,
-        ReportDetailLevel detailLevel = ReportDetailLevel.FullForensic,
+        ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
         CancellationToken token = default)
     {
         try

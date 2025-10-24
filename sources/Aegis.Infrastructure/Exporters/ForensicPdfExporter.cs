@@ -1,7 +1,7 @@
 ﻿using Aegis.Infrastructure.Aggregation;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
-using Aegis.Shared.Enums;
 using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -25,7 +25,7 @@ public sealed class ForensicPdfExporter : IReportExporter
         AegisArchitectureReport report,
         ProjectArchitectureContext context,
         string outputPath,
-        ReportDetailLevel detailLevel = ReportDetailLevel.FullForensic,
+        ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
         CancellationToken token = default)
     {
         var categories = _aggregator.BuildCategorySummaries(report.Results);
@@ -58,7 +58,7 @@ public sealed class ForensicPdfExporter : IReportExporter
             });
 
             // ─── SUMMARY-ONLY MODE ─────────────────────────────────────
-            if (detailLevel == ReportDetailLevel.SummaryOnly)
+            if (detailLevel == ArchitectureReportDetailLevel.SummaryOnly)
             {
                 container.Page(page =>
                 {
@@ -108,7 +108,7 @@ public sealed class ForensicPdfExporter : IReportExporter
 
                             col.Item().Text($"Violations : {layer.Violations} — Health : {layer.HealthIndex:0.0}%");
 
-                            if (detailLevel >= ReportDetailLevel.Layered)
+                            if (detailLevel >= ArchitectureReportDetailLevel.Layered)
                             {
                                 col.Item().PaddingVertical(5)
                                     .Text("Top Violations / Principales Violations").Bold();
@@ -117,7 +117,7 @@ public sealed class ForensicPdfExporter : IReportExporter
                                         .FontSize(10).FontColor(Colors.Grey.Darken2);
                             }
 
-                            if (detailLevel == ReportDetailLevel.FullForensic && layer.Recommendations.Any())
+                            if (detailLevel == ArchitectureReportDetailLevel.FullForensic && layer.Recommendations.Any())
                             {
                                 col.Item().Text("Recommendations / Recommandations").Bold();
                                 foreach (var rec in layer.Recommendations)

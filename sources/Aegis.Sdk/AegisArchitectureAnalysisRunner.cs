@@ -1,10 +1,10 @@
-﻿using Aegis.Core.Analysis;
+﻿using Aegis.Core.Architecture.Analysis;
 using Aegis.Core.Architecture.RuleEngines;
 using Aegis.Infrastructure.Data;
 using Aegis.Infrastructure.Persistence;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
-using Aegis.Shared.Enums;
 using Franz.Common.Business.Domain;
 using Franz.Common.Business.Repositories;
 using Franz.Common.EntityFramework.Repositories;
@@ -18,22 +18,22 @@ namespace Aegis.Sdk;
 /// from context detection → evaluator execution → rule evaluation → weighted aggregation → persistence.
 /// Each run creates a unique ReportEntity session stored in the database, enabling historical comparisons.
 /// </summary>
-public sealed class AegisRunner
+public sealed class AegisArchitectureAnalysisRunner
 {
     private readonly RuleEngine _engine;
     private readonly EntityRepository<AegisDbContext, RuleResultEntity> _ruleResultRepo;
     private readonly EntityRepository<AegisDbContext, ReportEntity> _reportRepo;
     private readonly IRuleResultRepository _customRuleResultRepo;
     private readonly IReportRepository _customReportRepo;
-    private readonly ILogger<AegisRunner> _logger;
+    private readonly ILogger<AegisArchitectureAnalysisRunner> _logger;
 
-    public AegisRunner(
+    public AegisArchitectureAnalysisRunner(
         RuleEngine engine,
         EntityRepository<AegisDbContext, RuleResultEntity> ruleResultRepo,
         EntityRepository<AegisDbContext, ReportEntity> reportRepo,
         IRuleResultRepository customRuleResultRepo,
         IReportRepository customReportRepo,
-        ILogger<AegisRunner> logger)
+        ILogger<AegisArchitectureAnalysisRunner> logger)
     {
         _engine = engine;
         _ruleResultRepo = ruleResultRepo;
@@ -60,7 +60,7 @@ public sealed class AegisRunner
 
             // Detect project context
             _logger.LogInformation("🔍 Detecting project context for {Path}", projectPath);
-            var context = ProjectContextDetector.Detect(projectPath);
+            var context = ProjectArchitectureContextDetector.Detect(projectPath);
             _logger.LogInformation(
                 "🧭 Context detected: {Lang}/{Framework} ({Architecture}) → {Domain}/{Layer} [{Nature}]",
                 context.Language, context.Framework, context.ArchitectureStyle,
@@ -195,7 +195,7 @@ public sealed class AegisRunner
     private async Task ExportJsonAsync(
         AegisArchitectureReport report,
         ProjectArchitectureContext context,
-        ReportDetailLevel detailLevel,
+        ArchitectureReportDetailLevel detailLevel,
         CancellationToken token)
     {
         try

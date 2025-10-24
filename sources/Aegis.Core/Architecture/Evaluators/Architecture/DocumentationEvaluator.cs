@@ -12,7 +12,7 @@ namespace Aegis.Core.Architecture.Evaluators.Architecture;
 /// Evaluates inline documentation coverage across source files.
 /// Produces structured EvaluatorResults with per-file coverage metrics.
 /// </summary>
-public sealed class DocumentationEvaluator : BaseEvaluator, IScopedDependency
+public sealed class DocumentationEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     public override string Name => "DocumentationEvaluator";
 

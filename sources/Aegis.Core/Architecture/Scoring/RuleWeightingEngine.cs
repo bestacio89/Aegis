@@ -1,6 +1,6 @@
-﻿using Aegis.Shared.Architecture.Models.Policies;
+﻿using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Rules;
-using Aegis.Shared.Enums;
 using Aegis.Shared.Models;
 using Microsoft.Extensions.Logging;
 using System;
@@ -8,19 +8,19 @@ using System;
 namespace Aegis.Core.Architecture.Scoring;
 
 /// <summary>
-/// Applies policy-driven weighted scoring to <see cref="RuleResult"/> objects
+/// Applies policy-driven weighted scoring to <see cref="ArchitectureRuleresult"/> objects
 /// based on severity, maintainability, and performance policies.
 /// </summary>
 public sealed class RuleWeightingEngine
 {
     private readonly ILogger<RuleWeightingEngine> _logger;
-    private readonly Dictionary<RuleSeverity, double> _baseWeights = new()
+    private readonly Dictionary<ArchitectureRuleSeverity, double> _baseWeights = new()
     {
-        [RuleSeverity.Critical] = 1.5,
-        [RuleSeverity.High] = 1.25,
-        [RuleSeverity.Medium] = 1.0,
-        [RuleSeverity.Low] = 0.75,
-        [RuleSeverity.Info] = 0.5
+        [ArchitectureRuleSeverity.Critical] = 1.5,
+        [ArchitectureRuleSeverity.High] = 1.25,
+        [ArchitectureRuleSeverity.Medium] = 1.0,
+        [ArchitectureRuleSeverity.Low] = 0.75,
+        [ArchitectureRuleSeverity.Info] = 0.5
     };
 
     private double _performanceScale = 1.0;
@@ -35,7 +35,7 @@ public sealed class RuleWeightingEngine
     /// <summary>
     /// Applies contextual weights to each rule result.
     /// </summary>
-    public IEnumerable<RuleResult> ApplyWeights(IEnumerable<RuleResult> results)
+    public IEnumerable<ArchitectureRuleresult> ApplyWeights(IEnumerable<ArchitectureRuleresult> results)
     {
         foreach (var result in results)
         {
@@ -64,7 +64,7 @@ public sealed class RuleWeightingEngine
     /// <summary>
     /// Computes normalized compliance according to weighted impacts.
     /// </summary>
-    public double ComputeWeightedCompliance(IEnumerable<RuleResult> results)
+    public double ComputeWeightedCompliance(IEnumerable<ArchitectureRuleresult> results)
     {
         var ruleList = results.ToList();
         if (ruleList.Count == 0)

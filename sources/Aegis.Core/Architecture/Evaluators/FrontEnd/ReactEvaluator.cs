@@ -15,7 +15,7 @@ namespace Aegis.Core.Architecture.Evaluators.FrontEnd;
 /// Produces a ReactComplianceScore (0–100) per component and aggregates
 /// project-wide ReactHealthIndex.
 /// </summary>
-public sealed class ReactEvaluator : BaseEvaluator
+public sealed class ReactEvaluator : BaseArchitectureEvaluator
 {
     private readonly FrontendPolicy _policy;
 

@@ -16,7 +16,7 @@ namespace Aegis.Core.Architecture.Evaluators.Infrastructure;
 /// Quantifies configuration health via syntax integrity, secret exposure, dependency control, and CI/CD safety.
 /// Produces ConfigurationIntegrityScore (0–100) and aggregates InfrastructureHealthIndex.
 /// </summary>
-public sealed class ConfigurationEvaluator : BaseEvaluator
+public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 {
     private readonly ConfigurationPolicy _policy;
 

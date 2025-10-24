@@ -106,7 +106,7 @@ public sealed class CrossEvaluatorAggregator
     // 🧩 DOMAIN & PROJECT METRICS
     // ==============================================================
 
-    private ArchitectureDomainSummary ComputeDomainSummary(string domain, List<RuleResult> results)
+    private ArchitectureDomainSummary ComputeDomainSummary(string domain, List<ArchitectureRuleresult> results)
     {
         var compliant = results.Count(r => r.IsCompliant);
         var total = Math.Max(1, results.Count);

@@ -16,7 +16,7 @@ namespace Aegis.Core.Architecture.Evaluators.BackEnd;
 /// Builds a lightweight dependency graph from import/using statements across modules.
 /// Emits EvaluatorResults with per-module dependency metrics for analysis and visualization.
 /// </summary>
-public sealed class DependencyGraphEvaluator : BaseEvaluator, IScopedDependency
+public sealed class DependencyGraphEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly DependencyGraphPolicy _policy;
 

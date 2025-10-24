@@ -1,4 +1,4 @@
-﻿using Aegis.Shared.Enums;
+﻿using Aegis.Shared.Architecture.Enums;
 
 namespace Aegis.Shared.Architecture.Models;
 
@@ -11,6 +11,6 @@ public record ArchitectureScanSummary(
     int FilesScanned,
     int RulesEvaluated,
     int ViolationsFound,
-    ScanStatus Status,
+    ArchitectureScanStatus Status,
     DateTimeOffset Timestamp
 );

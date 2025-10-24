@@ -16,7 +16,7 @@ namespace Aegis.Core.Architecture.Evaluators.BackEnd;
 /// Evaluates class cohesion by analyzing member and method distribution across source files.
 /// Produces EvaluatorResults with field counts, method counts, and method/field ratios.
 /// </summary>
-public sealed class CohesionEvaluator : BaseEvaluator, IScopedDependency
+public sealed class CohesionEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly CohesionPolicy _policy;
 

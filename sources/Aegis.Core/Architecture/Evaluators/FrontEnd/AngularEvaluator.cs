@@ -13,7 +13,7 @@ namespace Aegis.Core.Architecture.Evaluators.FrontEnd;
 /// Quantitatively evaluates Angular (.ts) sources for structure, naming, and modular discipline.
 /// Produces AngularComplianceScore (0–100) and component-level metrics for maintainability.
 /// </summary>
-public sealed class AngularEvaluator : BaseEvaluator
+public sealed class AngularEvaluator : BaseArchitectureEvaluator
 {
     private readonly FrontendPolicy _policy;
 

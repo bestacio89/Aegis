@@ -17,7 +17,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// - Anemic domain tendencies
 /// Outputs metrics and an overall GodClassScore (0–100).
 /// </summary>
-public sealed class GodClassEvaluator : BaseEvaluator
+public sealed class GodClassEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 

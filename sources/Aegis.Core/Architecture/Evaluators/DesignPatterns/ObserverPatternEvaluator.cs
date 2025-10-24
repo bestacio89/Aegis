@@ -14,7 +14,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// Detects subscription leaks, missing disposal, manual polling,
 /// and interface non-compliance. Produces an ObserverComplianceScore (0–100).
 /// </summary>
-public sealed class ObserverPatternEvaluator : BaseEvaluator
+public sealed class ObserverPatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 

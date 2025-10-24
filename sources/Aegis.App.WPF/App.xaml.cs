@@ -29,7 +29,7 @@ public partial class App : Application
                 // ✅ Core Aegis services
                 services.AddDbContext<AegisDbContext>();
                 services.AddScoped<RuleEngine>();
-                services.AddScoped<AegisRunner>();
+                services.AddScoped<AegisArchitectureAnalysisRunner>();
 
                 // ✅ Repositories
                 services.AddScoped(typeof(EntityRepository<AegisDbContext, RuleResultEntity>));

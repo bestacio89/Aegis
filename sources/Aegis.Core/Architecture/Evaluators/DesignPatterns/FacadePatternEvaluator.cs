@@ -17,7 +17,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// - Detects orchestration complexity and excessive service calls
 /// Outputs quantitative metrics for rule evaluation.
 /// </summary>
-public sealed class FacadePatternEvaluator : BaseEvaluator
+public sealed class FacadePatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 

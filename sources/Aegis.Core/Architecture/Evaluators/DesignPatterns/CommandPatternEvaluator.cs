@@ -17,7 +17,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// - Detects overgrown (God) commands
 /// - Flags handler invocations and forbidden dependencies
 /// </summary>
-public sealed class CommandPatternEvaluator : BaseEvaluator
+public sealed class CommandPatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 

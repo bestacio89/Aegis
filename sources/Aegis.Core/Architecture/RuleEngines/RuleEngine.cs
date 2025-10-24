@@ -1,9 +1,9 @@
 ﻿using Aegis.Core.Architecture.Aggregation;
 using Aegis.Core.Architecture.Scoring;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Contracts;
-using Aegis.Shared.Enums;
 using Aegis.Shared.Models.Rules;
 using France.Common.Extensions;
 using Microsoft.Extensions.Logging;
@@ -180,7 +180,7 @@ public sealed class RuleEngine
             try
             {
                 var outputPath = Path.Combine(projectPath, $"AegisReport.{exporter.Format}");
-                await exporter.ExportAsync(report, context, outputPath, ReportDetailLevel.SummaryOnly, token);
+                await exporter.ExportAsync(report, context, outputPath, ArchitectureReportDetailLevel.SummaryOnly, token);
                 _logger.LogInformation("📝 {Format} report exported → {Path}", exporter.Format.ToUpper(), outputPath);
             }
             catch (Exception ex)

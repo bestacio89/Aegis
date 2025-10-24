@@ -1,4 +1,4 @@
-﻿using Aegis.Shared.Enums;
+﻿using Aegis.Shared.Architecture.Enums;
 
 namespace Aegis.Shared.Architecture.Models;
 
@@ -22,7 +22,7 @@ public sealed class ProjectArchitectureContext
     public bool IsMultiModule { get; set; }                     // True if multiple modules/projects detected
 
     // ⚙️ Build / Dependency Metadata
-    public BuildSystem BuildSystem { get; set; } = BuildSystem.Unknown;
+    public ArchitectureBuildSystem BuildSystem { get; set; } = ArchitectureBuildSystem.Unknown;
     public string? EntryPointFile { get; set; }
     public List<string> DetectedDependencies { get; set; } = new();
     public List<string> DetectedFrameworks { get; set; } = new();

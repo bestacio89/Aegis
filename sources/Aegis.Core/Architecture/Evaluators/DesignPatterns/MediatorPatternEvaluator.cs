@@ -18,7 +18,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// - Over-dispatching ("God Mediator")
 /// Outputs a MediatorComplianceScore (0–100).
 /// </summary>
-public sealed class MediatorPatternEvaluator : BaseEvaluator
+public sealed class MediatorPatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 

@@ -15,7 +15,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// and excessive repository complexity ("God Repository").
 /// Produces RepositoryComplianceScore (0–100).
 /// </summary>
-public sealed class RepositoryPatternEvaluator : BaseEvaluator
+public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 

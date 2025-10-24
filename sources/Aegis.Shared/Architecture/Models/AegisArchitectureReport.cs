@@ -1,5 +1,5 @@
-﻿using Aegis.Shared.Architecture.Models.Rules;
-using Aegis.Shared.Enums;
+﻿using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models.Rules;
 using System.Collections.ObjectModel;
 
 namespace Aegis.Shared.Architecture.Models;
@@ -19,7 +19,7 @@ public sealed class AegisArchitectureReport
 
     // 🧩 Raw results (remain init-only; collections can still be modified)
     public Collection<ArchitectureEvaluatorResult> Facts { get; init; } = new();
-    public Collection<RuleResult> Results { get; init; } = new();
+    public Collection<ArchitectureRuleresult> Results { get; init; } = new();
 
     // 📊 Aggregated domain summaries
     public List<ArchitectureDomainSummary> Domains { get; init; } = new();
@@ -33,7 +33,7 @@ public sealed class AegisArchitectureReport
     public int TotalViolations => Results.Count(r => !r.IsCompliant);
 
     // 🧮 Backwards-compatible quick compliance dictionary
-    public Dictionary<RuleCategory, double> ComplianceScores { get; set; } = new();
+    public Dictionary<ArchitectureRuleCategory, double> ComplianceScores { get; set; } = new();
 
     // 🧠 Recomputes compliance after weighting and aggregation
     public void ComputeCompliance()

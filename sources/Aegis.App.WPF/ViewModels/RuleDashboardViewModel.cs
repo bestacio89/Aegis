@@ -1,6 +1,5 @@
 ﻿using Aegis.Infrastructure.Data;
 using Aegis.Infrastructure.Persistence;
-using Aegis.Shared.Enums;
 using Aegis.Shared.Architecture.Models;
 using Microsoft.Extensions.Logging;
 using OxyPlot;
@@ -9,6 +8,7 @@ using OxyPlot.Series;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Aegis.Shared.Architecture.Enums;
 
 namespace Aegis.App.Wpf.ViewModels;
 
@@ -62,8 +62,8 @@ public sealed class RuleDashboardViewModel
                 RuleResults.Add(v);
 
             TotalViolations = RuleResults.Count;
-            CriticalCount = RuleResults.Count(v => v.Severity == RuleSeverity.Critical);
-            BlockerCount = RuleResults.Count(v => v.Severity == RuleSeverity.Blocker);
+            CriticalCount = RuleResults.Count(v => v.Severity == ArchitectureRuleSeverity.Critical);
+            BlockerCount = RuleResults.Count(v => v.Severity == ArchitectureRuleSeverity.Blocker);
 
             BuildSeverityChart();
             BuildCategoryChart();
@@ -105,11 +105,11 @@ public sealed class RuleDashboardViewModel
         {
             var color = g.Severity switch
             {
-                RuleSeverity.Blocker => OxyColors.DarkRed,
-                RuleSeverity.Critical => OxyColors.IndianRed,
-                RuleSeverity.High => OxyColors.Orange,
-                RuleSeverity.Medium => OxyColors.Gold,
-                RuleSeverity.Info => OxyColors.SkyBlue,
+                ArchitectureRuleSeverity.Blocker => OxyColors.DarkRed,
+                ArchitectureRuleSeverity.Critical => OxyColors.IndianRed,
+                ArchitectureRuleSeverity.High => OxyColors.Orange,
+                ArchitectureRuleSeverity.Medium => OxyColors.Gold,
+                ArchitectureRuleSeverity.Info => OxyColors.SkyBlue,
                 _ => OxyColors.Gray
             };
 

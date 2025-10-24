@@ -1,8 +1,8 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
-using Aegis.Shared.Enums;
 using Microsoft.Extensions.Logging;
 
 namespace Aegis.Infrastructure.Exporters;
@@ -10,7 +10,7 @@ namespace Aegis.Infrastructure.Exporters;
 /// <summary>
 /// 🧾 Exports the full Aegis analysis report in JSON format.
 /// Includes project context, metrics, and rule evaluations.
-/// Adapts verbosity according to <see cref="ReportDetailLevel"/>.
+/// Adapts verbosity according to <see cref="ArchitectureReportDetailLevel"/>.
 /// </summary>
 public sealed class JsonReportExporter : IReportExporter
 {
@@ -26,7 +26,7 @@ public sealed class JsonReportExporter : IReportExporter
         AegisArchitectureReport report,
         ProjectArchitectureContext context,
         string outputPath,
-        ReportDetailLevel detailLevel = ReportDetailLevel.FullForensic,
+        ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
         CancellationToken token = default)
     {
         try
@@ -81,7 +81,7 @@ public sealed class JsonReportExporter : IReportExporter
 
                 Results = detailLevel switch
                 {
-                    ReportDetailLevel.SummaryOnly => (object)report.Results
+                    ArchitectureReportDetailLevel.SummaryOnly => (object)report.Results
                         .GroupBy(r => r.Category)
                         .Select(g => new
                         {
@@ -93,7 +93,7 @@ public sealed class JsonReportExporter : IReportExporter
                                        .FirstOrDefault()?.RuleName
                         }),
 
-                    ReportDetailLevel.Layered => (object)report.Results
+                    ArchitectureReportDetailLevel.Layered => (object)report.Results
                         .GroupBy(r => new { r.Category, r.Domain })
                         .Select(g => new
                         {

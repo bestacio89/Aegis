@@ -16,7 +16,7 @@ namespace Aegis.Core.Architecture.Evaluators.DesignPatterns;
 /// Evaluates Builder pattern compliance across supported languages.
 /// Collects metrics for fluent chaining, Build() presence, and immutability adherence.
 /// </summary>
-public sealed class BuilderPatternEvaluator : BaseEvaluator, IScopedDependency
+public sealed class BuilderPatternEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly DesignPatternPolicy _policy;
 

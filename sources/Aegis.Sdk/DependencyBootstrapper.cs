@@ -16,8 +16,8 @@ public static class DependencyBootstrapper
         services.AddScoped<AegisArchitectureAnalysisRunner>();
         // Evaluators
         services.Scan(scan => scan
-            .FromAssembliesOf(typeof(BaseEvaluator))
-            .AddClasses(classes => classes.AssignableTo<BaseEvaluator>())
+            .FromAssembliesOf(typeof(BaseArchitectureEvaluator))
+            .AddClasses(classes => classes.AssignableTo<BaseArchitectureEvaluator>())
             .AsImplementedInterfaces()
             .WithScopedLifetime());
     }

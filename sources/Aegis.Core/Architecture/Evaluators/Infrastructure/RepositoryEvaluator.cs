@@ -14,7 +14,7 @@ namespace Aegis.Core.Architecture.Evaluators.Infrastructure;
 /// according to <see cref="RepositoryPolicy"/> and quantifies overall repository governance quality.
 /// Produces RepositoryHealthIndex and supporting metrics.
 /// </summary>
-public sealed class RepositoryEvaluator : BaseEvaluator
+public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
 {
     private readonly RepositoryPolicy _policy;
 

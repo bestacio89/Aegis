@@ -1,8 +1,8 @@
-﻿using Aegis.Shared.Enums;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Rules;
+using Aegis.Shared.Architecture.Enums;
 
 namespace Aegis.Core.Architecture.RuleEngines;
 
@@ -13,14 +13,14 @@ namespace Aegis.Core.Architecture.RuleEngines;
 public sealed class RuleEngineCore
 {
     private readonly ILogger<RuleEngineCore> _logger;
-    private readonly IReadOnlyList<RuleDefinition> _rules;
+    private readonly IReadOnlyList<ArchitectureRuleDefinition> _rules;
     private AegisArchitecturePolicy _policy;
 
     public RuleEngineCore(ILogger<RuleEngineCore> logger, AegisArchitecturePolicy policy)
     {
         _logger = logger;
         _policy = policy;
-        _rules = RuleRegistry.All;
+        _rules = ArchitectureRuleRegistry.All;
     }
 
     // ======================================================
@@ -36,7 +36,7 @@ public sealed class RuleEngineCore
             newPolicy.Name ?? "Unnamed", newPolicy.Version ?? "1.0");
 
         // Optionally, push updated thresholds into RuleRegistry
-        foreach (var rule in RuleRegistry.All)
+        foreach (var rule in ArchitectureRuleRegistry.All)
         {
             var updatedThreshold = ResolveThreshold(rule);
             if (Math.Abs(rule.Threshold - updatedThreshold) > 0.0001)
@@ -51,9 +51,9 @@ public sealed class RuleEngineCore
     // ======================================================
     // 🧮 Evaluation
     // ======================================================
-    public IEnumerable<RuleResult> Evaluate(ProjectArchitectureContext context, IEnumerable<ArchitectureEvaluatorResult> facts)
+    public IEnumerable<ArchitectureRuleresult> Evaluate(ProjectArchitectureContext context, IEnumerable<ArchitectureEvaluatorResult> facts)
     {
-        var results = new List<RuleResult>();
+        var results = new List<ArchitectureRuleresult>();
         int totalChecks = 0;
 
         foreach (var fact in facts)
@@ -80,11 +80,11 @@ public sealed class RuleEngineCore
 
                     if (violated)
                     {
-                        var category = Enum.TryParse<RuleCategory>(rule.Category, true, out var cat)
+                        var category = Enum.TryParse<ArchitectureRuleCategory>(rule.Category, true, out var cat)
                             ? cat
-                            : RuleCategory.General;
+                            : ArchitectureRuleCategory.General;
 
-                        results.Add(new RuleResult(
+                        results.Add(new ArchitectureRuleresult(
                             rule.Id,
                             rule.Name,
                             category,
@@ -115,28 +115,28 @@ public sealed class RuleEngineCore
     // ======================================================
     // 🎚️ Threshold resolution
     // ======================================================
-    private double ResolveThreshold(RuleDefinition rule)
+    private double ResolveThreshold(ArchitectureRuleDefinition rule)
     {
         try
         {
             return rule.Category switch
             {
-                nameof(RuleCategory.Performance) => _policy.Performance?.MaxNestedLoopDepth
+                nameof(ArchitectureRuleCategory.Performance) => _policy.Performance?.MaxNestedLoopDepth
                                                     ?? rule.Threshold,
 
-                nameof(RuleCategory.Maintainability) => _policy.Maintainability?.MinMaintainabilityIndex
+                nameof(ArchitectureRuleCategory.Maintainability) => _policy.Maintainability?.MinMaintainabilityIndex
                                                         ?? rule.Threshold,
 
-                nameof(RuleCategory.Security) => _policy.Security?.MinimumScore
+                nameof(ArchitectureRuleCategory.Security) => _policy.Security?.MinimumScore
                                                  ?? rule.Threshold,
 
-                nameof(RuleCategory.Dependency) => _policy.Dependency?.MaxDependencyDepth
+                nameof(ArchitectureRuleCategory.Dependency) => _policy.Dependency?.MaxDependencyDepth
                                                    ?? rule.Threshold,
 
-                nameof(RuleCategory.Coupling) => _policy.Coupling?.MaxCouplingRatio
+                nameof(ArchitectureRuleCategory.Coupling) => _policy.Coupling?.MaxCouplingRatio
                                                  ?? rule.Threshold,
 
-                nameof(RuleCategory.Architecture) => _policy.Architecture?.AllowedDependencies?.Count
+                nameof(ArchitectureRuleCategory.Architecture) => _policy.Architecture?.AllowedDependencies?.Count
                                                      ?? rule.Threshold,
 
                 _ => rule.Threshold

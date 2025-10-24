@@ -16,18 +16,38 @@ public static class AnalyzeCommand
         var logger = host.Services.GetRequiredService<ILogger<AegisRunner>>();
         var runner = host.Services.GetRequiredService<AegisRunner>();
 
-        logger.LogInformation("🧠 Initiating Aegis analysis at {Path}", projectPath);
+        try
+        {
+            logger.LogInformation("🧠 Initiating Aegis analysis for project at: {Path}", projectPath);
 
-        // ✅ Instance call (AegisRunner is not static anymore)
-        var exitCode = await runner.RunAsync(projectPath, policyPath ?? "aegis.policy.json", exportJson);
+            // ✅ Call the modern orchestration method (creates report session, persists results, etc.)
+            var exitCode = await runner.RunSessionAsync(
+                projectPath: projectPath,
+                policyPath: policyPath,
+                exportJson: exportJson,
+                token: default
+            );
 
-        if (exitCode == 0)
-            logger.LogInformation("✅ Aegis analysis completed successfully. No violations found.");
-        else if (exitCode == 1)
-            logger.LogWarning("⚠️ Analysis completed with rule violations.");
-        else
-            logger.LogError("❌ Analysis failed during execution.");
+            // 🧾 Display final outcome clearly in CLI
+            switch (exitCode)
+            {
+                case 0:
+                    logger.LogInformation("✅ Analysis completed successfully — no violations found.");
+                    break;
+                case -1:
+                    logger.LogError("❌ Analysis failed — check logs for diagnostic information.");
+                    break;
+                default:
+                    logger.LogWarning("⚠️ Analysis completed with non-zero code ({Code}). See report for details.", exitCode);
+                    break;
+            }
 
-        return exitCode;
+            return exitCode;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "💥 Fatal error during Aegis analysis execution.");
+            return -1;
+        }
     }
 }

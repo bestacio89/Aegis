@@ -5,7 +5,7 @@ namespace Aegis.Cli.Services;
 
 /// <summary>
 /// Encapsulates the Aegis CLI analysis workflow.
-/// This allows dependency injection and testable orchestration.
+/// Allows dependency injection and testable orchestration.
 /// </summary>
 public sealed class AnalyzeCommandService
 {
@@ -25,21 +25,25 @@ public sealed class AnalyzeCommandService
     {
         try
         {
-            _logger.LogInformation("🧠 Starting Aegis analysis for path: {Path}", projectPath);
+            _logger.LogInformation("🧠 Starting Aegis analysis for: {Path}", projectPath);
 
-            var policyFile = policyPath ?? "aegis.policy.json";
-            var resultCode = await _runner.RunAsync(projectPath, policyFile, exportJson);
+            var resultCode = await _runner.RunSessionAsync(
+                projectPath: projectPath,
+                policyPath: policyPath,
+                exportJson: exportJson,
+                token: default
+            );
 
             switch (resultCode)
             {
                 case 0:
-                    _logger.LogInformation("✅ Aegis analysis completed successfully. No violations found.");
+                    _logger.LogInformation("✅ Aegis analysis completed successfully. No errors detected.");
                     break;
-                case 1:
-                    _logger.LogWarning("⚠️ Analysis completed with rule violations.");
+                case -1:
+                    _logger.LogError("❌ Aegis analysis failed during execution. See logs for details.");
                     break;
                 default:
-                    _logger.LogError("❌ Analysis failed during execution.");
+                    _logger.LogWarning("⚠️ Aegis analysis completed with non-standard exit code: {Code}", resultCode);
                     break;
             }
 
@@ -47,7 +51,7 @@ public sealed class AnalyzeCommandService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "💥 Unexpected failure during Aegis analysis execution.");
+            _logger.LogError(ex, "💥 Unexpected exception during Aegis CLI analysis execution.");
             return -1;
         }
     }

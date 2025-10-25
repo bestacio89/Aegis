@@ -1,6 +1,6 @@
 ﻿using Aegis.Shared.Security.Enums;
 
-namespace Aegis.Shared.Security.Models.Rules;
+namespace Aegis.Shared.Security.Models.Rules.Sets;
 
 public static class SecurityRuleSetFactory
 {

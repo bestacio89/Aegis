@@ -1,6 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 
-namespace Aegis.Shared.Security.Models.Rules;
+namespace Aegis.Shared.Security.Models.Rules.Sets;
 
 /// <summary>
 /// Base class for all security rule sets, providing common behavior and metadata.

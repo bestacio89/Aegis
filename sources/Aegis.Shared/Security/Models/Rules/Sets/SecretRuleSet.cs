@@ -111,13 +111,13 @@ public sealed class SecretsRuleSet : SecurityRuleSet
             owasp: "A09:2021",
             cwe: "CWE-200",
             vuln: VulnerabilityType.SecretExposure,
-            tags: new[] { "git", "history", "secrets" },
+            tags: ["git", "history", "secrets"],
             pattern: @"(?i)(password|api[_-]?key|secret|token).*?(""?[A-Za-z0-9/_+=-]{8,}"")",
             surface: "Git Repository History",
             remediation: "Use tools like TruffleHog or GitLeaks to scan history. Rotate any affected credentials immediately.",
             reference: "https://owasp.org/Top10/A09_2021-Security_Logging_and_Monitoring_Failures/",
             detection: "Dynamic",
-            files: new[] { ".git", ".log", ".json" }
+            files: [".git", ".log", ".json"]
         )
     };
 

@@ -29,12 +29,13 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.10" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Security\Models\" />
-    <Folder Include="Security\Policies\Application\" />
-    <Folder Include="Security\Policies\IaC\" />
-    <Folder Include="Security\Policies\Dependency\" />
-    <Folder Include="Security\Policies\Network\" />
-    <Folder Include="Security\Policies\Secrets\" />
+    <Folder Include="Security\Models\Policies\Application\" />
+    <Folder Include="Security\Models\Policies\IaC\" />
+    <Folder Include="Security\Models\Policies\Dependency\" />
+    <Folder Include="Security\Models\Policies\Network\" />
+    <Folder Include="Security\Models\Policies\Infrastructure\" />
+    <Folder Include="Security\Models\Policies\Governance\" />
+    <Folder Include="Security\Models\Policies\Secrets\" />
   </ItemGroup>
 
 </Project>

@@ -1,6 +1,6 @@
 ﻿using Aegis.Shared.Security.Enums;
 
-namespace Aegis.Shared.Security.Models;
+namespace Aegis.Shared.Security.Models.Rules;
 
 /// <summary>
 /// Represents the result of a single evaluated security rule.

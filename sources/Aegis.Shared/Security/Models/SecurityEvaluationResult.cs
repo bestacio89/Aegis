@@ -1,4 +1,5 @@
 ﻿using Aegis.Shared.Security.Enums;
+using Aegis.Shared.Security.Models.Rules;
 using System.Collections.ObjectModel;
 
 namespace Aegis.Shared.Security.Models;

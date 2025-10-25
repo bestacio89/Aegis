@@ -2,7 +2,7 @@
 
 public enum RiskLevel
 {
-    None,
+    Information,
     Low,
     Moderate,
     High,

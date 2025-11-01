@@ -38,7 +38,7 @@
        Project References
        ============================================= -->
   <ItemGroup>
-    <ProjectReference Include="..\Aegis.Core\Aegis.Core.csproj" />
+    <ProjectReference Include="..\Aegis.Core\Aegis.Architecture.csproj" />
     <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />
   </ItemGroup>
 

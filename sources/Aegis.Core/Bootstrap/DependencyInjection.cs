@@ -1,9 +1,9 @@
-﻿using Aegis.Core.Architecture.RuleEngines;
+﻿using Aegis.Architecture.RuleEngines;
 using Franz.Common.DependencyInjection.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Aegis.Core.Bootstrap;
+namespace Aegis.Architecture.Bootstrap;
 
 public static class DependencyInjection
 {

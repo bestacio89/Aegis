@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Aggregation\" />
+    <Folder Include="Analysis\" />
+    <Folder Include="Bootstrap\" />
+    <Folder Include="Diagnostics\" />
+    <Folder Include="Evaluators\" />
+    <Folder Include="RuleEngine\" />
+  </ItemGroup>
+
+</Project>

@@ -12,7 +12,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "build", "build", "{02EA681E
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sources", "sources", "{1C78CA1B-3346-4FA4-82A7-C9C9995D734D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aegis.Core", "sources\Aegis.Core\Aegis.Core.csproj", "{F9A60DF5-E987-997A-0A4E-21903F6831CB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aegis.Architecture", "sources\Aegis.Core\Aegis.Architecture.csproj", "{F9A60DF5-E987-997A-0A4E-21903F6831CB}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aegis.Sdk", "sources\Aegis.Sdk\Aegis.Sdk.csproj", "{9DF5E204-BDB3-50B8-74FD-A5802EC4B9E8}"
 EndProject
@@ -23,6 +23,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aegis.Shared", "sources\Aegis.Shared\Aegis.Shared.csproj", "{4904089B-164A-3A3C-21CF-3F69B4DA41FB}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aegis.Cli", "sources\Aegis.Cli\Aegis.Cli.csproj", "{75A0D050-DC35-457A-B87E-529B8BC2BF57}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aegis.Security", "sources\Aegis.Security\Aegis.Security.csproj", "{B3917814-B9E3-40D6-A758-668C946E07D2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -54,6 +56,10 @@ Global
 		{75A0D050-DC35-457A-B87E-529B8BC2BF57}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{75A0D050-DC35-457A-B87E-529B8BC2BF57}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{75A0D050-DC35-457A-B87E-529B8BC2BF57}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3917814-B9E3-40D6-A758-668C946E07D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3917814-B9E3-40D6-A758-668C946E07D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3917814-B9E3-40D6-A758-668C946E07D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3917814-B9E3-40D6-A758-668C946E07D2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -65,6 +71,7 @@ Global
 		{9B09B9A8-5F3C-488F-4F07-5C248614E8DC} = {1C78CA1B-3346-4FA4-82A7-C9C9995D734D}
 		{4904089B-164A-3A3C-21CF-3F69B4DA41FB} = {1C78CA1B-3346-4FA4-82A7-C9C9995D734D}
 		{75A0D050-DC35-457A-B87E-529B8BC2BF57} = {1C78CA1B-3346-4FA4-82A7-C9C9995D734D}
+		{B3917814-B9E3-40D6-A758-668C946E07D2} = {1C78CA1B-3346-4FA4-82A7-C9C9995D734D}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {31A5AE18-9DD0-411A-A099-9A6C402AC6BA}

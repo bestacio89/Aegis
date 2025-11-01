@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Franz.Common.Logging;
-using Aegis.Core.Architecture.Evaluators;
-using Aegis.Core.Architecture.RuleEngines;
+using Aegis.Architecture.Evaluators;
+using Aegis.Architecture.RuleEngines;
 
 namespace Aegis.Sdk;
 

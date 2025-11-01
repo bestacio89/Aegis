@@ -81,4 +81,6 @@ public sealed class ProjectSecurityMetadata
     /// </summary>
     public override string ToString() =>
         $"{ProjectName} [{Environment}] - Branch: {Branch ?? "N/A"}, Commit: {CommitHash ?? "N/A"} | Host: {HostName}, Engine: {EngineVersion}";
+
+    public float RiskIndex { get; init; }
 }

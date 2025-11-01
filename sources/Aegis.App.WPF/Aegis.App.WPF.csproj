@@ -63,7 +63,7 @@
        ============================================= -->
   <ItemGroup>
     <ProjectReference Include="..\Aegis.Cli\Aegis.Cli.csproj" />
-    <ProjectReference Include="..\Aegis.Core\Aegis.Core.csproj" />
+    <ProjectReference Include="..\Aegis.Core\Aegis.Architecture.csproj" />
     <ProjectReference Include="..\Aegis.Infrastructure\Aegis.Infrastructure.csproj" />
     <ProjectReference Include="..\Aegis.Sdk\Aegis.Sdk.csproj" />
     <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />

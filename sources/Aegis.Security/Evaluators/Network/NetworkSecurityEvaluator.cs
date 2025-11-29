@@ -67,24 +67,3 @@ public sealed class NetworkSecurityEvaluator : ISecurityEvaluator
     }
 }
 
-/*
-  
-Now that these models are fixed and unified, we can safely continue generating:
-
-OS scanners
-
-OS signal adapters
-
-TLS evaluator
-
-Network evaluator
-
-Compliance engine
-
-Tell me what you want next:
-
-👉 “Continue OS module”
-👉 “Generate TLS evaluator”
-👉 “Generate Network evaluator”
-👉 “Generate Compliance engine”
-*/

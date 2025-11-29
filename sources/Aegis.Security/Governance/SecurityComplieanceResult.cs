@@ -1,5 +1,6 @@
 ﻿using Aegis.Shared.Security.Enums;
 using Aegis.Shared.Security.Models;
+using Aegis.Shared.Security.Models.Compliance;
 
 public sealed class SecurityComplianceResult
 {

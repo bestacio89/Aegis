@@ -13,4 +13,5 @@ public sealed class ProjectSecurityContext
 
     /// <summary>Optional extra context (branch, tags, etc.)</summary>
     public Dictionary<string, string> Tags { get; init; } = new();
+    public NetworkProbeConfig NetworkConfig { get; init; } = new();
 }

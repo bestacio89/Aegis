@@ -38,6 +38,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Aegis.Core\Aegis.Architecture.csproj" />
     <ProjectReference Include="..\Aegis.Infrastructure\Aegis.Infrastructure.csproj" />
+    <ProjectReference Include="..\Aegis.Security\Aegis.Security.csproj" />
     <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />
   </ItemGroup>
 
@@ -46,10 +47,10 @@
        ============================================= -->
   <ItemGroup>
     <!-- Franz DI enables plugin/service registration -->
-    <PackageReference Include="Franz.Common.Business" Version="1.6.14" />
-    <PackageReference Include="Franz.Common.DependencyInjection" Version="1.6.14" />
-    <PackageReference Include="Franz.Common.Logging" Version="1.6.14" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="9.0.10" />
+    <PackageReference Include="Franz.Common.Business" Version="1.6.21" />
+    <PackageReference Include="Franz.Common.DependencyInjection" Version="1.6.21" />
+    <PackageReference Include="Franz.Common.Logging" Version="1.6.21" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="10.0.0" />
   </ItemGroup>
 
 </Project>

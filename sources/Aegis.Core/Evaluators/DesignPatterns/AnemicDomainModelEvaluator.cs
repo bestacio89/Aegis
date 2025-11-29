@@ -3,7 +3,7 @@ using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
-using Aegis.Shared.Enums;
+
 using Aegis.Shared.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

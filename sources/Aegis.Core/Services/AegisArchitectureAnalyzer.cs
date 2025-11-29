@@ -3,7 +3,6 @@ using Aegis.Architecture.Analysis;
 using Aegis.Architecture.Scoring;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
-using Aegis.Shared.Models.Rules;
 using Microsoft.Extensions.Logging;
 
 namespace Aegis.Architecture.Services;

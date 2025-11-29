@@ -1,8 +1,7 @@
 ﻿using Aegis.Architecture.Diagnostics;
-using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Diagnostics;
-using Aegis.Shared.Enums;
+
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

@@ -4,7 +4,6 @@ using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Contracts;
-using Aegis.Shared.Models.Rules;
 using France.Common.Extensions;
 using Microsoft.Extensions.Logging;
 

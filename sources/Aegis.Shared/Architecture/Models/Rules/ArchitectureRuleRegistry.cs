@@ -1,9 +1,5 @@
 ﻿using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models.Rules.Sets;
-using Aegis.Shared.Rules.Sets.BackEnd;
-using Aegis.Shared.Rules.Sets.FrontEnd;
-using Aegis.Shared.Rules.Sets.Performance;
-using Aegis.Shared.Rules.Sets.Persistence;
 using France.Common.Extensions;
 
 namespace Aegis.Shared.Architecture.Models.Rules;

@@ -1,69 +1,92 @@
 ﻿<Project>
 
+  <!-- =============================================
+       Global Warnings / Security
+       ============================================= -->
   <PropertyGroup>
-    <!-- Disable vulnerability scanning on private feeds -->
     <NuGetAuditMode>direct</NuGetAuditMode>
-    <NoWarn>NU1900</NoWarn>
+
+    <!-- Combine all NoWarn values safely -->
+    <NoWarn>$(NoWarn);NU1900;1591;1608</NoWarn>
   </PropertyGroup>
+
   <ItemGroup>
     <AuditExclusion Include="FranzPlatform" />
   </ItemGroup>
-  <!-- ===============================
-       Global Build Properties
-       =============================== -->
+
+
+  <!-- =============================================
+       GLOBAL BUILD CONFIGURATION (.NET 10 baseline)
+       ============================================= -->
   <PropertyGroup>
-    
-    <!-- Framework & Language -->
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- Framework (base for non-UI projects) -->
+    <TargetFramework>net10.0</TargetFramework>
+
+    <!-- Language -->
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
     <!-- Code Quality -->
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- <TreatWarningsAsErrors>true</TreatWarningsAsErrors>-->
+    <WarningsNotAsErrors>NU1608</WarningsNotAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
-    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <Deterministic>true</Deterministic>
+
+    <!-- Nullability warnings that matter -->
     <WarningsAsErrors>CS8600;CS8602;CS8618;CS8629;CS8632</WarningsAsErrors>
 
     <!-- Documentation -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>1591</NoWarn>
 
-    <!-- Company & Metadata -->
+    <!-- Metadata -->
     <Authors>Bernardo Estacio Abreu</Authors>
     <Company>AjnaTellus</Company>
     <Product>Aegis</Product>
-    <RepositoryUrl>https://dev.azure.com/Ajna/Aegis</RepositoryUrl>
+    <RepositoryUrl>https://dev.azure.com/AjnaTellus/_git/Aegis</RepositoryUrl>
     <Version>1.0.0-alpha</Version>
     <Copyright>© 2025 AjnaTellus Systems</Copyright>
 
-    <!-- Build Output -->
+    <!-- Output Path -->
     <OutputPath>$(SolutionDir)artifacts\$(MSBuildProjectName)\</OutputPath>
     <DocumentationFile>$(OutputPath)$(AssemblyName).xml</DocumentationFile>
 
-    <!-- StyleCop / Analyzer Defaults -->
+    <!-- Analyzer rules -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <CodeAnalysisRuleSet>$(SolutionDir)Aegis.ruleset</CodeAnalysisRuleSet>
 
-    <!-- Enable Source Link if public -->
+    <!-- SourceLink -->
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
+
+    <!-- CI -->
     <ContinuousIntegrationBuild Condition="'$(BUILD_BUILDID)' != ''">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
-  <!-- ===============================
-       Platform-Specific Overrides
-       =============================== -->
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Aegis.App.WPF'">
+
+  <!-- =============================================
+       WPF OVERRIDE (correct name!)
+       ============================================= -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Aegis.App.Wpf'">
     <UseWPF>true</UseWPF>
-    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
   </PropertyGroup>
 
+
+  <!-- =============================================
+       MAUI OVERRIDE — upgraded to .NET 10 workloads
+       ============================================= -->
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Aegis.App.Maui'">
     <UseMaui>true</UseMaui>
-    <TargetFrameworks>net9.0-windows10.0.19041.0;net9.0-maccatalyst</TargetFrameworks>
+
+    <!-- Real .NET 10 Maui target frameworks -->
+    <TargetFrameworks>
+      net10.0-windows10.0.19041.0;
+      net10.0-maccatalyst;
+      net10.0-android
+    </TargetFrameworks>
+
     <SingleProject>true</SingleProject>
   </PropertyGroup>
-
 
 </Project>

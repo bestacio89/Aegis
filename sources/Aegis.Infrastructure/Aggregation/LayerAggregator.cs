@@ -1,5 +1,5 @@
 ﻿using Aegis.Shared.Architecture.Models.Rules;
-using Aegis.Shared.Enums;
+
 
 namespace Aegis.Infrastructure.Aggregation;
 

@@ -1,7 +1,7 @@
 ﻿using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Rules;
-using Aegis.Shared.Models;
+
 using Microsoft.Extensions.Logging;
 using System;
 

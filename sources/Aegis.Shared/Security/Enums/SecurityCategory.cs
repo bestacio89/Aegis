@@ -30,7 +30,8 @@ public enum SecurityCategory
 
     /// <summary>Business logic vulnerabilities (race conditions, bypasses, inconsistent state validation).</summary>
     Logic = 6,
-
+    /// <summary>Filesystem vulnerabilities (race conditions, bypasses, inconsistent state validation).</summary>
+    FileSystem = 7,
     // =========================================================
     // ☁️ Infrastructure, IaC, and Cloud
     // =========================================================
@@ -112,11 +113,14 @@ public enum SecurityCategory
 
     /// <summary>Human factors, phishing, and social engineering exposure.</summary>
     Human = 46,
+    OS = 47,
+    Stt = 48,
 
     // =========================================================
     // 🧩 Miscellaneous
     // =========================================================
 
     /// <summary>Unclassified or experimental findings.</summary>
-    Misc = 99
+    Misc = 99,
+    Unknown = 100
 }

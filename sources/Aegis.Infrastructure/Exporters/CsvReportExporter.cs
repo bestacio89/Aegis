@@ -3,7 +3,6 @@ using System.Text;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
-using Aegis.Shared.Models.Rules;
 using Microsoft.Extensions.Logging;
 
 namespace Aegis.Infrastructure.Exporters;

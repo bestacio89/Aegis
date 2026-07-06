@@ -24,14 +24,14 @@
     <Folder Include="Integration\" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Franz.Common" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.Business" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.DependencyInjection" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.EntityFramework" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.Errors" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.Http.EntityFramework" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.Mediator" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.Reflection" Version="1.6.21" />
+    <PackageReference Include="Franz.Common" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.Business" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.DependencyInjection" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.EntityFramework" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.Errors" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.Http.EntityFramework" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.Mediator" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.Reflection" Version="2.2.16" />
   </ItemGroup>
 
   <!-- =============================================
@@ -49,9 +49,9 @@
   
   
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0' Or '$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
-    <PackageReference Include="QuestPDF" Version="2025.7.3" />
+    <PackageReference Include="QuestPDF" Version="2026.7.0" />
     <PackageReference Include="RazorLight" Version="2.3.1" />
-    <PackageReference Include="Franz.Common.Logging" Version="1.6.21" />
+    <PackageReference Include="Franz.Common.Logging" Version="2.2.16" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
 

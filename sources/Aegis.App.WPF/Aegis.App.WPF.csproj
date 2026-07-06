@@ -37,26 +37,26 @@
     <PackageReference Include="MahApps.Metro" Version="2.4.11" />
 
     <!-- MVVM -->
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 
     <!-- Logging -->
-    <PackageReference Include="Franz.Common.Logging" Version="1.6.21" />
+    <PackageReference Include="Franz.Common.Logging" Version="2.2.16" />
 
     <!-- Dependency Injection -->
-    <PackageReference Include="Franz.Common.DependencyInjection" Version="1.6.21" />
+    <PackageReference Include="Franz.Common.DependencyInjection" Version="2.2.16" />
 
     <!-- Microsoft Extensions (.NET 10 versions) -->
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
 
     <!-- WebView for in-app HTML reports -->
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3537.50" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4022.49" />
 
     <!-- Charts -->
     <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
 
     <!-- Reporting (PDF) -->
-    <PackageReference Include="QuestPDF" Version="2025.7.3" />
+    <PackageReference Include="QuestPDF" Version="2026.7.0" />
 
     <!-- Razor template engine -->
     <PackageReference Include="RazorLight" Version="2.3.1" />
@@ -65,7 +65,7 @@
     <PackageReference Include="Refractored.MvvmHelpers" Version="1.6.2" />
 
     <!-- Logging UI sink -->
-    <PackageReference Include="Serilog.Sinks.ObservableCollection" Version="1.0.0" />
+    <PackageReference Include="Serilog.Sinks.ObservableCollection" Version="1.1.0" />
 
   </ItemGroup>
 

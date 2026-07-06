@@ -34,6 +34,9 @@
   <ItemGroup>
 
     <!-- WPF UI -->
+    <PackageReference Include="Franz.Common.EntityFramework.PostGres" Version="2.2.16" />
+    <PackageReference Include="LiveChartsCore.SkiaSharpView" Version="2.0.5" />
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
     <PackageReference Include="MahApps.Metro" Version="2.4.11" />
 
     <!-- MVVM -->
@@ -53,7 +56,6 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4022.49" />
 
     <!-- Charts -->
-    <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
 
     <!-- Reporting (PDF) -->
     <PackageReference Include="QuestPDF" Version="2026.7.0" />

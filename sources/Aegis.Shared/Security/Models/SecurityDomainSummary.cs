@@ -3,95 +3,84 @@
 namespace Aegis.Shared.Security.Models;
 
 /// <summary>
-/// Represents an aggregated summary of all security evaluations for a specific domain (e.g., Application, IaC, Network).
+/// Aggregated view of all evaluations for a single security domain
+/// (Application, IaC, Network, OS, FileSystem, Cloud, etc.).
 /// </summary>
 public sealed class SecurityDomainSummary
 {
-    /// <summary>
-    /// The security domain category represented in this summary.
-    /// </summary>
+    /// <summary>The logical security domain/category.</summary>
     public SecurityCategory Category { get; init; }
 
-    /// <summary>
-    /// Collection of individual evaluation results that belong to this domain.
-    /// </summary>
-    public IReadOnlyCollection<SecurityEvaluationResult> Evaluations { get; init; } = Array.Empty<SecurityEvaluationResult>();
+    /// <summary>All evaluation results contributing to this domain.</summary>
+    public IReadOnlyCollection<SecurityEvaluationResult> Evaluations { get; init; }
+        = Array.Empty<SecurityEvaluationResult>();
 
-    /// <summary>
-    /// Total number of rule results analyzed under this domain.
-    /// </summary>
+    /// <summary>Total number of rule results across all evaluations.</summary>
     public int TotalFindings => Evaluations.Sum(e => e.RuleResults.Count);
 
     /// <summary>
-    /// Total number of failed rules (Medium severity or higher).
+    /// Total number of failed findings (Medium severity or higher).
     /// </summary>
-    public int FailedFindings => Evaluations
-        .SelectMany(e => e.RuleResults)
-        .Count(r => r.Severity >= SecuritySeverity.Medium);
+    public int FailedFindings => Evaluations.Sum(e =>
+        e.RuleResults.Count(r => r.Severity >= SecuritySeverity.Medium));
 
-    /// <summary>
-    /// Average score across all rule results in this domain.
-    /// </summary>
+    /// <summary>Total number of rules executed across all evaluations.</summary>
+    public int TotalRules => Evaluations.Sum(e => e.TotalRules);
+
+    /// <summary>Total number of rules that passed.</summary>
+    public int PassedRules => Evaluations.Sum(e => e.PassedRules);
+
+    /// <summary>Average score (0–10) across all evaluations in this domain.</summary>
     public double AverageScore => Evaluations.Any()
-        ? Math.Round(Evaluations.SelectMany(e => e.RuleResults).Average(r => r.Score), 2)
+        ? Math.Round(Evaluations.Average(e => e.AverageScore), 2)
         : 0.0;
 
-    /// <summary>
-    /// Highest severity found within this domain.
-    /// </summary>
+    /// <summary>Compliance percentage for this domain (0–100%).</summary>
+    public double ComplianceRate
+    {
+        get
+        {
+            var total = TotalRules;
+            var failed = FailedFindings;
+
+            if (total == 0)
+                return 100.0;
+
+            var compliant = Math.Max(0, total - failed);
+            return Math.Round(100.0 * compliant / total, 2);
+        }
+    }
+
+    /// <summary>Highest severity among all rule results in this domain.</summary>
     public SecuritySeverity MaxSeverity => Evaluations.Any()
-        ? Evaluations.SelectMany(e => e.RuleResults).MaxBy(r => r.Severity)!.Severity
+        ? Evaluations.MaxBy(e => e.MaxSeverity)!.MaxSeverity
         : SecuritySeverity.Info;
 
-    /// <summary>
-    /// Severity distribution histogram.
-    /// </summary>
+    /// <summary>Aggregated severity distribution for this domain.</summary>
     public IReadOnlyDictionary<SecuritySeverity, int> SeverityDistribution =>
         Evaluations
             .SelectMany(e => e.RuleResults)
             .GroupBy(r => r.Severity)
             .ToDictionary(g => g.Key, g => g.Count());
 
-    /// <summary>
-    /// Derived overall risk level for this domain.
-    /// </summary>
-    public RiskLevel RiskLevel =>
-        MaxSeverity switch
-        {
-            SecuritySeverity.Critical => RiskLevel.Severe,
-            SecuritySeverity.High => RiskLevel.High,
-            SecuritySeverity.Medium => RiskLevel.Moderate,
-            SecuritySeverity.Low => RiskLevel.Low,
-            _ => RiskLevel.Information
-        };
-
-    /// <summary>
-    /// Indicates whether any critical findings exist in this domain.
-    /// </summary>
+    /// <summary>Whether any critical findings exist in this domain.</summary>
     public bool HasCriticalFindings => Evaluations.Any(e => e.HasCriticalFindings);
 
-    /// <summary>
-    /// Percentage of evaluations passing all checks.
-    /// </summary>
-    public double ComplianceRate
-    {
-        get
-        {
-            var total = Evaluations.Count;
-            if (total == 0) return 100;
-            var compliant = Evaluations.Count(e => e.FailedRules == 0);
-            return Math.Round(compliant / (double)total * 100, 2);
-        }
-    }
-
-    /// <summary>
-    /// UTC timestamp of aggregation.
-    /// </summary>
-    public DateTimeOffset AggregatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
-
-    /// <summary>
-    /// Returns a compact summary string for dashboards or reports.
-    /// </summary>
     public override string ToString() =>
-        $"[{Category}] {FailedFindings} issues ({MaxSeverity}) — AvgScore={AverageScore:F2}, Compliance={ComplianceRate:F2}%";
+        $"[{Category}] {FailedFindings}/{TotalFindings} failed — Max={MaxSeverity}, Avg={AverageScore:F2}, Compliance={ComplianceRate:F2}%";
+
+    /// <summary>
+    /// Convenience factory to build a domain summary from evaluation results.
+    /// </summary>
+    public static SecurityDomainSummary FromEvaluations(
+        SecurityCategory category,
+        IEnumerable<SecurityEvaluationResult> evaluations)
+    {
+        var evals = evaluations.ToArray();
+        return new SecurityDomainSummary
+        {
+            Category = category,
+            Evaluations = evals
+        };
+    }
 }

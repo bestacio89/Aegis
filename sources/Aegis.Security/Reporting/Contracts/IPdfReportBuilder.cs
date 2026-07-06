@@ -15,6 +15,6 @@ namespace Aegis.Security.Reporting.Contracts
     /// </summary>
     public interface IPdfReportBuilder
     {
-        byte[] Build(AegisSecurityReport report, SecurityComplianceResult compliance);
+        byte[] Build(AegisSecurityReport report);
     }
 }

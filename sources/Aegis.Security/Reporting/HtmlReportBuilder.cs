@@ -14,10 +14,10 @@ public sealed class HtmlReportBuilder : IHtmlReportBuilder
         _markdown = markdown;
     }
 
-    public string Build(AegisSecurityReport report, SecurityComplianceResult compliance)
+    public string Build(AegisSecurityReport report)
     {
         // Easiest: embed markdown in <pre> until you wire a markdown→HTML converter.
-        var md = _markdown.Build(report, compliance);
+        var md = _markdown.Build(report);
         var encoded = WebUtility.HtmlEncode(md);
 
         var sb = new StringBuilder();

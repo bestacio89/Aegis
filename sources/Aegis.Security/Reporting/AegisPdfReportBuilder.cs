@@ -17,11 +17,11 @@ public sealed class AegisPdfReportBuilder : IPdfReportBuilder
         _htmlBuilder = htmlBuilder;
     }
 
-    public byte[] Build(AegisSecurityReport report, SecurityComplianceResult compliance)
+    public byte[] Build(AegisSecurityReport report)
     {
         // v0: produce HTML bytes (good enough for WPF / browser preview / placeholder PDF).
         // v1: replace this with real PDF rendering.
-        var html = _htmlBuilder.Build(report, compliance);
+        var html = _htmlBuilder.Build(report);
         return Encoding.UTF8.GetBytes(html);
     }
 }

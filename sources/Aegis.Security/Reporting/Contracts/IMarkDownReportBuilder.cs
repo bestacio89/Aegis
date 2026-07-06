@@ -1,16 +1,8 @@
-﻿using Aegis;
-using Aegis.Security;
-using Aegis.Security.Reporting;
-using Aegis.Security.Reporting.Contracts;
-using Aegis.Shared.Security.Models;
-using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using Aegis.Shared.Security.Models;
 
-namespace Aegis.Security.Reporting.Contracts
+namespace Aegis.Security.Reporting.Contracts;
+
+public interface IMarkdownReportBuilder
 {
-    public interface IMarkdownReportBuilder
-    {
-        string Build(AegisSecurityReport report, SecurityComplianceResult compliance);
-    }
+    string Build(AegisSecurityReport report);
 }

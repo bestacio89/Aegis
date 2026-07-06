@@ -11,6 +11,6 @@ namespace Aegis.Security.Reporting.Contracts
 {
     public interface IHtmlReportBuilder
     {
-        string Build(AegisSecurityReport report, SecurityComplianceResult compliance);
+        string Build(AegisSecurityReport report);
     }
 }

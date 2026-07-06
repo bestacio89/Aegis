@@ -2,6 +2,8 @@
 using Aegis.Infrastructure.Persistence;
 using Aegis.Infrastructure.Repositories;
 using Franz.Common.DependencyInjection.Extensions;
+using Franz.Common.EntityFramework.Extensions;
+
 // Franz persistence entrypoint
 using Franz.Common.Http.EntityFramework.Extensions;
 using Microsoft.Extensions.Configuration;

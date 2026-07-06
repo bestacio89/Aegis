@@ -21,16 +21,16 @@ namespace Aegis.Sdk;
 public sealed class AegisArchitectureAnalysisRunner
 {
     private readonly RuleEngine _engine;
-    private readonly EntityRepository<AegisDbContext, RuleResultEntity> _ruleResultRepo;
-    private readonly EntityRepository<AegisDbContext, ReportEntity> _reportRepo;
+    private readonly IEntityRepository<RuleResultEntity,int> _ruleResultRepo;
+    private readonly IEntityRepository<ReportEntity, int> _reportRepo;
     private readonly IRuleResultRepository _customRuleResultRepo;
     private readonly IReportRepository _customReportRepo;
     private readonly ILogger<AegisArchitectureAnalysisRunner> _logger;
 
     public AegisArchitectureAnalysisRunner(
         RuleEngine engine,
-        EntityRepository<AegisDbContext, RuleResultEntity> ruleResultRepo,
-        EntityRepository<AegisDbContext, ReportEntity> reportRepo,
+        IEntityRepository<RuleResultEntity,int> ruleResultRepo,
+        IEntityRepository<ReportEntity,int> reportRepo,
         IRuleResultRepository customRuleResultRepo,
         IReportRepository customReportRepo,
         ILogger<AegisArchitectureAnalysisRunner> logger)

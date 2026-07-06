@@ -3,7 +3,7 @@ using Aegis.Shared.Architecture.Enums;
 
 namespace Aegis.Infrastructure.Data;
 
-public class RuleResultEntity : Entity
+public class RuleResultEntity : Entity<int>
 {
     public int ReportId { get; set; }
     public string RuleId { get; set; } = string.Empty;

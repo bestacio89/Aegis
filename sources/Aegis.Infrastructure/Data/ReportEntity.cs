@@ -2,7 +2,7 @@
 
 namespace Aegis.Infrastructure.Data;
 
-public class ReportEntity : Entity
+public class ReportEntity : Entity<int>
 {
     public string ProjectName { get; set; } = string.Empty;
     public string Language { get; set; } = string.Empty;

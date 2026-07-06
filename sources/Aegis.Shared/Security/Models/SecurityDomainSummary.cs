@@ -10,8 +10,13 @@ public sealed class SecurityDomainSummary
 {
     /// <summary>The logical security domain/category.</summary>
     public SecurityCategory Category { get; init; }
-
+    public DateTimeOffset AggregatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
     /// <summary>All evaluation results contributing to this domain.</summary>
+ 
+    /// <summary>
+    /// UTC timestamp when this domain summary was aggregated.
+    /// </summary>
+
     public IReadOnlyCollection<SecurityEvaluationResult> Evaluations { get; init; }
         = Array.Empty<SecurityEvaluationResult>();
 

@@ -2,11 +2,11 @@
 using Aegis.Infrastructure.Persistence;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Elastic.CommonSchema;
+using LiveChartsCore;
+using LiveChartsCore.SkiaSharpView;
+using LiveChartsCore.SkiaSharpView.Painting;
 using Microsoft.Extensions.Logging;
-using OxyPlot;
-using OxyPlot.Axes;
-using OxyPlot.Series;
+using SkiaSharp;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -20,7 +20,13 @@ public sealed partial class LayerDashboardViewModel : ObservableObject
     private readonly ILogger<LayerDashboardViewModel> _logger;
 
     [ObservableProperty]
-    private PlotModel _layerPlot = new();
+    private ObservableCollection<ISeries> _series = new();
+
+    [ObservableProperty]
+    private Axis[] _xAxes = [];
+
+    [ObservableProperty]
+    private Axis[] _yAxes = [];
 
     [ObservableProperty]
     private ObservableCollection<LayerStat> _layers = new();
@@ -35,7 +41,7 @@ public sealed partial class LayerDashboardViewModel : ObservableObject
         _logger = logger;
 
         LoadDataCommand = new AsyncRelayCommand(LoadDataAsync);
-        _ = LoadDataAsync(); // auto-load
+        _ = LoadDataAsync();
     }
 
     public IAsyncRelayCommand LoadDataCommand { get; }
@@ -44,105 +50,107 @@ public sealed partial class LayerDashboardViewModel : ObservableObject
     {
         try
         {
-            _logger.LogInformation("📊 Loading layer stats...");
+            _logger.LogInformation("Loading layer stats...");
 
             var reports = await _reportRepo.GetAllReportsAsync(default);
             var lastReport = reports.OrderByDescending(r => r.ScanDate).FirstOrDefault();
-            if (lastReport == null)
+
+            if (lastReport is null)
             {
-                CreateEmptyPlot("⚠️ No reports found");
+                BuildEmpty("No reports found");
                 return;
             }
 
             var violations = await _ruleRepo.GetViolationsByReportIdAsync(lastReport.Id, default);
-            if (violations == null || !violations.Any())
+
+            if (violations is null || !violations.Any())
             {
-               CreateEmptyPlot("⚠️ No violations found");
+                BuildEmpty("No violations found");
                 return;
             }
 
-            // Group by "Layer" (assuming it's part of your model’s Target or Category)
             var grouped = violations
                 .GroupBy(v =>
                 {
-                    // Derive layer name from Target, Category, or naming convention
                     var target = v.Target ?? string.Empty;
+
                     if (target.Contains("Api", System.StringComparison.OrdinalIgnoreCase)) return "API";
                     if (target.Contains("App", System.StringComparison.OrdinalIgnoreCase)) return "Application";
                     if (target.Contains("Domain", System.StringComparison.OrdinalIgnoreCase)) return "Domain";
                     if (target.Contains("Infrastructure", System.StringComparison.OrdinalIgnoreCase)) return "Infrastructure";
+
                     return "Other";
                 })
                 .Select(g => new LayerStat(g.Key, g.Count()))
                 .OrderByDescending(x => x.Count)
                 .ToList();
 
-             new ObservableCollection<LayerStat>(grouped);
-             BuildLayerPlot(grouped);
+            Layers = new ObservableCollection<LayerStat>(grouped);
+
+            BuildChart(grouped);
         }
-        catch (Exception ex)
+        catch (System.Exception ex)
         {
-            _logger.LogError(ex, "❌ Failed to load layer dashboard");
-             CreateEmptyPlot("❌ Error loading data");
+            _logger.LogError(ex, "Failed to load layer dashboard");
+            BuildEmpty("Error loading data");
         }
     }
 
-    // ---------------------------------------------------------------------
-    // 🧱 Build OxyPlot bar chart
-    // ---------------------------------------------------------------------
-    private PlotModel BuildLayerPlot(IEnumerable<LayerStat> layers)
+    // ------------------------------------------------------------------
+    // 📊 LiveCharts version of bar chart
+    // ------------------------------------------------------------------
+    private void BuildChart(IEnumerable<LayerStat> layers)
     {
-        var model = new PlotModel
+        var data = layers.ToList();
+
+        Series = new ObservableCollection<ISeries>
         {
-            Title = "Violations by Architecture Layer",
-            TextColor = OxyColors.White,
-            Background = OxyColor.FromRgb(30, 30, 30),
-            PlotAreaBorderColor = OxyColors.Gray
+            new ColumnSeries<int>
+            {
+                Name = "Violations",
+                Values = data.Select(x => x.Count).ToArray(),
+                Fill = new SolidColorPaint(new SKColor(0, 191, 255))
+            }
         };
 
-        var catAxis = new CategoryAxis
+        XAxes = new[]
         {
-            Position = AxisPosition.Bottom,
-            TextColor = OxyColors.White,
-            Title = "Layer"
-        };
-        catAxis.Labels.AddRange(layers.Select(l => l.Layer));
-
-        var valAxis = new LinearAxis
-        {
-            Position = AxisPosition.Left,
-            Title = "Violation Count",
-            TextColor = OxyColors.White,
-            MajorGridlineStyle = LineStyle.Solid
+            new Axis
+            {
+                Labels = data.Select(x => x.Layer).ToArray(),
+                LabelsRotation = 15
+            }
         };
 
-        var barSeries = new BarSeries
+        YAxes = new[]
         {
-            Title = "Violations per Layer",
-            FillColor = OxyColor.FromRgb(0, 191, 255),
-            StrokeColor = OxyColors.White,
-            StrokeThickness = 1,
-            LabelPlacement = LabelPlacement.Inside,
-            LabelFormatString = "{0}",
-            ItemsSource = layers.Select(l => new BarItem { Value = l.Count }).ToList()
+            new Axis
+            {
+                Name = "Violations"
+            }
         };
-
-        model.Axes.Add(catAxis);
-        model.Axes.Add(valAxis);
-        model.Series.Add(barSeries);
-        return model;
     }
 
-    // ---------------------------------------------------------------------
-    // 🧩 Placeholder chart
-    // ---------------------------------------------------------------------
-    private static PlotModel CreateEmptyPlot(string message) => new()
+    // ------------------------------------------------------------------
+    // 🧱 Empty state
+    // ------------------------------------------------------------------
+    private void BuildEmpty(string message)
     {
-        Title = message,
-        TextColor = OxyColors.White,
-        Background = OxyColor.FromRgb(30, 30, 30)
-    };
+        Series = new ObservableCollection<ISeries>();
+
+        XAxes = new[]
+        {
+            new Axis { Name = message }
+        };
+
+        YAxes = new[]
+        {
+            new Axis { Name = "" }
+        };
+    }
 }
 
-// 🧩 Helper record for DataGrid
+// ----------------------------------------------------------------------
+// 🧩 Model stays unchanged
+// ----------------------------------------------------------------------
 public sealed record LayerStat(string Layer, int Count);

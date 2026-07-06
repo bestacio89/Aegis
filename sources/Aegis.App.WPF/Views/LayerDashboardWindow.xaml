@@ -1,25 +1,51 @@
-﻿<Window x:Class="Aegis.App.WPF.Views.LayerDashboardWindow"
+﻿<Window x:Class="Aegis.App.Wpf.Views.LayerDashboardWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d"
-        Title="Layer Dashboard" Height="450" Width="800"
-        Background="#1E1E1E" Foreground="White">
+        xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+        Title="Layer Dashboard"
+        Height="500"
+        Width="900"
+        Background="#1E1E1E"
+        Foreground="White">
+
     <Grid Margin="10">
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="200"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <Button Content="Reload" Command="{Binding LoadDataCommand}" Margin="0,0,0,8" Width="100"/>
+        <!-- Reload -->
+        <Button Content="Reload"
+                Command="{Binding LoadDataCommand}"
+                Width="120"
+                Margin="0,0,0,10"/>
 
-        <DataGrid Grid.Row="1" ItemsSource="{Binding Layers}" AutoGenerateColumns="False"
-                  Background="#252526" Foreground="White" HeadersVisibility="Column">
+        <!-- Chart -->
+        <lvc:CartesianChart Grid.Row="1"
+                            Series="{Binding LayerSeries}"
+                            XAxes="{Binding LayerAxes}"
+                            YAxes="{Binding ValueAxes}"
+                            Background="#1E1E1E"
+                            Margin="0,0,0,10"/>
+
+        <!-- Table (kept for precision view) -->
+        <DataGrid Grid.Row="2"
+                  ItemsSource="{Binding Layers}"
+                  AutoGenerateColumns="False"
+                  Background="#252526"
+                  Foreground="White"
+                  HeadersVisibility="Column"
+                  RowBackground="#2a2a2a"
+                  AlternatingRowBackground="#242424">
+
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Layer" Binding="{Binding Layer}" Width="*" />
-                <DataGridTextColumn Header="Violations" Binding="{Binding Count}" Width="Auto" />
+                <DataGridTextColumn Header="Layer" Binding="{Binding Layer}" Width="*"/>
+                <DataGridTextColumn Header="Violations" Binding="{Binding Count}" Width="Auto"/>
             </DataGrid.Columns>
+
         </DataGrid>
+
     </Grid>
 </Window>

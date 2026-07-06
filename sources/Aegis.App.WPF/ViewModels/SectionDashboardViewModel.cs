@@ -58,70 +58,55 @@ public sealed partial class SectionDashboardViewModel : ObservableObject
                 counts.Add(prop.Value.EnumerateObject().Count());
             }
 
-           BuildSectionPlot(names, counts);
+            BuildChart(names, counts);
         }
-        catch (Exception ex)
+        catch
         {
-            CreateEmptyPlot("❌ Failed to load policy data");
-            Console.WriteLine(ex);
+            BuildEmpty("Failed to load policy data");
         }
     }
 
-    // ---------------------------------------------------------------------
-    // 🧱 Build OxyPlot model
-    // ---------------------------------------------------------------------
-    private PlotModel BuildSectionPlot(List<string> names, List<int> counts)
+    // ---------------- LiveCharts build ----------------
+
+    private void BuildChart(List<string> names, List<int> counts)
     {
-        var model = new PlotModel
+        Series = new ISeries[]
         {
-            Title = "Policy Sections and Rule Counts",
-            TextColor = OxyColors.White,
-            Background = OxyColor.FromRgb(30, 30, 30),
-            PlotAreaBorderColor = OxyColors.Gray
+            new ColumnSeries<int>
+            {
+                Values = counts,
+                Name = "Rules per Section",
+                Fill = new SolidColorPaint(new SKColor(0, 191, 255)),
+                Stroke = new SolidColorPaint(new SKColor(255, 255, 255)) { StrokeThickness = 1 }
+            }
         };
 
-        var catAxis = new CategoryAxis
+        XAxes = new Axis[]
         {
-            Position = AxisPosition.Bottom,
-            TextColor = OxyColors.White,
-            Title = "Sections"
-        };
-        catAxis.Labels.AddRange(names);
-
-        var valAxis = new LinearAxis
-        {
-            Position = AxisPosition.Left,
-            Title = "Rule Count",
-            TextColor = OxyColors.White,
-            MajorGridlineStyle = LineStyle.Solid
+            new Axis
+            {
+                Labels = names,
+                Name = "Sections",
+                LabelsPaint = new SolidColorPaint(SKColors.White)
+            }
         };
 
-        // BarSeries is always horizontal, so we’ll just flip axis order for vertical layout
-        var barSeries = new BarSeries
+        YAxes = new Axis[]
         {
-            Title = "Rules per Section",
-            FillColor = OxyColor.FromRgb(0, 191, 255),
-            StrokeColor = OxyColors.White,
-            StrokeThickness = 1,
-            LabelPlacement = LabelPlacement.Inside,
-            LabelFormatString = "{0}",
-            ItemsSource = counts.Select(c => new BarItem { Value = c }).ToList()
+            new Axis
+            {
+                Name = "Rule Count",
+                LabelsPaint = new SolidColorPaint(SKColors.White)
+            }
         };
-
-        model.Axes.Add(catAxis);
-        model.Axes.Add(valAxis);
-        model.Series.Add(barSeries);
-
-        return model;
     }
 
-    // ---------------------------------------------------------------------
-    // 🧩 Placeholder chart
-    // ---------------------------------------------------------------------
-    private PlotModel CreateEmptyPlot(string message) => new()
+    private void BuildEmpty(string message)
     {
-        Title = message,
-        TextColor = OxyColors.White,
-        Background = OxyColor.FromRgb(30, 30, 30)
-    };
+        Title = message;
+
+        Series = Array.Empty<ISeries>();
+        XAxes = Array.Empty<Axis>();
+        YAxes = Array.Empty<Axis>();
+    }
 }

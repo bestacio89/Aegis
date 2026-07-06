@@ -17,7 +17,7 @@ using System.Reflection;
 
 namespace Aegis.Security.Bootstrap;
 
-public static class SecurityBootstrapper
+public static class AegisSecurityServiceCollectionExtensions
 {
     public static IServiceCollection AddAegisSecurity(this IServiceCollection services, IConfiguration config)
     {

@@ -28,18 +28,21 @@ public sealed class AegisSecurityPipeline : IAegisSecurityPipeline
         ProjectSecurityContext context,
         CancellationToken ct = default)
     {
-        _logger.LogInformation("🔐 Aegis security pipeline starting for {Project}", context.ProjectPath);
+        _logger.LogInformation("Aegis security pipeline starting for {Project}", context.ProjectPath);
 
-        // 1. Run probes
         var allSignals = new List<SecuritySignal>();
+
         foreach (var probe in _probes)
         {
             try
             {
-                _logger.LogInformation("▶ Running probe {ProbeId}", probe.Id);
+                _logger.LogInformation("Running probe {ProbeId}", probe.Id);
+
                 var signals = await probe.ExecuteAsync(context, ct);
                 allSignals.AddRange(signals);
-                _logger.LogInformation("✔ Probe {ProbeId} produced {Count} signals", probe.Id, signals.Count);
+
+                _logger.LogInformation("Probe {ProbeId} produced {Count} signals",
+                    probe.Id, signals.Count());
             }
             catch (Exception ex)
             {
@@ -47,36 +50,46 @@ public sealed class AegisSecurityPipeline : IAegisSecurityPipeline
             }
         }
 
-        // 2. Evaluate
-        var evaluations = (await _evaluatorEngine.EvaluateAllAsync(context, allSignals, ct)).ToArray();
+        var evaluations = (await _evaluatorEngine
+            .EvaluateAllAsync(context, allSignals, ct))
+            .ToArray();
 
-        // 3. Aggregate into summary
-        var summary = SecurityScanSummary.FromEvaluations(evaluations);
+        // FIX 1: correct factory usage
+        var summary = SecurityScanSummary.FromEvaluations(
+            context.ProjectPath,
+            evaluations,
+            policyVersion: "v1.0",
+            executedBy: context.Environment
+        );
 
-        // 4. Build AegisSecurityReport
         var report = new AegisSecurityReport
         {
             ProjectName = context.ProjectPath,
-            EngineVersion = "1.0.0-alpha", // optionally injected from options
-            PolicyVersion = "v1.0",        // idem
+            EngineVersion = "1.0.0-alpha",
+            PolicyVersion = "v1.0",
             StartedAtUtc = context.ExecutedAtUtc,
             CompletedAtUtc = DateTimeOffset.UtcNow,
             Summary = summary,
             Metadata = new ProjectSecurityMetadata
             {
                 Environment = context.Environment,
-                PipelineRunId = context.PipelineRunId,
-                Tags = context.Tags
+                Tags = context.Tags.Values.ToList()
             }
         };
 
-        // 5. Compliance
-        var compliance = _complianceEngine.Evaluate(evaluations);
+        // FIX 2: correct compliance engine signature
+        var compliance = _complianceEngine.Evaluate(
+            report,
+            evaluations,
+            context.Environment,
+            "v1.0"
+        );
 
         _logger.LogInformation(
-            "🔚 Aegis pipeline completed. Risk={Risk}, Compliance={Compliance:F2}%",
+            "Aegis pipeline completed. Risk={Risk}, Compliance={Compliance:F2}%",
             compliance.GlobalRisk,
-            compliance.ComplianceRate);
+            compliance.ComplianceRate
+        );
 
         return (report, compliance);
     }

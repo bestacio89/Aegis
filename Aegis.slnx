@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/build/">
+    <File Path="Aegis.ruleset" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+  </Folder>
+  <Folder Name="/sources/">
+    <Project Path="sources/Aegis.App.WPF/Aegis.App.Wpf.csproj" />
+    <Project Path="sources/Aegis.Cli/Aegis.Cli.csproj" />
+    <Project Path="sources/Aegis.Core/Aegis.Architecture.csproj" />
+    <Project Path="sources/Aegis.Infrastructure/Aegis.Infrastructure.csproj" />
+    <Project Path="sources/Aegis.Sdk/Aegis.Sdk.csproj" />
+    <Project Path="sources/Aegis.Security/Aegis.Security.csproj" />
+    <Project Path="sources/Aegis.Shared/Aegis.Shared.csproj" />
+  </Folder>
+</Solution>

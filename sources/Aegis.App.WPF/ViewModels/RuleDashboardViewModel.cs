@@ -157,3 +157,6 @@ public sealed class RuleDashboardViewModel
         };
     }
 }
+
+// helper model unchanged
+public sealed record LayerStat(string Layer, int Count);

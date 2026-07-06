@@ -1,7 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
-using OxyPlot;
-using OxyPlot.Axes;
-using OxyPlot.Series;
+using LiveChartsCore;
+using LiveChartsCore.SkiaSharpView;
+using LiveChartsCore.SkiaSharpView.Painting;
+using SkiaSharp;
 using System.IO;
 using System.Text.Json;
 
@@ -9,12 +10,18 @@ namespace Aegis.App.Wpf.ViewModels;
 
 public sealed partial class SectionDashboardViewModel : ObservableObject
 {
-    // 🧩 This is YOUR property (not an OxyPlot type)
-    [ObservableProperty]
-    private PlotModel _sectionPlot = new();
-
     [ObservableProperty]
     private string _title = "🧩 Aegis Policy Sections";
+
+    // LiveCharts replaces PlotModel entirely
+    [ObservableProperty]
+    private ISeries[] _series = Array.Empty<ISeries>();
+
+    [ObservableProperty]
+    private Axis[] _xAxes = Array.Empty<Axis>();
+
+    [ObservableProperty]
+    private Axis[] _yAxes = Array.Empty<Axis>();
 
     public SectionDashboardViewModel()
     {
@@ -26,9 +33,10 @@ public sealed partial class SectionDashboardViewModel : ObservableObject
         try
         {
             var policyPath = Path.Combine(AppContext.BaseDirectory, "config", "aegis.policy.json");
+
             if (!File.Exists(policyPath))
             {
-                CreateEmptyPlot("⚠️ Policy file not found");
+                BuildEmpty("Policy file not found");
                 return;
             }
 
@@ -37,7 +45,7 @@ public sealed partial class SectionDashboardViewModel : ObservableObject
 
             if (!doc.RootElement.TryGetProperty("AegisPolicy", out var root))
             {
-                CreateEmptyPlot("⚠️ Invalid policy structure");
+                BuildEmpty("Invalid policy structure");
                 return;
             }
 

@@ -1,10 +1,10 @@
 ﻿using Aegis.App.Wpf.ViewModels;
 using Aegis.Architecture.RuleEngines;
-using Aegis.Infrastructure.Data;
+using Aegis.Infrastructure.Extensions;
 using Aegis.Infrastructure.Persistence;
-using Aegis.Infrastructure.Repositories;
 using Aegis.Sdk;
-using Franz.Common.EntityFramework.Repositories;
+using Franz.Common.Logging.Extensions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -14,39 +14,63 @@ namespace Aegis.App.Wpf;
 
 public partial class App : Application
 {
-   public static IHost Host { get; private set; } = default!;
-
+    public static IHost Host { get; private set; } = default!;
 
     public App()
     {
-        Host = CreateHostBuilder().Build();
+        Host = CreateHost();
     }
 
-    private static IHostBuilder CreateHostBuilder() =>
-        Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
+    private static IHost CreateHost()
+    {
+        // -------------------------------
+        // STEP 1: build configuration manually (NO HOST YET)
+        // -------------------------------
+        var configBuilder = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("config/appsettings.json", optional: false, reloadOnChange: true)
+            .AddEnvironmentVariables();
+
+        var configuration = configBuilder.Build();
+
+        // -------------------------------
+        // STEP 2: temporary logger factory
+        // -------------------------------
+        using var loggerFactory = LoggerFactory.Create(logging =>
+        {
+            logging.AddConsole();
+            logging.AddDebug();
+        });
+
+        var logger = loggerFactory.CreateLogger("DatabaseBootstrap");
+
+        // -------------------------------
+        // STEP 3: DB detection
+        // -------------------------------
+        DatabaseDetector.DetectOrRepairDatabaseConfig(configuration, logger);
+
+        // -------------------------------
+        // STEP 4: build real host
+        // -------------------------------
+        return Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
+            .UseLog()
+            .ConfigureAppConfiguration((context, config) =>
+            {
+                config.AddConfiguration(configuration);
+            })
             .ConfigureServices((context, services) =>
             {
-                // ✅ Core Aegis services
-                services.AddDbContext<AegisDbContext>();
+                services.AddAegisInfrastructure(
+                    context.HostingEnvironment,
+                    context.Configuration);
+
                 services.AddScoped<RuleEngine>();
                 services.AddScoped<AegisArchitectureAnalysisRunner>();
 
-                // ✅ Repositories
-                services.AddScoped(typeof(EntityRepository<AegisDbContext, RuleResultEntity>));
-                services.AddScoped(typeof(EntityRepository<AegisDbContext, ReportEntity>));
-                services.AddScoped<IRuleResultRepository, RuleResultRepository>();
-                services.AddScoped<IReportRepository, ReportRepository>();
-
-                // ✅ ViewModels
                 services.AddSingleton<MainViewModel>();
-
-                // ✅ Logging
-                services.AddLogging(builder =>
-                {
-                    builder.AddConsole();
-                    builder.AddDebug();
-                });
-            });
+            })
+            .Build();
+    }
 
     protected override async void OnStartup(StartupEventArgs e)
     {

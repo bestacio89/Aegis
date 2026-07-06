@@ -29,6 +29,7 @@ namespace Aegis.Infrastructure.Extensions
             IConfiguration config)
         {
             // 🧱 Core persistence (auto-detects provider)
+            
             services.AddRelationalDatabase<AegisDbContext>(env, config)
                     .AddEntityRepositories<AegisDbContext>();
 

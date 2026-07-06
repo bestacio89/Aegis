@@ -131,7 +131,7 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
 #if DEBUG
             throw;
 #else
-            return Enumerable.Empty<EvaluatorResult>();
+            return Enumerable.Empty<ArchitectureEvaluatorResult>();
 #endif
         }
     }

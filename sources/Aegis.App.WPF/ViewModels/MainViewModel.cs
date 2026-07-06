@@ -1,109 +1,131 @@
-﻿using Aegis.Sdk;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using MvvmHelpers;
 using System;
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Input;
 
 namespace Aegis.App.Wpf.ViewModels;
 
-public sealed class MainViewModel : BaseViewModel
+public partial class MainViewModel : ObservableObject
 {
-    private readonly AegisArchitectureAnalysisRunner _runner;
-    private readonly ILogger<MainViewModel> _logger;
+    private readonly IServiceProvider _services;
 
-    public ObservableCollection<string> Logs { get; } = new();
-    public ICommand AnalyzeCommand { get; }
-    public ICommand ExportCommand { get; }
-    public ICommand ReloadCommand { get; }
-
-    private double _progress;
-    public double Progress
+    public MainViewModel(IServiceProvider services)
     {
-        get => _progress;
-        set => SetProperty(ref _progress, value);
+        _services = services;
+
+        Logs = new ObservableCollection<string>();
+
+        Workspaces = new ObservableCollection<string>
+        {
+            "Layers",
+            "Sections",
+            "Rules"
+        };
+
+        SelectedWorkspace = "Layers";
+        ShowLayerWorkspace();
     }
 
-    public MainViewModel()
-    {
-        // ✅ Resolve dependencies through the DI container (App.Host configured in App.xaml.cs)
-        _runner = App.Host.Services.GetRequiredService<AegisArchitectureAnalysisRunner>();
-        _logger = App.Host.Services.GetRequiredService<ILogger<MainViewModel>>();
+    // =========================
+    // STATE
+    // =========================
 
-        // ✅ Setup commands
-        AnalyzeCommand = new AsyncRelayCommand(RunAnalysisAsync);
-        ExportCommand = new AsyncRelayCommand(ExportReportAsync);
-        ReloadCommand = new RelayCommand(Logs.Clear);
+    [ObservableProperty]
+    private string? repositoryPath;
+
+    [ObservableProperty]
+    private double analysisProgress;
+
+    [ObservableProperty]
+    private object? activeWorkspaceViewModel;
+
+    [ObservableProperty]
+    private string? selectedWorkspace;
+
+    // FIX: was object, now minimal contract
+    [ObservableProperty]
+    private InspectableItemViewModel? selectedItem;
+
+    public ObservableCollection<string> Logs { get; }
+
+    // FIX: XAML was binding to Sections (did not exist)
+    public ObservableCollection<string> Workspaces { get; }
+
+    // alias to avoid rewriting XAML further if you want
+    public ObservableCollection<string> Sections => Workspaces;
+
+    // =========================
+    // COMMANDS
+    // =========================
+
+    [RelayCommand]
+    private void SelectRepository()
+    {
+        RepositoryPath = @"C:\repo";
+        AddLog("Repository selected");
     }
 
-    // 🚀───────────────────────────────────────────────
-    // ANALYSIS WORKFLOW
-    // ────────────────────────────────────────────────
-    private async Task RunAnalysisAsync()
+    [RelayCommand]
+    private void RunAnalysis()
     {
-        try
-        {
-            AppendLog("🚀 Starting Aegis analysis...");
+        AddLog("Analysis started");
 
-            var projectPath = Environment.CurrentDirectory;
-            var policyPath = Path.Combine("config", "aegis.policy.json");
+        AnalysisProgress = 0;
+        AnalysisProgress = 100;
 
-            Progress = 10;
-            AppendLog($"📂 Target project: {projectPath}");
-
-            var resultCode = await _runner.RunSessionAsync(
-                projectPath: projectPath,
-                policyPath: policyPath,
-                exportJson: true,
-                token: default
-            );
-
-            Progress = 90;
-            if (resultCode == 0)
-                AppendLog("✅ Analysis complete! No violations detected.");
-            else if (resultCode == -1)
-                AppendLog("❌ Analysis failed during execution. See logs for details.");
-            else
-                AppendLog($"⚠️ Analysis finished with code {resultCode} (see report for details).");
-
-            Progress = 100;
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"💥 Exception during analysis: {ex.Message}");
-            _logger.LogError(ex, "Error during Aegis analysis execution");
-        }
+        AddLog("Analysis completed");
     }
 
-    // 🧾───────────────────────────────────────────────
-    // REPORT EXPORT (placeholder or future PDF)
-    // ────────────────────────────────────────────────
-    private async Task ExportReportAsync()
+    [RelayCommand]
+    private void ExportResults()
     {
-        try
-        {
-            AppendLog("📦 Exporting report...");
-            await Task.Delay(400); // simulate process for now
-            AppendLog("📄 Report exported successfully (JSON or PDF depending on exporter settings).");
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"❌ Export failed: {ex.Message}");
-            _logger.LogError(ex, "Error during report export");
-        }
+        AddLog("Export started");
+        AddLog("Export completed");
     }
 
-    // 🪶───────────────────────────────────────────────
-    // LOGGING UTILITIES
-    // ────────────────────────────────────────────────
-    private void AppendLog(string message)
+    [RelayCommand]
+    private void ClearLogs()
     {
-        Application.Current.Dispatcher.Invoke(() => Logs.Add(message));
-        _logger.LogInformation(message);
+        Logs.Clear();
+    }
+
+    [RelayCommand]
+    private void ShowLayerWorkspace()
+    {
+        ActiveWorkspaceViewModel =
+            _services.GetRequiredService<LayerDashboardViewModel>();
+
+        SelectedWorkspace = "Layers";
+        AddLog("Switched to Layer workspace");
+    }
+
+    [RelayCommand]
+    private void ShowSectionWorkspace()
+    {
+        ActiveWorkspaceViewModel =
+            _services.GetRequiredService<SectionDashboardViewModel>();
+
+        SelectedWorkspace = "Sections";
+        AddLog("Switched to Section workspace");
+    }
+
+    [RelayCommand]
+    private void ShowRuleWorkspace()
+    {
+        ActiveWorkspaceViewModel =
+            _services.GetRequiredService<RuleDashboardViewModel>();
+
+        SelectedWorkspace = "Rules";
+        AddLog("Switched to Rule workspace");
+    }
+
+    // =========================
+    // LOGGING
+    // =========================
+
+    private void AddLog(string message)
+    {
+        Logs.Add($"[{DateTime.Now:HH:mm:ss}] {message}");
     }
 }

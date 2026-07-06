@@ -1,4 +1,5 @@
 ﻿using Aegis.App.Wpf.ViewModels;
+using Aegis.App.Wpf.Views;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Infrastructure.Extensions;
 using Aegis.Infrastructure.Persistence;
@@ -67,7 +68,24 @@ public partial class App : Application
                 services.AddScoped<RuleEngine>();
                 services.AddScoped<AegisArchitectureAnalysisRunner>();
 
+                // =========================
+                // VIEW MODELS
+                // =========================
                 services.AddSingleton<MainViewModel>();
+
+                services.AddTransient<LayerDashboardViewModel>();
+                services.AddTransient<SectionDashboardViewModel>();
+                services.AddTransient<RuleDashboardViewModel>();
+
+                // =========================
+                // VIEWS (IMPORTANT FIX)
+                // =========================
+                services.AddSingleton<MainWindow>();
+
+                // Only needed if you still instantiate them as windows
+                services.AddTransient<LayerDashboardWindow>();
+                services.AddTransient<SectionDashboardWindow>();
+                services.AddTransient<RuleDashboardWindow>();
             })
             .Build();
     }

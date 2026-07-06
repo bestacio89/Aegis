@@ -2,50 +2,138 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
-        Title="Layer Dashboard"
-        Height="500"
-        Width="900"
+        Title="Layer Analysis Workspace"
+        Width="1000"
+        Height="650"
         Background="#1E1E1E"
-        Foreground="White">
+        Foreground="White"
+        FontFamily="Consolas"
+        WindowStartupLocation="CenterScreen">
 
-    <Grid Margin="10">
+    <Window.Resources>
+
+        <!-- Panel -->
+        <Style x:Key="Panel" TargetType="Border">
+            <Setter Property="Background" Value="#252526"/>
+            <Setter Property="BorderBrush" Value="#333"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Margin" Value="6"/>
+        </Style>
+
+        <!-- KPI -->
+        <Style x:Key="KpiCard" TargetType="Border">
+            <Setter Property="Background" Value="#2A2A2A"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="BorderBrush" Value="#333"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
+    </Window.Resources>
+
+    <Grid Margin="12">
 
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="200"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="2*"/>
+            <RowDefinition Height="3*"/>
         </Grid.RowDefinitions>
 
-        <!-- Reload -->
-        <Button Content="Reload"
-                Command="{Binding LoadDataCommand}"
-                Width="120"
-                Margin="0,0,0,10"/>
+        <!-- ================= HEADER ================= -->
+        <Border Background="#252526"
+                Padding="10"
+                CornerRadius="6"
+                BorderBrush="#333"
+                BorderThickness="1">
 
-        <!-- Chart -->
-        <lvc:CartesianChart Grid.Row="1"
-                            Series="{Binding LayerSeries}"
-                            XAxes="{Binding LayerAxes}"
-                            YAxes="{Binding ValueAxes}"
-                            Background="#1E1E1E"
-                            Margin="0,0,0,10"/>
+            <DockPanel>
 
-        <!-- Table (kept for precision view) -->
-        <DataGrid Grid.Row="2"
-                  ItemsSource="{Binding Layers}"
-                  AutoGenerateColumns="False"
-                  Background="#252526"
-                  Foreground="White"
-                  HeadersVisibility="Column"
-                  RowBackground="#2a2a2a"
-                  AlternatingRowBackground="#242424">
+                <TextBlock Text="LAYER ANALYSIS WORKSPACE"
+                           Foreground="#00BFFF"
+                           FontSize="16"
+                           FontWeight="Bold"
+                           DockPanel.Dock="Left"/>
 
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Layer" Binding="{Binding Layer}" Width="*"/>
-                <DataGridTextColumn Header="Violations" Binding="{Binding Count}" Width="Auto"/>
-            </DataGrid.Columns>
+                <Button Content="Reload"
+                        Command="{Binding LoadDataCommand}"
+                        DockPanel.Dock="Right"
+                        Width="100"/>
 
-        </DataGrid>
+            </DockPanel>
+
+        </Border>
+
+        <!-- ================= KPI STRIP ================= -->
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Center"
+                    Margin="0,10,0,10">
+
+            <Border Style="{StaticResource KpiCard}">
+                <StackPanel>
+                    <TextBlock Text="TOTAL LAYERS" Foreground="#888"/>
+                    <TextBlock Text="{Binding Layers.Count}"
+                               FontSize="18"
+                               FontWeight="Bold"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource KpiCard}">
+                <StackPanel>
+                    <TextBlock Text="TOTAL VIOLATIONS" Foreground="#888"/>
+                    <TextBlock Text="{Binding TotalViolations}"
+                               FontSize="18"
+                               FontWeight="Bold"
+                               Foreground="#FF5555"/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+
+        <!-- ================= CHART ================= -->
+        <Border Grid.Row="2" Style="{StaticResource Panel}">
+
+            <lvc:CartesianChart Series="{Binding LayerSeries}"
+                                XAxes="{Binding LayerAxes}"
+                                YAxes="{Binding ValueAxes}"
+                                Background="#1E1E1E"/>
+
+        </Border>
+
+        <!-- ================= TABLE ================= -->
+        <Border Grid.Row="3" Style="{StaticResource Panel}">
+
+            <DataGrid ItemsSource="{Binding Layers}"
+                      AutoGenerateColumns="False"
+                      Background="#1E1E1E"
+                      Foreground="White"
+                      BorderBrush="#333"
+                      RowBackground="#2A2A2A"
+                      AlternatingRowBackground="#242424"
+                      HeadersVisibility="Column"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      GridLinesVisibility="Horizontal">
+
+                <DataGrid.Columns>
+
+                    <DataGridTextColumn Header="Layer"
+                                        Binding="{Binding Layer}"
+                                        Width="*"/>
+
+                    <DataGridTextColumn Header="Violations"
+                                        Binding="{Binding Count}"
+                                        Width="120"/>
+
+                </DataGrid.Columns>
+
+            </DataGrid>
+
+        </Border>
 
     </Grid>
 </Window>

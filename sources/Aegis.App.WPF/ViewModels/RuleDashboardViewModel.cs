@@ -2,38 +2,23 @@
 using Aegis.Infrastructure.Persistence;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
-using LiveChartsCore.SkiaSharpView.Painting.Effects;
 using Microsoft.Extensions.Logging;
 using SkiaSharp;
 using System.Collections.ObjectModel;
 
 namespace Aegis.App.Wpf.ViewModels;
 
-public sealed class RuleDashboardViewModel
+public sealed partial class RuleDashboardViewModel : ObservableObject
 {
     private readonly IRuleResultRepository _ruleRepo;
     private readonly IReportRepository _reportRepo;
     private readonly ILogger<RuleDashboardViewModel> _logger;
-
-    public ObservableCollection<RuleResultEntity> RuleResults { get; } = new();
-
-    // ---------------- LIVECHARTS BINDINGS ----------------
-
-    public ISeries[] SeveritySeries { get; private set; } = Array.Empty<ISeries>();
-    public ISeries[] CategorySeries { get; private set; } = Array.Empty<ISeries>();
-
-    public Axis[] CategoryXAxis { get; private set; } = Array.Empty<Axis>();
-    public Axis[] ValueYAxis { get; private set; } = Array.Empty<Axis>();
-
-    // ---------------- KPIs ----------------
-
-    public int TotalViolations { get; private set; }
-    public int CriticalCount { get; private set; }
-    public int BlockerCount { get; private set; }
-
+ 
     public RuleDashboardViewModel(
         IRuleResultRepository ruleRepo,
         IReportRepository reportRepo,
@@ -43,27 +28,58 @@ public sealed class RuleDashboardViewModel
         _reportRepo = reportRepo;
         _logger = logger;
 
-        _ = LoadAsync();
+        RuleResults = new ObservableCollection<RuleResultEntity>();
+
+        LoadCommand = new AsyncRelayCommand(LoadAsync);
     }
 
+    // =========================
+    // COMMANDS
+    // =========================
+    public IAsyncRelayCommand LoadCommand { get; }
+
+    // =========================
+    // DATA GRID
+    // =========================
+    public ObservableCollection<RuleResultEntity> RuleResults { get; }
+
+    // =========================
+    // KPI
+    // =========================
+    [ObservableProperty] private int totalViolations;
+    [ObservableProperty] private int criticalCount;
+    [ObservableProperty] private int blockerCount;
+
+    // =========================
+    // CHARTS (MATCH XAML)
+    // =========================
+    [ObservableProperty] private ISeries[] severitySeries = [];
+    [ObservableProperty]
+    private ISeries[] categorySeries = [];
+
+
+    [ObservableProperty] private Axis[] categoryAxes = [];
+    [ObservableProperty] private Axis[] valueAxes = [];
+
+    // =========================
+    // LOAD
+    // =========================
     private async Task LoadAsync()
     {
         try
         {
-            _logger.LogInformation("Loading latest rule report...");
+            _logger.LogInformation("Loading rule dashboard...");
 
             var reports = await _reportRepo.GetAllReportsAsync(default);
-            var lastReport = reports.OrderByDescending(r => r.ScanDate).FirstOrDefault();
+            var last = reports.OrderByDescending(r => r.ScanDate).FirstOrDefault();
 
-            if (lastReport == null)
-            {
-                _logger.LogWarning("No reports found.");
+            if (last is null)
                 return;
-            }
 
-            var violations = await _ruleRepo.GetViolationsByReportIdAsync(lastReport.Id, default);
+            var violations = await _ruleRepo.GetViolationsByReportIdAsync(last.Id, default);
 
             RuleResults.Clear();
+
             foreach (var v in violations)
                 RuleResults.Add(v);
 
@@ -73,19 +89,16 @@ public sealed class RuleDashboardViewModel
 
             BuildSeverityChart();
             BuildCategoryChart();
-
-            _logger.LogInformation("Loaded {Count} violations", RuleResults.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed loading dashboard");
+            _logger.LogError(ex, "Rule dashboard load failed");
         }
     }
 
-    // --------------------------------------------------
-    // PIE CHART (Severity)
-    // --------------------------------------------------
-
+    // =========================
+    // PIE
+    // =========================
     private void BuildSeverityChart()
     {
         var grouped = RuleResults
@@ -114,10 +127,9 @@ public sealed class RuleDashboardViewModel
         }).ToArray();
     }
 
-    // --------------------------------------------------
-    // BAR / COLUMN CHART (Category)
-    // --------------------------------------------------
-
+    // =========================
+    // BAR
+    // =========================
     private void BuildCategoryChart()
     {
         var grouped = RuleResults
@@ -139,7 +151,7 @@ public sealed class RuleDashboardViewModel
             }
         };
 
-        CategoryXAxis = new Axis[]
+        CategoryAxes = new[]
         {
             new Axis
             {
@@ -148,7 +160,7 @@ public sealed class RuleDashboardViewModel
             }
         };
 
-        ValueYAxis = new Axis[]
+        ValueAxes = new[]
         {
             new Axis
             {

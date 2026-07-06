@@ -1,27 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
+﻿using System.Windows;
+using Aegis.App.Wpf.ViewModels;
 
-namespace Aegis.App.Wpf.Views
+namespace Aegis.App.Wpf.Views;
+
+public partial class RuleDashboardWindow : Window
 {
-    /// <summary>
-    /// Interaction logic for RuleDashboardWindow.xaml
-    /// </summary>
-    public partial class RuleDashboardWindow : Window
+    public RuleDashboardWindow(RuleDashboardViewModel viewModel)
     {
-        public RuleDashboardWindow()
-        {
-            InitializeComponent();
-        }
+        InitializeComponent();
+
+        DataContext = viewModel;
     }
 }

@@ -27,6 +27,12 @@
   <ItemGroup>
     <Folder Include="Resources\" />
   </ItemGroup>
+  
+ <ItemGroup>
+  <Content Include="config\**\*">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </Content>
+ </ItemGroup>
 
   <!-- =============================================
        Dependencies — Updated to .NET 10 compatible versions
@@ -47,6 +53,10 @@
 
     <!-- Dependency Injection -->
     <PackageReference Include="Franz.Common.DependencyInjection" Version="2.2.16" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
 
     <!-- Microsoft Extensions (.NET 10 versions) -->
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.9" />

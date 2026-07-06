@@ -1,0 +1,206 @@
+{
+  "Architecture": {
+    "EnforceLayerBoundaries": true,
+    "AllowedDependencies": {
+      "Api": [ "App", "Domain" ],
+      "App": [ "Domain" ],
+      "Domain": [],
+      "Infrastructure": [ "Domain" ]
+    },
+    "LayerHints": {
+      "Api": [ "Api", "Controllers" ],
+      "App": [ "Application", "Services" ],
+      "Domain": [ "Domain", "Models", "Entities" ],
+      "Infrastructure": [ "Infrastructure", "Data", "Persistence" ]
+    },
+    "EnforcementByLanguage": {
+      "CSharp": "Strict",
+      "Java": "Strict",
+      "Python": "Advisory",
+      "TypeScript": "Strict"
+    },
+    "Node": {
+      "DisallowEval": true,
+      "DisallowChildProcess": true,
+      "CheckUnhandledPromises": true,
+      "ValidatePackageJsonScripts": true,
+      "EnforceESModules": true,
+      "EnforceRequireUsage": true
+    },
+    "CircularDependency": {
+      "Enabled": true,
+      "MaxDependencyDepth": 8,
+      "TreatAsError": true,
+      "CrossLanguageDetection": true
+    },
+    "Configuration": {
+      "Enabled": true,
+      "RequiredFiles": [
+        "appsettings.json",
+        "appsettings.Development.json",
+        ".env"
+      ],
+      "EnforceEnvVariables": true,
+      "ForbiddenKeys": [
+        "password",
+        "secret",
+        "apikey",
+        "connectionstring",
+        "token"
+      ],
+      "DetectDuplicates": true,
+      "EnforceKeyCasing": true,
+      "ValidateSyntax": true,
+      "MaxFileSizeBytes": 2097152,
+      "RequirementsFiles": [
+        "requirements.txt",
+        "requirements-dev.txt"
+      ]
+    },
+    "Transaction": {
+      "Enabled": true,
+      "FrameworkHints": {
+        "CSharp": [
+          "TransactionScope",
+          "BeginTransaction",
+          "DbContextTransaction"
+        ],
+        "Java": [
+          "@Transactional",
+          "EntityManager.getTransaction()",
+          "Connection.setAutoCommit(false)"
+        ],
+        "Python": [
+          "session.begin()",
+          "with session:",
+          "with transaction.atomic()"
+        ],
+        "Node": [
+          "sequelize.transaction",
+          "mongoose.startSession"
+        ]
+      },
+      "RequireExplicitCommit": true,
+      "RequireRollbackOnFailure": true,
+      "WarnReadOnlyTransactions": true,
+      "DetectRawSqlConcatenation": true,
+      "AllowParameterizedQueriesOnly": true,
+      "MaxTransactionBlockLines": 100,
+      "DetectNestedTransactions": true
+    },
+    "Performance": {
+      "Enabled": true,
+      "MaxNestedLoopDepth": 3,
+      "MaxLoopBodyLength": 80,
+      "RequireAsyncForIOMethods": true,
+      "DisallowBlockingCalls": true,
+      "CheckThreadSleepUsage": true,
+      "DetectStringConcatenationInLoops": true,
+      "DetectLargeCollectionsInitialization": true,
+      "LargeCollectionThreshold": 1000,
+      "WarnThreadCreationInHotPaths": true,
+      "DetectSynchronousWaits": true,
+      "SuggestAsyncStreams": true
+    },
+    "DesignPatterns": {
+      "EnforceRepositoryPattern": true,
+      "RequireRepositoryInterface": true,
+      "EnforceSingletonPattern": true,
+      "RequireThreadSafety": true,
+      "RequireLazyInitialization": true,
+      "AllowMultipleSingletons": false,
+      "EnforceFactoryPattern": true,
+      "RequireFactoryInterface": false,
+      "MaxFactoryInstantiations": 3,
+      "EnforceBuilderPattern": true,
+      "RequireFluentInterface": true,
+      "RequireBuildMethod": true,
+      "SuggestImmutability": true,
+      "EnforceMediatorPattern": true,
+      "RequireMediatorInterface": true,
+      "MediatorSuffix": "Mediator",
+      "MaxHandlersPerFile": 5,
+      "MaxMediatorCallsPerFile": 10,
+      "EnforceCommandPattern": true,
+      "RequireCommandHandlerPair": true,
+      "DetectGodCommandObjects": true,
+      "MaxMethodsPerCommand": 3,
+      "ForbiddenInCommand": [ "DbContext", "HttpClient", "Repository", "Service" ],
+      "EnforceStrategyPattern": true,
+      "RequireStrategyInterface": true,
+      "DetectConditionalStrategySwitch": true,
+      "WarnMultipleStrategiesPerClass": true,
+      "EnforceObserverPattern": true,
+      "RequireObserverInterface": true,
+      "DetectLeakingSubscriptions": true,
+      "DisallowManualPolling": true,
+      "DetectGodClass": true,
+      "GodClassMethodThreshold": 20,
+      "GodClassLineThreshold": 600,
+      "DetectCircularDependencies": true,
+      "DetectAnemicDomainModel": true,
+      "AnemicPropertyRatioThreshold": 70,
+      "RequirePatternSuffix": true,
+      "AllowedSuffixes": [
+        "Repository",
+        "Service",
+        "Factory",
+        "Handler",
+        "Strategy",
+        "Mediator",
+        "Observer",
+        "Builder"
+      ],
+      "EnablePatternHints": true,
+      "AllowPatternOverlap": false,
+      "DetectGodClasses": true,
+      "MaxMethodsPerClass": 20,
+      "MaxLinesPerClass": 600,
+      "DetectAnemicDomainModels": true,
+      "MinPropertiesForDomainClass": 3,
+      "MaxAllowedMethodsForAnemic": 1,
+      "CheckEncapsulation": true,
+      "LayerScaling": {
+        "Domain": 1.0,
+        "Application": 1.25,
+        "Infrastructure": 1.5,
+        "Api": 1.2
+      },
+      "EnforceDecoratorPattern": true,
+      "RequireDecoratorConstructorInjection": true,
+      "RequireDecoratorDelegation": true,
+      "EnforceFacadePattern": true,
+      "MaxDependenciesPerFacade": 4,
+      "MaxPublicMethodsPerFacade": 8,
+      "MaxServiceCallsPerFacade": 10,
+      "MediatorFrameworkHints": {
+        "FranzMediator": [
+          "IDispatcher",
+          "ICommandHandler",
+          "IEventHandler",
+          "IQueryHandler",
+          "INotificationHandler"
+        ],
+        "MediatR": [
+          "IMediator",
+          "IRequestHandler",
+          "INotificationHandler",
+          "IRequest"
+        ]
+      },
+      "MediatorMethodHints": [
+        "Send",
+        "SendAsync",
+        "Publish",
+        "PublishAsync",
+        "Dispatch"
+      ],
+      "MediatorApplicableLanguages": {
+        "CSharp": true,
+        "Java": false,
+        "TypeScript": false,
+        "Python": false
+      }
+    }
+  }
+}

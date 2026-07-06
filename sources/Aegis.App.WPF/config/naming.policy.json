@@ -1,0 +1,60 @@
+{
+  "Naling": {
+    "Enabled": true,
+    "EnforcePascalCase": true,
+    "RequireInterfacePrefix": true,
+    "EnforceSuffixForModels": true,
+    "AllowedModelSuffixes": [ "Dto", "ViewModel", "Model" ],
+    "EnforceComponentSuffix": true,
+    "AllowedComponentSuffixes": [
+      "Controller",
+      "Service",
+      "Repository",
+      "Manager",
+      "Handler",
+      "Adapter"
+    ],
+    "EnforceCamelCaseForMethods": true,
+    "AllowedMethodPrefixes": [
+      "Get",
+      "Set",
+      "Load",
+      "Create",
+      "Update",
+      "Delete",
+      "Add",
+      "Remove",
+      "Find",
+      "Calculate",
+      "Handle",
+      "Resolve"
+    ],
+    "StaticMethodsPascalCase": true,
+    "AllowSnakeCase": false,
+    "AllowAllCapsConstants": true,
+    "EnforceCamelCaseForVariables": true,
+    "EnforcePascalCaseForProperties": true,
+    "EnforceFileNameMatch": true,
+    "EnforcePluralization": true,
+    "EnforceNamespaceStructure": true,
+    "AllowLowercaseNamespaces": false,
+    "MinOverallCompliance": 95,
+    "MinCategoryCompliance": 95,
+    "DetectAcronymViolations": true,
+    "EnforceAcronymNormalization": true,
+    "DisallowTestOrTempPrefixes": true,
+    "ForbiddenPrefixes": [
+      "Tmp",
+      "Temp",
+      "Foo",
+      "Bar",
+      "Test",
+      "Dummy",
+      "Sample",
+      "Old",
+      "Legacy"
+    ],
+    "DetectRedundantSuffixes": true
+  }
+
+}

@@ -1,0 +1,5 @@
+{
+  "AllowEmptyCatch": false,
+  "AllowGenericCatch": false,
+  "RequireLoggingOrRethrow": true
+}

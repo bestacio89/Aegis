@@ -14,7 +14,6 @@
       Infrastructure components for Aegis.
       Handles persistence, reporting, and external integrations.
     </Description>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <!-- =============================================
@@ -32,6 +31,10 @@
     <PackageReference Include="Franz.Common.Http.EntityFramework" Version="2.2.16" />
     <PackageReference Include="Franz.Common.Mediator" Version="2.2.16" />
     <PackageReference Include="Franz.Common.Reflection" Version="2.2.16" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.9">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <!-- =============================================

@@ -1,0 +1,12 @@
+{
+  "MinMaintainabilityIndex": 80,
+  "RequireCommentDensityCheck": true,
+  "MinCommentDensity": 8.0,
+  "MaxLinesPerFile": 400,
+  "ComplexityWeight": 2.5,
+  "LineWeight": 0.015,
+  "IncludeDocCommentsInScore": true,
+  "Factor": 1.0,
+  "HealthImpactWeight": 0.5,
+  "CriticalThresshold": 50
+}

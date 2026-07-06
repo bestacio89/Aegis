@@ -1,0 +1,7 @@
+{
+  "ApiConsistency": {
+    "EnforceLowercaseRoutes": true,
+    "EnforceNoTrailingSlash": true,
+    "CheckPluralization": true
+  }
+}

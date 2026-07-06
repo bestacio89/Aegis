@@ -1,0 +1,8 @@
+{
+  "Complexity": {
+    "MaxCyclomaticComplexity": 8,
+    "MaxLinesPerMethod": 40
+  
+  }
+   
+}

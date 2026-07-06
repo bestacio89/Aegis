@@ -14,7 +14,7 @@
       Extensibility SDK for Aegis.
       Defines contracts for rules, analyzers, and plugin modules.
     </Description>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+ 
 
     <!-- NuGet Metadata -->
     <PackageId>Aegis.SDK</PackageId>

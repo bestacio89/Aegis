@@ -1,8 +1,17 @@
-﻿using Aegis.Sdk.Contracts;
+﻿using Aegis.Infrastructure.Exporters;
+using Aegis.Sdk.Contracts;
 using Aegis.Shared.Architecture.Models.Policies;
+using Aegis.Shared.Architecture.Models.Policies.Architecture;
+using Aegis.Shared.Architecture.Models.Policies.BackEnd;
+using Aegis.Shared.Architecture.Models.Policies.Dependency;
+using Aegis.Shared.Architecture.Models.Policies.Infrastructure;
+using Aegis.Shared.Architecture.Models.Policies.Naming;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System;
+using System.IO;
+using System.Reflection;
 
 namespace Aegis.SDK.Extensions;
 
@@ -18,7 +27,6 @@ public static class PluginRegistrationExtensions
         return services;
     }
 
-
     public static IServiceCollection AddAegisReportExporter<TExporter>(this IServiceCollection services)
         where TExporter : class, IReportExporter
     {
@@ -26,52 +34,73 @@ public static class PluginRegistrationExtensions
         return services;
     }
 
- 
 
-    /// <summary>
-    /// Registers all Aegis policies using configuration binding.
-    /// Attempts to auto-load aegis.policy.json if present.
-    /// </summary>
-    public static IServiceCollection AddAegisPolicies(this IServiceCollection services, IConfiguration? config = null)
+    public static IServiceCollection AddAegisReportExporters(
+    this IServiceCollection services)
     {
-        IConfiguration configuration = config ?? BuildLocalConfiguration();
+        services
+            .AddAegisReportExporter<JsonReportExporter>()
+            .AddAegisReportExporter<PdfReportExporter>()
+            .AddAegisReportExporter<HtmlReportExporter>()
+            .AddAegisReportExporter<MarkdownReportExporter>()
+            .AddAegisReportExporter<ForensicPdfExporter>()
+            .AddAegisReportExporter<JsonReportExporter>();
+            
 
-        var aegisSection = configuration.GetSection("AegisPolicy");
-        if (!aegisSection.Exists())
-            throw new FileNotFoundException("Could not find the 'AegisPolicy' section in configuration or aegis.policy.json.");
-
-        services.Configure<AegisArchitecturePolicy>(aegisSection);
         return services;
     }
 
-    private static IConfiguration BuildLocalConfiguration()
+    /// <summary>
+    /// Registers all Aegis policies using configuration binding.
+    /// Explicitly routes paths through structural subfolders cleanly.
+    /// </summary>
+    public static IServiceCollection AddAegisPolicies(
+        this IServiceCollection services,
+        IConfiguration? configuration = null)
     {
-        var builder = new ConfigurationBuilder();
+        IConfiguration config = configuration ?? BuildPolicyConfiguration();
 
-        // Search for aegis.policy.json in likely locations
-        var basePath = Directory.GetCurrentDirectory();
-        var filePath = Path.Combine(basePath, "aegis.policy.json");
+        services.Configure<ArchitecturePolicy>(config.GetSection("Architecture"));
+        services.Configure<RepositoryPolicy>(config.GetSection("Repository"));
+        services.Configure<SecurityPolicy>(config.GetSection("Security"));
+        services.Configure<MaintainabilityPolicy>(config.GetSection("Maintainability"));
+        services.Configure<DependencyPolicy>(config.GetSection("Dependency"));
+        services.Configure<NamingPolicy>(config.GetSection("Naming"));
+        services.Configure<ComplexityPolicy>(config.GetSection("Complexity"));
+        services.Configure<CohesionPolicy>(config.GetSection("Cohesion"));
+        services.Configure<CouplingPolicy>(config.GetSection("Coupling"));
+        services.Configure<ApiConsistencyPolicy>(config.GetSection("ApiConsistency"));
+        services.Configure<ErrorHandlingPolicy>(config.GetSection("ErrorHandling"));
 
-        if (!File.Exists(filePath))
+        return services;
+    }
+
+    private static IConfiguration BuildPolicyConfiguration()
+    {
+        // Ground the configuration baseline to the running application binaries absolute root directory
+        var rootDir = AppContext.BaseDirectory;
+
+        if (string.IsNullOrEmpty(rootDir) || !Directory.Exists(rootDir))
         {
-            // Look one level up (e.g., when running from bin/Debug)
-            var parentPath = Directory.GetParent(basePath)?.FullName;
-            var parentFile = Path.Combine(parentPath ?? basePath, "aegis.policy.json");
-
-            if (File.Exists(parentFile))
-                filePath = parentFile;
+            var location = Assembly.GetExecutingAssembly().Location;
+            rootDir = Path.GetDirectoryName(location) ?? Directory.GetCurrentDirectory();
         }
 
-        if (File.Exists(filePath))
-        {
-            builder.SetBasePath(Path.GetDirectoryName(filePath)!)
-                   .AddJsonFile(Path.GetFileName(filePath), optional: false, reloadOnChange: true);
-        }
-        else
-        {
-            throw new FileNotFoundException($"Aegis policy file not found at: {filePath}");
-        }
-
-        return builder.Build();
+        // Keep the configuration engine base path pinned safely to the execution root,
+        // while specifying the precise relative directory inside the string path literal.
+        return new ConfigurationBuilder()
+            .SetBasePath(rootDir)
+            .AddJsonFile(Path.Combine("config", "architecture.policy.json"), optional: false, reloadOnChange: true)
+            .AddJsonFile(Path.Combine("config", "repository.policy.json"), optional: false, reloadOnChange: true)
+            .AddJsonFile(Path.Combine("config", "security.policy.json"), optional: false, reloadOnChange: true)
+            .AddJsonFile(Path.Combine("config", "maintainability.policy.json"), optional: false, reloadOnChange: true)
+            .AddJsonFile(Path.Combine("config", "dependency.policy.json"), optional: false, reloadOnChange: true)
+            .AddJsonFile(Path.Combine("config", "naming.policy.json"), optional: false, reloadOnChange: true)
+            .AddJsonFile(Path.Combine("config", "complexity.policy.json"), optional: false, reloadOnChange: true)
+            .AddJsonFile(Path.Combine("config", "cohesion.policy.json"), optional: false, reloadOnChange: true)
+            .AddJsonFile(Path.Combine("config", "coupling.policy.json"), optional: false, reloadOnChange: true)
+            .AddJsonFile(Path.Combine("config", "apiconsistency.policy.json"), optional: false, reloadOnChange: true)
+            .AddJsonFile(Path.Combine("config", "errorhandling.policy.json"), optional: false, reloadOnChange: true)
+            .Build();
     }
 }

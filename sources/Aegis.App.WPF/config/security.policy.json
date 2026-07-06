@@ -1,0 +1,10 @@
+{
+  "Security": {
+    "ScanForHardcodedSecrets": true,
+    "EnforceSafeCryptography": true,
+    "DetectWeakSSLProtocols": true,
+    "Enabled": true,
+    "minimumScore": 75.0
+  }
+
+}

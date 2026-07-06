@@ -14,7 +14,6 @@
       Core rule engine and evaluation logic for Aegis.
       Handles scanning orchestration, rule evaluation, and scoring.
     </Description>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <!-- =============================================

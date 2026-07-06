@@ -33,6 +33,17 @@
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
   </Content>
  </ItemGroup>
+  
+ <ItemGroup>
+   <Content Remove="config\api.policy.json" />
+ </ItemGroup>
+  
+ <ItemGroup>
+   <Content Include="appsettings.json">
+     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+   </Content>
+   <Content Include="Services\aegis.policy.json" />
+ </ItemGroup>
 
   <!-- =============================================
        Dependencies — Updated to .NET 10 compatible versions

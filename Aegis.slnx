@@ -2,7 +2,6 @@
   <Folder Name="/build/">
     <File Path="Aegis.ruleset" />
     <File Path="Directory.Build.props" />
-    <File Path="Directory.Build.targets" />
   </Folder>
   <Folder Name="/sources/">
     <Project Path="sources/Aegis.App.WPF/Aegis.App.Wpf.csproj" />

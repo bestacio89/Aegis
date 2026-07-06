@@ -74,6 +74,7 @@
     <Rule Id="RS1009" Action="None" />
     <Rule Id="RS1010" Action="None" />
     <Rule Id="RS1011" Action="None" />
+    <Rule Id="RS1014" Action="None" />
     <Rule Id="RS1016" Action="None" />
     <Rule Id="RS1017" Action="None" />
     <Rule Id="RS1018" Action="None" />
@@ -88,6 +89,11 @@
     <Rule Id="RS1031" Action="None" />
     <Rule Id="RS1032" Action="None" />
     <Rule Id="RS1033" Action="None" />
+    <Rule Id="RS1034" Action="None" />
+    <Rule Id="RS1037" Action="None" />
+    <Rule Id="RS1038" Action="None" />
+    <Rule Id="RS1041" Action="None" />
+    <Rule Id="RS1042" Action="None" />
     <Rule Id="RS2000" Action="None" />
     <Rule Id="RS2001" Action="None" />
     <Rule Id="RS2002" Action="None" />
@@ -425,6 +431,11 @@
     <Rule Id="CS9268" Action="None" />
     <Rule Id="CS9269" Action="None" />
     <Rule Id="CS9270" Action="None" />
+    <Rule Id="CS9335" Action="None" />
+    <Rule Id="CS9336" Action="None" />
+    <Rule Id="CS9337" Action="None" />
+    <Rule Id="CS9368" Action="None" />
+    <Rule Id="CS9377" Action="None" />
   </Rules>
   <Rules AnalyzerId="Microsoft.CodeAnalysis.CSharp.Analyzers" RuleNamespace="Microsoft.CodeAnalysis.CSharp.Analyzers">
     <Rule Id="RS1002" Action="None" />
@@ -437,6 +448,10 @@
     <Rule Id="RS1014" Action="None" />
     <Rule Id="RS1022" Action="None" />
     <Rule Id="RS1023" Action="None" />
+    <Rule Id="RS1035" Action="None" />
+    <Rule Id="RS1036" Action="None" />
+    <Rule Id="RS1039" Action="None" />
+    <Rule Id="RS1040" Action="None" />
   </Rules>
   <Rules AnalyzerId="Microsoft.CodeAnalysis.CSharp.Features" RuleNamespace="Microsoft.CodeAnalysis.CSharp.Features">
     <Rule Id="EnableGenerateDocumentationFile" Action="None" />
@@ -525,6 +540,7 @@
     <Rule Id="IDE0210" Action="None" />
     <Rule Id="IDE0211" Action="None" />
     <Rule Id="IDE0220" Action="None" />
+    <Rule Id="IDE0221" Action="None" />
     <Rule Id="IDE0230" Action="None" />
     <Rule Id="IDE0240" Action="None" />
     <Rule Id="IDE0241" Action="None" />
@@ -546,6 +562,10 @@
     <Rule Id="IDE0340" Action="None" />
     <Rule Id="IDE0350" Action="None" />
     <Rule Id="IDE0360" Action="None" />
+    <Rule Id="IDE0370" Action="None" />
+    <Rule Id="IDE0380" Action="None" />
+    <Rule Id="IDE0390" Action="None" />
+    <Rule Id="IDE0391" Action="None" />
     <Rule Id="IDE1005" Action="None" />
     <Rule Id="IDE1006" Action="None" />
     <Rule Id="IDE2000" Action="None" />
@@ -582,6 +602,7 @@
     <Rule Id="CA2252" Action="None" />
     <Rule Id="CA2260" Action="None" />
     <Rule Id="CA2263" Action="None" />
+    <Rule Id="CA2266" Action="None" />
   </Rules>
   <Rules AnalyzerId="Microsoft.CodeAnalysis.Features" RuleNamespace="Microsoft.CodeAnalysis.Features">
     <Rule Id="IDE0033" Action="None" />

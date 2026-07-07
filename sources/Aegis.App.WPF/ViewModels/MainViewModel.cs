@@ -1,6 +1,9 @@
-﻿using Aegis.Sdk;
+﻿using Aegis.App.Wpf.models;
+using Aegis.App.Wpf.Models;
+using Aegis.App.Wpf.Services;
+using Aegis.App.Wpf.ViewModels;
+using Aegis.Sdk;
 using Aegis.Shared.Architecture.Models;
-using Aegis.Shared.Contracts;
 using Microsoft.Win32;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -16,7 +19,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly SemaphoreSlim _syncLock = new(1, 1);
 
     private readonly AegisArchitectureAnalysisRunner _runner;
-    private readonly IReadOnlyCollection<IReportExporter> _exporters;
+
+    private readonly SectionDashboardViewModel _sectionDashboard;
+    private readonly LayerDashboardViewModel _layerDashboard;
+    private readonly RuleDashboardViewModel _ruleDashboard;
+    private readonly ReportVisualizationViewModel _reportVisualization;
 
     private string _repositoryPath = string.Empty;
     private double _analysisProgress;
@@ -25,64 +32,107 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private object? _selectedItem;
 
     private string _selectedExportFormat = "pdf";
+
     private AegisArchitectureReport? _currentReport;
+    private ProjectArchitectureContext? _currentContext;
 
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
 
+
     public MainViewModel(
         AegisArchitectureAnalysisRunner runner,
-        IEnumerable<IReportExporter> exporters)
+        SectionDashboardViewModel sectionDashboard,
+        LayerDashboardViewModel layerDashboard,
+        RuleDashboardViewModel ruleDashboard,
+        ReportVisualizationViewModel visualizationViewModel)
     {
         _runner = runner;
-        _exporters = exporters.ToList();
+
+        _sectionDashboard = sectionDashboard;
+        _layerDashboard = layerDashboard;
+        _ruleDashboard = ruleDashboard;
+        _reportVisualization = visualizationViewModel;
 
 
         SelectRepositoryCommand =
-            new RelayCommand(_ => ExecuteSelectRepository());
+            new RelayCommand(_ =>
+                ExecuteSelectRepository());
+
 
 
         RunAnalysisCommand =
             new RelayCommand(
-                async _ => await ExecuteRunAnalysisAsync(),
-                _ => !string.IsNullOrWhiteSpace(RepositoryPath));
+                async _ =>
+                    await ExecuteRunAnalysisAsync(),
+                _ =>
+                    !string.IsNullOrWhiteSpace(RepositoryPath));
+
 
 
         ExportResultsCommand =
             new RelayCommand(
-                async _ => await ExecuteExportAsync(),
-                _ => _currentReport != null);
+                async _ =>
+                    await ExecuteExportAsync(),
+                _ =>
+                    _currentReport != null);
+
 
 
         ClearLogsCommand =
-            new RelayCommand(_ => Logs.Clear());
+            new RelayCommand(_ =>
+                Logs.Clear());
+
 
 
         ShowSectionWorkspaceCommand =
             new RelayCommand(_ =>
             {
-                SelectedWorkspace = "Sections";
+                ActiveWorkspaceViewModel =
+                    _sectionDashboard;
+
+                SelectedWorkspace =
+                    "Sections";
             });
+
 
 
         ShowLayerWorkspaceCommand =
             new RelayCommand(_ =>
             {
-                SelectedWorkspace = "Layers";
+                ActiveWorkspaceViewModel =
+                    _layerDashboard;
+
+                SelectedWorkspace =
+                    "Layers";
             });
+
 
 
         ShowRuleWorkspaceCommand =
             new RelayCommand(_ =>
             {
-                SelectedWorkspace = "Rules";
+                ActiveWorkspaceViewModel =
+                    _ruleDashboard;
+
+                SelectedWorkspace =
+                    "Rules";
             });
 
+        ShowReportVisualizationCommand =
+            new RelayCommand(_ =>
+            {
+                ActiveWorkspaceViewModel =
+               _reportVisualization;
 
-        foreach (var exporter in _exporters)
+                SelectedWorkspace =
+                "Report";
+    });
+
+        foreach (var format in _runner.AvailableExportFormats)
         {
-            ExportFormats.Add(exporter.Format);
+            ExportFormats.Add(format);
         }
     }
 
@@ -91,6 +141,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string RepositoryPath
     {
         get => _repositoryPath;
+
         set
         {
             if (SetField(ref _repositoryPath, value))
@@ -102,46 +153,69 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
 
+
     public double AnalysisProgress
     {
         get => _analysisProgress;
-        set => SetField(ref _analysisProgress, value);
+
+        set =>
+            SetField(ref _analysisProgress, value);
     }
+
 
 
     public object? ActiveWorkspaceViewModel
     {
         get => _activeWorkspaceViewModel;
-        set => SetField(ref _activeWorkspaceViewModel, value);
+
+        set =>
+            SetField(ref _activeWorkspaceViewModel, value);
     }
+
 
 
     public string? SelectedWorkspace
     {
         get => _selectedWorkspace;
-        set => SetField(ref _selectedWorkspace, value);
+
+        set =>
+            SetField(ref _selectedWorkspace, value);
     }
+
 
 
     public object? SelectedItem
     {
         get => _selectedItem;
-        set => SetField(ref _selectedItem, value);
+
+        set =>
+            SetField(ref _selectedItem, value);
     }
+
 
 
     public string SelectedExportFormat
     {
         get => _selectedExportFormat;
-        set => SetField(ref _selectedExportFormat, value);
+
+        set =>
+            SetField(ref _selectedExportFormat, value);
     }
 
 
-    public ObservableCollection<string> Workspaces { get; } = new();
 
-    public ObservableCollection<string> Logs { get; } = new();
+    public ObservableCollection<string> Workspaces { get; }
+        = new();
 
-    public ObservableCollection<string> ExportFormats { get; } = new();
+
+
+    public ObservableCollection<string> Logs { get; }
+        = new();
+
+
+
+    public ObservableCollection<string> ExportFormats { get; }
+        = new();
 
 
 
@@ -158,7 +232,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand ShowLayerWorkspaceCommand { get; }
 
     public ICommand ShowRuleWorkspaceCommand { get; }
-
+    public ICommand ShowReportVisualizationCommand { get; }
 
 
 
@@ -166,19 +240,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "Select Architecture Repository Root",
-            InitialDirectory = AppDomain.CurrentDomain.BaseDirectory
+            Title =
+                "Select Architecture Repository Root",
+
+            InitialDirectory =
+                AppDomain.CurrentDomain.BaseDirectory
         };
 
 
         if (dialog.ShowDialog() == true)
         {
-            RepositoryPath = dialog.FolderName;
+            RepositoryPath =
+                dialog.FolderName;
+
 
             Logs.Add(
                 $"[INFO] Target repository shifted to: {RepositoryPath}");
         }
     }
+
+
 
 
 
@@ -197,13 +278,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
             AnalysisProgress = 0;
 
 
+
             var task = Task.Run(async () =>
             {
                 return await _runner.RunSessionAsync(
                     RepositoryPath,
-                    policyPath: null,
-                    exportJson: true);
+                    policyPath: null);
             });
+
 
 
             while (!task.IsCompleted)
@@ -216,25 +298,47 @@ public sealed class MainViewModel : INotifyPropertyChanged
             }
 
 
+
             var result = await task;
 
 
             AnalysisProgress = 100;
 
 
+
             if (result.Success)
             {
+                _currentReport = result.Report;
+
+                _currentContext = result.Context;
+
+                var snapshot =
+        DashboardSnapshotBuilder.Build(
+            result.Report,
+            result.Context);
+
+                RefreshDashboards(
+                    result.Report);
+
+
+
                 Logs.Add(
                     "[SUCCESS] Analysis completed successfully.");
 
+
                 Logs.Add(
-                    "[INFO] Exporters are now available.");
+                    "[INFO] Dashboards refreshed.");
+
+
+                Logs.Add(
+                    "[INFO] Export is now available — pick a format and destination.");
             }
             else
             {
                 Logs.Add(
-                    "[ERROR] Analysis failed.");
+                    $"[ERROR] Analysis failed: {result.ErrorMessage ?? "unknown error"}");
             }
+
 
 
             (ExportResultsCommand as RelayCommand)
@@ -253,9 +357,63 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
 
 
+
+
+    private void RefreshDashboards(
+        AegisArchitectureReport report)
+    {
+        var layers =
+            report.Results
+                .GroupBy(x =>
+                    string.IsNullOrWhiteSpace(x.Domain)
+                        ? "Unknown"
+                        : x.Domain)
+                .Select(g =>
+                    new LayerStat(
+                        g.Key,
+                        g.Count()))
+                .OrderByDescending(x => x.Count)
+                .ToList();
+
+
+
+        _layerDashboard.Update(
+            layers);
+
+        _sectionDashboard.Update(
+    report.Results
+        .GroupBy(x => x.Category)
+        .Select(g =>
+            new SectionDashboardItem(
+                g.Key.ToString(),
+                g.Key,
+                CalculateScore(g),
+                g.Count(),
+                CalculateScore(g) >= 0.7
+                    ? "Compliant"
+                    : "Non-Compliant",
+                $"{g.Count()} findings"))
+        .ToList());
+
+        _ruleDashboard.Update(
+         report.Results
+        .Select(x => new RuleDashboardItem(
+            x.RuleName,
+            x.Category,
+            x.Severity,
+            x.Message,
+            x.WeightedImpact))
+        .ToList());
+    }
+
+
+
+
+
     private async Task ExecuteExportAsync()
     {
-        if (_currentReport == null)
+        if (_currentReport == null ||
+            _currentContext == null)
         {
             Logs.Add(
                 "[WARN] No analysis report available.");
@@ -264,14 +422,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
 
 
-        var exporter = _exporters
-            .FirstOrDefault(x =>
-                x.Format.Equals(
-                    SelectedExportFormat,
-                    StringComparison.OrdinalIgnoreCase));
 
-
-        if (exporter == null)
+        if (!_runner.AvailableExportFormats.Contains(
+                SelectedExportFormat,
+                StringComparer.OrdinalIgnoreCase))
         {
             Logs.Add(
                 $"[ERROR] Exporter not found: {SelectedExportFormat}");
@@ -280,28 +434,39 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
 
 
+
         var dialog = new SaveFileDialog
         {
-            Title = "Export Aegis Report",
+            Title =
+                "Export Aegis Report",
+
+            FileName =
+                $"AegisReport_{_currentReport.ProjectName}_{DateTime.UtcNow:yyyyMMdd_HHmmss}",
+
             Filter =
-                $"{exporter.Format.ToUpper()} file|*.{exporter.Format}"
+                $"{SelectedExportFormat.ToUpper()} file|*.{SelectedExportFormat}"
         };
+
 
 
         if (dialog.ShowDialog() != true)
             return;
 
 
+
         try
         {
             Logs.Add(
-                $"[EXEC] Exporting report as {exporter.Format}...");
+                $"[EXEC] Exporting report as {SelectedExportFormat} → {dialog.FileName}...");
 
 
-            await exporter.ExportAsync(
+
+            await _runner.ExportReportAsync(
                 _currentReport,
-                new(),
+                _currentContext,
+                SelectedExportFormat,
                 dialog.FileName);
+
 
 
             Logs.Add(
@@ -315,6 +480,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
 
+    private static double CalculateScore(
+    IEnumerable<dynamic> results)
+    {
+        var count = results.Count();
+
+        return count switch
+        {
+            0 => 1,
+            <= 3 => 0.9,
+            <= 10 => 0.7,
+            _ => 0.4
+        };
+    }
 
 
     private bool SetField<T>(
@@ -326,11 +504,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return false;
 
 
+
         field = value;
 
+
+
         PropertyChanged?
-            .Invoke(this,
+            .Invoke(
+                this,
                 new PropertyChangedEventArgs(propertyName));
+
 
 
         return true;
@@ -339,13 +522,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
 
 
+
 public sealed class RelayCommand : ICommand
 {
     private readonly Action<object?> _execute;
+
     private readonly Predicate<object?>? _canExecute;
 
 
+
     public event EventHandler? CanExecuteChanged;
+
 
 
     public RelayCommand(
@@ -353,16 +540,20 @@ public sealed class RelayCommand : ICommand
         Predicate<object?>? canExecute = null)
     {
         _execute = execute;
+
         _canExecute = canExecute;
     }
+
 
 
     public bool CanExecute(object? parameter)
         => _canExecute?.Invoke(parameter) ?? true;
 
 
+
     public void Execute(object? parameter)
         => _execute(parameter);
+
 
 
     public void RaiseCanExecuteChanged()

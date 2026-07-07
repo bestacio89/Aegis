@@ -85,10 +85,14 @@
 
                 <Button Content="🧱"
                         Command="{Binding ShowLayerWorkspaceCommand}"
-                        Height="50"/>
+                        Height="50" Click="Button_Click"/>
 
                 <Button Content="⚖"
                         Command="{Binding ShowRuleWorkspaceCommand}"
+                        Height="50"/>
+
+                <Button Content="📄"
+                        Command="{Binding ShowReportVisualizationCommand}"
                         Height="50"/>
 
             </StackPanel>
@@ -96,16 +100,11 @@
         </Border>
 
         <!-- NAV -->
-        <Border Grid.Row="1" Grid.Column="1"
-                Background="#252526">
 
-            <ListBox ItemsSource="{Binding Workspaces}"
-                     SelectedItem="{Binding SelectedWorkspace}"/>
-        </Border>
 
         <!-- WORKSPACE -->
-        <Border Grid.Row="1" Grid.Column="2"
-                Background="#252526">
+        <Border Grid.Column="1"
+                Background="#252526" Grid.ColumnSpan="2" Margin="0,34,0,0" Grid.RowSpan="2">
 
             <ContentControl Content="{Binding ActiveWorkspaceViewModel}"/>
         </Border>

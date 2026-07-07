@@ -1,6 +1,6 @@
 ﻿using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models.Rules.Sets;
-using France.Common.Extensions;
+using Franz.Common.Extensions;
 
 namespace Aegis.Shared.Architecture.Models.Rules;
 
@@ -66,7 +66,7 @@ public static class ArchitectureRuleRegistry
         if (getMethod == null) return;
 
         if (getMethod.Invoke(null, null) is IEnumerable<ArchitectureRuleDefinition> rules)
-            target.AddRange(rules);
+            target.AddRangeSafe(rules);
     }
 
     /// <summary>

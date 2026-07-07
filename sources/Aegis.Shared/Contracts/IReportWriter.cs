@@ -1,9 +1,10 @@
 ﻿using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Enums;
+using Franz.Common.DependencyInjection;
 
 namespace Aegis.Shared.Contracts;
 
-public interface IReportExporter
+public interface IReportExporter: IScopedDependency
 {
     string Format { get; }
 

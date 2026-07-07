@@ -73,6 +73,10 @@ public sealed class MaintainabilityEvaluator : BaseArchitectureEvaluator, IScope
 
         foreach (var file in files)
         {
+            _logger.LogInformation(
+                   "🚀 {Evaluator} started for {Path}",
+                        Name,
+                        projectPath);
             token.ThrowIfCancellationRequested();
 
             var content = await File.ReadAllTextAsync(file, token).ConfigureAwait(false);

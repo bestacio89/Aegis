@@ -99,7 +99,7 @@ public partial class App : Application
                 services.AddScoped<AegisArchitectureAnalysisRunner>();
                 services.AddSingleton<LayerAggregator>();
 
-                services.AddAegisReportExporters();
+               
                 services.AddFranzMediatorStandard(new[] { typeof(AegisDbContext).Assembly });
 
                 // =========================
@@ -110,16 +110,17 @@ public partial class App : Application
                 services.AddTransient<LayerDashboardViewModel>();
                 services.AddTransient<SectionDashboardViewModel>();
                 services.AddTransient<RuleDashboardViewModel>();
+                services.AddTransient<ReportVisualizationViewModel>();
                 services.AddTransient<ILayerAnalysisService, LayerAnalysisService>();
 
                 // =========================
                 // VIEWS
                 // =========================
                 services.AddSingleton<MainWindow>();
-
-                services.AddTransient<LayerDashboardWindow>();
-                services.AddTransient<SectionDashboardWindow>();
-                services.AddTransient<RuleDashboardWindow>();
+                services.AddTransient<ReportVisualizationView>();
+                services.AddTransient<LayerDashboardView>();
+                services.AddTransient<SectionDashboardView>();
+                services.AddTransient<RuleDashboardView>();
             })
             .Build();
     }

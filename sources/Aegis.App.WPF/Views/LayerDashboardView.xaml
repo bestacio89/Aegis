@@ -1,0 +1,386 @@
+﻿<UserControl x:Class="Aegis.App.Wpf.Views.LayerDashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+
+             Background="#181818"
+             Foreground="White"
+             FontFamily="Segoe UI">
+
+
+    <UserControl.Resources>
+
+
+        <!-- Dashboard Card -->
+
+        <Style x:Key="Card"
+               TargetType="Border">
+
+            <Setter Property="Background"
+                    Value="#222222"/>
+
+            <Setter Property="BorderBrush"
+                    Value="#383838"/>
+
+            <Setter Property="BorderThickness"
+                    Value="1"/>
+
+            <Setter Property="CornerRadius"
+                    Value="8"/>
+
+            <Setter Property="Padding"
+                    Value="14"/>
+
+            <Setter Property="Margin"
+                    Value="6"/>
+
+        </Style>
+
+
+
+
+        <!-- KPI -->
+
+        <Style x:Key="KpiCard"
+               TargetType="Border">
+
+            <Setter Property="Background"
+                    Value="#252526"/>
+
+            <Setter Property="BorderBrush"
+                    Value="#404040"/>
+
+            <Setter Property="BorderThickness"
+                    Value="1"/>
+
+            <Setter Property="CornerRadius"
+                    Value="8"/>
+
+            <Setter Property="Width"
+                    Value="180"/>
+
+            <Setter Property="Height"
+                    Value="80"/>
+
+            <Setter Property="Padding"
+                    Value="12"/>
+
+            <Setter Property="Margin"
+                    Value="6"/>
+
+        </Style>
+
+
+    </UserControl.Resources>
+
+
+
+
+
+    <Grid Margin="12">
+
+
+        <Grid.RowDefinitions>
+
+            <RowDefinition Height="Auto"/>
+
+            <RowDefinition Height="Auto"/>
+
+            <RowDefinition Height="2*"/>
+
+            <RowDefinition Height="3*"/>
+
+        </Grid.RowDefinitions>
+
+
+
+
+
+
+
+        <!-- TITLE -->
+
+        <Border Style="{StaticResource Card}">
+
+
+            <DockPanel>
+
+
+                <StackPanel>
+
+
+                    <TextBlock Text="LAYER ARCHITECTURE ANALYSIS"
+
+                               FontSize="20"
+
+                               FontWeight="SemiBold"
+
+                               Foreground="#4CAF50"/>
+
+
+                    <TextBlock Text="Structural distribution and violation impact by architecture layer"
+
+                               Foreground="#AAAAAA"
+
+                               FontSize="12"
+
+                               Margin="0,4,0,0" Width="356"/>
+
+
+                </StackPanel>
+
+
+
+                <Button Content="Reload"
+
+                        DockPanel.Dock="Right"
+
+                        Command="{Binding LoadDataCommand}"
+
+                        Width="90"/>
+
+
+            </DockPanel>
+
+
+        </Border>
+
+
+
+
+
+
+
+
+
+        <!-- KPI BAR -->
+
+
+        <StackPanel Grid.Row="1"
+
+                    Orientation="Horizontal"
+
+                    Margin="0,6">
+
+
+            <Border Style="{StaticResource KpiCard}">
+
+
+                <StackPanel>
+
+
+                    <TextBlock Text="LAYERS"
+
+                               Foreground="#888888"
+
+                               FontSize="11"/>
+
+
+                    <TextBlock Text="{Binding Layers.Count}"
+
+                               FontSize="26"
+
+                               FontWeight="Bold"/>
+
+
+                </StackPanel>
+
+
+            </Border>
+
+
+
+
+
+            <Border Style="{StaticResource KpiCard}">
+
+
+                <StackPanel>
+
+
+                    <TextBlock Text="VIOLATIONS"
+
+                               Foreground="#888888"
+
+                               FontSize="11"/>
+
+
+                    <TextBlock Text="{Binding TotalViolations}"
+
+                               FontSize="26"
+
+                               FontWeight="Bold"
+
+                               Foreground="#FF6666"/>
+
+
+                </StackPanel>
+
+
+            </Border>
+
+
+        </StackPanel>
+
+
+
+
+
+
+
+
+
+        <!-- ANALYTICS -->
+
+
+        <Border Grid.Row="2"
+
+                Style="{StaticResource Card}">
+
+
+            <Grid>
+
+
+                <Grid.RowDefinitions>
+
+                    <RowDefinition Height="Auto"/>
+
+                    <RowDefinition Height="*"/>
+
+                </Grid.RowDefinitions>
+
+
+
+
+                <TextBlock Text="Layer Distribution"
+
+                           FontWeight="Bold"
+
+                           Foreground="#BBBBBB"/>
+
+
+
+
+
+                <lvc:CartesianChart Grid.Row="1"
+
+                                    Margin="0,8,0,0"
+
+                                    Series="{Binding LayerSeries}"
+
+                                    XAxes="{Binding LayerAxes}"
+
+                                    YAxes="{Binding ValueAxes}"
+
+                                    Background="#222222"
+
+                                    Padding="0"
+
+                                    DrawMarginFrame="{x:Null}"/>
+
+
+            </Grid>
+
+
+        </Border>
+
+
+
+
+
+
+
+
+
+        <!-- FINDINGS TABLE -->
+
+
+        <Border Grid.Row="3"
+
+                Style="{StaticResource Card}">
+
+
+            <Grid>
+
+
+                <Grid.RowDefinitions>
+
+                    <RowDefinition Height="Auto"/>
+
+                    <RowDefinition Height="*"/>
+
+                </Grid.RowDefinitions>
+
+
+
+                <TextBlock Text="Detected Layer Findings"
+
+                           FontWeight="Bold"
+
+                           Foreground="#BBBBBB"
+
+                           Margin="0,0,0,10"/>
+
+
+
+
+
+                <DataGrid Grid.Row="1"
+
+                          ItemsSource="{Binding Layers}"
+
+                          AutoGenerateColumns="False"
+
+                          Background="#181818"
+
+                          Foreground="White"
+
+                          BorderThickness="0"
+
+                          RowBackground="#252526"
+
+                          AlternatingRowBackground="#202020"
+
+                          HeadersVisibility="Column"
+
+                          CanUserAddRows="False"
+
+                          CanUserDeleteRows="False"
+
+                          GridLinesVisibility="None">
+
+
+                    <DataGrid.Columns>
+
+
+                        <DataGridTextColumn Header="Layer"
+
+                                            Binding="{Binding Layer}"
+
+                                            Width="*"/>
+
+
+
+                        <DataGridTextColumn Header="Violations"
+
+                                            Binding="{Binding Count}"
+
+                                            Width="120"/>
+
+
+                    </DataGrid.Columns>
+
+
+                </DataGrid>
+
+
+            </Grid>
+
+
+        </Border>
+
+
+    </Grid>
+
+
+</UserControl>

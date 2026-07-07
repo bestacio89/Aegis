@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Aegis.App.Wpf.ViewModels;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -17,16 +18,14 @@ namespace Aegis.App.Wpf.Views
     /// <summary>
     /// Interaction logic for LayerDashboardWindow.xaml
     /// </summary>
-    public partial class LayerDashboardWindow : Window
+    public partial class LayerDashboardView :UserControl  
     {
-        public LayerDashboardWindow()
+        public LayerDashboardView()
         {
             InitializeComponent();
+            
         }
 
-        private void DataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-
-        }
+    
     }
 }

@@ -3,8 +3,10 @@ using Aegis.App.Wpf.Services.NewFolder;
 using Aegis.App.Wpf.ViewModels;
 using Aegis.App.Wpf.Views;
 using Aegis.Architecture.Aggregation;
+using Aegis.Architecture.Bootstrap;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Architecture.Scoring;
+using Aegis.Infrastructure.Aggregation;
 using Aegis.Infrastructure.Data;
 using Aegis.Infrastructure.Extensions;
 using Aegis.Infrastructure.Persistence;
@@ -93,11 +95,10 @@ public partial class App : Application
                 // ========================================================
                 // ENGINE ARCHITECTURE REGISTRATIONS
                 // ========================================================
-                services.AddScoped<CrossEvaluatorAggregator>();
-                services.AddScoped<RuleWeightingEngine>();
-                services.AddScoped<RuleEngine>();
-                services.AddScoped<RuleEngineCore>();
+                services.AddAegisCore();
                 services.AddScoped<AegisArchitectureAnalysisRunner>();
+                services.AddSingleton<LayerAggregator>();
+
                 services.AddAegisReportExporters();
                 services.AddFranzMediatorStandard(new[] { typeof(AegisDbContext).Assembly });
 

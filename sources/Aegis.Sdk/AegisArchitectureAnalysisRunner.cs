@@ -258,43 +258,32 @@ public sealed class AegisArchitectureAnalysisRunner
 
 
     private async Task PersistRuleResultsAsync(
-        int reportId,
-        AegisArchitectureReport report,
-        CancellationToken token)
+    int reportId,
+    AegisArchitectureReport report,
+    CancellationToken token)
     {
-        _logger.LogInformation(
-            "💾 Persisting {Count} rule results for report {Id}",
-            report.Results.Count,
-            reportId);
+        var entities = report.Results
+            .Select(result => new RuleResultEntity
+            {
+                ReportId = reportId,
+                RuleId = result.RuleId,
+                RuleName = result.RuleName,
+                Severity = result.Severity,
+                Category = result.Category.ToString(),
+                Target = result.Target,
+                Message = result.Message,
+                ImpactScore = result.ImpactScore,
+                WeightedImpact = result.WeightedImpact,
+                Domain = result.Domain,
+                AnalyzerVersion = result.AnalyzerVersion,
+                Project = report.ProjectName,
+                DateDetected = DateTime.UtcNow
+            })
+            .ToList();
 
-
-
-        foreach (var result in report.Results)
-        {
-            await _ruleResultRepo.AddAsync(
-                new RuleResultEntity
-                {
-                    ReportId = reportId,
-                    RuleId = result.RuleId,
-                    RuleName = result.RuleName,
-                    Severity = result.Severity,
-                    Category = result.Category.ToString(),
-                    Target = result.Target,
-                    Message = result.Message,
-                    ImpactScore = result.ImpactScore,
-                    WeightedImpact = result.WeightedImpact,
-                    Domain = result.Domain,
-                    AnalyzerVersion = result.AnalyzerVersion,
-                    Project = report.ProjectName,
-                    DateDetected = DateTime.UtcNow
-                });
-        }
-
-
-
-        _logger.LogInformation(
-            "✅ Rule results persisted for report {Id}",
-            reportId);
+        await _customRuleResultRepo.AddBatchAsync(
+            entities,
+            token);
     }
 
 

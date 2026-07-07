@@ -1,6 +1,7 @@
 ﻿using Aegis.Infrastructure.Data;
 using Aegis.Infrastructure.Persistence;
 using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -58,6 +59,21 @@ public sealed class RuleResultRepository : IRuleResultRepository
             query = (IOrderedQueryable<RuleResultEntity>)query.Take(limit.Value);
 
         return await query.ToListAsync(token);
+
     }
 
+    public async Task AddBatchAsync(
+     IEnumerable<RuleResultEntity> results,
+     CancellationToken token = default)
+    {
+        await _db.RuleResults.AddRangeAsync(
+            results,
+            token);
+
+        await _db.SaveChangesAsync(token);
+    }
 }
+
+
+
+

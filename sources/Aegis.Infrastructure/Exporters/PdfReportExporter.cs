@@ -2,196 +2,394 @@
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.Logging;
-using QuestPDF.Fluent;
-using QuestPDF.Helpers;
-using QuestPDF.Infrastructure;
+using MigraDoc.DocumentObjectModel;
+using MigraDoc.DocumentObjectModel.Tables;
+using MigraDoc.Rendering;
 
 namespace Aegis.Infrastructure.Exporters;
 
 /// <summary>
-/// 📄 Executive PDF Report Exporter (Professional summary view)
+/// 📄 Executive PDF Report Exporter using MigraDoc.
+/// Generates professional architecture audit reports.
 /// </summary>
 public sealed class PdfReportExporter : IReportExporter
 {
     public string Format => "pdf";
+
     private readonly ILogger<PdfReportExporter> _logger;
 
-    public PdfReportExporter(ILogger<PdfReportExporter> logger)
+    public PdfReportExporter(
+        ILogger<PdfReportExporter> logger)
     {
         _logger = logger;
     }
 
+
     public async Task ExportAsync(
-          AegisArchitectureReport report,
-          ProjectArchitectureContext context,
-          string outputPath,
-          ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
-          CancellationToken token = default)
+        AegisArchitectureReport report,
+        ProjectArchitectureContext context,
+        string outputPath,
+        ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
+        CancellationToken token = default)
     {
         try
         {
-            var doc = Document.Create(container =>
+            await Task.Run(() =>
             {
-                container.Page(page =>
+                token.ThrowIfCancellationRequested();
+
+                var document = CreateDocument(
+                    report,
+                    context,
+                    detailLevel);
+
+                var renderer = new PdfDocumentRenderer
                 {
-                    page.Margin(40);
-                    page.Size(PageSizes.A4);
-                    page.DefaultTextStyle(TextStyle.Default.FontSize(11).FontFamily("Arial"));
+                    Document = document
+                };
 
-                    // HEADER
-                    page.Header().Row(row =>
-                    {
-                        row.RelativeItem().AlignLeft().Text($"🧠 Aegis Executive Report")
-                            .FontSize(22).Bold().FontColor(Colors.Blue.Medium);
-                        row.ConstantItem(100).AlignRight().Text(DateTime.UtcNow.ToString("u"))
-                            .FontSize(9).FontColor(Colors.Grey.Darken1);
-                    });
+                renderer.RenderDocument();
+                renderer.PdfDocument.Save(outputPath);
 
-                    // CONTENT
-                    page.Content().Column(col =>
-                    {
-                        col.Item().PaddingBottom(10).Text($"📁 Project: {report.ProjectName}")
-                            .Bold().FontSize(14);
-                        col.Item().Text($"📂 Path: {report.ProjectPath}").FontSize(10);
-                        col.Item().Text($"🌐 Language: {context.Language}").FontSize(10);
-                        col.Item().Text($"🧩 Framework: {context.Framework}").FontSize(10);
-                        col.Item().Text($"🏗️ Architecture: {context.ArchitectureStyle ?? "Unknown"}").FontSize(10);
-                        col.Item().Text($"🧱 Layer: {context.Layer ?? "Unclassified"}").FontSize(10);
-                        col.Item().Text($"🔨 Build System: {context.BuildSystem}").FontSize(10);
-                        col.Item().Text($"🧠 Confidence: {context.Confidence:P0}").FontSize(10);
-                        col.Item().PaddingVertical(8).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
+            }, token);
 
-                        // SUMMARY METRICS
-                        col.Item().Text("📊 Project Health Summary / Résumé de la santé du projet")
-                            .Bold().FontSize(13).FontColor(Colors.Blue.Medium);
 
-                        col.Item().PaddingVertical(4).Row(row =>
-                        {
-                            row.RelativeItem().Text($"Total Files Scanned:\n{report.TotalFilesScanned}");
-                            row.RelativeItem().Text($"Total Violations:\n{report.TotalViolations}")
-                                .FontColor(Colors.Red.Medium);
-                            row.RelativeItem().Text($"Health Index:\n{report.Metrics.ProjectHealthIndex:0.00}%")
-                                .Bold()
-                                .FontColor(report.Metrics.ProjectHealthIndex >= 80
-                                    ? Colors.Green.Medium
-                                    : report.Metrics.ProjectHealthIndex >= 50
-                                        ? Colors.Orange.Medium
-                                        : Colors.Red.Medium);
-                        });
-
-                        col.Item().PaddingVertical(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
-
-                        // COMPLIANCE TABLE
-                        col.Item().Text("🧩 Compliance by Category / Conformité par catégorie")
-                            .Bold().FontSize(13);
-
-                        col.Item().Table(table =>
-                        {
-                            table.ColumnsDefinition(c =>
-                            {
-                                c.RelativeColumn(2);
-                                c.RelativeColumn(1);
-                                c.RelativeColumn(1);
-                            });
-
-                            table.Header(h =>
-                            {
-                                h.Cell().Text("Category / Catégorie").Bold();
-                                h.Cell().AlignCenter().Text("Score");
-                                h.Cell().AlignCenter().Text("Status");
-                            });
-
-                            foreach (var kv in report.ComplianceScores)
-                            {
-                                var score = kv.Value;
-                                var color = score >= 80 ? Colors.Green.Medium :
-                                            score >= 50 ? Colors.Orange.Medium :
-                                            Colors.Red.Medium;
-
-                                table.Cell().Text(kv.Key.ToString());
-                                table.Cell().AlignCenter().Text($"{score:0.00}%");
-                                table.Cell().AlignCenter()
-                                    .Text(score >= 80 ? "✅ OK" :
-                                        score >= 50 ? "⚠️ Warning" : "❌ Critical")
-                                    .FontColor(color);
-                            }
-                        });
-
-                        col.Item().PaddingVertical(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
-
-                        // TOP VIOLATIONS
-                        col.Item().Text("🔍 Top 10 Violations / Principales violations")
-                            .Bold().FontSize(13).FontColor(Colors.Red.Medium);
-
-                        foreach (var v in report.Results
-                                                 .OrderByDescending(r => r.WeightedImpact)
-                                                 .Take(10))
-                        {
-                            col.Item().Text($"• {v.RuleName} [{v.Severity}] → {v.Message}")
-                                .FontSize(10)
-                                .FontColor(v.Severity switch
-                                {
-                                    ArchitectureRuleSeverity.Critical => Colors.Red.Medium,
-                                    ArchitectureRuleSeverity.High => Colors.Orange.Medium,
-                                    _ => Colors.Grey.Darken2
-                                });
-                        }
-
-                        col.Item().PaddingVertical(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
-
-                        // LAYER ANALYSIS
-                        col.Item().Text("🏗️ Layer-by-Layer Analysis / Analyse par couche")
-                            .Bold().FontSize(13).FontColor(Colors.Blue.Medium);
-
-                        var byLayer = report.Results.GroupBy(r => r.Domain).OrderBy(g => g.Key);
-
-                        foreach (var group in byLayer)
-                        {
-                            col.Item().PaddingTop(6).Text($"📦 {group.Key} Layer")
-                                .Bold().FontSize(12).FontColor(Colors.Grey.Darken1);
-
-                            col.Item().Table(t =>
-                            {
-                                t.ColumnsDefinition(c =>
-                                {
-                                    c.RelativeColumn(2);
-                                    c.RelativeColumn(1);
-                                    c.RelativeColumn(4);
-                                });
-
-                                t.Header(h =>
-                                {
-                                    h.Cell().Text("Rule").Bold();
-                                    h.Cell().Text("Severity").Bold();
-                                    h.Cell().Text("Message").Bold();
-                                });
-
-                                foreach (var r in group.Take(5))
-                                {
-                                    t.Cell().Text(r.RuleName);
-                                    t.Cell().Text(r.Severity.ToString());
-                                    t.Cell().Text(r.Message);
-                                }
-                            });
-                        }
-                    });
-
-                    // FOOTER
-                    page.Footer()
-                        .AlignCenter()
-                        .Text($"Generated {DateTime.UtcNow:u} • Aegis v1.0 — Executive Summary Report")
-                        .FontSize(9)
-                        .FontColor(Colors.Grey.Darken1);
-                });
-            });
-
-            await Task.Run(() => doc.GeneratePdf(outputPath), token);
-            _logger.LogInformation("📄 PDF report exported → {Path}", outputPath);
+            _logger.LogInformation(
+                "📄 PDF report exported → {Path}",
+                outputPath);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Failed to generate PDF report → {Path}", outputPath);
+            _logger.LogError(
+                ex,
+                "❌ Failed to generate PDF report → {Path}",
+                outputPath);
+
             throw;
         }
+    }
+
+
+    private static Document CreateDocument(
+        AegisArchitectureReport report,
+        ProjectArchitectureContext context,
+        ArchitectureReportDetailLevel detailLevel)
+    {
+        var document = new Document();
+
+        document.Info.Title =
+            "Aegis Architecture Executive Report";
+
+        document.Info.Author =
+            "Aegis Architecture Analyzer";
+
+
+        DefineStyles(document);
+
+
+        var section = document.AddSection();
+
+        section.PageSetup.PageFormat =
+            PageFormat.A4;
+
+
+        section.PageSetup.TopMargin =
+            Unit.FromCentimeter(2);
+
+        section.PageSetup.BottomMargin =
+            Unit.FromCentimeter(2);
+
+
+
+        AddHeader(section);
+
+        AddProjectInformation(
+            section,
+            report,
+            context);
+
+
+        AddMetrics(
+            section,
+            report);
+
+
+        AddComplianceTable(
+            section,
+            report);
+
+
+        AddViolations(
+            section,
+            report);
+
+
+        AddLayerAnalysis(
+            section,
+            report);
+
+
+        AddFooter(section);
+
+
+        return document;
+    }
+
+
+
+    private static void DefineStyles(Document document)
+    {
+        var normal = document.Styles[StyleNames.Normal]
+            ?? throw new InvalidOperationException(
+                "MigraDoc Normal style was not found.");
+
+        normal.Font.Name = "DejaVu Sans";
+        normal.Font.Size = 10;
+
+
+        var heading = document.Styles[StyleNames.Heading1]
+            ?? throw new InvalidOperationException(
+                "MigraDoc Heading1 style was not found.");
+
+        heading.Font.Name = "DejaVu Sans";
+        heading.Font.Size = 16;
+        heading.Font.Bold = true;
+    }
+
+
+
+    private static void AddHeader(Section section)
+    {
+        var paragraph =
+            section.Headers.Primary.AddParagraph();
+
+        paragraph.AddText(
+            "🧠 Aegis Executive Architecture Report");
+
+        paragraph.Style =
+            "Heading1";
+    }
+
+
+
+    private static void AddProjectInformation(
+        Section section,
+        AegisArchitectureReport report,
+        ProjectArchitectureContext context)
+    {
+        var p =
+            section.AddParagraph();
+
+
+        p.AddFormattedText(
+            $"📁 Project: {report.ProjectName}\n",
+            TextFormat.Bold);
+
+        p.AddText(
+            $"📂 Path: {report.ProjectPath}\n");
+
+        p.AddText(
+            $"🌐 Language: {context.Language}\n");
+
+        p.AddText(
+            $"🧩 Framework: {context.Framework}\n");
+
+        p.AddText(
+            $"🏗️ Architecture: {context.ArchitectureStyle ?? "Unknown"}\n");
+
+        p.AddText(
+            $"🧱 Layer: {context.Layer ?? "Unclassified"}\n");
+
+        p.AddText(
+            $"🔨 Build System: {context.BuildSystem}\n");
+
+        p.AddText(
+            $"🧠 Confidence: {context.Confidence:P0}");
+    }
+
+
+
+    private static void AddMetrics(
+        Section section,
+        AegisArchitectureReport report)
+    {
+        section.AddParagraph("Project Metrics")
+            .Style = "Heading1";
+
+
+        var table = section.AddTable();
+
+        table.Borders.Width = 0.5;
+
+
+        // REQUIRED
+        table.AddColumn("5cm");
+        table.AddColumn("5cm");
+
+
+        AddMetricRow(
+            table,
+            "Files scanned",
+            report.TotalFilesScanned.ToString());
+
+
+        AddMetricRow(
+            table,
+            "Violations",
+            report.TotalViolations.ToString());
+
+
+        AddMetricRow(
+            table,
+            "Health Index",
+            $"{report.Metrics?.ProjectHealthIndex ?? 0:0.00}%");
+    }
+
+
+    private static void AddMetricRow(
+        Table table,
+        string label,
+        string value)
+    {
+        var row = table.AddRow();
+
+        row.Cells[0]
+            .AddParagraph(label);
+
+        row.Cells[1]
+            .AddParagraph(value);
+    }
+
+
+
+    private static void AddComplianceTable(
+    Section section,
+    AegisArchitectureReport report)
+    {
+        section.AddParagraph(
+            "Compliance by Category")
+            .Style = "Heading1";
+
+
+        var table = section.AddTable();
+
+        table.Borders.Width = 0.5;
+
+
+        // REQUIRED: define columns before adding rows
+        table.AddColumn("5cm");
+        table.AddColumn("3cm");
+        table.AddColumn("3cm");
+
+
+        var header = table.AddRow();
+
+        header.Cells[0]
+            .AddParagraph("Category");
+
+        header.Cells[1]
+            .AddParagraph("Score");
+
+        header.Cells[2]
+            .AddParagraph("Status");
+
+
+        if (!report.ComplianceScores.Any())
+        {
+            var emptyRow = table.AddRow();
+
+            emptyRow.Cells[0]
+                .AddParagraph("No compliance data available");
+
+            emptyRow.Cells[1]
+                .AddParagraph("-");
+
+            emptyRow.Cells[2]
+                .AddParagraph("-");
+
+            return;
+        }
+
+
+        foreach (var score in report.ComplianceScores)
+        {
+            var row = table.AddRow();
+
+
+            row.Cells[0]
+                .AddParagraph(
+                    score.Key.ToString());
+
+
+            row.Cells[1]
+                .AddParagraph(
+                    $"{score.Value:0.00}%");
+
+
+            row.Cells[2]
+                .AddParagraph(
+                    score.Value >= 80
+                        ? "OK"
+                        : score.Value >= 50
+                            ? "Warning"
+                            : "Critical");
+        }
+    }
+
+
+
+    private static void AddViolations(
+        Section section,
+        AegisArchitectureReport report)
+    {
+        section.AddParagraph(
+            "🔍 Top Violations")
+            .Style = "Heading1";
+
+
+        foreach (var violation in report.Results
+            .OrderByDescending(x => x.WeightedImpact)
+            .Take(10))
+        {
+            section.AddParagraph(
+                $"• {violation.RuleName} [{violation.Severity}] → {violation.Message}");
+        }
+    }
+
+
+
+    private static void AddLayerAnalysis(
+        Section section,
+        AegisArchitectureReport report)
+    {
+        section.AddParagraph(
+            "🏗️ Layer Analysis")
+            .Style = "Heading1";
+
+
+        foreach (var layer in report.Results
+            .GroupBy(x => x.Domain))
+        {
+            section.AddParagraph(
+                $"📦 {layer.Key}")
+                .Style = "Heading2";
+
+
+            foreach (var item in layer.Take(5))
+            {
+                section.AddParagraph(
+                    $"{item.RuleName} | {item.Severity} | {item.Message}");
+            }
+        }
+    }
+
+
+
+    private static void AddFooter(Section section)
+    {
+        section.Footers.Primary.AddParagraph(
+            $"Generated {DateTime.UtcNow:u} • Aegis v1.0")
+            .Format.Alignment =
+            ParagraphAlignment.Center;
     }
 }

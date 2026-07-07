@@ -35,21 +35,7 @@ public static class PluginRegistrationExtensions
     }
 
 
-    public static IServiceCollection AddAegisReportExporters(
-    this IServiceCollection services)
-    {
-        services
-            .AddAegisReportExporter<JsonReportExporter>()
-            .AddAegisReportExporter<PdfReportExporter>()
-            .AddAegisReportExporter<HtmlReportExporter>()
-            .AddAegisReportExporter<MarkdownReportExporter>()
-            .AddAegisReportExporter<ForensicPdfExporter>();
-     
-
-            
-
-        return services;
-    }
+   
 
     /// <summary>
     /// Registers all Aegis policies using configuration binding.

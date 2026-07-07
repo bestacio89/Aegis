@@ -84,7 +84,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                                    .Where(n => !new[] { "if", "for", "while", "switch" }.Contains(n))
                                    .ToList();
 
-            var camelViolations = methodNames.Count(n => !Regex.IsMatch(n, @"^[a-z][a-zA-Z0-9]+$"));
+            var camelViolations = methodNames.Count(n => Regex.IsMatch(n, @"^[a-z][a-zA-Z0-9]+$"));
             result.Metrics["MethodNamingViolationCount"] = camelViolations;
             result.Metrics["MethodNamingComplianceIndex"] = methodNames.Count == 0 ? 100 : Math.Max(0, 100 - camelViolations * 100.0 / methodNames.Count);
 

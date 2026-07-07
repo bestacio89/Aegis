@@ -330,7 +330,7 @@ public sealed class AegisArchitectureAnalysisRunner
                 .Where(current =>
                     !previousResults.Any(previous =>
                         previous.RuleId == current.RuleId &&
-                        previous.Target == current.Target))
+                        previous.Project == current.Project))
                 .ToList();
 
 

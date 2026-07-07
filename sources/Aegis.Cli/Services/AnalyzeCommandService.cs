@@ -63,10 +63,10 @@ public sealed class AnalyzeCommandService
                 Health Index   : {Health:0.00}%
                 """,
                 result.ReportId,
-                result.Report.ProjectName,
-                result.Report.TotalFilesScanned,
-                result.Report.TotalViolations,
-                result.Report.Metrics.ProjectHealthIndex);
+                result.Report?.ProjectName,
+                result.Report?.TotalFilesScanned,
+                result.Report?.TotalViolations,
+                result.Report?.Metrics.ProjectHealthIndex);
 
 
             return result;

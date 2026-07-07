@@ -1,5 +1,6 @@
 ﻿using Aegis.Cli.Services;
 using Aegis.Sdk;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -37,7 +38,6 @@ public static class AnalyzeCommand
                 await runner.RunSessionAsync(
                     projectPath,
                     policyPath,
-                    false,
                     CancellationToken.None);
 
 
@@ -77,10 +77,10 @@ public static class AnalyzeCommand
                 Health Index : {Health:0.00}%
                 Detail Level : {Detail}
                 """,
-                result.Report.ProjectName ?? "Unknown",
-                result.Report.TotalFilesScanned,
-                result.Report.TotalViolations,
-                result.Report.Metrics?.ProjectHealthIndex ?? 0,
+                result.Report?.ProjectName ?? "Unknown",
+                result.Report?.TotalFilesScanned,
+                result.Report?.TotalViolations,
+                result.Report?.Metrics?.ProjectHealthIndex ?? 0,
                 result.DetailLevel);
 
 

@@ -19,7 +19,7 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "SingletonPatternEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "Flask", "FastAPI"];
 
     private static readonly Regex SingletonClassRx =

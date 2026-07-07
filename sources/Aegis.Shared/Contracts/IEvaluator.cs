@@ -17,7 +17,7 @@ public interface IEvaluator : IScopedDependency
     string Name { get; }
 
     /// <summary>
-    /// Programming languages supported by this evaluator (e.g., ["CSharp", "TypeScript"]).
+    /// Programming languages supported by this evaluator (e.g., ["C#", "TypeScript"]).
     /// </summary>
     string[] SupportedLanguages { get; }
 

@@ -22,7 +22,7 @@ public sealed class CouplingEvaluator : BaseArchitectureEvaluator, IScopedDepend
 
     public override string Name => "CouplingEvaluator";
 
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python", "TypeScript", "JavaScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python", "TypeScript", "JavaScript"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring Boot", "FastAPI", "Angular", "React", "Node"];
 
     public CouplingEvaluator(

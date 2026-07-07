@@ -19,7 +19,7 @@ public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
     private readonly RepositoryPolicy _policy;
 
     public override string Name => "RepositoryEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "JavaScript", "TypeScript", "Python"];
+    public override string[] SupportedLanguages => ["C#", "JavaScript", "TypeScript", "Python"];
     public override string[] SupportedFrameworks => ["DotNet", "Node", "Python", "Platform"];
 
     public RepositoryEvaluator(ILogger<RepositoryEvaluator> logger, IOptions<AegisArchitecturePolicy> options)

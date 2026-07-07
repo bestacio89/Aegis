@@ -106,7 +106,7 @@ public sealed class DesignPatternPolicy
 };
     public Dictionary<string, bool> MediatorApplicableLanguages { get; set; } = new()
     {
-        ["CSharp"] = true,
+        ["C#"] = true,
         ["Java"] = false,
         ["TypeScript"] = false,
         ["Python"] = false

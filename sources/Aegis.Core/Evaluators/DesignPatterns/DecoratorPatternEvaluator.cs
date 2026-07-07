@@ -22,7 +22,7 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "DecoratorPatternEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "TypeScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "TypeScript"];
     public override string[] SupportedFrameworks => ["CleanArchitecture", "DDD", "Spring", "NestJS"];
 
     private static readonly Regex InterfaceImplRx = new(@"class\s+\w+\s*:\s*\w+", RegexOptions.Compiled);

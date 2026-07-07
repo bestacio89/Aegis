@@ -21,7 +21,7 @@ public sealed class ComplexityEvaluator : BaseArchitectureEvaluator, IScopedDepe
 
     public override string Name => "ComplexityEvaluator";
 
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python"];  
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring Boot", "FastAPI"];
 
     public ComplexityEvaluator(
@@ -45,7 +45,7 @@ public sealed class ComplexityEvaluator : BaseArchitectureEvaluator, IScopedDepe
         // 🔍 Determine file extensions based on language
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "Java" => new[] { ".java" },
             "Python" => new[] { ".py" },
             _ => new[] { ".cs", ".java", ".py" }

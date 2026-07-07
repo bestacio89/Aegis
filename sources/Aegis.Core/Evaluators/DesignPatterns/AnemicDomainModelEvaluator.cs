@@ -19,7 +19,7 @@ public sealed class AnemicDomainModelEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "AnemicDomainModelEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java"];
+    public override string[] SupportedLanguages => ["C#", "Java"];
     public override string[] SupportedFrameworks => ["Domain", "DDD", "CleanArchitecture"];
 
     private static readonly Regex ClassRx =

@@ -18,7 +18,7 @@ public sealed class PerformanceEvaluator : BaseArchitectureEvaluator
     private readonly PerformancePolicy _policy;
 
     public override string Name => "PerformanceEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python", "TypeScript", "JavaScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python", "TypeScript", "JavaScript"];
     public override string[] SupportedFrameworks => ["DotNet", "Spring", "Node", "FastAPI", "Flask"];
 
     private static readonly Regex LoopRx = new(@"\b(for|while|foreach)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -170,7 +170,7 @@ public sealed class PerformanceEvaluator : BaseArchitectureEvaluator
 
     private static string DetectLanguage(string path)
     {
-        if (path.EndsWith(".cs")) return "CSharp";
+        if (path.EndsWith(".cs")) return "C#";
         if (path.EndsWith(".java")) return "Java";
         if (path.EndsWith(".py")) return "Python";
         if (path.EndsWith(".ts")) return "TypeScript";

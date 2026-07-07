@@ -23,7 +23,7 @@ public sealed class ArchitecturalEvaluator : BaseArchitectureEvaluator, IScopedD
 
     public override string Name => "ArchitecturalEvaluator";
 
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python", "TypeScript", "JavaScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python", "TypeScript", "JavaScript"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring Boot", "FastAPI", "Node", "Angular", "React", "Vue"];
 
     private static readonly Regex UsingRegex =
@@ -54,7 +54,7 @@ public sealed class ArchitecturalEvaluator : BaseArchitectureEvaluator, IScopedD
 
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "Java" => new[] { ".java" },
             "Python" => new[] { ".py" },
             "TypeScript" => new[] { ".ts" },
@@ -129,7 +129,7 @@ public sealed class ArchitecturalEvaluator : BaseArchitectureEvaluator, IScopedD
 
     private static string DetectLanguage(string file)
     {
-        if (file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) return "CSharp";
+        if (file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) return "C#";
         if (file.EndsWith(".java", StringComparison.OrdinalIgnoreCase)) return "Java";
         if (file.EndsWith(".py", StringComparison.OrdinalIgnoreCase)) return "Python";
         if (file.EndsWith(".ts", StringComparison.OrdinalIgnoreCase)) return "TypeScript";

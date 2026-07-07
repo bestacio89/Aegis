@@ -13,7 +13,7 @@
     "Infrastructure": [ "Infrastructure", "Data", "Persistence" ]
   },
   "EnforcementByLanguage": {
-    "CSharp": "Strict",
+    "C#": "Strict",
     "Java": "Strict",
     "Python": "Advisory",
     "TypeScript": "Strict"
@@ -59,7 +59,7 @@
   "Transaction": {
     "Enabled": true,
     "FrameworkHints": {
-      "CSharp": [
+      "C#": [
         "TransactionScope",
         "BeginTransaction",
         "DbContextTransaction"
@@ -195,7 +195,7 @@
       "Dispatch"
     ],
     "MediatorApplicableLanguages": {
-      "CSharp": true,
+      "C#": true,
       "Java": false,
       "TypeScript": false,
       "Python": false

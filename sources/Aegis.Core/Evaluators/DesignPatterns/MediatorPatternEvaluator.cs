@@ -23,7 +23,7 @@ public sealed class MediatorPatternEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "MediatorPatternEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "TypeScript", "Python"];
+    public override string[] SupportedLanguages => ["C#", "Java", "TypeScript", "Python"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "NestJS", "Angular", "FastAPI"];
 
     private static readonly Regex HandlerClassRx = new(@"class\s+(\w+Handler)\b", RegexOptions.Compiled);

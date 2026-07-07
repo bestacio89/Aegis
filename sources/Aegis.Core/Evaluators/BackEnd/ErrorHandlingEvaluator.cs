@@ -23,7 +23,7 @@ public sealed class ErrorHandlingEvaluator : BaseArchitectureEvaluator, IScopedD
 
     public override string Name => "ErrorHandlingEvaluator";
 
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring Boot", "FastAPI"];
 
     public ErrorHandlingEvaluator(
@@ -45,7 +45,7 @@ public sealed class ErrorHandlingEvaluator : BaseArchitectureEvaluator, IScopedD
         // 🎯 Filter files by language
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "Java" => new[] { ".java" },
             "Python" => new[] { ".py" },
             _ => new[] { ".cs", ".java", ".py" }

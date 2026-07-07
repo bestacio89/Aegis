@@ -15,7 +15,7 @@ public sealed class DocumentationEvaluator : BaseArchitectureEvaluator, IScopedD
 {
     public override string Name => "DocumentationEvaluator";
 
-    public override string[] SupportedLanguages => ["CSharp", "TypeScript", "JavaScript", "Java", "Python"];
+    public override string[] SupportedLanguages => ["C#", "TypeScript", "JavaScript", "Java", "Python"];
     public override string[] SupportedFrameworks => ["*"];
 
     public DocumentationEvaluator(ILogger<DocumentationEvaluator> logger) : base(logger) { }
@@ -31,7 +31,7 @@ public sealed class DocumentationEvaluator : BaseArchitectureEvaluator, IScopedD
         // Determine file extensions by detected language
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "TypeScript" => new[] { ".ts" },
             "JavaScript" => new[] { ".js" },
             "Java" => new[] { ".java" },
@@ -63,7 +63,7 @@ public sealed class DocumentationEvaluator : BaseArchitectureEvaluator, IScopedD
             var content = await File.ReadAllTextAsync(file, token).ConfigureAwait(false);
             var lines = content.Split('\n');
             int totalLines = lines.Length;
-            int docLines = CountDocumentationLines(lines, Context?.Language ?? "CSharp");
+            int docLines = CountDocumentationLines(lines, Context?.Language ?? "C#");
 
             double coverage = totalLines > 0 ? (double)docLines / totalLines * 100 : 0;
             totalCoverage += coverage;
@@ -111,7 +111,7 @@ public sealed class DocumentationEvaluator : BaseArchitectureEvaluator, IScopedD
     {
         return language switch
         {
-            "CSharp" => lines.Count(l => l.TrimStart().StartsWith("///")),
+            "C#" => lines.Count(l => l.TrimStart().StartsWith("///")),
             "Java" => lines.Count(l => l.TrimStart().StartsWith("*") || l.TrimStart().StartsWith("//")),
             "Python" => lines.Count(l => l.TrimStart().StartsWith("#") || l.TrimStart().StartsWith("\"\"\"")),
             "TypeScript" or "JavaScript" => lines.Count(l => l.TrimStart().StartsWith("//") || l.TrimStart().StartsWith("/*")),

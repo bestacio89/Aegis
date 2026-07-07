@@ -22,7 +22,7 @@ public sealed class FacadePatternEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "FacadePatternEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "TypeScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "TypeScript"];
     public override string[] SupportedFrameworks => ["Application", "Service", "Domain"];
 
     private static readonly Regex PublicMethodRx = new(@"public\s+\w+\s+\w+\s*\(", RegexOptions.Compiled);

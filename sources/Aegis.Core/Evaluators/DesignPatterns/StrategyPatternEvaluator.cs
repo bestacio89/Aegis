@@ -19,7 +19,7 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "StrategyPatternEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python", "TypeScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python", "TypeScript"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "NestJS", "FastAPI"];
 
     private static readonly Regex StrategyClassRx = new(@"class\s+(\w+Strategy)\b", RegexOptions.Compiled);
@@ -45,7 +45,7 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
 
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "Java" => new[] { ".java" },
             "TypeScript" => new[] { ".ts" },
             "Python" => new[] { ".py" },

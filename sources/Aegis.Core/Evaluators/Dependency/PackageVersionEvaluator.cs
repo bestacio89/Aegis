@@ -21,7 +21,7 @@ public sealed class PackageVersionEvaluator : BaseArchitectureEvaluator, IScoped
     private static readonly Regex VersionRx = new(@"(\d+)\.(\d+)\.(\d+)", RegexOptions.Compiled);
 
     public override string Name => "Package Version Evaluator";
-    public override string[] SupportedLanguages => ["CSharp", "JavaScript", "Python"];
+    public override string[] SupportedLanguages => ["C#", "JavaScript", "Python"];
     public override string[] SupportedFrameworks => ["DotNet", "Node", "Python"];
 
     public PackageVersionEvaluator(ILogger<PackageVersionEvaluator> logger, IOptions<AegisArchitecturePolicy> options)

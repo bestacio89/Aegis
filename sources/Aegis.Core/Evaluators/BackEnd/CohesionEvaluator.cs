@@ -22,7 +22,7 @@ public sealed class CohesionEvaluator : BaseArchitectureEvaluator, IScopedDepend
 
     public override string Name => "CohesionEvaluator";
 
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring Boot", "FastAPI"];
 
     public CohesionEvaluator(
@@ -45,7 +45,7 @@ public sealed class CohesionEvaluator : BaseArchitectureEvaluator, IScopedDepend
         // 🔍 Filter extensions based on detected language
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "Java" => new[] { ".java" },
             "Python" => new[] { ".py" },
             _ => new[] { ".cs", ".java", ".py" }

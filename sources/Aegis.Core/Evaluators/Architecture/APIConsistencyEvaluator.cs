@@ -21,7 +21,7 @@ public sealed class ApiConsistencyEvaluator : BaseArchitectureEvaluator, IScoped
 
     public override string Name => "ApiConsistencyEvaluator";
 
-    public override string[] SupportedLanguages => ["CSharp", "TypeScript", "JavaScript"];
+    public override string[] SupportedLanguages => ["C#", "TypeScript", "JavaScript"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Angular", "React", "Vue", "Node"];
 
     public ApiConsistencyEvaluator(
@@ -43,7 +43,7 @@ public sealed class ApiConsistencyEvaluator : BaseArchitectureEvaluator, IScoped
         // 🧩 Only scan language-relevant files
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "TypeScript" => new[] { ".ts" },
             "JavaScript" => new[] { ".js" },
             _ => new[] { ".cs", ".ts", ".js" }

@@ -22,7 +22,7 @@ public sealed class GodClassEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "GodClassEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python", "TypeScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python", "TypeScript"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "NestJS", "FastAPI"];
 
     private static readonly Regex ClassRx = new(@"class\s+(\w+)\b", RegexOptions.Compiled);

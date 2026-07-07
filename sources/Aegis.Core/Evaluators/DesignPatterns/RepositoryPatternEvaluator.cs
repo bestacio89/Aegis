@@ -20,7 +20,7 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "RepositoryPatternEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "Django", "FastAPI", "Flask"];
 
     private static readonly Regex RepoClassRx = new(@"class\s+(\w+Repository)\b", RegexOptions.Compiled);
@@ -50,7 +50,7 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
 
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "Java" => new[] { ".java" },
             "Python" => new[] { ".py" },
             _ => new[] { ".cs", ".java", ".py" }

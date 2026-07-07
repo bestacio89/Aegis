@@ -23,7 +23,7 @@ public sealed class SecurityEvaluator : BaseArchitectureEvaluator, IScopedDepend
     private readonly SecurityPolicy _policy;
 
     public override string Name => "SecurityEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Python", "JavaScript", "TypeScript", "Java"];
+    public override string[] SupportedLanguages => ["C#", "Python", "JavaScript", "TypeScript", "Java"];
     public override string[] SupportedFrameworks => ["ASP.NET", "FastAPI", "Flask", "Spring", "Node.js"];
 
     private static readonly Regex[] SecretPatterns =
@@ -245,7 +245,7 @@ public sealed class SecurityEvaluator : BaseArchitectureEvaluator, IScopedDepend
                     },
                     Metadata = new Dictionary<string, string>
                     {
-                        ["Language"] = "CSharp",
+                        ["Language"] = "C#",
                         ["Policy_AllowUnsafeBlocks"] = "False"
                     }
                 });

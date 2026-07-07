@@ -21,7 +21,7 @@ public sealed class BuilderPatternEvaluator : BaseArchitectureEvaluator, IScoped
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "BuilderPatternEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "TypeScript", "Python"];
+    public override string[] SupportedLanguages => ["C#", "Java", "TypeScript", "Python"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "Angular", "FastAPI", "Generic"];
 
     private static readonly Regex BuilderClassRx = new(@"class\s+(\w+Builder)\b", RegexOptions.Compiled);
@@ -50,7 +50,7 @@ public sealed class BuilderPatternEvaluator : BaseArchitectureEvaluator, IScoped
         // Filter relevant file types
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "Java" => new[] { ".java" },
             "TypeScript" => new[] { ".ts" },
             "Python" => new[] { ".py" },

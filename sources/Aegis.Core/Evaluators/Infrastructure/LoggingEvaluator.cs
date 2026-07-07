@@ -19,7 +19,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
     private readonly LoggingPolicy _policy;
 
     public override string Name => "LoggingEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python", "TypeScript", "JavaScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python", "TypeScript", "JavaScript"];
     public override string[] SupportedFrameworks => ["Serilog", "NLog", "Log4j", "Winston", "Python.Logging"];
 
     // Regex patterns
@@ -153,7 +153,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
     private static string DetectLanguage(string path)
     {
-        if (path.EndsWith(".cs")) return "CSharp";
+        if (path.EndsWith(".cs")) return "C#";
         if (path.EndsWith(".java")) return "Java";
         if (path.EndsWith(".py")) return "Python";
         if (path.EndsWith(".ts") || path.EndsWith(".js")) return "Node";

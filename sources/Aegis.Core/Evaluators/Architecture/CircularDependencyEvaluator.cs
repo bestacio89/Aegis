@@ -21,7 +21,7 @@ public sealed class CircularDependencyEvaluator : BaseArchitectureEvaluator, ISc
 {
     public override string Name => "CircularDependencyEvaluator";
 
-    public override string[] SupportedLanguages => ["CSharp", "TypeScript", "JavaScript", "Java"];
+    public override string[] SupportedLanguages => ["C#", "TypeScript", "JavaScript", "Java"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring Boot", "Angular", "React", "Node"];
 
     private readonly CircularDependencyPolicy _policy;
@@ -55,7 +55,7 @@ public sealed class CircularDependencyEvaluator : BaseArchitectureEvaluator, ISc
         // 🧩 Determine file extensions based on language context
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "TypeScript" => new[] { ".ts" },
             "JavaScript" => new[] { ".js" },
             "Java" => new[] { ".java" },

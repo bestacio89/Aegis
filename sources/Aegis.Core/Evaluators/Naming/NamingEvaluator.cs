@@ -19,7 +19,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
     private readonly NamingPolicy _policy;
 
     public override string Name => "Naming Convention Evaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Python", "TypeScript", "Java"];
+    public override string[] SupportedLanguages => ["C#", "Python", "TypeScript", "Java"];
     public override string[] SupportedFrameworks => ["DotNet", "Node", "Spring"];
 
     public NamingEvaluator(ILogger<NamingEvaluator> logger, IOptions<AegisArchitecturePolicy> options)

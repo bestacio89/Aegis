@@ -23,7 +23,7 @@ public sealed class MaintainabilityEvaluator : BaseArchitectureEvaluator, IScope
 
     public override string Name => "MaintainabilityEvaluator";
 
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring Boot", "FastAPI"];
 
     public MaintainabilityEvaluator(
@@ -45,7 +45,7 @@ public sealed class MaintainabilityEvaluator : BaseArchitectureEvaluator, IScope
         // Filter by language
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "Java" => new[] { ".java" },
             "Python" => new[] { ".py" },
             _ => new[] { ".cs", ".java", ".py" }

@@ -23,7 +23,7 @@ public sealed class UnusedReferenceEvaluator : BaseArchitectureEvaluator, IScope
     private readonly DependencyPolicy _policy;
 
     public override string Name => "Unused Reference Evaluator";
-    public override string[] SupportedLanguages => ["CSharp", "TypeScript", "Python"];
+    public override string[] SupportedLanguages => ["C#", "TypeScript", "Python"];
     public override string[] SupportedFrameworks => ["DotNet", "Node", "Python"];
 
     public UnusedReferenceEvaluator(ILogger<UnusedReferenceEvaluator> logger, IOptions<AegisArchitecturePolicy> options)

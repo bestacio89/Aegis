@@ -22,7 +22,7 @@ public sealed class DependencyGraphEvaluator : BaseArchitectureEvaluator, IScope
 
     public override string Name => "DependencyGraphEvaluator";
 
-    public override string[] SupportedLanguages => ["CSharp", "Java", "TypeScript", "JavaScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "TypeScript", "JavaScript"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring Boot", "Angular", "React", "Node"];
 
     public DependencyGraphEvaluator(
@@ -46,7 +46,7 @@ public sealed class DependencyGraphEvaluator : BaseArchitectureEvaluator, IScope
         // 🔍 Filter relevant extensions
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "Java" => new[] { ".java" },
             "TypeScript" => new[] { ".ts" },
             "JavaScript" => new[] { ".js" },

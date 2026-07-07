@@ -21,7 +21,7 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
     private readonly ConfigurationPolicy _policy;
 
     public override string Name => "ConfigurationEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python", "JavaScript", "TypeScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python", "JavaScript", "TypeScript"];
     public override string[] SupportedFrameworks => ["Docker", "Kubernetes", "CI/CD", "Infra"];
 
     private static readonly Regex EnvLineRx = new(@"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=", RegexOptions.Multiline);

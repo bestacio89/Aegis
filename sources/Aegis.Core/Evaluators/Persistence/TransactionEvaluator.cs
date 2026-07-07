@@ -19,7 +19,7 @@ public sealed class TransactionEvaluator : BaseArchitectureEvaluator
     private readonly TransactionPolicy _policy;
 
     public override string Name => "TransactionEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python", "TypeScript", "JavaScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python", "TypeScript", "JavaScript"];
     public override string[] SupportedFrameworks => ["EFCore", "Spring", "SQLAlchemy", "Mongoose", "Sequelize"];
 
     private static readonly Regex CommitRx = new(@"\b(commit|CommitTransaction|save|session\.commit|connection\.commit)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -163,7 +163,7 @@ public sealed class TransactionEvaluator : BaseArchitectureEvaluator
 
     private static string DetectLanguage(string path)
     {
-        if (path.EndsWith(".cs")) return "CSharp";
+        if (path.EndsWith(".cs")) return "C#";
         if (path.EndsWith(".java")) return "Java";
         if (path.EndsWith(".py")) return "Python";
         if (path.EndsWith(".ts") || path.EndsWith(".js")) return "Node";

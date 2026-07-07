@@ -19,7 +19,7 @@ public sealed class ObserverPatternEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "ObserverPatternEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python", "TypeScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python", "TypeScript"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "RxJS", "FastAPI"];
 
     private static readonly Regex ObserverClassRx = new(@"class\s+(\w+Observer)\b", RegexOptions.Compiled);
@@ -47,7 +47,7 @@ public sealed class ObserverPatternEvaluator : BaseArchitectureEvaluator
 
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "Java" => new[] { ".java" },
             "Python" => new[] { ".py" },
             "TypeScript" => new[] { ".ts" },

@@ -22,7 +22,7 @@ public sealed class CommandPatternEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "CommandPatternEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python", "TypeScript", "JavaScript"];
+    public override string[] SupportedLanguages => ["C#", "Java", "Python", "TypeScript", "JavaScript"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "NestJS", "FastAPI"];
 
     private static readonly Regex CommandClassRx = new(@"class\s+(\w+Command)\b", RegexOptions.Compiled);

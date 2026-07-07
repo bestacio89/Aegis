@@ -21,7 +21,7 @@ public sealed class FactoryPatternEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "FactoryPatternEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "TypeScript", "Python"];
+    public override string[] SupportedLanguages => ["C#", "Java", "TypeScript", "Python"];
     public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "Angular", "Flask", "Generic"];
 
     private static readonly Regex FactoryClassRx = new(@"class\s+(\w+Factory)\b", RegexOptions.Compiled);
@@ -47,7 +47,7 @@ public sealed class FactoryPatternEvaluator : BaseArchitectureEvaluator
 
         var extensions = Context?.Language switch
         {
-            "CSharp" => new[] { ".cs" },
+            "C#" => new[] { ".cs" },
             "Java" => new[] { ".java" },
             "TypeScript" => new[] { ".ts" },
             "Python" => new[] { ".py" },

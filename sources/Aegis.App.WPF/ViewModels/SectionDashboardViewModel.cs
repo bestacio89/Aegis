@@ -1,194 +1,231 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+﻿using Aegis.App.Wpf.Models;
+using CommunityToolkit.Mvvm.ComponentModel;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
 using SkiaSharp;
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Text.Json;
 
 namespace Aegis.App.Wpf.ViewModels;
 
-public sealed partial class SectionDashboardViewModel : ObservableObject
+public sealed partial class SectionDashboardViewModel
+    : ObservableObject
 {
+    public SectionDashboardViewModel()
+    {
+        SectionResults =
+            new ObservableCollection<SectionDashboardItem>();
+    }
+
+
     // =========================
     // HEADER
     // =========================
+
     [ObservableProperty]
-    private string title = "🧩 Aegis Policy Sections";
+    private string title =
+        "🧩 Architecture Sections";
+
+
 
     // =========================
-    // DATA GRID
+    // GRID
     // =========================
+
+    public ObservableCollection<SectionDashboardItem>
+        SectionResults
+    { get; }
+
+
+
+    // =========================
+    // KPI
+    // =========================
+
     [ObservableProperty]
-    private ObservableCollection<SectionResult> sectionResults = new();
+    private int totalSections;
+
+
+    [ObservableProperty]
+    private int compliantCount;
+
+
+    [ObservableProperty]
+    private int nonCompliantCount;
+
+
+    [ObservableProperty]
+    private double averageScore;
+
+
 
     // =========================
-    // KPI (MATCH XAML)
+    // CHARTS
     // =========================
-    [ObservableProperty] private int totalSections;
-    [ObservableProperty] private int compliantCount;
-    [ObservableProperty] private int nonCompliantCount;
+
+    [ObservableProperty]
+    private ISeries[] compliancePieSeries = [];
+
+
+    [ObservableProperty]
+    private ISeries[] sectionCategorySeries = [];
+
+
+    [ObservableProperty]
+    private Axis[] categoryAxes = [];
+
+
+    [ObservableProperty]
+    private Axis[] valueAxes = [];
+
+
 
     // =========================
-    // CHARTS (MATCH XAML)
+    // UPDATE
     // =========================
-    [ObservableProperty] private ISeries[] compliancePieSeries = [];
-    [ObservableProperty] private ISeries[] sectionCategorySeries = [];
 
-    [ObservableProperty] private Axis[] categoryAxes = [];
-    [ObservableProperty] private Axis[] valueAxes = [];
-
-    public SectionDashboardViewModel()
+    public void Update(
+        IReadOnlyCollection<SectionDashboardItem> sections)
     {
-        LoadPolicySections();
+        SectionResults.Clear();
+
+
+        foreach (var section in sections)
+            SectionResults.Add(section);
+
+
+
+        TotalSections =
+            SectionResults.Count;
+
+
+
+        CompliantCount =
+            SectionResults.Count(x =>
+                x.Status == "Compliant");
+
+
+
+        NonCompliantCount =
+            SectionResults.Count(x =>
+                x.Status != "Compliant");
+
+
+
+        averageScore =
+            SectionResults.Count == 0
+                ? 0
+                : SectionResults.Average(x => x.Score);
+
+
+
+        BuildComplianceChart();
+
+        BuildCategoryChart();
     }
 
+
+
     // =========================
-    // LOAD
+    // PIE
     // =========================
-    private void LoadPolicySections()
+
+    private void BuildComplianceChart()
     {
-        try
-        {
-            var policyPath = Path.Combine(AppContext.BaseDirectory, "config", "aegis.policy.json");
-
-            if (!File.Exists(policyPath))
+        CompliancePieSeries =
+        [
+            new PieSeries<int>
             {
-                BuildEmpty("Policy file not found");
-                return;
-            }
+                Values =
+                [
+                    CompliantCount
+                ],
 
-            var json = File.ReadAllText(policyPath);
-            using var doc = JsonDocument.Parse(json);
+                Name = "Compliant",
 
-            if (!doc.RootElement.TryGetProperty("AegisPolicy", out var root))
+                Fill =
+                    new SolidColorPaint(
+                        SKColors.LightGreen)
+            },
+
+
+            new PieSeries<int>
             {
-                BuildEmpty("Invalid policy structure");
-                return;
+                Values =
+                [
+                    NonCompliantCount
+                ],
+
+                Name = "Non-Compliant",
+
+                Fill =
+                    new SolidColorPaint(
+                        SKColors.IndianRed)
             }
-
-            var sections = new List<SectionResult>();
-
-            int compliant = 0;
-            int nonCompliant = 0;
-
-            var names = new List<string>();
-            var counts = new List<int>();
-
-            foreach (var prop in root.EnumerateObject())
-            {
-                var name = prop.Name;
-                var ruleCount = prop.Value.EnumerateObject().Count();
-
-                names.Add(name);
-                counts.Add(ruleCount);
-
-                var score = ruleCount > 5 ? 0.4 : 0.9;
-                var status = score >= 0.7 ? "Compliant" : "Non-Compliant";
-
-                if (status == "Compliant") compliant++;
-                else nonCompliant++;
-
-                sections.Add(new SectionResult(
-                    SectionId: name.GetHashCode(),
-                    SectionName: name,
-                    ComplianceStatus: status,
-                    Category: "Policy",
-                    Score: score,
-                    Remarks: $"{ruleCount} rules"
-                ));
-            }
-
-            sectionResults = new ObservableCollection<SectionResult>(sections);
-
-            totalSections = sections.Count;
-            compliantCount = compliant;
-            nonCompliantCount = nonCompliant;
-
-            BuildBarChart(names, counts);
-            BuildPieChart(compliant, nonCompliant);
-        }
-        catch
-        {
-            BuildEmpty("Failed to load policy data");
-        }
+        ];
     }
 
-    // =========================
-    // PIE CHART
-    // =========================
-    private void BuildPieChart(int compliant, int nonCompliant)
-    {
-        compliancePieSeries = new ISeries[]
-        {
-            new PieSeries<int> { Values = new[] { compliant }, Name = "Compliant", Fill = new SolidColorPaint(SKColors.LightGreen) },
-            new PieSeries<int> { Values = new[] { nonCompliant }, Name = "Non-Compliant", Fill = new SolidColorPaint(SKColors.IndianRed) }
-        };
-    }
+
 
     // =========================
-    // BAR CHART
+    // BAR
     // =========================
-    private void BuildBarChart(List<string> names, List<int> counts)
+
+    private void BuildCategoryChart()
     {
-        sectionCategorySeries = new ISeries[]
-        {
+        var grouped =
+            SectionResults
+                .GroupBy(x => x.Category)
+                .Select(x => new
+                {
+                    Category = x.Key,
+                    Count = x.Count()
+                })
+                .OrderByDescending(x => x.Count)
+                .ToList();
+
+
+
+        SectionCategorySeries =
+        [
             new ColumnSeries<int>
             {
-                Values = counts,
-                Name = "Rules",
-                Fill = new SolidColorPaint(new SKColor(0, 191, 255))
-            }
-        };
+                Values =
+                    grouped
+                        .Select(x => x.Count)
+                        .ToArray(),
 
-        categoryAxes = new[]
-        {
+                Name = "Sections",
+
+                Fill =
+                    new SolidColorPaint(
+                        SKColors.DeepSkyBlue)
+            }
+        ];
+
+
+
+        CategoryAxes =
+        [
             new Axis
             {
-                Labels = names,
+                Labels =
+                    grouped
+                        .Select(x => x.Category.ToString())
+                        .ToArray(),
+
                 LabelsRotation = 15
             }
-        };
+        ];
 
-        valueAxes = new[]
-        {
+
+
+        ValueAxes =
+        [
             new Axis
             {
-                Name = "Rule Count"
+                Name = "Count"
             }
-        };
-    }
-
-    // =========================
-    // EMPTY STATE
-    // =========================
-    private void BuildEmpty(string message)
-    {
-        Title = message;
-
-        sectionResults.Clear();
-
-        totalSections = 0;
-        compliantCount = 0;
-        nonCompliantCount = 0;
-
-        compliancePieSeries = [];
-        sectionCategorySeries = [];
-
-        categoryAxes = [];
-        valueAxes = [];
+        ];
     }
 }
-
-// =========================
-// MODEL (must exist somewhere shared)
-// =========================
-public sealed record SectionResult(
-    int SectionId,
-    string SectionName,
-    string ComplianceStatus,
-    string Category,
-    double Score,
-    string Remarks
-);

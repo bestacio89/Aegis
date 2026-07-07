@@ -1,6 +1,4 @@
-﻿using Aegis.App.Wpf.Services.Abstractions;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
@@ -12,31 +10,26 @@ namespace Aegis.App.Wpf.ViewModels;
 
 public sealed partial class LayerDashboardViewModel : ObservableObject
 {
-    private readonly ILayerAnalysisService _service;
     private readonly ILogger<LayerDashboardViewModel> _logger;
 
     public LayerDashboardViewModel(
-        ILayerAnalysisService service,
         ILogger<LayerDashboardViewModel> logger)
     {
-        _service = service;
         _logger = logger;
 
-        LoadDataCommand = new AsyncRelayCommand(LoadAsync);
-
-        _ = LoadAsync();
+        Layers = new ObservableCollection<LayerStat>();
+        Series = new ObservableCollection<ISeries>();
     }
 
-    // =========================
-    // COMMANDS
-    // =========================
-    public IAsyncRelayCommand LoadDataCommand { get; }
-
-    // =========================
+    // ============================================================
     // STATE
-    // =========================
+    // ============================================================
+
     [ObservableProperty]
-    private ObservableCollection<ISeries> series = new();
+    private ObservableCollection<LayerStat> layers;
+
+    [ObservableProperty]
+    private ObservableCollection<ISeries> series;
 
     [ObservableProperty]
     private Axis[] xAxes = [];
@@ -44,59 +37,122 @@ public sealed partial class LayerDashboardViewModel : ObservableObject
     [ObservableProperty]
     private Axis[] yAxes = [];
 
-    [ObservableProperty]
-    private ObservableCollection<LayerStat> layers = new();
+    // ============================================================
+    // KPI
+    // ============================================================
 
-    // =========================
-    // LOAD
-    // =========================
-    private async Task LoadAsync()
+    [ObservableProperty]
+    private int totalLayers;
+
+    [ObservableProperty]
+    private int totalViolations;
+
+    [ObservableProperty]
+    private string dominantLayer = "-";
+
+    [ObservableProperty]
+    private double averageViolationsPerLayer;
+
+    // ============================================================
+    // PUBLIC UPDATE
+    // ============================================================
+
+    public void Update(
+        IReadOnlyCollection<LayerStat> layerStats)
     {
         try
         {
-            _logger.LogInformation("Loading layer dashboard...");
+            Layers.Clear();
 
-            var data = await _service.GetLayerStatsAsync(default);
+            foreach (var layer in layerStats.OrderByDescending(x => x.Count))
+                Layers.Add(layer);
 
-            Layers = new ObservableCollection<LayerStat>(data);
+            totalLayers = Layers.Count;
 
-            BuildChart(data);
+            totalViolations = Layers.Sum(x => x.Count);
+
+            dominantLayer =
+                Layers
+                    .OrderByDescending(x => x.Count)
+                    .FirstOrDefault()?.Layer
+                ?? "-";
+
+            averageViolationsPerLayer =
+                totalLayers == 0
+                    ? 0
+                    : (double)totalViolations / totalLayers;
+
+            BuildChart(Layers);
+
+            _logger.LogInformation(
+                "Layer dashboard updated ({Count} layers).",
+                totalLayers);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Layer dashboard failed");
+            _logger.LogError(
+                ex,
+                "Failed to update layer dashboard.");
         }
     }
 
-    // =========================
-    // CHART ONLY (UI responsibility)
-    // =========================
-    private void BuildChart(IReadOnlyList<LayerStat> data)
+    // ============================================================
+    // CHART
+    // ============================================================
+
+    private void BuildChart(
+        IEnumerable<LayerStat> data)
     {
-        Series = new ObservableCollection<ISeries>
+        var ordered =
+            data.OrderByDescending(x => x.Count)
+                .ToList();
+
+        if (ordered.Count == 0)
         {
+            Series.Clear();
+
+            XAxes = [];
+
+            YAxes = [];
+
+            return;
+        }
+
+        Series.Clear();
+
+        Series.Add(
             new ColumnSeries<int>
             {
                 Name = "Violations",
-                Values = data.Select(x => x.Count).ToArray(),
-                Fill = new SolidColorPaint(new SKColor(0, 191, 255))
-            }
-        };
+                Values = ordered
+                    .Select(x => x.Count)
+                    .ToArray(),
 
-        XAxes = new[]
-        {
+                Fill = new SolidColorPaint(SKColors.DeepSkyBlue)
+            });
+
+        XAxes =
+        [
             new Axis
             {
-                Labels = data.Select(x => x.Layer).ToArray()
-            }
-        };
+                Labels = ordered
+                    .Select(x => x.Layer)
+                    .ToArray(),
 
-        YAxes = new[]
-        {
+                LabelsRotation = 15
+            }
+        ];
+
+        YAxes =
+        [
             new Axis
             {
                 Name = "Violations"
             }
-        };
+        ];
     }
 }
+
+public sealed record LayerStat(
+    string Layer,
+    int Count);

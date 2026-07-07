@@ -1,9 +1,6 @@
-﻿using Aegis.Infrastructure.Data;
-using Aegis.Infrastructure.Persistence;
+﻿using Aegis.App.Wpf.models;
 using Aegis.Shared.Architecture.Enums;
-using Aegis.Shared.Architecture.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
@@ -15,160 +12,257 @@ namespace Aegis.App.Wpf.ViewModels;
 
 public sealed partial class RuleDashboardViewModel : ObservableObject
 {
-    private readonly IRuleResultRepository _ruleRepo;
-    private readonly IReportRepository _reportRepo;
     private readonly ILogger<RuleDashboardViewModel> _logger;
- 
+
+
     public RuleDashboardViewModel(
-        IRuleResultRepository ruleRepo,
-        IReportRepository reportRepo,
         ILogger<RuleDashboardViewModel> logger)
     {
-        _ruleRepo = ruleRepo;
-        _reportRepo = reportRepo;
         _logger = logger;
 
-        RuleResults = new ObservableCollection<RuleResultEntity>();
-
-        LoadCommand = new AsyncRelayCommand(LoadAsync);
+        RuleResults =
+            new ObservableCollection<RuleDashboardItem>();
     }
 
-    // =========================
-    // COMMANDS
-    // =========================
-    public IAsyncRelayCommand LoadCommand { get; }
 
     // =========================
-    // DATA GRID
+    // GRID
     // =========================
-    public ObservableCollection<RuleResultEntity> RuleResults { get; }
+
+    public ObservableCollection<RuleDashboardItem> RuleResults { get; }
+
+
 
     // =========================
     // KPI
     // =========================
-    [ObservableProperty] private int totalViolations;
-    [ObservableProperty] private int criticalCount;
-    [ObservableProperty] private int blockerCount;
+
+    [ObservableProperty]
+    private int totalViolations;
+
+
+    [ObservableProperty]
+    private int criticalCount;
+
+
+    [ObservableProperty]
+    private int blockerCount;
+
+
+    [ObservableProperty]
+    private int highCount;
+
+
+
+    [ObservableProperty]
+    private string mostAffectedCategory = "-";
+
+
 
     // =========================
-    // CHARTS (MATCH XAML)
+    // CHARTS
     // =========================
-    [ObservableProperty] private ISeries[] severitySeries = [];
+
+    [ObservableProperty]
+    private ISeries[] severitySeries = [];
+
+
     [ObservableProperty]
     private ISeries[] categorySeries = [];
 
 
-    [ObservableProperty] private Axis[] categoryAxes = [];
-    [ObservableProperty] private Axis[] valueAxes = [];
+    [ObservableProperty]
+    private Axis[] categoryAxes = [];
+
+
+    [ObservableProperty]
+    private Axis[] valueAxes = [];
+
+
 
     // =========================
-    // LOAD
+    // UPDATE FROM ANALYSIS
     // =========================
-    private async Task LoadAsync()
+
+    public void Update(
+        IReadOnlyCollection<RuleDashboardItem> rules)
     {
         try
         {
-            _logger.LogInformation("Loading rule dashboard...");
-
-            var reports = await _reportRepo.GetAllReportsAsync(default);
-            var last = reports.OrderByDescending(r => r.ScanDate).FirstOrDefault();
-
-            if (last is null)
-                return;
-
-            var violations = await _ruleRepo.GetViolationsByReportIdAsync(last.Id, default);
-
             RuleResults.Clear();
 
-            foreach (var v in violations)
-                RuleResults.Add(v);
 
-            TotalViolations = RuleResults.Count;
-            CriticalCount = RuleResults.Count(v => v.Severity == ArchitectureRuleSeverity.Critical);
-            BlockerCount = RuleResults.Count(v => v.Severity == ArchitectureRuleSeverity.Blocker);
+            foreach (var rule in rules)
+                RuleResults.Add(rule);
+
+
+
+            TotalViolations =
+                RuleResults.Count;
+
+
+            CriticalCount =
+                RuleResults.Count(x =>
+                    x.Severity ==
+                    ArchitectureRuleSeverity.Critical);
+
+
+
+            BlockerCount =
+                RuleResults.Count(x =>
+                    x.Severity ==
+                    ArchitectureRuleSeverity.Blocker);
+
+
+
+            HighCount =
+                RuleResults.Count(x =>
+                    x.Severity ==
+                    ArchitectureRuleSeverity.High);
+
+
+
+            MostAffectedCategory =
+                RuleResults
+                    .GroupBy(x => x.Category.ToString())
+                    .OrderByDescending(x => x.Count())
+                    .FirstOrDefault()
+                    ?.Key
+                    ?? "-";
+
+
 
             BuildSeverityChart();
+
             BuildCategoryChart();
+
+
+            _logger.LogInformation(
+                "Rule dashboard updated. {Count} rules.",
+                TotalViolations);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Rule dashboard load failed");
+            _logger.LogError(
+                ex,
+                "Rule dashboard update failed.");
         }
     }
 
-    // =========================
-    // PIE
-    // =========================
+
+
     private void BuildSeverityChart()
     {
-        var grouped = RuleResults
-            .GroupBy(v => v.Severity)
-            .Select(g => new { Severity = g.Key, Count = g.Count() })
-            .ToList();
+        var grouped =
+            RuleResults
+                .GroupBy(x => x.Severity)
+                .Select(x => new
+                {
+                    Severity = x.Key,
+                    Count = x.Count()
+                })
+                .ToList();
 
-        SeveritySeries = grouped.Select(g =>
-        {
-            var color = g.Severity switch
-            {
-                ArchitectureRuleSeverity.Blocker => SKColors.DarkRed,
-                ArchitectureRuleSeverity.Critical => SKColors.IndianRed,
-                ArchitectureRuleSeverity.High => SKColors.Orange,
-                ArchitectureRuleSeverity.Medium => SKColors.Gold,
-                ArchitectureRuleSeverity.Info => SKColors.SkyBlue,
-                _ => SKColors.Gray
-            };
 
-            return new PieSeries<int>
+
+        SeveritySeries =
+            grouped.Select(x =>
             {
-                Values = new[] { g.Count },
-                Name = g.Severity.ToString(),
-                Fill = new SolidColorPaint(color)
-            };
-        }).ToArray();
+                var color = x.Severity switch
+                {
+                    ArchitectureRuleSeverity.Blocker
+                        => SKColors.DarkRed,
+
+                    ArchitectureRuleSeverity.Critical
+                        => SKColors.IndianRed,
+
+                    ArchitectureRuleSeverity.High
+                        => SKColors.Orange,
+
+                    ArchitectureRuleSeverity.Medium
+                        => SKColors.Gold,
+
+                    ArchitectureRuleSeverity.Info
+                        => SKColors.SkyBlue,
+
+                    _ => SKColors.Gray
+                };
+
+
+                return new PieSeries<int>
+                {
+                    Values =
+                    [
+                        x.Count
+                    ],
+
+                    Name =
+                        x.Severity.ToString(),
+
+                    Fill =
+                        new SolidColorPaint(color)
+                };
+
+            }).ToArray();
     }
 
-    // =========================
-    // BAR
-    // =========================
+
+
     private void BuildCategoryChart()
     {
-        var grouped = RuleResults
-            .GroupBy(v => v.Category)
-            .Select(g => new
-            {
-                Category = g.Key ?? "Unknown",
-                Count = g.Count()
-            })
-            .ToList();
+        var grouped =
+            RuleResults
+                .GroupBy(x => x.Category)
+                .Select(x => new
+                {
+                    Category = x.Key,
+                    Count = x.Count()
+                })
+                .OrderByDescending(x => x.Count)
+                .ToList();
 
-        CategorySeries = new ISeries[]
-        {
+
+
+        CategorySeries =
+        [
             new ColumnSeries<int>
             {
-                Values = grouped.Select(x => x.Count).ToArray(),
-                Name = "Violations",
-                Fill = new SolidColorPaint(SKColors.DeepSkyBlue)
-            }
-        };
+                Values =
+                    grouped
+                        .Select(x => x.Count)
+                        .ToArray(),
 
-        CategoryAxes = new[]
-        {
+                Name = "Violations",
+
+                Fill =
+                    new SolidColorPaint(
+                        SKColors.DeepSkyBlue)
+            }
+        ];
+
+
+
+        CategoryAxes =
+        [
             new Axis
             {
-                Labels = grouped.Select(x => x.Category).ToArray(),
+                Labels =
+                    grouped
+                        .Select(x => x.Category.ToString())
+                        .ToArray(),
+
                 LabelsRotation = 15
             }
-        };
+        ];
 
-        ValueAxes = new[]
-        {
+
+
+        ValueAxes =
+        [
             new Axis
             {
                 Name = "Count"
             }
-        };
+        ];
     }
 }
-
-// helper model unchanged
-public sealed record LayerStat(string Layer, int Count);

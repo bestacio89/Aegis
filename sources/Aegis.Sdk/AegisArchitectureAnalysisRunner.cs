@@ -155,7 +155,11 @@ public sealed class AegisArchitectureAnalysisRunner
                 "❌ Aegis session failed for {Path}",
                 projectPath);
 
-            return null;
+            return new AegisAnalysisSessionResult
+            {
+                Success = false,
+                
+            };
         }
     }
 

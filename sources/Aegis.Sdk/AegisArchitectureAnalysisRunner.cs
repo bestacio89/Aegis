@@ -62,7 +62,6 @@ public sealed class AegisArchitectureAnalysisRunner
     public async Task<AegisAnalysisSessionResult> RunSessionAsync(
         string projectPath,
         string? policyPath = null,
-        bool exportJson = false,
         CancellationToken token = default)
     {
         try
@@ -116,22 +115,14 @@ public sealed class AegisArchitectureAnalysisRunner
 
 
 
+            // The only automatic output: a full JSON snapshot persisted to the
+            // database as part of finalizing the report row. No files are
+            // written to disk here anymore — that only happens on demand, via
+            // ExportReportAsync, once the user picks a format/name/location.
             await _customReportRepo.FinalizeReportAsync(
                 reportEntity.Id,
                 report,
                 token);
-
-
-
-            if (exportJson)
-            {
-                await ExportReportAsync(
-                    "json",
-                    report,
-                    context,
-                    policy.ReportDetailLevel,
-                    token);
-            }
 
 
 
@@ -221,12 +212,18 @@ public sealed class AegisArchitectureAnalysisRunner
 
 
 
-    private async Task ExportReportAsync(
-        string format,
+    /// <summary>
+    /// On-demand report export. Call this only when the user actually asks for
+    /// a file — e.g. from the WPF Export button, after they've picked a format,
+    /// file name, and location. Nothing calls this automatically anymore.
+    /// </summary>
+    public async Task ExportReportAsync(
         AegisArchitectureReport report,
         ProjectArchitectureContext context,
-        ArchitectureReportDetailLevel detailLevel,
-        CancellationToken token)
+        string format,
+        string outputPath,
+        ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
+        CancellationToken token = default)
     {
         if (!_exporters.TryGetValue(format, out var exporter))
         {
@@ -234,33 +231,25 @@ public sealed class AegisArchitectureAnalysisRunner
                 "⚠️ Exporter {Format} not registered.",
                 format);
 
-            return;
+            throw new InvalidOperationException($"No report exporter registered for format '{format}'.");
         }
-
-
-
-        var output =
-            Path.Combine(
-                report.ProjectPath ??
-                Directory.GetCurrentDirectory(),
-                $"AegisReport.{DateTime.UtcNow:yyyyMMdd_HHmmss}.{format}");
-
-
 
         await exporter.ExportAsync(
             report,
             context,
-            output,
+            outputPath,
             detailLevel,
             token);
-
-
 
         _logger.LogInformation(
             "📄 {Format} report exported → {Path}",
             format,
-            output);
+            outputPath);
     }
+
+    /// <summary>Formats currently available for on-demand export (for populating a UI picker).</summary>
+    public IReadOnlyCollection<string> AvailableExportFormats =>
+    _exporters.Keys.ToArray();
 
 
 

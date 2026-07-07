@@ -4,7 +4,6 @@ using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Contracts;
-using France.Common.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace Aegis.Architecture.RuleEngines;
@@ -12,7 +11,6 @@ namespace Aegis.Architecture.RuleEngines;
 public sealed class RuleEngine
 {
     private readonly IEnumerable<IEvaluator> _evaluators;
-    private readonly IEnumerable<IReportExporter> _exporters;
     private readonly RuleEngineCore _core;
     private readonly RuleWeightingEngine _weighting;
     private readonly CrossEvaluatorAggregator _aggregator;
@@ -22,14 +20,12 @@ public sealed class RuleEngine
 
     public RuleEngine(
         IEnumerable<IEvaluator> evaluators,
-        IEnumerable<IReportExporter> exporters,
         RuleEngineCore core,
         RuleWeightingEngine weighting,
         CrossEvaluatorAggregator aggregator,
         ILogger<RuleEngine> logger)
     {
         _evaluators = evaluators;
-        _exporters = exporters;
         _core = core;
         _weighting = weighting;
         _aggregator = aggregator;
@@ -137,6 +133,8 @@ public sealed class RuleEngine
         _logger.LogInformation("🚀 Starting Aegis scan for {Project} [{Lang}/{Framework}]",
             report.ProjectName, context.Language, context.Framework);
 
+        _logger.LogWarning("🔎 DIAGNOSTIC: {Count} evaluator(s) resolved from DI.", _evaluators.Count());
+
         var allFacts = new List<ArchitectureEvaluatorResult>();
 
         // 1️⃣ Run only enabled evaluators
@@ -166,31 +164,17 @@ public sealed class RuleEngine
         foreach (var _ in _weighting.ApplyWeights(ruleResults)) { }
 
         // 4️⃣ Aggregate and compute metrics
-        report.Results.AddRange(ruleResults);
-        report.Facts.AddRange(allFacts);
+        foreach (var result in ruleResults)
+            report.Results.Add(result);
+
+        foreach (var fact in allFacts)
+            report.Facts.Add(fact);
+
         report.TotalFilesScanned = context.FileCount;
         report.ComputeCompliance();
 
         _logger.LogInformation("✅ Evaluation completed — {Count} rule violations detected.", ruleResults.Count);
 
-        // 5️⃣ Export all report formats
-        foreach (var exporter in _exporters)
-        {
-            try
-            {
-                var outputPath = Path.Combine(projectPath, $"AegisReport.{exporter.Format}");
-                await exporter.ExportAsync(report, context, outputPath, ArchitectureReportDetailLevel.SummaryOnly, token);
-                _logger.LogInformation("📝 {Format} report exported → {Path}", exporter.Format.ToUpper(), outputPath);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "❌ Report exporter {Format} failed.", exporter.Format);
-            }
-        }
-
         return report;
     }
-
-    public IReportExporter? GetExporter(string format) =>
-        _exporters.FirstOrDefault(e => e.Format.Equals(format, StringComparison.OrdinalIgnoreCase));
 }

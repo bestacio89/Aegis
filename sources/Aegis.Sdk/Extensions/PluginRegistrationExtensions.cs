@@ -43,8 +43,9 @@ public static class PluginRegistrationExtensions
             .AddAegisReportExporter<PdfReportExporter>()
             .AddAegisReportExporter<HtmlReportExporter>()
             .AddAegisReportExporter<MarkdownReportExporter>()
-            .AddAegisReportExporter<ForensicPdfExporter>()
-            .AddAegisReportExporter<JsonReportExporter>();
+            .AddAegisReportExporter<ForensicPdfExporter>();
+     
+
             
 
         return services;

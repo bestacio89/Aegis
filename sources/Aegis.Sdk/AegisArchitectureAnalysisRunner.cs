@@ -184,77 +184,49 @@ public sealed class AegisArchitectureAnalysisRunner
             })
             .ToList();
 
-        await _customRuleResultRepo.AddBatchAsync(
-            entities,
-            token);
+        await _customRuleResultRepo.AddBatchAsync(entities, token);
     }
 
-
-
-    private async Task CompareWithPreviousAsync(
-        ReportEntity currentReport,
-        CancellationToken token)
+    private async Task CompareWithPreviousAsync(ReportEntity currentReport, CancellationToken token)
     {
         try
         {
-            var previous =
-                await _customReportRepo.GetLatestAsync(token);
+            var previous = await _customReportRepo.GetLatestAsync(token);
 
-
-            if (previous == null ||
-               previous.Id == currentReport.Id)
+            if (previous == null || previous.Id == currentReport.Id)
             {
-                _logger.LogInformation(
-                    "📂 No previous report to compare with.");
-
+                _logger.LogInformation("📂 No previous report to compare with.");
                 return;
             }
 
+            var previousResults = await _customRuleResultRepo.GetPreviousReportAsync(
+                currentReport.ProjectName, currentReport.DateCreated, token);
 
+            var currentResults = await _customRuleResultRepo.GetViolationsByReportIdAsync(
+                currentReport.Id, token);
 
-            var previousResults =
-                await _customRuleResultRepo
-                    .GetViolationsByReportIdAsync(
-                        previous.Id,
-                        token);
+            // Update tuple definition to match the string type of RuleId
+            var previousViolationKeys = new HashSet<(string RuleId, string Project)>(
+                previousResults.Select(r => (r.RuleId, r.Project))
+            );
 
-
-
-            var currentResults =
-                await _customRuleResultRepo
-                    .GetViolationsByReportIdAsync(
-                        currentReport.Id,
-                        token);
-
-
-
-            var newViolations =
-                currentResults
-                .Where(current =>
-                    !previousResults.Any(previous =>
-                        previous.RuleId == current.RuleId &&
-                        previous.Project == current.Project))
+            // Update lookup to use the correct tuple types
+            var newViolations = currentResults
+                .Where(current => !previousViolationKeys.Contains((current.RuleId, current.Project)))
                 .ToList();
-
-
 
             if (newViolations.Count > 0)
             {
-                _logger.LogWarning(
-                    "⚠️ {Count} new violations detected.",
-                    newViolations.Count);
+                _logger.LogWarning("⚠️ {Count} new violations detected.", newViolations.Count);
             }
             else
             {
-                _logger.LogInformation(
-                    "✅ No new violations introduced.");
+                _logger.LogInformation("✅ No new violations introduced.");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(
-                ex,
-                "❌ Failed report comparison.");
+            _logger.LogError(ex, "❌ Failed report comparison.");
         }
     }
 }

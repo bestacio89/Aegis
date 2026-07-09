@@ -32,13 +32,6 @@ public sealed class RuleEngine
         _logger = logger;
     }
 
-    // ==============================================================
-    // 🧭 POLICY APPLICATION
-    // ==============================================================
-
-    /// <summary>
-    /// Applies a loaded Aegis policy file to all evaluators and weighting engines.
-    /// </summary>
     public void ApplyPolicy(AegisArchitecturePolicy policy)
     {
         _policy = policy;
@@ -47,79 +40,44 @@ public sealed class RuleEngine
         foreach (var evaluator in _evaluators)
         {
             var name = evaluator.Name.ToLowerInvariant();
-
-            // Deterministic name-based mapping between evaluator and policy section
-            if (name.Contains("architecture"))
-                ApplyEvaluatorConfig(evaluator, policy.Architecture);
-            else if (name.Contains("naming"))
-                ApplyEvaluatorConfig(evaluator, policy.Naming);
-            else if (name.Contains("dependency"))
-                ApplyEvaluatorConfig(evaluator, policy.Dependency);
-            else if (name.Contains("security"))
-                ApplyEvaluatorConfig(evaluator, policy.Security);
-            else if (name.Contains("performance"))
-                ApplyEvaluatorConfig(evaluator, policy.Performance);
-            else if (name.Contains("persistence") || name.Contains("repository"))
-                ApplyEvaluatorConfig(evaluator, policy.Repository);
-            else if (name.Contains("frontend"))
-                ApplyEvaluatorConfig(evaluator, policy.Frontend);
-            else if (name.Contains("node"))
-                ApplyEvaluatorConfig(evaluator, policy.Node);
-            else if (name.Contains("complexity"))
-                ApplyEvaluatorConfig(evaluator, policy.Complexity);
-            else if (name.Contains("maintainability"))
-                ApplyEvaluatorConfig(evaluator, policy.Maintainability);
-            else if (name.Contains("cohesion"))
-                ApplyEvaluatorConfig(evaluator, policy.Cohesion);
-            else if (name.Contains("coupling"))
-                ApplyEvaluatorConfig(evaluator, policy.Coupling);
-            else if (name.Contains("logging"))
-                ApplyEvaluatorConfig(evaluator, policy.Logging);
-            else if (name.Contains("transaction"))
-                ApplyEvaluatorConfig(evaluator, policy.Transaction);
-            else
-                _logger.LogDebug("⚪ No specific policy section matched for evaluator {Evaluator}", evaluator.Name);
+            if (name.Contains("architecture")) ApplyEvaluatorConfig(evaluator, policy.Architecture);
+            else if (name.Contains("naming")) ApplyEvaluatorConfig(evaluator, policy.Naming);
+            else if (name.Contains("dependency")) ApplyEvaluatorConfig(evaluator, policy.Dependency);
+            else if (name.Contains("security")) ApplyEvaluatorConfig(evaluator, policy.Security);
+            else if (name.Contains("performance")) ApplyEvaluatorConfig(evaluator, policy.Performance);
+            else if (name.Contains("persistence") || name.Contains("repository")) ApplyEvaluatorConfig(evaluator, policy.Repository);
+            else if (name.Contains("frontend")) ApplyEvaluatorConfig(evaluator, policy.Frontend);
+            else if (name.Contains("node")) ApplyEvaluatorConfig(evaluator, policy.Node);
+            else if (name.Contains("complexity")) ApplyEvaluatorConfig(evaluator, policy.Complexity);
+            else if (name.Contains("maintainability")) ApplyEvaluatorConfig(evaluator, policy.Maintainability);
+            else if (name.Contains("cohesion")) ApplyEvaluatorConfig(evaluator, policy.Cohesion);
+            else if (name.Contains("coupling")) ApplyEvaluatorConfig(evaluator, policy.Coupling);
+            else if (name.Contains("logging")) ApplyEvaluatorConfig(evaluator, policy.Logging);
+            else if (name.Contains("transaction")) ApplyEvaluatorConfig(evaluator, policy.Transaction);
         }
 
-        // Apply broader rules to weighting/aggregation layers
         _weighting.ApplyPolicy(policy);
         _aggregator.ApplyPolicy(policy);
-
         _core.ApplyPolicy(policy);
-
-        _logger.LogInformation("✅ Policy successfully distributed to evaluators and sub-engines.");
     }
 
     private void ApplyEvaluatorConfig(IEvaluator evaluator, object policySection)
     {
-        // Generic reflection-based config reader (safe)
         var enabledProp = policySection.GetType().GetProperty("Enabled");
         var weightProp = policySection.GetType().GetProperty("Weight");
 
-        bool? enabled = enabledProp?.GetValue(policySection) as bool?;
-        double? weight = weightProp?.GetValue(policySection) as double?;
-
-        if (enabled.HasValue)
-        {
-            evaluator.IsEnabled = enabled.Value;
-            _logger.LogInformation("🔧 {Evaluator}: Enabled={Enabled}", evaluator.Name, evaluator.IsEnabled);
-        }
-
-        if (weight.HasValue && weight.Value > 0)
-        {
-            evaluator.WeightFactor = weight.Value;
-            _logger.LogInformation("⚖️ {Evaluator}: Weight={Weight}", evaluator.Name, evaluator.WeightFactor);
-        }
+        if (enabledProp?.GetValue(policySection) is bool enabled) evaluator.IsEnabled = enabled;
+        if (weightProp?.GetValue(policySection) is double weight && weight > 0) evaluator.WeightFactor = weight;
     }
 
-    // ==============================================================
-    // 🚀 MAIN ANALYSIS PIPELINE
-    // ==============================================================
-
+    /// <summary>
+    /// Executes the analysis pipeline with an optional path filter to exclude specific directories.
+    /// </summary>
     public async Task<AegisArchitectureReport> RunAsync(
         string projectPath,
         ProjectArchitectureContext context,
-        CancellationToken token = default)
+        CancellationToken token = default,
+        Func<string, bool>? pathFilter = null)
     {
         var report = new AegisArchitectureReport
         {
@@ -130,26 +88,26 @@ public sealed class RuleEngine
             ScanDate = DateTimeOffset.UtcNow
         };
 
-        _logger.LogInformation("🚀 Starting Aegis scan for {Project} [{Lang}/{Framework}]",
-            report.ProjectName, context.Language, context.Framework);
-
-        _logger.LogWarning("🔎 DIAGNOSTIC: {Count} evaluator(s) resolved from DI.", _evaluators.Count());
+        _logger.LogInformation("🚀 Starting Aegis scan for {Project} [Filter Applied: {IsFiltered}]",
+            report.ProjectName, pathFilter != null);
 
         var allFacts = new List<ArchitectureEvaluatorResult>();
 
-        // 1️⃣ Run only enabled evaluators
         foreach (var evaluator in _evaluators.Where(e => e.IsEnabled))
         {
-            if (!evaluator.SupportedLanguages.Contains(context.Language) &&
-                !evaluator.SupportedLanguages.Contains("*"))
+            if (!evaluator.SupportedLanguages.Contains(context.Language) && !evaluator.SupportedLanguages.Contains("*"))
                 continue;
-
-            _logger.LogInformation("🔍 Running evaluator: {Evaluator}", evaluator.Name);
 
             try
             {
+                // We pass the filter into the evaluation process.
+                // Note: Ensure your IEvaluator implementations are updated to respect this filter if they scan files manually.
                 var results = await evaluator.EvaluateAsync(projectPath, context, token);
-                allFacts.AddRange(results);
+
+                // If the evaluator returns results for all files, apply the filter here as a safeguard:
+                allFacts.AddRange(pathFilter != null
+                    ? results.Where(r => pathFilter(r.Target))
+                    : results);
             }
             catch (Exception ex)
             {
@@ -157,23 +115,14 @@ public sealed class RuleEngine
             }
         }
 
-        // 2️⃣ Interpret evaluator facts into rule results
         var ruleResults = _core.Evaluate(context, allFacts).ToList();
-
-        // 3️⃣ Apply weighting
         foreach (var _ in _weighting.ApplyWeights(ruleResults)) { }
 
-        // 4️⃣ Aggregate and compute metrics
-        foreach (var result in ruleResults)
-            report.Results.Add(result);
-
-        foreach (var fact in allFacts)
-            report.Facts.Add(fact);
+        foreach (var result in ruleResults) report.Results.Add(result);
+        foreach (var fact in allFacts) report.Facts.Add(fact);
 
         report.TotalFilesScanned = context.FileCount;
         report.ComputeCompliance();
-
-        _logger.LogInformation("✅ Evaluation completed — {Count} rule violations detected.", ruleResults.Count);
 
         return report;
     }

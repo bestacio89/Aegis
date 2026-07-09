@@ -32,7 +32,6 @@ public sealed class AegisArchitectureAnalysisRunner
 
     private readonly ILogger<AegisArchitectureAnalysisRunner> _logger;
 
-
     public AegisArchitectureAnalysisRunner(
         RuleEngine engine,
         IEntityRepository<RuleResultEntity, int> ruleResultRepo,
@@ -57,8 +56,6 @@ public sealed class AegisArchitectureAnalysisRunner
         _logger = logger;
     }
 
-
-
     public async Task<AegisAnalysisSessionResult> RunSessionAsync(
         string projectPath,
         string? policyPath = null,
@@ -66,22 +63,13 @@ public sealed class AegisArchitectureAnalysisRunner
     {
         try
         {
-            var policy = await LoadPolicyAsync(
-                policyPath,
-                token);
-
+            var policy = await LoadPolicyAsync(policyPath, token);
 
             _engine.ApplyPolicy(policy);
 
+            _logger.LogInformation("🔍 Detecting project context for {Path}", projectPath);
 
-            _logger.LogInformation(
-                "🔍 Detecting project context for {Path}",
-                projectPath);
-
-
-            var context =
-                ProjectArchitectureContextDetector.Detect(projectPath);
-
+            var context = ProjectArchitectureContextDetector.Detect(projectPath);
 
             _logger.LogInformation(
                 "🧭 Context detected: {Language}/{Framework} → {Domain}/{Layer}",
@@ -90,54 +78,26 @@ public sealed class AegisArchitectureAnalysisRunner
                 context.DomainType,
                 context.Layer);
 
+            var reportEntity = await _customReportRepo.CreateSessionAsync(projectPath, context, token);
 
+            // Analysis run with path exclusion filter for 'client' directories
+            var report = await _engine.RunAsync(
+                projectPath,
+                context,
+                token,
+                path => !path.Contains(@"\client", StringComparison.OrdinalIgnoreCase)
+                     && !path.Contains("/client", StringComparison.OrdinalIgnoreCase));
 
-            var reportEntity =
-                await _customReportRepo.CreateSessionAsync(
-                    projectPath,
-                    context,
-                    token);
+            await PersistRuleResultsAsync(reportEntity.Id, report, token);
 
+            await _customReportRepo.FinalizeReportAsync(reportEntity.Id, report, token);
 
-
-            var report =
-                await _engine.RunAsync(
-                    projectPath,
-                    context,
-                    token);
-
-
-
-            await PersistRuleResultsAsync(
-                reportEntity.Id,
-                report,
-                token);
-
-
-
-            // The only automatic output: a full JSON snapshot persisted to the
-            // database as part of finalizing the report row. No files are
-            // written to disk here anymore — that only happens on demand, via
-            // ExportReportAsync, once the user picks a format/name/location.
-            await _customReportRepo.FinalizeReportAsync(
-                reportEntity.Id,
-                report,
-                token);
-
-
-
-            await CompareWithPreviousAsync(
-                reportEntity,
-                token);
-
-
+            await CompareWithPreviousAsync(reportEntity, token);
 
             _logger.LogInformation(
                 "✅ Audit session {Id} complete for {Project}",
                 reportEntity.Id,
                 report.ProjectName);
-
-
 
             return new AegisAnalysisSessionResult
             {
@@ -150,58 +110,27 @@ public sealed class AegisArchitectureAnalysisRunner
         }
         catch (Exception ex)
         {
-            _logger.LogError(
-                ex,
-                "❌ Aegis session failed for {Path}",
-                projectPath);
-
-            return new AegisAnalysisSessionResult
-            {
-                Success = false,
-                
-            };
+            _logger.LogError(ex, "❌ Aegis session failed for {Path}", projectPath);
+            return new AegisAnalysisSessionResult { Success = false };
         }
     }
 
-
-
-    private async Task<AegisArchitecturePolicy> LoadPolicyAsync(
-        string? policyPath,
-        CancellationToken token)
+    private async Task<AegisArchitecturePolicy> LoadPolicyAsync(string? policyPath, CancellationToken token)
     {
-        if (string.IsNullOrWhiteSpace(policyPath) ||
-           !File.Exists(policyPath))
+        if (string.IsNullOrWhiteSpace(policyPath) || !File.Exists(policyPath))
         {
-            policyPath =
-                Path.Combine(
-                    AppContext.BaseDirectory,
-                    "config",
-                    "aegis.policy.json");
+            policyPath = Path.Combine(AppContext.BaseDirectory, "config", "aegis.policy.json");
         }
 
-
-        _logger.LogInformation(
-            "📜 Loading Aegis policy from {Path}",
-            policyPath);
-
-
+        _logger.LogInformation("📜 Loading Aegis policy from {Path}", policyPath);
 
         if (!File.Exists(policyPath))
         {
-            _logger.LogWarning(
-                "⚠️ Policy file missing. Using defaults.");
-
+            _logger.LogWarning("⚠️ Policy file missing. Using defaults.");
             return new AegisArchitecturePolicy();
         }
 
-
-
-        var json =
-            await File.ReadAllTextAsync(
-                policyPath,
-                token);
-
-
+        var json = await File.ReadAllTextAsync(policyPath, token);
 
         return JsonSerializer.Deserialize<AegisArchitecturePolicy>(
             json,
@@ -210,17 +139,9 @@ public sealed class AegisArchitectureAnalysisRunner
                 PropertyNameCaseInsensitive = true,
                 ReadCommentHandling = JsonCommentHandling.Skip,
                 AllowTrailingCommas = true
-            })
-            ?? new AegisArchitecturePolicy();
+            }) ?? new AegisArchitecturePolicy();
     }
 
-
-
-    /// <summary>
-    /// On-demand report export. Call this only when the user actually asks for
-    /// a file — e.g. from the WPF Export button, after they've picked a format,
-    /// file name, and location. Nothing calls this automatically anymore.
-    /// </summary>
     public async Task ExportReportAsync(
         AegisArchitectureReport report,
         ProjectArchitectureContext context,
@@ -231,36 +152,18 @@ public sealed class AegisArchitectureAnalysisRunner
     {
         if (!_exporters.TryGetValue(format, out var exporter))
         {
-            _logger.LogWarning(
-                "⚠️ Exporter {Format} not registered.",
-                format);
-
+            _logger.LogWarning("⚠️ Exporter {Format} not registered.", format);
             throw new InvalidOperationException($"No report exporter registered for format '{format}'.");
         }
 
-        await exporter.ExportAsync(
-            report,
-            context,
-            outputPath,
-            detailLevel,
-            token);
+        await exporter.ExportAsync(report, context, outputPath, detailLevel, token);
 
-        _logger.LogInformation(
-            "📄 {Format} report exported → {Path}",
-            format,
-            outputPath);
+        _logger.LogInformation("📄 {Format} report exported → {Path}", format, outputPath);
     }
 
-    /// <summary>Formats currently available for on-demand export (for populating a UI picker).</summary>
-    public IReadOnlyCollection<string> AvailableExportFormats =>
-    _exporters.Keys.ToArray();
+    public IReadOnlyCollection<string> AvailableExportFormats => _exporters.Keys.ToArray();
 
-
-
-    private async Task PersistRuleResultsAsync(
-    int reportId,
-    AegisArchitectureReport report,
-    CancellationToken token)
+    private async Task PersistRuleResultsAsync(int reportId, AegisArchitectureReport report, CancellationToken token)
     {
         var entities = report.Results
             .Select(result => new RuleResultEntity

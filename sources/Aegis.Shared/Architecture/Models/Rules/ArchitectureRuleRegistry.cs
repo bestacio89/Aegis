@@ -45,11 +45,12 @@ public static class ArchitectureRuleRegistry
         list.AddRangeSafe(DependencyRuleset.Get());
         list.AddRangeSafe(NamingRuleset.Get());
 
-        // Optional rule sets (loaded only if present)
-        TryAddRuleset(list, "Aegis.Shared.Rules.Sets.BackEnd.BackendRuleset");
-        TryAddRuleset(list, "Aegis.Shared.Rules.Sets.FrontEnd.FrontendRuleset");
-        TryAddRuleset(list, "Aegis.Shared.Rules.Sets.Persistence.PersistenceRuleset");
-        TryAddRuleset(list, "Aegis.Shared.Rules.Sets.Performance.PerformanceRuleset");
+        // Domain-specific rule sets
+        list.AddRangeSafe(BackendRuleset.Get());
+        list.AddRangeSafe(FrontendRuleset.Get());
+        list.AddRangeSafe(PersistenceRuleset.Get());
+        list.AddRangeSafe(PerformanceRuleset.Get());
+        list.AddRangeSafe(InfrastructureRuleset.Get());
 
         return list.AsReadOnly();
     }

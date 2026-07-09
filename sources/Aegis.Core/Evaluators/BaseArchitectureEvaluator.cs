@@ -166,9 +166,11 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             return new ArchitectureRuleresult
             {
                 RuleId = ruleId,
-                Message = $"{e.Source}: {e.Target} ({string.Join(", ", e.Metrics.Select(m => $"{m.Key}={m.Value:0.##}"))})",
+                Message =
+                 $"{e.Source}: {Path.GetFileName(e.Target)} ({string.Join(", ", e.Metrics.Select(m => $"{m.Key}={m.Value:0.##}"))})",
                 Category = category,
-                Severity = ArchitectureRuleSeverity.Info
+                Severity = ArchitectureRuleSeverity.Info,
+                Target = e.Target
             };
         });
 }

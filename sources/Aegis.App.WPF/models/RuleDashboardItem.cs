@@ -5,6 +5,7 @@ namespace Aegis.App.Wpf.models;
 public sealed record RuleDashboardItem(
     string RuleName,
     ArchitectureRuleCategory Category,
-    ArchitectureRuleSeverity Severity,
+    ArchitectureRuleSeverity Severity,    
+    string Target,
     string Message,
     double Impact);

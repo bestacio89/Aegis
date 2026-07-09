@@ -3,6 +3,7 @@ using Aegis.App.Wpf.Models;
 using Aegis.App.Wpf.Services.Abstractions;
 using Aegis.App.Wpf.ViewModels;
 using Aegis.Shared.Architecture.Models;
+using System.IO;
 
 namespace Aegis.App.Wpf.Services;
 
@@ -51,6 +52,7 @@ public static class DashboardSnapshotBuilder
                     x.RuleName,
                     x.Category,
                     x.Severity,
+                    Path.GetFileName(x.Target),
                     x.Message,
                     x.WeightedImpact))
             .ToList();

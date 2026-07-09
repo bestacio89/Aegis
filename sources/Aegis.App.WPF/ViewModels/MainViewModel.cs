@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -233,22 +234,22 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void ExecuteSelectRepository()
     {
+        // Common developer paths for quick access
+        string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string defaultRepos = Path.Combine(userProfile, "Source", "Repos");
+
         var dialog = new OpenFolderDialog
         {
             Title = "Select Architecture Repository Root",
-
-            InitialDirectory =
-                AppDomain.CurrentDomain.BaseDirectory
+            // Setting to a sensible default or null to let the OS decide (usually Documents/Home)
+            InitialDirectory = Directory.Exists(defaultRepos) ? defaultRepos : userProfile
         };
-
 
         if (dialog.ShowDialog() == true)
         {
             RepositoryPath = dialog.FolderName;
 
-
-            Logs.Add(
-                $"[INFO] Target repository shifted to: {RepositoryPath}");
+            Logs.Add($"[INFO] Target repository shifted to: {RepositoryPath}");
         }
     }
 
@@ -390,6 +391,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                         x.RuleName,
                         x.Category,
                         x.Severity,
+                        x.FilePath,
                         x.Message,
                         x.WeightedImpact))
                 .ToList());

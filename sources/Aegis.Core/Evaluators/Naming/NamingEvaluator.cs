@@ -47,6 +47,9 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                 f.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) ||
                 f.EndsWith(".java", StringComparison.OrdinalIgnoreCase))
             .Where(f => !IsExcludedDir(f))
+            // Explicitly skipping 'client' directories to prevent over-analysis
+            .Where(f => !f.Contains(@"\client\", StringComparison.OrdinalIgnoreCase)
+                     && !f.Contains("/client/", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         foreach (var file in codeFiles)

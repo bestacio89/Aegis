@@ -4,7 +4,6 @@ using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
 using Aegis.Shared.Diagnostics;
-
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -34,15 +33,11 @@ public sealed class MaintainabilityEvaluator : BaseArchitectureEvaluator, IScope
         _policy = options.Value.Maintainability ?? new MaintainabilityPolicy();
     }
 
-    /// <summary>
-    /// Scans all source files to compute maintainability metrics and produces EvaluatorResults.
-    /// </summary>
     protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
         string projectPath, CancellationToken token)
     {
         var results = new List<ArchitectureEvaluatorResult>();
 
-        // Filter by language
         var extensions = Context?.Language switch
         {
             "C#" => new[] { ".cs" },
@@ -51,32 +46,39 @@ public sealed class MaintainabilityEvaluator : BaseArchitectureEvaluator, IScope
             _ => new[] { ".cs", ".java", ".py" }
         };
 
+        // Whitelist-based enumeration: Only include files under 'back' or 'front'
         var files = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-            .Where(f => extensions.Any(ext => f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
-            .Where(f => !IsExcludedDir(f))
+            .Where(f =>
+            {
+                var relativePath = Path.GetRelativePath(projectPath, f);
+                // Whitelist: Must start with 'back' or 'front'
+                bool isTargetDomain = relativePath.StartsWith("back", StringComparison.OrdinalIgnoreCase) ||
+                                     relativePath.StartsWith("front", StringComparison.OrdinalIgnoreCase);
+
+                // Must have correct extension AND not be an excluded system directory
+                return isTargetDomain &&
+                       extensions.Any(ext => f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)) &&
+                       !IsExcludedDir(f);
+            })
             .ToList();
 
         if (files.Count == 0)
         {
             AegisDiagnostics.Report(Name, DiagnosticLevel.Info,
-                $"No {Context?.Language ?? "source"} files found for maintainability evaluation.");
+                $"No source files found in 'back' or 'front' domains for maintainability evaluation.");
             return results;
         }
 
         AegisDiagnostics.Report(Name, DiagnosticLevel.Trace,
             $"🧮 Running maintainability analysis on {files.Count} file(s) ({Context?.Language}/{Context?.Framework}).");
 
-        // Track project-level aggregates
         double totalMaintainability = 0;
         double totalComplexity = 0;
         double totalCommentDensity = 0;
 
         foreach (var file in files)
         {
-            _logger.LogInformation(
-                   "🚀 {Evaluator} started for {Path}",
-                        Name,
-                        projectPath);
+            _logger.LogInformation("🚀 {Evaluator} started for {Path}", Name, Path.GetFileName(file));
             token.ThrowIfCancellationRequested();
 
             var content = await File.ReadAllTextAsync(file, token).ConfigureAwait(false);
@@ -84,7 +86,6 @@ public sealed class MaintainabilityEvaluator : BaseArchitectureEvaluator, IScope
             int commentCount = CountComments(content);
             int complexity = CountComplexity(content);
 
-            // Compute maintainability index (simplified heuristic)
             double maintainabilityIndex = Math.Max(0, 100 - complexity * _policy.ComplexityWeight - lineCount / _policy.LineWeight);
             double commentDensity = lineCount > 0 ? (double)commentCount / lineCount * 100 : 0;
 
@@ -92,7 +93,6 @@ public sealed class MaintainabilityEvaluator : BaseArchitectureEvaluator, IScope
             totalComplexity += complexity;
             totalCommentDensity += commentDensity;
 
-            // Emit one result per file
             results.Add(new ArchitectureEvaluatorResult(Name, file)
             {
                 Category = "Maintainability",
@@ -101,52 +101,34 @@ public sealed class MaintainabilityEvaluator : BaseArchitectureEvaluator, IScope
                     ["MaintainabilityIndex"] = maintainabilityIndex,
                     ["Complexity"] = complexity,
                     ["LineCount"] = lineCount,
-                    ["CommentDensity"] = commentDensity,
-                    ["MinMaintainabilityThreshold"] = _policy.MinMaintainabilityIndex,
-                    ["MinCommentDensityThreshold"] = _policy.MinCommentDensity
+                    ["CommentDensity"] = commentDensity
                 },
                 Metadata = new Dictionary<string, string>
                 {
                     ["Language"] = Context?.Language ?? "Unknown",
-                    ["Framework"] = Context?.Framework ?? "Unknown",
-                    ["RequireCommentDensityCheck"] = _policy.RequireCommentDensityCheck.ToString(),
-                    ["ComplexityWeight"] = _policy.ComplexityWeight.ToString(),
-                    ["LineWeight"] = _policy.LineWeight.ToString()
+                    ["FilePath"] = file
                 }
             });
         }
 
-        // 📊 Global summary metrics
-        int fileCount = results.Count;
-        if (fileCount > 0)
+        if (results.Count > 0)
         {
             results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
             {
                 Category = "MaintainabilitySummary",
                 Metrics = new Dictionary<string, double>
                 {
-                    ["FileCount"] = fileCount,
-                    ["AverageMaintainability"] = totalMaintainability / fileCount,
-                    ["AverageComplexity"] = totalComplexity / fileCount,
-                    ["AverageCommentDensity"] = totalCommentDensity / fileCount
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Language"] = Context?.Language ?? "Unknown",
-                    ["Framework"] = Context?.Framework ?? "Unknown"
+                    ["FileCount"] = results.Count,
+                    ["AverageMaintainability"] = totalMaintainability / results.Count,
+                    ["AverageComplexity"] = totalComplexity / results.Count,
+                    ["AverageCommentDensity"] = totalCommentDensity / results.Count
                 }
             });
         }
 
-        AegisDiagnostics.Report(Name, DiagnosticLevel.Info,
-            $"✅ Maintainability analysis complete — {results.Count} metric entries collected.");
-
         return results;
     }
 
-    // -------------------------------------------------
-    // Helpers
-    // -------------------------------------------------
     private static int CountComplexity(string content)
     {
         var keywords = new[] { "if", "for", "while", "switch", "case", "catch", "&&", "||" };

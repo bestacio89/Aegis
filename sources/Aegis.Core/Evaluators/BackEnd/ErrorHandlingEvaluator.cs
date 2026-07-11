@@ -1,5 +1,4 @@
 ﻿using Aegis.Architecture.Diagnostics;
-using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
@@ -12,147 +11,367 @@ using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.BackEnd;
 
-/// <summary>
-/// Scans code for exception-handling patterns to measure robustness.
-/// Collects metrics on empty, generic, or unlogged catch blocks
-/// according to <see cref="ErrorHandlingPolicy"/> thresholds.
-/// </summary>
-public sealed class ErrorHandlingEvaluator : BaseArchitectureEvaluator, IScopedDependency
+
+public sealed class ErrorHandlingEvaluator
+    : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly ErrorHandlingPolicy _policy;
 
-    public override string Name => "ErrorHandlingEvaluator";
 
-    public override string[] SupportedLanguages => ["C#", "Java", "Python"];
-    public override string[] SupportedFrameworks => ["ASP.NET", "Spring Boot", "FastAPI"];
+
+    public override string Name =>
+        "ErrorHandlingEvaluator";
+
+
+
+    public override string[] SupportedLanguages =>
+    [
+        "C#",
+        "Java",
+        "Python"
+    ];
+
+
+
+    public override string[] SupportedFrameworks =>
+    [
+        "ASP.NET",
+        "Spring Boot",
+        "FastAPI"
+    ];
+
+
+
+    private static readonly Regex CatchRegex =
+        new(
+            @"catch\s*(?:\(\s*(?<type>[A-Za-z0-9_.]+)(?:\s+\w+)?\s*\))?\s*\{(?<body>.*?)\}",
+            RegexOptions.Singleline |
+            RegexOptions.Compiled);
+
+
 
     public ErrorHandlingEvaluator(
         ILogger<ErrorHandlingEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.ErrorHandling ?? new ErrorHandlingPolicy();
+        _policy =
+            options.Value.ErrorHandling
+            ?? new ErrorHandlingPolicy();
     }
 
-    /// <summary>
-    /// Core analysis logic — scans each source file and produces EvaluatorResults with exception metrics.
-    /// </summary>
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath, CancellationToken token)
+
+
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
+        var results =
+            new List<ArchitectureEvaluatorResult>();
 
-        // 🎯 Filter files by language
-        var extensions = Context?.Language switch
-        {
-            "C#" => new[] { ".cs" },
-            "Java" => new[] { ".java" },
-            "Python" => new[] { ".py" },
-            _ => new[] { ".cs", ".java", ".py" }
-        };
 
-        var files = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-            .Where(f => extensions.Any(ext => f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
+
+        if (Context is null)
+            return results;
+
+
+
+        var extensions =
+            Context.Language switch
+            {
+                "C#" =>
+                [".cs"],
+
+                "Java" =>
+                [".java"],
+
+                "Python" =>
+                [".py"],
+
+                _ =>
+                    Array.Empty<string>()
+            };
+
+
+
+        var files =
+            ResolveSourceFiles(
+                projectPath,
+                extensions);
+
+
 
         if (files.Count == 0)
         {
-            AegisDiagnostics.Report(Name, DiagnosticLevel.Info,
-                $"No {Context?.Language ?? "source"} files found for error-handling evaluation.");
+            AegisDiagnostics.Report(
+                Name,
+                DiagnosticLevel.Trace,
+                "No source files found for error handling analysis.");
+
             return results;
         }
 
-        AegisDiagnostics.Report(Name, DiagnosticLevel.Trace,
-            $"⚙️ Evaluating exception-handling robustness across {files.Count} {Context?.Language} files.");
+
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
-            var content = await File.ReadAllTextAsync(file, token).ConfigureAwait(false);
 
-            int emptyCatchCount = 0;
-            int genericCatchCount = 0;
-            int swallowedCount = 0;
-            int totalCatchCount = 0;
+            var content =
+                await File.ReadAllTextAsync(
+                    file,
+                    token);
 
-            // --- Empty catches ---
-            var emptyMatches = Regex.Matches(content, @"catch\s*\([^)]+\)\s*\{\s*\}", RegexOptions.Multiline);
-            emptyCatchCount = emptyMatches.Count;
 
-            // --- Generic catches ---
-            var genericMatches = Regex.Matches(content, @"catch\s*\(\s*Exception\s*\w*\)", RegexOptions.Multiline);
-            genericCatchCount = genericMatches.Count;
 
-            // --- Swallowed exceptions (no logging / rethrow) ---
-            var swallowMatches = Regex.Matches(content, @"catch\s*\([^)]+\)\s*\{([^}]*)\}", RegexOptions.Singleline);
-            foreach (Match m in swallowMatches)
-            {
-                var body = m.Groups[1].Value;
-                bool hasLoggingOrRethrow =
-                    body.Contains("throw", StringComparison.OrdinalIgnoreCase) ||
-                    body.Contains("log", StringComparison.OrdinalIgnoreCase) ||
-                    body.Contains("Console.Write", StringComparison.OrdinalIgnoreCase) ||
-                    body.Contains("print(", StringComparison.OrdinalIgnoreCase);
+            var metrics =
+                AnalyzeCatchBlocks(
+                    content);
 
-                if (!hasLoggingOrRethrow)
-                    swallowedCount++;
-            }
 
-            totalCatchCount = swallowMatches.Count;
 
-            // 🧩 Emit metrics for this file
-            results.Add(new ArchitectureEvaluatorResult(Name, file)
-            {
-                Category = "ErrorHandling",
-                Metrics = new Dictionary<string, double>
+            if (metrics.TotalCatchBlocks == 0)
+                continue;
+
+
+
+            var layer =
+                ResolveLayer(file);
+
+
+
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    file)
                 {
-                    ["EmptyCatchCount"] = emptyCatchCount,
-                    ["GenericCatchCount"] = genericCatchCount,
-                    ["SwallowedCatchCount"] = swallowedCount,
-                    ["TotalCatchCount"] = totalCatchCount
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Language"] = Context?.Language ?? "Unknown",
-                    ["Framework"] = Context?.Framework ?? "Unknown",
-                    ["AllowEmptyCatch"] = _policy.AllowEmptyCatch.ToString(),
-                    ["AllowGenericCatch"] = _policy.AllowGenericCatch.ToString(),
-                    ["RequireLoggingOrRethrow"] = _policy.RequireLoggingOrRethrow.ToString()
-                }
-            });
+                    ProjectName =
+                        Context.ProjectName,
+
+                    Language =
+                        Context.Language,
+
+                    Framework =
+                        Context.Framework,
+
+                    Layer =
+                        layer,
+
+                    DetectionConfidence =
+                        Context.Confidence,
+
+
+                    Category =
+                        "ErrorHandling",
+
+
+                    Metrics =
+                    {
+                        ["TotalCatchBlocks"] =
+                            metrics.TotalCatchBlocks,
+
+                        ["EmptyCatchBlocks"] =
+                            metrics.EmptyCatchBlocks,
+
+                        ["GenericCatchBlocks"] =
+                            metrics.GenericCatchBlocks,
+
+                        ["SwallowedExceptions"] =
+                            metrics.SwallowedExceptions
+                    },
+
+
+                    Metadata =
+                    {
+                        ["Language"] =
+                            Context.Language,
+
+                        ["Framework"] =
+                            Context.Framework
+                            ?? "Unknown",
+
+                        ["Layer"] =
+                            layer
+                            ?? "Unknown"
+                    }
+                });
         }
 
-        // 🧮 Add a global summary for the project
-        if (results.Count > 0)
-        {
-            var totalEmpty = results.Sum(r => r.Metrics.GetValueOrDefault("EmptyCatchCount"));
-            var totalGeneric = results.Sum(r => r.Metrics.GetValueOrDefault("GenericCatchCount"));
-            var totalSwallowed = results.Sum(r => r.Metrics.GetValueOrDefault("SwallowedCatchCount"));
-            var totalFiles = results.Count;
 
-            results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
-            {
-                Category = "ErrorHandlingSummary",
-                Metrics = new Dictionary<string, double>
-                {
-                    ["TotalFilesScanned"] = totalFiles,
-                    ["TotalEmptyCatches"] = totalEmpty,
-                    ["TotalGenericCatches"] = totalGeneric,
-                    ["TotalSwallowedCatches"] = totalSwallowed
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Language"] = Context?.Language ?? "Unknown",
-                    ["Framework"] = Context?.Framework ?? "Unknown"
-                }
-            });
-        }
 
-        AegisDiagnostics.Report(Name, DiagnosticLevel.Info,
-            $"✅ Error-handling analysis complete — {results.Count} metric entries collected.");
+        AddSummary(
+            results,
+            projectPath);
+
+
+
+        AegisDiagnostics.Report(
+            Name,
+            DiagnosticLevel.Info,
+            $"Error handling analysis completed with {results.Count} results.");
+
+
 
         return results;
+    }
+
+
+
+    private static (
+        int TotalCatchBlocks,
+        int EmptyCatchBlocks,
+        int GenericCatchBlocks,
+        int SwallowedExceptions)
+        AnalyzeCatchBlocks(
+            string content)
+    {
+        int total = 0;
+        int empty = 0;
+        int generic = 0;
+        int swallowed = 0;
+
+
+
+        foreach (Match match in CatchRegex.Matches(content))
+        {
+            total++;
+
+
+            var exceptionType =
+                match.Groups["type"]
+                    .Value;
+
+
+            var body =
+                match.Groups["body"]
+                    .Value;
+
+
+
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                empty++;
+            }
+
+
+
+            if (exceptionType.Equals(
+                    "Exception",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                generic++;
+            }
+
+
+
+            if (!ContainsHandling(body))
+            {
+                swallowed++;
+            }
+        }
+
+
+
+        return
+        (
+            total,
+            empty,
+            generic,
+            swallowed
+        );
+    }
+
+
+
+    private static bool ContainsHandling(
+        string body)
+    {
+        return
+            body.Contains(
+                "throw",
+                StringComparison.OrdinalIgnoreCase)
+
+            ||
+
+            body.Contains(
+                "log",
+                StringComparison.OrdinalIgnoreCase)
+
+            ||
+
+            body.Contains(
+                "logger",
+                StringComparison.OrdinalIgnoreCase)
+
+            ||
+
+            body.Contains(
+                "Console.",
+                StringComparison.OrdinalIgnoreCase)
+
+            ||
+
+            body.Contains(
+                "print",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+
+
+    private string? ResolveLayer(
+        string file)
+    {
+        if (Context is null)
+            return null;
+
+
+
+        return Context.Layers
+            .FirstOrDefault(
+                layer =>
+                    layer.Files.Contains(
+                        file,
+                        StringComparer.OrdinalIgnoreCase))
+            ?.Name;
+    }
+
+
+
+    private static void AddSummary(
+        List<ArchitectureEvaluatorResult> results,
+        string projectPath)
+    {
+        var fileResults =
+            results
+                .Where(x =>
+                    x.Category == "ErrorHandling")
+                .ToList();
+
+
+
+        results.Add(
+            new ArchitectureEvaluatorResult(
+                "ErrorHandlingEvaluator",
+                projectPath)
+            {
+                Category =
+                    "ErrorHandlingSummary",
+
+
+                Metrics =
+                {
+                    ["FilesWithCatchBlocks"] =
+                        fileResults.Count,
+
+                    ["TotalCatchBlocks"] =
+                        fileResults.Sum(
+                            x =>
+                                x.Metrics
+                                    .GetValueOrDefault(
+                                        "TotalCatchBlocks"))
+                }
+            });
     }
 }

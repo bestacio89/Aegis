@@ -1,133 +1,74 @@
-﻿using Aegis.App.Wpf.Models;
+﻿using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
 using SkiaSharp;
-using System.Collections.ObjectModel;
+using Aegis.App.Wpf.Models;
 
 namespace Aegis.App.Wpf.ViewModels;
 
-public sealed partial class SectionDashboardViewModel
-    : ObservableObject
+public sealed partial class SectionDashboardViewModel : ObservableObject
 {
     public SectionDashboardViewModel()
     {
-        SectionResults =
-            new ObservableCollection<SectionDashboardItem>();
+        SectionResults = new ObservableCollection<SectionDashboardItem>();
     }
 
-
     // =========================
-    // HEADER
+    // PROPERTIES
     // =========================
 
     [ObservableProperty]
-    private string title =
-        "🧩 Architecture Sections";
+    private string title = "🧩 Architecture Sections";
 
-
-
-    // =========================
-    // GRID
-    // =========================
-
-    public ObservableCollection<SectionDashboardItem>
-        SectionResults
-    { get; }
-
-
-
-    // =========================
-    // KPI
-    // =========================
+    public ObservableCollection<SectionDashboardItem> SectionResults { get; }
 
     [ObservableProperty]
     private int totalSections;
 
-
     [ObservableProperty]
     private int compliantCount;
-
 
     [ObservableProperty]
     private int nonCompliantCount;
 
-
     [ObservableProperty]
     private double averageScore;
-
-
-
-    // =========================
-    // CHARTS
-    // =========================
 
     [ObservableProperty]
     private ISeries[] compliancePieSeries = [];
 
-
     [ObservableProperty]
     private ISeries[] sectionCategorySeries = [];
-
 
     [ObservableProperty]
     private Axis[] categoryAxes = [];
 
-
     [ObservableProperty]
     private Axis[] valueAxes = [];
 
-
-
     // =========================
-    // UPDATE
+    // UPDATE LOGIC
     // =========================
 
-    public void Update(
-        IReadOnlyCollection<SectionDashboardItem> sections)
+    public void Update(IReadOnlyCollection<SectionDashboardItem> sections)
     {
         SectionResults.Clear();
-
-
         foreach (var section in sections)
             SectionResults.Add(section);
 
-
-
-        TotalSections =
-            SectionResults.Count;
-
-
-
-        CompliantCount =
-            SectionResults.Count(x =>
-                x.Status == "Compliant");
-
-
-
-        NonCompliantCount =
-            SectionResults.Count(x =>
-                x.Status != "Compliant");
-
-
-
-        averageScore =
-            SectionResults.Count == 0
-                ? 0
-                : SectionResults.Average(x => x.Score);
-
-
+        TotalSections = SectionResults.Count;
+        CompliantCount = SectionResults.Count(x => x.Status == "Compliant");
+        NonCompliantCount = SectionResults.Count(x => x.Status != "Compliant");
+        AverageScore = SectionResults.Count == 0 ? 0 : SectionResults.Average(x => x.Score);
 
         BuildComplianceChart();
-
         BuildCategoryChart();
     }
 
-
-
     // =========================
-    // PIE
+    // CHARTS
     // =========================
 
     private void BuildComplianceChart()
@@ -136,95 +77,62 @@ public sealed partial class SectionDashboardViewModel
         [
             new PieSeries<int>
             {
-                Values =
-                [
-                    CompliantCount
-                ],
-
+                Values = [CompliantCount],
                 Name = "Compliant",
-
-                Fill =
-                    new SolidColorPaint(
-                        SKColors.LightGreen)
+                Fill = new SolidColorPaint(SKColors.LightGreen)
             },
-
-
             new PieSeries<int>
             {
-                Values =
-                [
-                    NonCompliantCount
-                ],
-
+                Values = [NonCompliantCount],
                 Name = "Non-Compliant",
-
-                Fill =
-                    new SolidColorPaint(
-                        SKColors.IndianRed)
+                Fill = new SolidColorPaint(SKColors.IndianRed)
             }
         ];
     }
 
-
-
-    // =========================
-    // BAR
-    // =========================
-
     private void BuildCategoryChart()
     {
-        var grouped =
-            SectionResults
-                .GroupBy(x => x.Category)
-                .Select(x => new
-                {
-                    Category = x.Key,
-                    Count = x.Count()
-                })
-                .OrderByDescending(x => x.Count)
-                .ToList();
-
-
+        // Using double for scores to represent percentages accurately
+        var data = SectionResults
+            .GroupBy(x => x.Category)
+            .Select(g => new
+            {
+                Category = g.Key.ToString(),
+                AverageScore = g.Average(item => (double)item.Score)
+            })
+            .OrderBy(x => x.Category)
+            .ToList();
 
         SectionCategorySeries =
         [
-            new ColumnSeries<int>
+            new ColumnSeries<double>
             {
-                Values =
-                    grouped
-                        .Select(x => x.Count)
-                        .ToArray(),
-
-                Name = "Sections",
-
-                Fill =
-                    new SolidColorPaint(
-                        SKColors.DeepSkyBlue)
+                Values = data.Select(x => x.AverageScore).ToArray(),
+                Name = "Average Score (%)",
+                Fill = new SolidColorPaint(SKColors.DeepSkyBlue),
+                Padding = 10
             }
         ];
-
-
 
         CategoryAxes =
         [
             new Axis
             {
-                Labels =
-                    grouped
-                        .Select(x => x.Category.ToString())
-                        .ToArray(),
-
-                LabelsRotation = 15
+                Labels = data.Select(x => x.Category).ToArray(),
+                LabelsRotation = 15,
+                SeparatorsPaint = null
             }
         ];
-
-
 
         ValueAxes =
         [
             new Axis
             {
-                Name = "Count"
+                Name = "Score (%)",
+                MinLimit = 0,
+                MaxLimit = 100,
+                ForceStepToMin = true,
+                MinStep = 1
             }
         ];
     }

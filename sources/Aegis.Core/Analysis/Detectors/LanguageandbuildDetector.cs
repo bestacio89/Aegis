@@ -7,7 +7,7 @@ internal static class LanguageAndBuildDetector
 {
     public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
     {
-        if (files.Any(f => f.EndsWith(".csproj") || f.EndsWith(".sln")))
+        if (files.Any(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx")))
         {
             ctx.Language = "C#";
             ctx.BuildSystem = ArchitectureBuildSystem.DotNet;

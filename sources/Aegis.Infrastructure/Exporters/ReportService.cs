@@ -34,6 +34,7 @@ public sealed class ReportService : IScopedDependency
         ProjectArchitectureContext context,
         string basePath,
         ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
+        ReportLanguage language = ReportLanguage.English,
         CancellationToken token = default)
     {
         try
@@ -55,7 +56,7 @@ public sealed class ReportService : IScopedDependency
 
                     _logger.LogInformation("📤 Exporting using {Exporter} → {File}", exporter.GetType().Name, filePath);
 
-                    await exporter.ExportAsync(report, context, filePath, detailLevel, token);
+                    await exporter.ExportAsync(report, context, filePath, detailLevel, language ,token);
                 }
                 catch (Exception ex)
                 {

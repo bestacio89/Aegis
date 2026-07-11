@@ -9,7 +9,7 @@ public enum ArchitectureRuleCategory
     Performance,
     Security,
     Architecture,
-    Design,
+    DesignPatterns,
     Style,
     Documentation,
     Resilience,

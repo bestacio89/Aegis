@@ -1,163 +1,432 @@
-﻿using System.Text.RegularExpressions;
-using Aegis.Architecture.Evaluators;
+﻿using Aegis.Architecture.Diagnostics;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
+using Aegis.Shared.Diagnostics;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
+using System.Text.RegularExpressions;
+
 namespace Aegis.Architecture.Evaluators.DesignPatterns;
 
+
 /// <summary>
-/// Evaluates Factory pattern compliance:
-/// - Validates abstraction (interface presence)
-/// - Detects excessive direct instantiation
-/// - Flags concrete return types and dependency leaks
-/// Produces quantitative metrics for architecture analysis.
+/// Evaluates Factory Pattern compliance:
+/// - Detects factory abstractions.
+/// - Measures direct instantiation leakage.
+/// - Validates interface-based creation.
+/// - Detects infrastructure coupling.
+/// - Produces deterministic metrics consumed by RuleEngine.
 /// </summary>
 public sealed class FactoryPatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 
-    public override string Name => "FactoryPatternEvaluator";
-    public override string[] SupportedLanguages => ["C#", "Java", "TypeScript", "Python"];
-    public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "Angular", "Flask", "Generic"];
 
-    private static readonly Regex FactoryClassRx = new(@"class\s+(\w+Factory)\b", RegexOptions.Compiled);
-    private static readonly Regex ReturnNewRx = new(@"\breturn\s+new\s+\w+\s*\(", RegexOptions.Compiled);
-    private static readonly Regex NewOperatorRx = new(@"\bnew\s+\w+\s*\(", RegexOptions.Compiled);
-    private static readonly Regex InterfaceRx = new(@"interface\s+I(\w+Factory)\b", RegexOptions.Compiled);
+    public override string Name =>
+        "FactoryPatternEvaluator";
 
-    public FactoryPatternEvaluator(ILogger<FactoryPatternEvaluator> logger, IOptions<AegisArchitecturePolicy> options)
+
+    public override string[] SupportedLanguages =>
+    [
+        "C#",
+        "Java",
+        "TypeScript",
+        "Python"
+    ];
+
+
+    public override string[] SupportedFrameworks =>
+    [
+        "ASP.NET",
+        "Spring",
+        "Angular",
+        "Flask",
+        "Generic"
+    ];
+
+
+
+    private static readonly Regex FactoryClassRegex =
+        new(
+            @"class\s+(\w*Factory)\b",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex InterfaceRegex =
+        new(
+            @"interface\s+(I\w*Factory)\b",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex NewObjectRegex =
+        new(
+            @"\bnew\s+\w+\s*\(",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex ReturnConcreteRegex =
+        new(
+            @"return\s+new\s+\w+\s*\(",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly string[] InfrastructureIndicators =
+    [
+        "HttpClient",
+        "FileStream",
+        "SqlConnection",
+        "DbContext",
+        "Repository"
+    ];
+
+
+
+    public FactoryPatternEvaluator(
+        ILogger<FactoryPatternEvaluator> logger,
+        IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.Architecture.DesignPatterns ?? new();
+        _policy =
+            options.Value.Architecture.DesignPatterns
+            ?? new DesignPatternPolicy();
     }
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(string projectPath, CancellationToken token)
+
+
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
+        string projectPath,
+        CancellationToken token)
     {
         var results = new List<ArchitectureEvaluatorResult>();
 
+
         if (!_policy.EnforceFactoryPattern)
         {
-            _logger.LogInformation("🏭 Factory pattern enforcement disabled by policy.");
+            AegisDiagnostics.Report(
+                Name,
+                DiagnosticLevel.Info,
+                "🏭 Factory pattern evaluation disabled by policy.");
+
             return results;
         }
 
-        var extensions = Context?.Language switch
-        {
-            "C#" => new[] { ".cs" },
-            "Java" => new[] { ".java" },
-            "TypeScript" => new[] { ".ts" },
-            "Python" => new[] { ".py" },
-            _ => new[] { ".cs", ".java", ".ts", ".py" }
-        };
 
-        var files = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-            .Where(f => extensions.Any(ext => f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
+
+        var files =
+            ResolveSourceFiles(
+                projectPath,
+                ".cs",
+                ".java",
+                ".ts",
+                ".py");
+
+
 
         if (files.Count == 0)
         {
-            _logger.LogInformation("🏭 No relevant files found for Factory pattern evaluation.");
             return results;
         }
 
-        _logger.LogTrace("🏭 Scanning {Count} files for Factory pattern compliance...", files.Count);
+
+
+        var contents =
+            new Dictionary<string, string>();
+
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
-            var content = await File.ReadAllTextAsync(file, token);
-            var match = FactoryClassRx.Match(content);
-            if (!match.Success) continue;
 
-            var factoryName = match.Groups[1].Value;
-            var directory = Path.GetDirectoryName(file)!;
 
-            // --- Core detections ---
-            bool hasInterface = Directory.GetFiles(directory, $"I{factoryName}.*", SearchOption.AllDirectories).Any();
-            int instantiations = NewOperatorRx.Matches(content).Count;
-            bool returnsConcrete = ReturnNewRx.IsMatch(content);
-            bool leaksInfrastructure = content.Contains("HttpClient") || content.Contains("FileStream") || content.Contains("SqlConnection");
-            bool validNaming = !_policy.RequirePatternSuffix || factoryName.EndsWith(_policy.FactorySuffix);
-
-            // --- Derived metrics ---
-            double abstractionScore = hasInterface ? 1.0 : 0.0;
-            double instantiationRatio = instantiations / (double)Math.Max(1, _policy.MaxFactoryInstantiations);
-            double leakPenalty = leaksInfrastructure ? 1.0 : 0.0;
-            double namingPenalty = validNaming ? 0.0 : 0.5;
-            double returnPenalty = returnsConcrete ? 0.5 : 0.0;
-
-            // 🧮 Compute compliance score (0–100)
-            double compliance = ComputeCompliance(abstractionScore, instantiationRatio, leakPenalty, namingPenalty, returnPenalty);
-
-            results.Add(new ArchitectureEvaluatorResult(Name, file)
+            try
             {
-                Category = "DesignPattern",
-                Metrics = new Dictionary<string, double>
-                {
-                    ["AbstractionScore"] = abstractionScore,
-                    ["InstantiationCount"] = instantiations,
-                    ["InstantiationRatio"] = instantiationRatio,
-                    ["ReturnsConcrete"] = returnsConcrete ? 1 : 0,
-                    ["InfrastructureLeak"] = leaksInfrastructure ? 1 : 0,
-                    ["NamingPenalty"] = namingPenalty,
-                    ["FactoryComplianceScore"] = compliance
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["FactoryName"] = factoryName,
-                    ["Language"] = Context?.Language ?? "Unknown",
-                    ["Framework"] = Context?.Framework ?? "Unknown",
-                    ["Policy_MaxFactoryInstantiations"] = _policy.MaxFactoryInstantiations.ToString(),
-                    ["Policy_RequireFactoryInterface"] = _policy.RequireFactoryInterface.ToString(),
-                    ["Policy_RequirePatternSuffix"] = _policy.RequirePatternSuffix.ToString()
-                }
-            });
+                contents[file] =
+                    await File.ReadAllTextAsync(
+                        file,
+                        token);
+            }
+            catch
+            {
+                continue;
+            }
         }
 
-        // 📊 Global summary
+
+
+        var interfaces =
+            contents.Values
+                .SelectMany(
+                    content =>
+                        InterfaceRegex
+                            .Matches(content)
+                            .Select(
+                                match =>
+                                    match.Groups[1].Value))
+                .ToHashSet(
+                    StringComparer.OrdinalIgnoreCase);
+
+
+
+        foreach (var entry in contents)
+        {
+            token.ThrowIfCancellationRequested();
+
+
+            foreach (Match factoryMatch in FactoryClassRegex.Matches(entry.Value))
+            {
+                var factoryName =
+                    factoryMatch.Groups[1].Value;
+
+
+
+                var expectedInterface =
+                    $"I{factoryName}";
+
+
+
+                var hasInterface =
+                    interfaces.Contains(
+                        expectedInterface);
+
+
+
+                var instantiationCount =
+                    NewObjectRegex
+                        .Matches(entry.Value)
+                        .Count;
+
+
+
+                var returnsConcrete =
+                    ReturnConcreteRegex
+                        .IsMatch(entry.Value);
+
+
+
+                var infrastructureLeakCount =
+                    InfrastructureIndicators.Count(
+                        indicator =>
+                            entry.Value.Contains(
+                                indicator,
+                                StringComparison.OrdinalIgnoreCase));
+
+
+
+                var namingValid =
+                    !_policy.RequirePatternSuffix ||
+                    factoryName.EndsWith(
+                        _policy.FactorySuffix,
+                        StringComparison.Ordinal);
+
+
+
+                var abstractionScore =
+                    hasInterface
+                        ? 1d
+                        : 0d;
+
+
+
+                var instantiationRatio =
+                    instantiationCount /
+                    (double)Math.Max(
+                        1,
+                        _policy.MaxFactoryInstantiations);
+
+
+
+                var leakRatio =
+                    infrastructureLeakCount > 0
+                        ? 1d
+                        : 0d;
+
+
+
+                var namingPenalty =
+                    namingValid
+                        ? 0d
+                        : 1d;
+
+
+
+                var concretePenalty =
+                    returnsConcrete
+                        ? 1d
+                        : 0d;
+
+
+
+                var compliance =
+                    ComputeCompliance(
+                        abstractionScore,
+                        instantiationRatio,
+                        leakRatio,
+                        namingPenalty,
+                        concretePenalty);
+
+
+
+                results.Add(
+                    new ArchitectureEvaluatorResult(
+                        Name,
+                        entry.Key)
+                    {
+                        Category =
+                            nameof(
+                                ArchitectureRuleCategory.DesignPatterns),
+
+                        Metrics =
+                        {
+                            ["AbstractionScore"] =
+                                abstractionScore,
+
+                            ["InstantiationCount"] =
+                                instantiationCount,
+
+                            ["InstantiationRatio"] =
+                                instantiationRatio,
+
+                            ["InfrastructureLeakCount"] =
+                                infrastructureLeakCount,
+
+                            ["ReturnsConcrete"] =
+                                returnsConcrete
+                                    ? 1
+                                    : 0,
+
+                            ["NamingPenalty"] =
+                                namingPenalty,
+
+                            ["FactoryComplianceScore"] =
+                                compliance
+                        },
+
+                        Metadata =
+                        {
+                            ["FactoryName"] =
+                                factoryName,
+
+                            ["ExpectedInterface"] =
+                                expectedInterface,
+
+                            ["Language"] =
+                                Context?.Language
+                                ?? "Unknown",
+
+                            ["Framework"] =
+                                Context?.Framework
+                                ?? "Unknown"
+                        }
+                    });
+            }
+        }
+
+
+
         if (results.Count > 0)
         {
-            double avgScore = results.Average(r => r.Metrics.GetValueOrDefault("FactoryComplianceScore", 0));
-            double infraLeaks = results.Count(r => r.Metrics.GetValueOrDefault("InfrastructureLeak", 0) == 1);
-            double concreteReturns = results.Count(r => r.Metrics.GetValueOrDefault("ReturnsConcrete", 0) == 1);
+            var factoryResults =
+                results.ToList();
 
-            results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
-            {
-                Category = "DesignPatternSummary",
-                Metrics = new Dictionary<string, double>
+
+
+            var averageScore =
+                factoryResults.Average(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "FactoryComplianceScore",
+                            0));
+
+
+
+            var leakCount =
+                factoryResults.Count(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "InfrastructureLeakCount",
+                            0) > 0);
+
+
+
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    projectPath)
                 {
-                    ["FactoryCount"] = results.Count,
-                    ["AverageComplianceScore"] = avgScore,
-                    ["InfrastructureLeakCount"] = infraLeaks,
-                    ["ConcreteReturnCount"] = concreteReturns,
-                    ["OverallFactoryHealth"] = avgScore * (1 - (infraLeaks + concreteReturns) / Math.Max(1.0, results.Count))
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Evaluator"] = Name,
-                    ["PolicyEnabled"] = _policy.EnforceFactoryPattern.ToString()
-                }
-            });
+                    Category =
+                        "DesignPatternSummary",
+
+                    Metrics =
+                    {
+                        ["FactoryCount"] =
+                            factoryResults.Count,
+
+                        ["AverageComplianceScore"] =
+                            averageScore,
+
+                        ["InfrastructureLeakCount"] =
+                            leakCount,
+
+                        ["OverallFactoryHealth"] =
+                            averageScore *
+                            (
+                                1 -
+                                leakCount /
+                                (double)Math.Max(
+                                    1,
+                                    factoryResults.Count)
+                            )
+                    },
+
+                    Metadata =
+                    {
+                        ["Evaluator"] =
+                            Name,
+
+                        ["PolicyEnabled"] =
+                            _policy.EnforceFactoryPattern.ToString()
+                    }
+                });
         }
 
-        _logger.LogInformation("🏭 {Evaluator} completed with {Count} metric entries", Name, results.Count);
+
+
+        AegisDiagnostics.Report(
+            Name,
+            DiagnosticLevel.Info,
+            $"🏭 Factory evaluation completed with {results.Count} entries.");
+
+
         return results;
     }
 
-    private static double ComputeCompliance(double abstraction, double instantiationRatio, double leakPenalty, double namingPenalty, double returnPenalty)
-    {
-        // Lower penalties = higher compliance
-        double score = abstraction * 0.4 +
-                       (1 - Math.Min(instantiationRatio, 1)) * 0.25 +
-                       (1 - leakPenalty) * 0.15 +
-                       (1 - namingPenalty) * 0.1 +
-                       (1 - returnPenalty) * 0.1;
 
-        return Math.Round(score * 100, 2);
+
+    private static double ComputeCompliance(
+        double abstraction,
+        double instantiationRatio,
+        double leakRatio,
+        double namingPenalty,
+        double concretePenalty)
+    {
+        var score =
+            abstraction * 0.4 +
+            (1 - Math.Min(instantiationRatio, 1)) * 0.25 +
+            (1 - leakRatio) * 0.15 +
+            (1 - namingPenalty) * 0.1 +
+            (1 - concretePenalty) * 0.1;
+
+
+        return Math.Round(
+            score * 100,
+            2);
     }
 }

@@ -26,6 +26,7 @@ public sealed class CsvReportExporter : IReportExporter
         ProjectArchitectureContext context,
         string outputPath,
         ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
+        ReportLanguage language = ReportLanguage.English,
         CancellationToken token = default)
     {
         var sb = new StringBuilder();

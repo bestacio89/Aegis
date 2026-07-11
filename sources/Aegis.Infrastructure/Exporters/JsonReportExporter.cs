@@ -27,6 +27,7 @@ public sealed class JsonReportExporter : IReportExporter
         ProjectArchitectureContext context,
         string outputPath,
         ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
+        ReportLanguage language = ReportLanguage.English,
         CancellationToken token = default)
     {
         try
@@ -67,7 +68,6 @@ public sealed class JsonReportExporter : IReportExporter
                     context.FileCount,
                     context.LinesOfCode,
                     context.AverageComplexity,
-                    Metadata = context.Metadata
                 },
 
                 Overview = new

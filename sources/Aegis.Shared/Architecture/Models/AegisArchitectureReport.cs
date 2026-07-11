@@ -35,25 +35,38 @@ public sealed class AegisArchitectureReport
     // 🧮 Backwards-compatible quick compliance dictionary
     public Dictionary<ArchitectureRuleCategory, double> ComplianceScores { get; set; } = new();
 
-    // 🧠 Recomputes compliance after weighting and aggregation
+    // 🧠 Recomputes compliance after weighting and aggregation.
+    // Covers every category that has at least one registered rule — not just the
+    // categories that happen to have a violation — so a clean category is reported
+    // as 100% / PASSED instead of being silently absent from the report.
     public void ComputeCompliance()
     {
-        if (Results.Count == 0)
-        {
-            Metrics.ProjectHealthIndex = 100;
-            return;
-        }
+        var allCategories = ArchitectureRuleRegistry.All
+            .Select(r => ParseCategory(r.Category))
+            .Distinct()
+            .ToList();
 
-        var grouped = Results.GroupBy(r => r.Category);
         ComplianceScores.Clear();
 
-        foreach (var group in grouped)
-        {
-            var severityPenalty = group.Sum(r =>
-                r.IsCompliant ? 0 : ((int)r.Severity + 1) * 10);
+        var grouped = Results
+            .GroupBy(r => r.Category)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
-            var score = Math.Max(0, 100 - severityPenalty / Math.Max(1, group.Count()));
-            ComplianceScores[group.Key] = score;
+        foreach (var category in allCategories)
+        {
+            if (grouped.TryGetValue(category, out var categoryResults))
+            {
+                var severityPenalty = categoryResults.Sum(r =>
+                    r.IsCompliant ? 0 : ((int)r.Severity + 1) * 10);
+
+                var score = Math.Max(0, 100 - severityPenalty / Math.Max(1, categoryResults.Count));
+                ComplianceScores[category] = score;
+            }
+            else
+            {
+                // Rules exist for this category and none of them fired — genuinely clean.
+                ComplianceScores[category] = 100;
+            }
         }
 
         // Compute domain health averages if available
@@ -68,6 +81,11 @@ public sealed class AegisArchitectureReport
 
         Metrics.ProjectHealthIndex = Math.Round(Metrics.ProjectHealthIndex, 2);
     }
+
+    private static ArchitectureRuleCategory ParseCategory(string category) =>
+        Enum.TryParse<ArchitectureRuleCategory>(category, true, out var parsed)
+            ? parsed
+            : ArchitectureRuleCategory.General;
 
     // 🧾 Quick summary
     public string Summary =>

@@ -130,6 +130,7 @@ public static class AnalyzeCommand
             result.Context,
             outputPath,
             result.DetailLevel,
+            ReportLanguage.English,
             CancellationToken.None);
 
 

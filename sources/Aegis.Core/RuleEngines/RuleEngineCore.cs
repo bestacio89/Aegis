@@ -1,151 +1,295 @@
 ﻿using Microsoft.Extensions.Logging;
+
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Rules;
-using Aegis.Shared.Architecture.Enums;
 
 namespace Aegis.Architecture.RuleEngines;
 
 /// <summary>
-/// 🧠 Interprets evaluator metrics (facts) into rule violations using policy-aware thresholds
-/// while safely falling back to static rule registry defaults.
+/// 🧠 Converts evaluator facts into deterministic architecture rule results.
+///
+/// Evaluators only produce facts.
+/// This component interprets those facts using registered rules and policies.
 /// </summary>
 public sealed class RuleEngineCore
 {
     private readonly ILogger<RuleEngineCore> _logger;
+
     private readonly IReadOnlyList<ArchitectureRuleDefinition> _rules;
+
     private AegisArchitecturePolicy _policy;
 
-    public RuleEngineCore(ILogger<RuleEngineCore> logger, AegisArchitecturePolicy policy)
+
+
+    public RuleEngineCore(
+        ILogger<RuleEngineCore> logger,
+        AegisArchitecturePolicy policy)
     {
         _logger = logger;
+
         _policy = policy;
-        _rules = ArchitectureRuleRegistry.All;
+
+        _rules =
+            ArchitectureRuleRegistry.All;
     }
+
+
 
     // ======================================================
     // 🧩 Policy synchronization
     // ======================================================
+
     /// <summary>
-    /// Applies a new runtime policy and synchronizes it with all active rule definitions.
+    /// Updates runtime rule interpretation policy.
+    /// Rule definitions themselves remain immutable.
     /// </summary>
-    public void ApplyPolicy(AegisArchitecturePolicy newPolicy)
+    public void ApplyPolicy(
+        AegisArchitecturePolicy newPolicy)
     {
         _policy = newPolicy;
-        _logger.LogInformation("📜 Aegis policy applied → {Name} (v{Version})",
-            newPolicy.Name ?? "Unnamed", newPolicy.Version ?? "1.0");
 
-        // Optionally, push updated thresholds into RuleRegistry
-        foreach (var rule in ArchitectureRuleRegistry.All)
-        {
-            var updatedThreshold = ResolveThreshold(rule);
-            if (Math.Abs(rule.Threshold - updatedThreshold) > 0.0001)
-            {
-                _logger.LogDebug("🔧 Rule {Id} threshold updated: {Old} → {New}",
-                    rule.Id, rule.Threshold, updatedThreshold);
-                rule.Threshold = updatedThreshold;
-            }
-        }
+
+        _logger.LogInformation(
+            "Aegis rule policy applied → {Name} (v{Version})",
+            newPolicy.Name ?? "Unnamed",
+            newPolicy.Version ?? "1.0");
     }
+
+
 
     // ======================================================
     // 🧮 Evaluation
     // ======================================================
-    public IEnumerable<ArchitectureRuleresult> Evaluate(ProjectArchitectureContext context, IEnumerable<ArchitectureEvaluatorResult> facts)
+
+    public IEnumerable<ArchitectureRuleresult> Evaluate(
+        ProjectArchitectureContext context,
+        IEnumerable<ArchitectureEvaluatorResult> facts)
     {
-        var results = new List<ArchitectureRuleresult>();
+        var factList =
+            facts.ToList();
+
+
+        var results =
+            new List<ArchitectureRuleresult>();
+
+
         int totalChecks = 0;
 
-        foreach (var fact in facts)
-        {
-            foreach (var (metricKey, value) in fact.Metrics)
-            {
-                var applicable = _rules.Where(r =>
-                    r.MetricKey.Equals(metricKey, StringComparison.OrdinalIgnoreCase));
 
-                foreach (var rule in applicable)
+
+        foreach (var fact in factList)
+        {
+            foreach (var metric in fact.Metrics)
+            {
+                var applicableRules =
+                    _rules.Where(rule =>
+                        rule.MetricKey.Equals(
+                            metric.Key,
+                            StringComparison.OrdinalIgnoreCase));
+
+
+
+                foreach (var rule in applicableRules)
                 {
                     totalChecks++;
 
-                    double effectiveThreshold = ResolveThreshold(rule);
 
-                    bool violated = rule.Operator switch
+                    var threshold =
+                        ResolveThreshold(rule);
+
+
+
+                    if (!IsViolation(
+                        rule.Operator,
+                        metric.Value,
+                        threshold))
                     {
-                        ComparisonOperator.LessThan => value < effectiveThreshold,
-                        ComparisonOperator.GreaterThan => value > effectiveThreshold,
-                        ComparisonOperator.Equal => Math.Abs(value - effectiveThreshold) < 0.0001,
-                        ComparisonOperator.NotEqual => Math.Abs(value - effectiveThreshold) > 0.0001,
-                        _ => false
-                    };
-
-                    if (violated)
-                    {
-                        var category = Enum.TryParse<ArchitectureRuleCategory>(rule.Category, true, out var cat)
-                            ? cat
-                            : ArchitectureRuleCategory.General;
-
-                        results.Add(new ArchitectureRuleresult(
-                            rule.Id,
-                            rule.Name,
-                            category,
-                            rule.Severity,
-                            fact.Target,
-                            fact.Metadata?.GetValueOrDefault("Namespace"),
-                            $"[{fact.Source}] Metric '{metricKey}' = {value:0.##}, threshold = {effectiveThreshold:0.##}. {rule.Recommendation}",
-                            DateTimeOffset.UtcNow,
-                            isCompliant: false
-                        )
-                        {
-                            DetectedBy = fact.Source,
-                            Domain = context.DomainType ?? "General",
-                            AnalyzerVersion = context.DetectorVersion
-                        });
+                        continue;
                     }
+
+
+
+                    results.Add(
+                        CreateRuleResult(
+                            rule,
+                            fact,
+                            context,
+                            metric.Key,
+                            metric.Value,
+                            threshold));
                 }
             }
         }
 
+
+
         _logger.LogInformation(
-            "🧩 RuleEngineCore evaluated {Facts} facts → {Results} violations ({Checks} checks).",
-            facts.Count(), results.Count, totalChecks);
+            "RuleEngineCore evaluated {Facts} facts → {Results} violations ({Checks} checks).",
+            factList.Count,
+            results.Count,
+            totalChecks);
+
+
 
         return results;
     }
 
+
+
     // ======================================================
-    // 🎚️ Threshold resolution
+    // 🏗️ Rule Result Creation
     // ======================================================
-    private double ResolveThreshold(ArchitectureRuleDefinition rule)
+
+    private static ArchitectureRuleresult CreateRuleResult(
+        ArchitectureRuleDefinition rule,
+        ArchitectureEvaluatorResult fact,
+        ProjectArchitectureContext context,
+        string metric,
+        double value,
+        double threshold)
+    {
+        var category =
+            ParseCategory(
+                rule.Category);
+
+
+
+        return new ArchitectureRuleresult(
+            rule.Id,
+            rule.Name,
+            category,
+            rule.Severity,
+            fact.Target,
+            fact.Source,
+            $"[{fact.Source}] Metric '{metric}' = {value:0.##}, threshold = {threshold:0.##}. {rule.Recommendation}",
+            DateTimeOffset.UtcNow,
+            isCompliant: false)
+        {
+            DetectedBy =
+                fact.Source,
+
+
+            Domain =
+                fact.Domain ?? "General",
+
+
+            AnalyzerVersion =
+                context.DetectorVersion
+        };
+    }
+
+
+
+    private static ArchitectureRuleCategory ParseCategory(
+        string category)
+    {
+        return Enum.TryParse(
+            category,
+            true,
+            out ArchitectureRuleCategory parsed)
+                ? parsed
+                : ArchitectureRuleCategory.General;
+    }
+
+
+
+    // ======================================================
+    // 🎚️ Threshold Resolution
+    // ======================================================
+
+    private double ResolveThreshold(
+        ArchitectureRuleDefinition rule)
     {
         try
         {
             return rule.Category switch
             {
-                nameof(ArchitectureRuleCategory.Performance) => _policy.Performance?.MaxNestedLoopDepth
-                                                    ?? rule.Threshold,
+                nameof(ArchitectureRuleCategory.Performance)
+                    =>
+                    _policy.Performance?.MaxNestedLoopDepth
+                    ?? rule.Threshold,
 
-                nameof(ArchitectureRuleCategory.Maintainability) => _policy.Maintainability?.MinMaintainabilityIndex
-                                                        ?? rule.Threshold,
 
-                nameof(ArchitectureRuleCategory.Security) => _policy.Security?.MinimumScore
-                                                 ?? rule.Threshold,
+                nameof(ArchitectureRuleCategory.Maintainability)
+                    =>
+                    _policy.Maintainability?.MinMaintainabilityIndex
+                    ?? rule.Threshold,
 
-                nameof(ArchitectureRuleCategory.Dependency) => _policy.Dependency?.MaxDependencyDepth
-                                                   ?? rule.Threshold,
 
-                nameof(ArchitectureRuleCategory.Coupling) => _policy.Coupling?.MaxCouplingRatio
-                                                 ?? rule.Threshold,
+                nameof(ArchitectureRuleCategory.Security)
+                    =>
+                    _policy.Security?.MinimumScore
+                    ?? rule.Threshold,
 
-                nameof(ArchitectureRuleCategory.Architecture) => _policy.Architecture?.AllowedDependencies?.Count
-                                                     ?? rule.Threshold,
 
-                _ => rule.Threshold
+                nameof(ArchitectureRuleCategory.Dependency)
+                    =>
+                    _policy.Dependency?.MaxDependencyDepth
+                    ?? rule.Threshold,
+
+
+                nameof(ArchitectureRuleCategory.Coupling)
+                    =>
+                    _policy.Coupling?.MaxCouplingRatio
+                    ?? rule.Threshold,
+
+
+                nameof(ArchitectureRuleCategory.Architecture)
+                    =>
+                    _policy.Architecture?.AllowedDependencies?.Count
+                    ?? rule.Threshold,
+
+
+                _ =>
+                    rule.Threshold
             };
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "⚠️ Failed to resolve threshold for rule {RuleId}, using default {Threshold}.", rule.Id, rule.Threshold);
+            _logger.LogWarning(
+                ex,
+                "Failed resolving threshold for rule {RuleId}. Using default threshold {Threshold}.",
+                rule.Id,
+                rule.Threshold);
+
+
             return rule.Threshold;
         }
+    }
+
+
+
+    // ======================================================
+    // ⚖️ Comparison
+    // ======================================================
+
+    private static bool IsViolation(
+        ComparisonOperator operation,
+        double value,
+        double threshold)
+    {
+        return operation switch
+        {
+            ComparisonOperator.LessThan =>
+                value < threshold,
+
+
+            ComparisonOperator.GreaterThan =>
+                value > threshold,
+
+
+            ComparisonOperator.Equal =>
+                Math.Abs(value - threshold) < 0.0001,
+
+
+            ComparisonOperator.NotEqual =>
+                Math.Abs(value - threshold) > 0.0001,
+
+
+            _ =>
+                false
+        };
     }
 }

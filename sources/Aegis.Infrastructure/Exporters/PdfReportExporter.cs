@@ -6,12 +6,16 @@ using MigraDoc.DocumentObjectModel;
 using MigraDoc.DocumentObjectModel.Tables;
 using MigraDoc.Rendering;
 using PdfSharp.Fonts;
+using System.Globalization;
 
 namespace Aegis.Infrastructure.Exporters;
 
 /// <summary>
 /// 📄 Industrialized Executive PDF Report Exporter using MigraDoc.
 /// Generates deterministic, deeply formatted architecture audit reports featuring target file tracing.
+/// Always renders full detail across all layers and violations — a PDF is the situational record of
+/// everything found, regardless of the requested detailLevel. detailLevel is accepted for interface
+/// compatibility but intentionally not used to truncate content here.
 /// </summary>
 public sealed class PdfReportExporter : IReportExporter
 {
@@ -36,6 +40,7 @@ public sealed class PdfReportExporter : IReportExporter
         ProjectArchitectureContext context,
         string outputPath,
         ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
+        ReportLanguage language = ReportLanguage.English,
         CancellationToken token = default)
     {
         try
@@ -45,14 +50,16 @@ public sealed class PdfReportExporter : IReportExporter
                 token.ThrowIfCancellationRequested();
                 EnsureFontResolverRegistered();
 
-                var document = CreateDocument(report, context, detailLevel);
+                var document = CreateDocument(report, context, language);
                 var renderer = new PdfDocumentRenderer { Document = document };
 
                 renderer.RenderDocument();
                 renderer.PdfDocument.Save(outputPath);
             }, token);
 
-            _logger.LogInformation("📄 Architectural PDF report compiled and saved successfully to -> {Path}", outputPath);
+            _logger.LogInformation(
+                "📄 Architectural PDF report ({Language}) compiled and saved successfully to -> {Path}",
+                language, outputPath);
         }
         catch (Exception ex)
         {
@@ -72,12 +79,47 @@ public sealed class PdfReportExporter : IReportExporter
         }
     }
 
-    private static Document CreateDocument(AegisArchitectureReport report, ProjectArchitectureContext context, ArchitectureReportDetailLevel detailLevel)
+    /// <summary>
+    /// Minimal inline localization helper. English/French only, by design —
+    /// this exporter is the only consumer, so a full resource-file setup would be overkill for now.
+    /// </summary>
+    private static string L(ReportLanguage lang, string en, string fr) =>
+        lang == ReportLanguage.French ? fr : en;
+
+    private static string LocalizeCategory(string category, ReportLanguage lang)
+    {
+        if (lang != ReportLanguage.French) return category;
+
+        return category switch
+        {
+            "Maintainability" => "Maintenabilité",
+            "Performance" => "Performance",
+            "Security" => "Sécurité",
+            "Architecture" => "Architecture",
+            "Design" => "Conception",
+            "Style" => "Style",
+            "Documentation" => "Documentation",
+            "Resilience" => "Résilience",
+            "Quality" => "Qualité",
+            "BestPractices" => "Bonnes Pratiques",
+            "Infrastructure" => "Infrastructure",
+            "Testing" => "Tests",
+            "Persistence" => "Persistance",
+            "General" => "Général",
+            "Dependency" => "Dépendance",
+            "Naming" => "Nommage",
+            "Coupling" => "Couplage",
+            "Other" => "Autre",
+            _ => category
+        };
+    }
+
+    private static Document CreateDocument(AegisArchitectureReport report, ProjectArchitectureContext context, ReportLanguage language)
     {
         var document = new Document();
-        document.Info.Title = "Aegis Architecture Executive Compliance Report";
+        document.Info.Title = L(language, "Aegis Architecture Executive Compliance Report", "Rapport Exécutif de Conformité Architecturale Aegis");
         document.Info.Author = "Aegis Core Rule Engine";
-        document.Info.Subject = $"Compliance Metrics for {report.ProjectName}";
+        document.Info.Subject = $"{L(language, "Compliance Metrics for", "Métriques de Conformité pour")} {report.ProjectName}";
 
         DefineStyles(document);
 
@@ -88,14 +130,14 @@ public sealed class PdfReportExporter : IReportExporter
         section.PageSetup.RightMargin = "1.5cm";
         section.PageSetup.TopMargin = "2cm";
         section.PageSetup.BottomMargin = "2cm";
-     
-        AddHeader(section);
-        AddProjectSummaryCard(section, report, context);
-        AddMetricsSection(section, report);
-        AddComplianceMatrix(section, report);
-        AddTopViolationsLedger(section, report);
-        AddLayerAnalysisDetails(section, report);
-        AddFooter(section);
+
+        AddHeader(section, language);
+        AddProjectSummaryCard(section, report, context, language);
+        AddMetricsSection(section, report, language);
+        AddComplianceMatrix(section, report, language);
+        AddViolationsLedger(section, report, language);
+        AddLayerAnalysisDetails(section, report, language);
+        AddFooter(section, language);
 
         return document;
     }
@@ -148,43 +190,45 @@ public sealed class PdfReportExporter : IReportExporter
         }
     }
 
-    private static void AddHeader(Section section)
+    private static void AddHeader(Section section, ReportLanguage language)
     {
         var header = section.Headers.Primary.AddParagraph();
         header.Format.Alignment = ParagraphAlignment.Right;
-        header.AddFormattedText("AEGIS ARCHITECTURAL COMPLIANCE REPORT", TextFormat.Bold).Font.Color = PrimaryAccentColor;
+        header.AddFormattedText(
+            L(language, "AEGIS ARCHITECTURAL COMPLIANCE REPORT", "RAPPORT DE CONFORMITÉ ARCHITECTURALE AEGIS"),
+            TextFormat.Bold).Font.Color = PrimaryAccentColor;
     }
 
-    private static void AddProjectSummaryCard(Section section, AegisArchitectureReport report, ProjectArchitectureContext context)
+    private static void AddProjectSummaryCard(Section section, AegisArchitectureReport report, ProjectArchitectureContext context, ReportLanguage language)
     {
-        section.AddParagraph("Executive Scope Summary").Style = StyleNames.Heading1;
+        section.AddParagraph(L(language, "Executive Scope Summary", "Synthèse Exécutive du Périmètre")).Style = StyleNames.Heading1;
         var table = section.AddTable();
         ConfigureBaseTable(table);
         table.AddColumn("4.5cm");
         table.AddColumn("13.5cm");
 
-        AddRow(table, "Target Project", report.ProjectName, true);
-        AddRow(table, "Workspace Path", report.ProjectPath);
-        AddRow(table, "Language", context.Language);
-        AddRow(table, "Framework", context.Framework);
-        AddRow(table, "Style", context.ArchitectureStyle ?? "N/A");
+        AddRow(table, L(language, "Target Project", "Projet Cible"), report.ProjectName, true);
+        AddRow(table, L(language, "Workspace Path", "Chemin du Projet"), report.ProjectPath);
+        AddRow(table, L(language, "Language", "Langage"), context.Language);
+        AddRow(table, L(language, "Framework", "Framework"), context.Framework);
+        AddRow(table, L(language, "Style", "Style"), context.ArchitectureStyle ?? "N/A");
     }
 
-    private static void AddMetricsSection(Section section, AegisArchitectureReport report)
+    private static void AddMetricsSection(Section section, AegisArchitectureReport report, ReportLanguage language)
     {
-        section.AddParagraph("High-Level Quantitative Metrics").Style = StyleNames.Heading1;
+        section.AddParagraph(L(language, "High-Level Quantitative Metrics", "Indicateurs Quantitatifs Globaux")).Style = StyleNames.Heading1;
         var table = section.AddTable();
         ConfigureBaseTable(table);
         table.AddColumn("6cm");
         table.AddColumn("12cm");
 
-        AddRow(table, "Files Scanned", report.TotalFilesScanned.ToString());
-        AddRow(table, "Total Violations", report.TotalViolations.ToString());
+        AddRow(table, L(language, "Files Scanned", "Fichiers Analysés"), report.TotalFilesScanned.ToString());
+        AddRow(table, L(language, "Total Violations", "Violations Totales"), report.TotalViolations.ToString());
     }
 
-    private static void AddComplianceMatrix(Section section, AegisArchitectureReport report)
+    private static void AddComplianceMatrix(Section section, AegisArchitectureReport report, ReportLanguage language)
     {
-        section.AddParagraph("Compliance Index Matrix").Style = StyleNames.Heading1;
+        section.AddParagraph(L(language, "Compliance Index Matrix", "Matrice des Indices de Conformité")).Style = StyleNames.Heading1;
         var table = section.AddTable();
         ConfigureBaseTable(table);
         table.AddColumn("8cm");
@@ -193,33 +237,47 @@ public sealed class PdfReportExporter : IReportExporter
 
         var header = table.AddRow();
         ApplyRowStyle(header, true, false);
-        header.Cells[0].AddParagraph("Category");
-        header.Cells[1].AddParagraph("Score");
-        header.Cells[2].AddParagraph("Status");
+        header.Cells[0].AddParagraph(L(language, "Category", "Catégorie"));
+        header.Cells[1].AddParagraph(L(language, "Score", "Score"));
+        header.Cells[2].AddParagraph(L(language, "Status", "Statut"));
 
         bool alt = false;
         foreach (var score in report.ComplianceScores)
         {
             var row = table.AddRow();
             ApplyRowStyle(row, false, alt);
-            row.Cells[0].AddParagraph(score.Key.ToString());
+            row.Cells[0].AddParagraph(LocalizeCategory(score.Key.ToString(), language));
             row.Cells[1].AddParagraph($"{score.Value:0.00}%");
-            row.Cells[2].AddParagraph(score.Value >= 80 ? "PASSED" : "WARNING");
+            row.Cells[2].AddParagraph(score.Value >= 80
+                ? L(language, "PASSED", "CONFORME")
+                : L(language, "WARNING", "ATTENTION"));
             alt = !alt;
         }
     }
 
-    private static void AddTopViolationsLedger(Section section, AegisArchitectureReport report)
+    /// <summary>
+    /// Renders every violation in the report, ranked by weighted impact.
+    /// No cap: a compliance-grade PDF must reflect the full finding set, not a top-N excerpt.
+    /// </summary>
+    private static void AddViolationsLedger(Section section, AegisArchitectureReport report, ReportLanguage language)
     {
-        section.AddParagraph("Critical Violations").Style = StyleNames.Heading1;
+        section.AddParagraph(
+            $"{L(language, "All Violations", "Toutes les Violations")} ({report.Results.Count})")
+            .Style = StyleNames.Heading1;
+
         var table = section.AddTable();
         ConfigureBaseTable(table);
         table.AddColumn("4cm");
         table.AddColumn("12cm");
 
-        var targets = report.Results.OrderByDescending(x => x.WeightedImpact).Take(12);
+        var header = table.AddRow();
+        ApplyRowStyle(header, true, false);
+        header.Cells[0].AddParagraph(L(language, "File", "Fichier"));
+        header.Cells[1].AddParagraph(L(language, "Rule / Message", "Règle / Message"));
+
+        var ordered = report.Results.OrderByDescending(x => x.WeightedImpact);
         bool alt = false;
-        foreach (var item in targets)
+        foreach (var item in ordered)
         {
             var row = table.AddRow();
             ApplyRowStyle(row, false, alt);
@@ -231,12 +289,12 @@ public sealed class PdfReportExporter : IReportExporter
         }
     }
 
-    private static void AddLayerAnalysisDetails(Section section, AegisArchitectureReport report)
+    private static void AddLayerAnalysisDetails(Section section, AegisArchitectureReport report, ReportLanguage language)
     {
-        section.AddParagraph("Layer Cross-Section Analysis").Style = StyleNames.Heading1;
+        section.AddParagraph(L(language, "Layer Cross-Section Analysis", "Analyse Transversale par Couche")).Style = StyleNames.Heading1;
         foreach (var group in report.Results.GroupBy(x => x.Domain))
         {
-            section.AddParagraph($"Layer: {group.Key ?? "Core"}").Style = StyleNames.Heading2;
+            section.AddParagraph($"{L(language, "Layer", "Couche")}: {group.Key ?? "Core"}").Style = StyleNames.Heading2;
             var table = section.AddTable();
             ConfigureBaseTable(table);
             table.AddColumn("4cm");
@@ -260,10 +318,15 @@ public sealed class PdfReportExporter : IReportExporter
         row.Cells[1].AddParagraph(value).Format.Font.Bold = bold;
     }
 
-    private static void AddFooter(Section section)
+    private static void AddFooter(Section section, ReportLanguage language)
     {
+        var culture = language == ReportLanguage.French
+            ? new CultureInfo("fr-FR")
+            : new CultureInfo("en-US");
+
         var f = section.Footers.Primary.AddParagraph();
         f.Format.Alignment = ParagraphAlignment.Center;
-        f.AddText($"Generated {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC • Aegis v1.0");
+        f.AddText(
+            $"{L(language, "Generated", "Généré le")} {DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss", culture)} UTC • Aegis v1.0");
     }
 }

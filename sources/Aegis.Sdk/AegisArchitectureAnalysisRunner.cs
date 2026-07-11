@@ -148,6 +148,7 @@ public sealed class AegisArchitectureAnalysisRunner
         string format,
         string outputPath,
         ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
+        ReportLanguage  language = ReportLanguage.English,
         CancellationToken token = default)
     {
         if (!_exporters.TryGetValue(format, out var exporter))
@@ -156,7 +157,7 @@ public sealed class AegisArchitectureAnalysisRunner
             throw new InvalidOperationException($"No report exporter registered for format '{format}'.");
         }
 
-        await exporter.ExportAsync(report, context, outputPath, detailLevel, token);
+        await exporter.ExportAsync(report, context, outputPath, detailLevel, language ,token);
 
         _logger.LogInformation("📄 {Format} report exported → {Path}", format, outputPath);
     }

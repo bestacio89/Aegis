@@ -40,9 +40,9 @@ public sealed class ReportRepository : IReportRepository
         {
             ProjectName = Path.GetFileName(projectPath),
             Language = context.Language,
-            Framework = context.Metadata?.Framework ?? context.Framework ?? "Unknown",
-            
-            
+            Framework = context.DetectedFrameworks.FirstOrDefault() ?? context.Framework ?? "Unknown",
+
+
 
             ScanDate = DateTime.UtcNow,
             RuleResults = new List<RuleResultEntity>()

@@ -1,11 +1,10 @@
-﻿using System.Text.RegularExpressions;
-using Aegis.Architecture.Evaluators;
+﻿using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.FrontEnd;
-
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.FrontEnd;
 
@@ -17,154 +16,423 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 {
     private readonly FrontendPolicy _policy;
 
-    public override string Name => "AngularEvaluator";
-    public override string[] SupportedLanguages => ["TypeScript"];
-    public override string[] SupportedFrameworks => ["Angular"];
 
-    // Regex patterns
-    private static readonly Regex ComponentRx = new(@"@Component\s*\(\s*\{", RegexOptions.Compiled);
-    private static readonly Regex ModuleRx = new(@"@NgModule\s*\(\s*\{", RegexOptions.Compiled);
-    private static readonly Regex SelectorRx = new(@"selector\s*:\s*'([^']+)'", RegexOptions.Compiled);
-    private static readonly Regex TemplateInlineRx = new(@"template\s*:\s*`([^`]*)`", RegexOptions.Compiled);
-    private static readonly Regex PascalCaseRx = new(@"class\s+([a-z]\w*)\s+implements\s+OnInit", RegexOptions.Compiled);
-    private static readonly Regex DeclarationsRx = new(@"declarations\s*:\s*\[([^\]]+)\]", RegexOptions.Singleline | RegexOptions.Compiled);
+    public override string Name =>
+        "AngularEvaluator";
 
-    public AngularEvaluator(ILogger<AngularEvaluator> logger, IOptions<AegisArchitecturePolicy> options)
+
+    public override string[] SupportedLanguages =>
+    [
+        "TypeScript"
+    ];
+
+
+    public override string[] SupportedFrameworks =>
+    [
+        "Angular"
+    ];
+
+
+
+    private static readonly Regex ComponentRx =
+        new(
+            @"@Component\s*\(\s*\{",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex ModuleRx =
+        new(
+            @"@NgModule\s*\(\s*\{",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex SelectorRx =
+        new(
+            @"selector\s*:\s*'([^']+)'",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex TemplateInlineRx =
+        new(
+            @"template\s*:\s*`([^`]*)`",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex PascalCaseRx =
+        new(
+            @"class\s+([a-z]\w*)\s+implements\s+OnInit",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex DeclarationsRx =
+        new(
+            @"declarations\s*:\s*\[([^\]]+)\]",
+            RegexOptions.Singleline |
+            RegexOptions.Compiled);
+
+
+
+    public AngularEvaluator(
+        ILogger<AngularEvaluator> logger,
+        IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.Frontend ?? new FrontendPolicy();
+        _policy =
+            options.Value.Frontend
+            ?? new FrontendPolicy();
     }
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(string projectPath, CancellationToken token)
-    {
-        var results = new List<ArchitectureEvaluatorResult>();
-        var files = Directory.EnumerateFiles(projectPath, "*.ts", SearchOption.AllDirectories)
-                             .Where(f => !IsExcludedDir(f))
-                             .ToList();
 
-        _logger.LogInformation("🅰️ Running {Evaluator} on {Count} files", Name, files.Count);
+
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
+    {
+        var results =
+            new List<ArchitectureEvaluatorResult>();
+
+
+
+        var files =
+            ResolveSourceFiles(
+                projectPath,
+                ".ts");
+
+
+
+        if (files.Count == 0)
+        {
+            return results;
+        }
+
+
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
-            var content = await File.ReadAllTextAsync(file, token);
-            var fileName = Path.GetFileName(file);
 
-            bool isComponent = ComponentRx.IsMatch(content);
-            bool isModule = ModuleRx.IsMatch(content);
 
-            // Derived metrics
-            double selectorScore = 1.0;
-            double complexityScore = 1.0;
-            double namingScore = 1.0;
-            double modularityScore = 1.0;
+            string content;
 
-            // 1️⃣ Component selector naming
-            if (_policy.EnforceSelectorNaming && isComponent)
+            try
             {
-                var match = SelectorRx.Match(content);
-                if (!match.Success)
+                content =
+                    await File.ReadAllTextAsync(
+                        file,
+                        token);
+            }
+            catch
+            {
+                continue;
+            }
+
+
+
+            var fileName =
+                Path.GetFileName(file);
+
+
+
+            var isComponent =
+                ComponentRx.IsMatch(content);
+
+
+
+            var isModule =
+                ModuleRx.IsMatch(content);
+
+
+
+            var selectorScore = 1.0;
+            var complexityScore = 1.0;
+            var namingScore = 1.0;
+            var modularityScore = 1.0;
+
+
+
+            if (_policy.EnforceSelectorNaming &&
+                isComponent)
+            {
+                var selectorMatch =
+                    SelectorRx.Match(content);
+
+
+                if (!selectorMatch.Success)
                 {
                     selectorScore = 0;
                 }
                 else
                 {
-                    var selector = match.Groups[1].Value;
-                    if (!_policy.AllowedSelectorPrefixes.Any(p => selector.StartsWith(p, StringComparison.Ordinal)))
-                        selectorScore = 0.5; // wrong prefix
+                    var selector =
+                        selectorMatch.Groups[1].Value;
+
+
+                    if (!_policy.AllowedSelectorPrefixes.Any(
+                            p =>
+                                selector.StartsWith(
+                                    p,
+                                    StringComparison.Ordinal)))
+                    {
+                        selectorScore = 0.5;
+                    }
                 }
             }
 
-            // 2️⃣ Inline template complexity
-            if (_policy.MaxComponentComplexity > 0 && TemplateInlineRx.IsMatch(content))
+
+
+            if (_policy.MaxComponentComplexity > 0 &&
+                TemplateInlineRx.IsMatch(content))
             {
-                var template = TemplateInlineRx.Match(content).Groups[1].Value;
-                var lineCount = template.Split('\n').Length;
+                var template =
+                    TemplateInlineRx
+                        .Match(content)
+                        .Groups[1]
+                        .Value;
+
+
+                var lineCount =
+                    template.Split('\n').Length;
+
+
                 if (lineCount > _policy.MaxComponentComplexity)
-                    complexityScore = Math.Max(0, 1 - (double)lineCount / (_policy.MaxComponentComplexity * 2));
+                {
+                    complexityScore =
+                        Math.Max(
+                            0,
+                            1 -
+                            (double)lineCount /
+                            (_policy.MaxComponentComplexity * 2));
+                }
             }
 
-            // 3️⃣ Component PascalCase check
-            if (_policy.EnforceComponentPascalCase && PascalCaseRx.IsMatch(content))
+
+
+            if (_policy.EnforceComponentPascalCase &&
+                PascalCaseRx.IsMatch(content))
+            {
                 namingScore = 0.5;
+            }
 
-            // 4️⃣ Root vs Shared module misuse
-            if (isModule && content.Contains("bootstrap:", StringComparison.Ordinal))
-                modularityScore = 0.0;
 
-            // 5️⃣ Overly large module detection
-            if (_policy.MaxComponentsPerModule > 0 && isModule)
+
+            if (isModule &&
+                content.Contains(
+                    "bootstrap:",
+                    StringComparison.Ordinal))
             {
-                foreach (Match decl in DeclarationsRx.Matches(content))
+                modularityScore = 0;
+            }
+
+
+
+            if (_policy.MaxComponentsPerModule > 0 &&
+                isModule)
+            {
+                foreach (Match declaration in DeclarationsRx.Matches(content))
                 {
-                    var count = decl.Groups[1].Value.Split(',').Length;
+                    var count =
+                        declaration.Groups[1]
+                            .Value
+                            .Split(',')
+                            .Length;
+
+
                     if (count > _policy.MaxComponentsPerModule)
-                        modularityScore = Math.Max(0, 1 - (double)count / (_policy.MaxComponentsPerModule * 2));
+                    {
+                        modularityScore =
+                            Math.Max(
+                                0,
+                                1 -
+                                (double)count /
+                                (_policy.MaxComponentsPerModule * 2));
+                    }
                 }
             }
 
-            // 🎯 Final Angular compliance score
-            double angularComplianceScore = ComputeCompliance(selectorScore, complexityScore, namingScore, modularityScore);
 
-            results.Add(new ArchitectureEvaluatorResult(Name, file)
-            {
-                Category = "Frontend",
-                Metrics = new Dictionary<string, double>
+
+            var complianceScore =
+                ComputeCompliance(
+                    selectorScore,
+                    complexityScore,
+                    namingScore,
+                    modularityScore);
+
+
+
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    file)
                 {
-                    ["SelectorScore"] = selectorScore,
-                    ["ComplexityScore"] = complexityScore,
-                    ["NamingScore"] = namingScore,
-                    ["ModularityScore"] = modularityScore,
-                    ["AngularComplianceScore"] = angularComplianceScore
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["FileName"] = fileName,
-                    ["Language"] = "TypeScript",
-                    ["Framework"] = "Angular",
-                    ["IsComponent"] = isComponent.ToString(),
-                    ["IsModule"] = isModule.ToString()
-                }
-            });
+                    Category =
+                        "Frontend",
+
+                    Metrics =
+                    {
+                        ["SelectorScore"] =
+                            selectorScore,
+
+                        ["ComplexityScore"] =
+                            complexityScore,
+
+                        ["NamingScore"] =
+                            namingScore,
+
+                        ["ModularityScore"] =
+                            modularityScore,
+
+                        ["AngularComplianceScore"] =
+                            complianceScore
+                    },
+
+                    Metadata =
+                    {
+                        ["FileName"] =
+                            fileName,
+
+                        ["Language"] =
+                            Context?.Language
+                            ?? "TypeScript",
+
+                        ["Framework"] =
+                            Context?.Framework
+                            ?? "Angular",
+
+                        ["IsComponent"] =
+                            isComponent.ToString(),
+
+                        ["IsModule"] =
+                            isModule.ToString()
+                    }
+                });
         }
 
-        // 📊 Aggregate Summary
+
+
         if (results.Count > 0)
         {
-            double avgCompliance = results.Average(r => r.Metrics.GetValueOrDefault("AngularComplianceScore", 0));
-            double avgComplexity = results.Average(r => r.Metrics.GetValueOrDefault("ComplexityScore", 0));
-            double avgSelector = results.Average(r => r.Metrics.GetValueOrDefault("SelectorScore", 0));
-            double avgModularity = results.Average(r => r.Metrics.GetValueOrDefault("ModularityScore", 0));
+            var angularResults =
+                results.ToList();
 
-            results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
-            {
-                Category = "FrontendSummary",
-                Metrics = new Dictionary<string, double>
+
+
+            var averageCompliance =
+                angularResults.Average(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "AngularComplianceScore",
+                            0));
+
+
+
+            var averageComplexity =
+                angularResults.Average(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "ComplexityScore",
+                            0));
+
+
+
+            var averageSelector =
+                angularResults.Average(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "SelectorScore",
+                            0));
+
+
+
+            var averageModularity =
+                angularResults.Average(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "ModularityScore",
+                            0));
+
+
+
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    projectPath)
                 {
-                    ["AngularFileCount"] = results.Count,
-                    ["AverageComplianceScore"] = avgCompliance,
-                    ["AverageComplexityScore"] = avgComplexity,
-                    ["AverageSelectorScore"] = avgSelector,
-                    ["AverageModularityScore"] = avgModularity,
-                    ["FrontEndHealthIndex"] = avgCompliance * 0.6 + avgModularity * 0.4
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Evaluator"] = Name,
-                    ["PolicyEnabled"] = "True",
-                    ["Framework"] = "Angular"
-                }
-            });
+                    Category =
+                        "FrontendSummary",
+
+                    Metrics =
+                    {
+                        ["AngularFileCount"] =
+                            angularResults.Count,
+
+                        ["AverageComplianceScore"] =
+                            averageCompliance,
+
+                        ["AverageComplexityScore"] =
+                            averageComplexity,
+
+                        ["AverageSelectorScore"] =
+                            averageSelector,
+
+                        ["AverageModularityScore"] =
+                            averageModularity,
+
+                        ["FrontEndHealthIndex"] =
+                            averageCompliance * 0.6 +
+                            averageModularity * 0.4
+                    },
+
+                    Metadata =
+                    {
+                        ["Evaluator"] =
+                            Name,
+
+                        ["PolicyEnabled"] =
+                            "True",
+
+                        ["Framework"] =
+                            Context?.Framework
+                            ?? "Angular"
+                    }
+                });
         }
 
-        _logger.LogInformation("✅ {Evaluator} completed with {Count} metric entries", Name, results.Count);
+
+
+        _logger.LogInformation(
+            "✅ {Evaluator} completed with {Count} metric entries",
+            Name,
+            results.Count);
+
+
+
         return results;
     }
 
-    private static double ComputeCompliance(double selector, double complexity, double naming, double modularity)
+
+
+    private static double ComputeCompliance(
+        double selector,
+        double complexity,
+        double naming,
+        double modularity)
     {
-        // Weighted average emphasizing maintainability and correctness
-        double score = selector * 0.25 + complexity * 0.25 + naming * 0.20 + modularity * 0.30;
-        return Math.Round(score * 100, 2);
+        var score =
+            selector * 0.25 +
+            complexity * 0.25 +
+            naming * 0.20 +
+            modularity * 0.30;
+
+
+        return Math.Round(
+            score * 100,
+            2);
     }
 }

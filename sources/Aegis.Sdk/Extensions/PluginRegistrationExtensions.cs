@@ -4,6 +4,7 @@ using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
 using Aegis.Shared.Architecture.Models.Policies.Dependency;
+using Aegis.Shared.Architecture.Models.Policies.FrontEnd;
 using Aegis.Shared.Architecture.Models.Policies.Infrastructure;
 using Aegis.Shared.Architecture.Models.Policies.Naming;
 using Aegis.Shared.Contracts;
@@ -58,6 +59,7 @@ public static class PluginRegistrationExtensions
         services.Configure<CouplingPolicy>(config.GetSection("Coupling"));
         services.Configure<ApiConsistencyPolicy>(config.GetSection("ApiConsistency"));
         services.Configure<ErrorHandlingPolicy>(config.GetSection("ErrorHandling"));
+        services.Configure<FrontendPolicy>(config.GetSection("ErrorHandling"));
 
         return services;
     }
@@ -88,6 +90,7 @@ public static class PluginRegistrationExtensions
             .AddJsonFile(Path.Combine("config", "coupling.policy.json"), optional: false, reloadOnChange: true)
             .AddJsonFile(Path.Combine("config", "apiconsistency.policy.json"), optional: false, reloadOnChange: true)
             .AddJsonFile(Path.Combine("config", "errorhandling.policy.json"), optional: false, reloadOnChange: true)
+            .AddJsonFile(Path.Combine("config", "frontend.policy.json"), optional: false, reloadOnChange: true)
             .Build();
     }
 }

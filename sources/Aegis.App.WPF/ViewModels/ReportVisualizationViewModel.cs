@@ -1,8 +1,6 @@
 ﻿using Aegis.App.Wpf.Models;
-using Aegis.App.Wpf.Services.Abstractions;
 using Aegis.Shared.Architecture.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Collections.ObjectModel;
 
 namespace Aegis.App.Wpf.ViewModels;
@@ -42,35 +40,49 @@ public sealed partial class ReportVisualizationViewModel
 
 
 
+    /// <summary>
+    /// Populated directly from the live AegisArchitectureReport / ProjectArchitectureContext
+    /// rather than the unused DashboardSnapshot pipeline (DashBoardSnapshotBuilder has no
+    /// live consumers anywhere in the app — see RefreshDashboards in MainViewModel, which
+    /// reads the same two live objects for Layers/Sections rather than that dead builder).
+    /// </summary>
     public void Update(
-        DashboardSnapshot snapshot)
+        AegisArchitectureReport report,
+        ProjectArchitectureContext context)
     {
         SummaryItems.Clear();
 
 
 
-        var metrics =
-            snapshot.Metrics;
-
-
-
         ProjectName =
-            metrics.ProjectName ?? "-";
+            report.ProjectName ?? "-";
 
 
 
 
         ExecutiveMessage =
-            metrics.TotalViolations == 0
+            report.TotalViolations == 0
                 ? "Architecture compliance is healthy. No violations detected."
-                : $"Architecture review detected {metrics.TotalViolations} findings requiring attention.";
+                : $"Architecture review detected {report.TotalViolations} findings requiring attention.";
+
+
+
+        var healthIndex =
+            report.Metrics?.ProjectHealthIndex ?? 0;
+
+        HealthStatus =
+            healthIndex >= 80
+                ? "Compliant"
+                : healthIndex >= 50
+                    ? "At Risk"
+                    : "Critical";
 
 
 
         SummaryItems.Add(
             new(
                 "Files scanned",
-                metrics.FilesScanned.ToString(),
+                report.TotalFilesScanned.ToString(),
                 "Source files analyzed by Aegis"));
 
 
@@ -78,7 +90,7 @@ public sealed partial class ReportVisualizationViewModel
         SummaryItems.Add(
             new(
                 "Violations",
-                metrics.TotalViolations.ToString(),
+                report.TotalViolations.ToString(),
                 "Architecture rule violations"));
 
 
@@ -86,7 +98,7 @@ public sealed partial class ReportVisualizationViewModel
         SummaryItems.Add(
             new(
                 "Framework",
-                metrics.Framework ?? "Unknown",
+                context.Framework ?? "Unknown",
                 "Detected technology stack"));
 
 
@@ -94,7 +106,7 @@ public sealed partial class ReportVisualizationViewModel
         SummaryItems.Add(
             new(
                 "Architecture",
-                metrics.ArchitectureStyle ?? "Unknown",
+                context.ArchitectureStyle ?? "Unknown",
                 "Detected architectural pattern"));
 
 
@@ -102,7 +114,15 @@ public sealed partial class ReportVisualizationViewModel
         SummaryItems.Add(
             new(
                 "Confidence",
-                $"{metrics.ArchitectureConfidence:P0}",
+                $"{context.Confidence:P0}",
                 "Detection confidence score"));
+
+
+
+        SummaryItems.Add(
+            new(
+                "Health index",
+                $"{healthIndex:0.##}%",
+                "Weighted compliance across all evaluated categories"));
     }
 }

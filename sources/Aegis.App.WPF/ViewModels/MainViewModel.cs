@@ -1,6 +1,7 @@
 ﻿using Aegis.App.Wpf.models;
 using Aegis.App.Wpf.Models;
 using Aegis.App.Wpf.Services;
+using Aegis.Architecture.RuleEngines;
 using Aegis.Sdk;
 using Aegis.Shared.Architecture.Models;
 using CommunityToolkit.Mvvm.Input;
@@ -317,7 +318,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
 
             RefreshDashboards(
-                result.Report);
+                result.Report,
+                result.Context);
 
 
             Logs.Add(
@@ -346,18 +348,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
 
     private void RefreshDashboards(
-    AegisArchitectureReport report)
+    AegisArchitectureReport report,
+    ProjectArchitectureContext context)
     {
-        var layers =
+        // Left-join every known domain against actual violations, so a fully compliant layer
+        // (e.g. Security with zero findings) still shows up with Count = 0 instead of being
+        // absent from the chart entirely — absence previously read as "not evaluated" rather
+        // than "evaluated and clean."
+        var violationsByDomain =
             report.Results
                 .GroupBy(x =>
                     string.IsNullOrWhiteSpace(x.Domain)
                         ? "Unknown"
                         : x.Domain)
-                .Select(g =>
+                .ToDictionary(g => g.Key, g => g.Count());
+
+        var layers =
+            RuleEngine.KnownDomains
+                .Select(domain =>
                     new LayerStat(
-                        g.Key,
-                        g.Count()))
+                        domain,
+                        violationsByDomain.TryGetValue(domain, out var count) ? count : 0))
                 .OrderByDescending(x => x.Count)
                 .ToList();
 
@@ -367,19 +378,32 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
 
 
-        _sectionDashboard.Update(
+        // Build sections directly from report.ComplianceScores rather than re-deriving categories
+        // from report.Results: ComplianceScores already covers every category with a registered
+        // rule (via ArchitectureRuleRegistry), scoring clean categories at 100 instead of omitting
+        // them, whereas grouping report.Results directly only ever sees categories with violations.
+        var violationsByCategory =
             report.Results
                 .GroupBy(x => x.Category)
-                .Select(g =>
-                    new SectionDashboardItem(
-                        g.Key.ToString(),
-                        g.Key,
-                        CalculateScore(g),
-                        g.Count(),
-                        CalculateScore(g) >= 0.7
+                .ToDictionary(g => g.Key, g => g.Count());
+
+        _sectionDashboard.Update(
+            report.ComplianceScores
+                .Select(kvp =>
+                {
+                    var ruleCount = violationsByCategory.TryGetValue(kvp.Key, out var c) ? c : 0;
+                    return new SectionDashboardItem(
+                        kvp.Key.ToString(),
+                        kvp.Key,
+                        kvp.Value / 100.0,
+                        ruleCount,
+                        kvp.Value >= 80
                             ? "Compliant"
                             : "Non-Compliant",
-                        $"{g.Count()} findings"))
+                        ruleCount == 0
+                            ? "No findings"
+                            : $"{ruleCount} findings");
+                })
                 .ToList());
 
 
@@ -391,10 +415,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
                         x.RuleName,
                         x.Category,
                         x.Severity,
-                        x.FilePath,
+                        Path.GetFileName(x.FilePath),
                         x.Message,
                         x.WeightedImpact))
                 .ToList());
+
+
+
+        // Was never wired up at all: SummaryItems/ExecutiveMessage/HealthStatus sat on their
+        // hardcoded defaults forever since nothing ever called Update on this view model.
+        _reportVisualization.Update(
+            report,
+            context);
     }
 
 
@@ -466,24 +498,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Logs.Add(
                 $"[EXPORT ERROR] {ex.Message}");
         }
-    }
-
-
-
-    private static double CalculateScore(
-        IEnumerable<dynamic> results)
-    {
-        var count =
-            results.Count();
-
-
-        return count switch
-        {
-            0 => 1,
-            <= 3 => 0.9,
-            <= 10 => 0.7,
-            _ => 0.4
-        };
     }
 
 

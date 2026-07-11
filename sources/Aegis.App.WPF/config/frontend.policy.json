@@ -1,0 +1,39 @@
+{
+  "Frontend": {
+    "Enabled": true,
+
+    "EnforceSelectorNaming": true,
+    "AllowedSelectorPrefixes": [
+      "app",
+      "lib",
+      "shared"
+    ],
+    "EnforceComponentPascalCase": true,
+    "MaxComponentsPerModule": 20,
+
+    "CheckHooksRules": true,
+    "MaxHooksPerComponent": 10,
+    "RequireReactPropTyping": true,
+    "AllowClassComponents": false,
+
+    "EnforceRazorViewModels": true,
+    "PreventEntityExposure": true,
+    "DetectRazorBusinessLogic": true,
+    "PreventDatabaseAccessInViews": true,
+    "MaxRazorViewComplexity": 50,
+    "MaxInlineCodeLines": 15,
+
+    "EnforceBlazorCodeBehind": true,
+    "RequireBlazorDependencyInjection": true,
+    "DetectBlazorLifecycleMisuse": true,
+    "MaxBlazorComponentComplexity": 50,
+    "MaxBlazorCodeBlockLines": 30,
+    "MaxEventCallbacksPerComponent": 15,
+
+    "MaxComponentComplexity": 50,
+    "EnforceComponentSeparation": true,
+    "EnforceDependencyInjection": true,
+    "DetectBusinessLogicInUI": true
+  }
+
+}

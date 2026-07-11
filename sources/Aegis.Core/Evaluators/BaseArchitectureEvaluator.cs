@@ -13,55 +13,44 @@ namespace Aegis.Architecture.Evaluators;
 
 /// <summary>
 /// 🧠 Base abstraction for all Aegis Evaluators.
-/// Evaluators analyze source code and produce structured metrics or facts (EvaluatorResults)
-/// that will later be interpreted by the RuleEngine.
+/// Evaluators analyze source code and produce structured metrics or facts
+/// consumed later by the RuleEngine.
 /// </summary>
 public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
 {
     protected readonly ILogger _logger;
 
-    /// <summary>
-    /// Unique evaluator name, e.g. "ComplexityEvaluator" or "ApiConsistencyEvaluator".
-    /// </summary>
+
     public abstract string Name { get; }
 
-    /// <summary>
-    /// Supported languages for this evaluator (defaults to all).
-    /// </summary>
+
     public virtual string[] SupportedLanguages { get; } = ["*"];
 
-    /// <summary>
-    /// Supported frameworks for this evaluator (defaults to all).
-    /// </summary>
+
     public virtual string[] SupportedFrameworks { get; } = ["*"];
 
-    /// <summary>
-    /// Indicates whether this evaluator is currently enabled (policy driven).
-    /// </summary>
+
     public bool IsEnabled { get; set; } = true;
 
-    /// <summary>
-    /// Weight factor applied to this evaluator’s contribution to scoring.
-    /// </summary>
+
     public double WeightFactor { get; set; } = 1.0;
 
-    /// <summary>
-    /// Optional context (language, framework, project metadata).
-    /// </summary>
+
     protected ProjectArchitectureContext? Context { get; private set; }
 
-    protected BaseArchitectureEvaluator(ILogger logger) => _logger = logger;
 
-    // ===============================================================
-    // 🧩 Policy Application
-    // ===============================================================
-    /// <summary>
-    /// Applies policy configuration to this evaluator.
-    /// Derived evaluators can override this to read their specific policy block.
-    /// </summary>
-    public virtual void ApplyPolicy(AegisArchitecturePolicy policy)
+
+    protected BaseArchitectureEvaluator(
+        ILogger logger)
     {
-        // Example of policy-driven toggling
+        _logger = logger;
+    }
+
+
+
+    public virtual void ApplyPolicy(
+        AegisArchitecturePolicy policy)
+    {
         switch (Name)
         {
             case "PerformanceEvaluator":
@@ -70,7 +59,8 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                 break;
 
             case "MaintainabilityEvaluator":
-                IsEnabled = policy.Maintainability.MinMaintainabilityIndex > 0;
+                IsEnabled =
+                    policy.Maintainability.MinMaintainabilityIndex > 0;
                 WeightFactor = 1.0;
                 break;
 
@@ -85,13 +75,16 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                 break;
         }
 
-        _logger.LogDebug("⚙️ Evaluator '{Name}' → Enabled={Enabled}, Weight={Weight}",
-            Name, IsEnabled, WeightFactor);
+
+        _logger.LogDebug(
+            "Evaluator {Name}: Enabled={Enabled}, Weight={Weight}",
+            Name,
+            IsEnabled,
+            WeightFactor);
     }
 
-    // ===============================================================
-    // 🚀 Evaluation Pipeline
-    // ===============================================================
+
+
     public async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateAsync(
         string projectPath,
         ProjectArchitectureContext context,
@@ -99,35 +92,43 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
     {
         Context = context;
 
+
         if (!IsEnabled)
         {
-            AegisDiagnostics.Report(Name, DiagnosticLevel.Info,
-                $"⏭️ Evaluator disabled by policy. Skipping {Name}.");
+            AegisDiagnostics.Report(
+                Name,
+                DiagnosticLevel.Info,
+                $"Evaluator disabled by policy: {Name}");
+
             return Enumerable.Empty<ArchitectureEvaluatorResult>();
         }
 
-        AegisDiagnostics.Report(Name, DiagnosticLevel.Info,
-            $"Starting evaluation for {context.Language}/{context.Framework}.");
 
         try
         {
-            var results = await EvaluateCoreAsync(projectPath, token);
-            var count = results.Count();
+            var results =
+                await EvaluateCoreAsync(
+                    projectPath,
+                    token);
 
-            AegisDiagnostics.Report(Name, DiagnosticLevel.Info,
-                $"Completed evaluation with {count} result(s).");
 
-            // Optionally scale impact scores using WeightFactor
-            foreach (var r in results)
+            foreach (var result in results)
             {
-                r.WeightFactor = WeightFactor;
+                result.WeightFactor = WeightFactor;
+                result.WasEnabled = true;
             }
+
 
             return results;
         }
         catch (Exception ex)
         {
-            AegisDiagnostics.Report(Name, DiagnosticLevel.Error, "Evaluation failed.", ex);
+            AegisDiagnostics.Report(
+                Name,
+                DiagnosticLevel.Error,
+                "Evaluator failed.",
+                ex);
+
 #if DEBUG
             throw;
 #else
@@ -136,41 +137,172 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         }
     }
 
-    /// <summary>
-    /// Core logic implemented by derived evaluators.
-    /// Should perform the actual analysis and produce EvaluatorResults.
-    /// </summary>
-    protected abstract Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath, CancellationToken token);
+
+
+    protected abstract Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token);
+
+
 
     /// <summary>
-    /// Determines whether the given path belongs to an excluded directory.
+    /// Centralized Aegis source filtering.
+    /// Only analyzes application domains.
     /// </summary>
-    protected static bool IsExcludedDir(string path) => PathUtils.IsExcludedDir(path);
+    protected IReadOnlyList<string> ResolveSourceFiles(
+        string projectPath,
+        params string[] extensions)
+    {
+        return Directory
+            .EnumerateFiles(
+                projectPath,
+                "*.*",
+                SearchOption.AllDirectories)
+            .Where(file =>
+                extensions.Any(ext =>
+                    file.EndsWith(
+                        ext,
+                        StringComparison.OrdinalIgnoreCase)))
+            .Where(file =>
+                !IsExcludedDir(file))
+            .Where(IsApplicationCode)
+            .ToList();
+    }
+
+
 
     /// <summary>
-    /// Optional helper for backward compatibility:
-    /// converts evaluator outputs to a RuleResult form (temporary migration).
+    /// Restricts analysis to backend/frontend application layers.
+    /// Unity and external clients are intentionally ignored.
     /// </summary>
-    protected static IEnumerable<ArchitectureRuleresult> ConvertToRuleResults(
-        IEnumerable<ArchitectureEvaluatorResult> evalResults, string ruleId)
-        => evalResults.Select(e =>
+    private static bool IsApplicationCode(
+        string file)
+    {
+        var normalized =
+            file.Replace(
+                Path.AltDirectorySeparatorChar,
+                Path.DirectorySeparatorChar);
+
+
+
+        var ignored =
+            new[]
+            {
+                $"{Path.DirectorySeparatorChar}client{Path.DirectorySeparatorChar}",
+                $"{Path.DirectorySeparatorChar}Library{Path.DirectorySeparatorChar}",
+                $"{Path.DirectorySeparatorChar}Temp{Path.DirectorySeparatorChar}",
+                $"{Path.DirectorySeparatorChar}Logs{Path.DirectorySeparatorChar}",
+                $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                $"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}",
+                $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}"
+            };
+
+
+        if (ignored.Any(x =>
+                normalized.Contains(
+                    x,
+                    StringComparison.OrdinalIgnoreCase)))
         {
-            var category = ArchitectureRuleCategory.General;
+            return false;
+        }
+
+
+
+        var relativeParts =
+            normalized.Split(
+                Path.DirectorySeparatorChar,
+                StringSplitOptions.RemoveEmptyEntries);
+
+
+
+        return relativeParts.Any(part =>
+            part.Equals(
+                "back",
+                StringComparison.OrdinalIgnoreCase)
+            ||
+            part.Equals(
+                "front",
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+
+
+    protected static bool IsExcludedDir(
+        string path)
+        => PathUtils.IsExcludedDir(path);
+
+
+
+    protected static IEnumerable<ArchitectureRuleresult>
+        ConvertToRuleResults(
+            IEnumerable<ArchitectureEvaluatorResult> evalResults,
+            string ruleId)
+    {
+        return evalResults.Select(e =>
+        {
+            var category =
+                ArchitectureRuleCategory.General;
+
+
             if (!string.IsNullOrWhiteSpace(e.Category) &&
-                Enum.TryParse<ArchitectureRuleCategory>(e.Category, true, out var parsed))
+                Enum.TryParse(
+                    e.Category,
+                    true,
+                    out ArchitectureRuleCategory parsed))
             {
                 category = parsed;
             }
+
 
             return new ArchitectureRuleresult
             {
                 RuleId = ruleId,
                 Message =
-                 $"{e.Source}: {Path.GetFileName(e.Target)} ({string.Join(", ", e.Metrics.Select(m => $"{m.Key}={m.Value:0.##}"))})",
+                    $"{e.Source}: {Path.GetFileName(e.Target)} " +
+                    $"({string.Join(", ", e.Metrics.Select(m => $"{m.Key}={m.Value:0.##}"))})",
+
                 Category = category,
                 Severity = ArchitectureRuleSeverity.Info,
                 Target = e.Target
             };
         });
+    }
+
+
+    /// <summary>
+    /// Returns application source files restricted to Aegis application boundaries.
+    /// Only /back and /front domains are analyzed.
+    /// This avoids scanning external clients such as Unity projects.
+    /// </summary>
+  
+
+
+    /// <summary>
+    /// Filters files belonging only to supported application domains.
+    /// </summary>
+    protected static IEnumerable<string> EnumerateApplicationFiles(
+     string projectPath)
+    {
+        return Directory
+            .EnumerateFiles(
+                projectPath,
+                "*.*",
+                SearchOption.AllDirectories)
+            .Where(file =>
+            {
+                var relative =
+                    Path.GetRelativePath(projectPath, file);
+
+                return
+                    relative.StartsWith(
+                        $"back{Path.DirectorySeparatorChar}",
+                        StringComparison.OrdinalIgnoreCase)
+                    ||
+                    relative.StartsWith(
+                        $"front{Path.DirectorySeparatorChar}",
+                        StringComparison.OrdinalIgnoreCase);
+            });
+    }
 }

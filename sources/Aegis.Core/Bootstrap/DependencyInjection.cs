@@ -1,4 +1,5 @@
 ﻿using Aegis.Architecture.Aggregation;
+using Aegis.Architecture.Evaluators.Naming.Policies;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Architecture.Scoring;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -11,20 +12,37 @@ namespace Aegis.Architecture.Bootstrap;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddAegisCore(this IServiceCollection services, ILogger? logger = null)
+    public static IServiceCollection AddAegisCore(
+    this IServiceCollection services,
+    ILogger? logger = null)
     {
-        // Register all internal scoped dependencies following Franz model
         services.AddScopedDependencies(a => a.FullName?.StartsWith("Aegis") ?? false);
 
-        services.AddSingleton<RuleEngine>();
-
-        // Safe to always call: this only fills in whatever Franz's convention
-        // scan above missed, it never re-registers something already present.
         services.AddMissingArchitectureEvaluators();
+
+
+        // ===============================================================
+        // 🏷️ Naming Convention Engine
+        // ===============================================================
+
+        services.AddSingleton<NamingConventionResolver>();
+
+        services.AddSingleton<INamingConventionPolicy, CSharpNamingConventionPolicy>();
+        services.AddSingleton<INamingConventionPolicy, JavaNamingConventionPolicy>();
+        services.AddSingleton<INamingConventionPolicy, PythonNamingConventionPolicy>();
+        services.AddSingleton<INamingConventionPolicy, TypeScriptNamingConventionPolicy>();
+        services.AddSingleton<INamingConventionPolicy, DefaultNamingConventionPolicy>();
+
+
+        // ===============================================================
+        // ⚙️ Core Engines
+        // ===============================================================
+
+        services.AddSingleton<RuleEngine>();
         services.AddSingleton<RuleEngineCore>();
         services.AddSingleton<RuleWeightingEngine>();
         services.AddSingleton<CrossEvaluatorAggregator>();
-        services.AddSingleton<RuleEngine>();
+
 
         return services;
     }

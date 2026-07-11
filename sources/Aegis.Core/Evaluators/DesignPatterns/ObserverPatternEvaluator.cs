@@ -1,5 +1,7 @@
 ﻿using System.Text.RegularExpressions;
+
 using Aegis.Architecture.Evaluators;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
@@ -11,151 +13,406 @@ namespace Aegis.Architecture.Evaluators.DesignPatterns;
 
 /// <summary>
 /// Quantitatively evaluates Observer pattern usage and event discipline.
-/// Detects subscription leaks, missing disposal, manual polling,
-/// and interface non-compliance. Produces an ObserverComplianceScore (0–100).
+/// Detects:
+/// - Observer implementation
+/// - Subscription lifecycle handling
+/// - Missing unsubscribe/disposal patterns
+/// - Manual polling instead of notifications
+/// Produces an ObserverComplianceScore (0-100).
 /// </summary>
 public sealed class ObserverPatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 
-    public override string Name => "ObserverPatternEvaluator";
-    public override string[] SupportedLanguages => ["C#", "Java", "Python", "TypeScript"];
-    public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "RxJS", "FastAPI"];
 
-    private static readonly Regex ObserverClassRx = new(@"class\s+(\w+Observer)\b", RegexOptions.Compiled);
-    private static readonly Regex SubjectAttachRx = new(@"\b(Attach|Subscribe)\s*\(", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex SubjectDetachRx = new(@"\b(Detach|Unsubscribe|Dispose)\s*\(", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex InterfaceRx = new(@"I?(Observer|Subscriber|Listener)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex ManualPollingRx = new(@"\bwhile\s*\(.*\.has(Update|Change|Event)\(\)\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex EventCountRx = new(@"\.Subscribe\s*\(", RegexOptions.Compiled);
+    public override string Name =>
+        "ObserverPatternEvaluator";
 
-    public ObserverPatternEvaluator(ILogger<ObserverPatternEvaluator> logger, IOptions<AegisArchitecturePolicy> options)
+
+    public override string[] SupportedLanguages =>
+    [
+        "C#",
+        "Java",
+        "Python",
+        "TypeScript"
+    ];
+
+
+    public override string[] SupportedFrameworks =>
+    [
+        "ASP.NET",
+        "Spring",
+        "RxJS",
+        "FastAPI"
+    ];
+
+
+
+    private static readonly Regex ObserverClassRegex =
+        new(
+            @"class\s+(\w+Observer)\b",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex SubjectAttachRegex =
+        new(
+            @"\b(Attach|Subscribe)\s*\(",
+            RegexOptions.Compiled |
+            RegexOptions.IgnoreCase);
+
+
+
+    private static readonly Regex SubjectDetachRegex =
+        new(
+            @"\b(Detach|Unsubscribe|Dispose)\s*\(",
+            RegexOptions.Compiled |
+            RegexOptions.IgnoreCase);
+
+
+
+    private static readonly Regex InterfaceRegex =
+        new(
+            @"I?(Observer|Subscriber|Listener)\b",
+            RegexOptions.Compiled |
+            RegexOptions.IgnoreCase);
+
+
+
+    private static readonly Regex ManualPollingRegex =
+        new(
+            @"\bwhile\s*\(.*\.has(Update|Change|Event)\(\)\)",
+            RegexOptions.Compiled |
+            RegexOptions.IgnoreCase);
+
+
+
+    public ObserverPatternEvaluator(
+        ILogger<ObserverPatternEvaluator> logger,
+        IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.Architecture.DesignPatterns ?? new();
+        _policy =
+            options.Value.Architecture.DesignPatterns
+            ?? new DesignPatternPolicy();
     }
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(string projectPath, CancellationToken token)
+
+
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
+        string projectPath,
+        CancellationToken token)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
+        var results =
+            new List<ArchitectureEvaluatorResult>();
+
+
 
         if (!_policy.EnforceObserverPattern)
         {
-            _logger.LogInformation("🔕 Observer pattern enforcement disabled by policy.");
+            _logger.LogInformation(
+                "Observer pattern evaluation disabled by policy.");
+
             return results;
         }
 
-        var extensions = Context?.Language switch
-        {
-            "C#" => new[] { ".cs" },
-            "Java" => new[] { ".java" },
-            "Python" => new[] { ".py" },
-            "TypeScript" => new[] { ".ts" },
-            _ => new[] { ".cs", ".java", ".py", ".ts" }
-        };
 
-        var files = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-            .Where(f => extensions.Any(ext => f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
+
+        var files =
+            ResolveSourceFiles(
+                projectPath,
+                ".cs",
+                ".java",
+                ".py",
+                ".ts");
+
+
 
         if (files.Count == 0)
         {
-            _logger.LogInformation("🔔 No files found for Observer pattern evaluation.");
             return results;
         }
 
-        _logger.LogTrace("🔍 Scanning {Count} files for Observer pattern compliance...", files.Count);
+
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
-            var content = await File.ReadAllTextAsync(file, token);
-            var fileName = Path.GetFileName(file);
 
-            bool isObserver = ObserverClassRx.IsMatch(content);
-            bool hasInterface = InterfaceRx.IsMatch(content);
-            bool subscribes = SubjectAttachRx.IsMatch(content);
-            bool unsubscribes = SubjectDetachRx.IsMatch(content);
-            bool polling = ManualPollingRx.IsMatch(content);
-            int subscriptionCount = EventCountRx.Matches(content).Count;
 
-            // --- Derived metrics ---
-            double leakRisk = subscribes && !unsubscribes ? 1.0 : 0.0;
-            double subscriptionDensity = subscriptionCount / (double)Math.Max(1, _policy.MaxSubscribers);
-            double interfaceAdherence = hasInterface ? 1.0 : 0.0;
-            double pollingPenalty = polling ? 1.0 : 0.0;
+            string content;
 
-            // --- Compliance scoring ---
-            double complianceScore = ComputeCompliance(interfaceAdherence, leakRisk, subscriptionDensity, pollingPenalty);
-
-            results.Add(new ArchitectureEvaluatorResult(Name, file)
+            try
             {
-                Category = "DesignPattern",
-                Metrics = new Dictionary<string, double>
+                content =
+                    await File.ReadAllTextAsync(
+                        file,
+                        token);
+            }
+            catch
+            {
+                continue;
+            }
+
+
+
+            var isObserver =
+                ObserverClassRegex.IsMatch(content);
+
+
+
+            var hasInterface =
+                InterfaceRegex.IsMatch(content);
+
+
+
+            var subscribes =
+                SubjectAttachRegex.IsMatch(content);
+
+
+
+            var unsubscribes =
+                SubjectDetachRegex.IsMatch(content);
+
+
+
+            var polling =
+                ManualPollingRegex.IsMatch(content);
+
+
+
+            var subscriptionCount =
+                SubjectAttachRegex.Matches(content).Count;
+
+
+
+            var leakRisk =
+                subscribes && !unsubscribes
+                    ? 1
+                    : 0;
+
+
+
+            var subscriptionDensity =
+                subscriptionCount /
+                (double)Math.Max(
+                    1,
+                    _policy.MaxSubscribers);
+
+
+
+            subscriptionDensity =
+                Math.Min(
+                    subscriptionDensity,
+                    1);
+
+
+
+            var interfaceAdherence =
+                hasInterface
+                    ? 1
+                    : 0;
+
+
+
+            var pollingPenalty =
+                polling
+                    ? 1
+                    : 0;
+
+
+
+            var complianceScore =
+                ComputeCompliance(
+                    interfaceAdherence,
+                    leakRisk,
+                    subscriptionDensity,
+                    pollingPenalty);
+
+
+
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    file)
                 {
-                    ["IsObserverClass"] = isObserver ? 1 : 0,
-                    ["LeakRisk"] = leakRisk,
-                    ["SubscriptionDensity"] = subscriptionDensity,
-                    ["InterfaceAdherence"] = interfaceAdherence,
-                    ["PollingPenalty"] = pollingPenalty,
-                    ["ObserverComplianceScore"] = complianceScore
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["FileName"] = fileName,
-                    ["Language"] = Context?.Language ?? "Unknown",
-                    ["Framework"] = Context?.Framework ?? "Unknown",
-                    ["SubscriptionCount"] = subscriptionCount.ToString(),
-                    ["RequireObserverInterface"] = _policy.RequireObserverInterface.ToString(),
-                    ["MaxSubscribers"] = _policy.MaxSubscribers.ToString(),
-                    ["DetectLeakingSubscriptions"] = _policy.DetectLeakingSubscriptions.ToString()
-                }
-            });
+                    Category =
+                        nameof(
+                            ArchitectureRuleCategory.DesignPatterns),
+
+                    Metrics =
+                    {
+                        ["IsObserverClass"] =
+                            isObserver
+                                ? 1
+                                : 0,
+
+                        ["SubscriptionCount"] =
+                            subscriptionCount,
+
+                        ["LeakRisk"] =
+                            leakRisk,
+
+                        ["SubscriptionDensity"] =
+                            subscriptionDensity,
+
+                        ["InterfaceAdherence"] =
+                            interfaceAdherence,
+
+                        ["PollingPenalty"] =
+                            pollingPenalty,
+
+                        ["ObserverComplianceScore"] =
+                            complianceScore
+                    },
+
+                    Metadata =
+                    {
+                        ["FileName"] =
+                            Path.GetFileName(file),
+
+                        ["Language"] =
+                            Context?.Language
+                            ?? "Unknown",
+
+                        ["Framework"] =
+                            Context?.Framework
+                            ?? "Unknown",
+
+                        ["Layer"] =
+                            Context?.Layer
+                            ?? "Unknown",
+
+                        ["RequireObserverInterface"] =
+                            _policy.RequireObserverInterface.ToString(),
+
+                        ["DetectLeakingSubscriptions"] =
+                            _policy.DetectLeakingSubscriptions.ToString()
+                    }
+                });
         }
 
-        // 🔢 Aggregated summary
+
+
         if (results.Count > 0)
         {
-            double avgScore = results.Average(r => r.Metrics.GetValueOrDefault("ObserverComplianceScore", 0));
-            double avgDensity = results.Average(r => r.Metrics.GetValueOrDefault("SubscriptionDensity", 0));
-            double leakCount = results.Count(r => r.Metrics.GetValueOrDefault("LeakRisk", 0) == 1);
-            double pollingCount = results.Count(r => r.Metrics.GetValueOrDefault("PollingPenalty", 0) == 1);
+            var observerCount =
+                results.Count;
 
-            results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
-            {
-                Category = "DesignPatternSummary",
-                Metrics = new Dictionary<string, double>
+
+
+            var avgScore =
+                results.Average(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "ObserverComplianceScore",
+                            0));
+
+
+
+            var avgDensity =
+                results.Average(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "SubscriptionDensity",
+                            0));
+
+
+
+            var leakCount =
+                results.Count(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "LeakRisk",
+                            0) > 0);
+
+
+
+            var pollingCount =
+                results.Count(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "PollingPenalty",
+                            0) > 0);
+
+
+
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    projectPath)
                 {
-                    ["FileCount"] = results.Count,
-                    ["AverageComplianceScore"] = avgScore,
-                    ["AverageSubscriptionDensity"] = avgDensity,
-                    ["LeakCount"] = leakCount,
-                    ["PollingCount"] = pollingCount,
-                    ["OverallObserverHealth"] = avgScore * (1 - (leakCount + pollingCount) / Math.Max(1.0, results.Count))
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Evaluator"] = Name,
-                    ["PolicyEnabled"] = _policy.EnforceObserverPattern.ToString()
-                }
-            });
+                    Category =
+                        "DesignPatternSummary",
+
+                    Metrics =
+                    {
+                        ["ObserverCount"] =
+                            observerCount,
+
+                        ["AverageComplianceScore"] =
+                            avgScore,
+
+                        ["AverageSubscriptionDensity"] =
+                            avgDensity,
+
+                        ["LeakCount"] =
+                            leakCount,
+
+                        ["PollingCount"] =
+                            pollingCount,
+
+                        ["OverallObserverHealth"] =
+                            avgScore *
+                            (
+                                1 -
+                                (leakCount + pollingCount) /
+                                (double)Math.Max(
+                                    1,
+                                    observerCount)
+                            )
+                    },
+
+                    Metadata =
+                    {
+                        ["Evaluator"] =
+                            Name,
+
+                        ["PolicyEnabled"] =
+                            _policy.EnforceObserverPattern.ToString()
+                    }
+                });
         }
 
-        _logger.LogInformation("🔔 {Evaluator} completed with {Count} metric entries", Name, results.Count);
+
+
+        _logger.LogInformation(
+            "{Evaluator} completed with {Count} metric entries",
+            Name,
+            results.Count);
+
+
+
         return results;
     }
 
-    private static double ComputeCompliance(double interfaceAdherence, double leakRisk, double subscriptionDensity, double pollingPenalty)
+
+
+    private static double ComputeCompliance(
+        double interfaceAdherence,
+        double leakRisk,
+        double subscriptionDensity,
+        double pollingPenalty)
     {
-        // Weighted scoring model:
-        // Adherence & balance increase compliance; leaks/polling reduce it.
-        double score =
+        var score =
             interfaceAdherence * 0.35 +
             (1 - Math.Min(subscriptionDensity, 1)) * 0.25 +
             (1 - leakRisk) * 0.25 +
             (1 - pollingPenalty) * 0.15;
 
-        return Math.Round(score * 100, 2);
+
+        return Math.Round(
+            score * 100,
+            2);
     }
 }

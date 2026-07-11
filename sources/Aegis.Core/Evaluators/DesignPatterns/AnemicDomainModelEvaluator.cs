@@ -3,8 +3,6 @@ using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
-
-using Aegis.Shared.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -19,8 +17,19 @@ public sealed class AnemicDomainModelEvaluator : BaseArchitectureEvaluator
     private readonly DesignPatternPolicy _policy;
 
     public override string Name => "AnemicDomainModelEvaluator";
-    public override string[] SupportedLanguages => ["C#", "Java"];
-    public override string[] SupportedFrameworks => ["Domain", "DDD", "CleanArchitecture"];
+
+    public override string[] SupportedLanguages =>
+    [
+        "C#",
+        "Java"
+    ];
+
+    public override string[] SupportedFrameworks =>
+    [
+        "Domain",
+        "DDD",
+        "CleanArchitecture"
+    ];
 
     private static readonly Regex ClassRx =
         new(@"class\s+([A-Z][A-Za-z0-9_]*)", RegexOptions.Compiled);
@@ -31,26 +40,33 @@ public sealed class AnemicDomainModelEvaluator : BaseArchitectureEvaluator
     private static readonly Regex MethodRx =
         new(@"(public|protected|internal)\s+(\w+(\?|<\w+>)?)\s+\w+\s*\(.*\)\s*\{", RegexOptions.Compiled);
 
-    public AnemicDomainModelEvaluator(ILogger<AnemicDomainModelEvaluator> logger, IOptions<AegisArchitecturePolicy> options)
+    public AnemicDomainModelEvaluator(
+        ILogger<AnemicDomainModelEvaluator> logger,
+        IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
         _policy = options.Value.DesignPatterns ?? new DesignPatternPolicy();
     }
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(string projectPath, CancellationToken token)
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
+        string projectPath,
+        CancellationToken token)
     {
         var results = new List<ArchitectureEvaluatorResult>();
 
         if (!_policy.DetectAnemicDomainModels)
         {
-            _logger.LogInformation("🏗️ {Evaluator} disabled by policy.", Name);
+            _logger.LogInformation(
+                "🏗️ {Evaluator} disabled by policy.",
+                Name);
+
             return results;
         }
 
-        var files = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-            .Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                     || f.EndsWith(".java", StringComparison.OrdinalIgnoreCase))
-            .Where(f => !PathUtils.IsExcludedDir(f))
+        var files = EnumerateApplicationFiles(projectPath)
+            .Where(file =>
+                file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
+                file.EndsWith(".java", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         foreach (var file in files)
@@ -58,14 +74,23 @@ public sealed class AnemicDomainModelEvaluator : BaseArchitectureEvaluator
             token.ThrowIfCancellationRequested();
 
             string content;
-            try { content = await File.ReadAllTextAsync(file, token); }
-            catch { continue; }
 
-            // 🧩 Ignore known data types
+            try
+            {
+                content = await File.ReadAllTextAsync(file, token);
+            }
+            catch
+            {
+                continue;
+            }
+
+            // Ignore DTOs, Records and configuration models
             if (content.Contains("record ", StringComparison.OrdinalIgnoreCase) ||
                 content.Contains("Dto", StringComparison.OrdinalIgnoreCase) ||
                 content.Contains("Config", StringComparison.OrdinalIgnoreCase))
+            {
                 continue;
+            }
 
             foreach (Match match in ClassRx.Matches(content))
             {
@@ -74,17 +99,25 @@ public sealed class AnemicDomainModelEvaluator : BaseArchitectureEvaluator
                 int properties = PropertyRx.Matches(content).Count;
                 int methods = MethodRx.Matches(content).Count;
 
-                bool allPublic = content.Contains("public ", StringComparison.OrdinalIgnoreCase)
-                                 && !content.Contains("private set", StringComparison.OrdinalIgnoreCase);
-                bool inheritsBase = content.Contains("BaseEntity", StringComparison.OrdinalIgnoreCase);
+                bool allPublic =
+                    content.Contains("public ", StringComparison.OrdinalIgnoreCase) &&
+                    !content.Contains("private set", StringComparison.OrdinalIgnoreCase);
 
-                double propertyToMethodRatio = properties == 0 ? 0 : (double)methods / properties;
-                double anemicScore = ComputeAnemicScore(properties, methods);
+                bool inheritsBase =
+                    content.Contains("BaseEntity", StringComparison.OrdinalIgnoreCase);
 
-                // 🧠 Build metric result
+                double propertyToMethodRatio =
+                    properties == 0
+                        ? 0
+                        : (double)methods / properties;
+
+                double anemicScore =
+                    ComputeAnemicScore(properties, methods);
+
                 results.Add(new ArchitectureEvaluatorResult(Name, file)
                 {
                     Category = "DesignPattern",
+
                     Metrics = new Dictionary<string, double>
                     {
                         ["Properties"] = properties,
@@ -92,6 +125,7 @@ public sealed class AnemicDomainModelEvaluator : BaseArchitectureEvaluator
                         ["PropertyToMethodRatio"] = propertyToMethodRatio,
                         ["AnemicScore"] = anemicScore
                     },
+
                     Metadata = new Dictionary<string, string>
                     {
                         ["ClassName"] = className,
@@ -106,17 +140,20 @@ public sealed class AnemicDomainModelEvaluator : BaseArchitectureEvaluator
             }
         }
 
-        // 📊 Global summary: average anemic index
         if (results.Count > 0)
         {
             results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
             {
                 Category = "DesignPatternSummary",
+
                 Metrics = new Dictionary<string, double>
                 {
                     ["ClassCount"] = results.Count,
-                    ["AverageAnemicScore"] = results.Average(r => r.Metrics.GetValueOrDefault("AnemicScore", 0))
+                    ["AverageAnemicScore"] =
+                        results.Average(r =>
+                            r.Metrics.GetValueOrDefault("AnemicScore", 0))
                 },
+
                 Metadata = new Dictionary<string, string>
                 {
                     ["Evaluator"] = Name,
@@ -125,16 +162,24 @@ public sealed class AnemicDomainModelEvaluator : BaseArchitectureEvaluator
             });
         }
 
-        _logger.LogInformation("🏗️ {Evaluator} completed with {Count} entries", Name, results.Count);
+        _logger.LogInformation(
+            "🏗️ {Evaluator} completed with {Count} entries",
+            Name,
+            results.Count);
+
         return results;
     }
 
-    private static double ComputeAnemicScore(int properties, int methods)
+    private static double ComputeAnemicScore(
+        int properties,
+        int methods)
     {
-        // Simple heuristic: the higher the properties/methods ratio, the more anemic
-        if (properties == 0) return 0;
+        if (properties == 0)
+            return 0;
+
         double ratio = (double)methods / properties;
-        double score = 1 - Math.Min(ratio, 1.0); // 1.0 = fully anemic, 0.0 = rich in behavior
+        double score = 1 - Math.Min(ratio, 1.0);
+
         return Math.Round(score * 100, 2);
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System.Text.RegularExpressions;
+
 using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -9,26 +10,34 @@ using Microsoft.Extensions.Options;
 
 namespace Aegis.Architecture.Evaluators.FrontEnd;
 
+
 /// <summary>
-/// Quantitatively evaluates ASP.NET Razor (.cshtml) views for
-/// presentation separation, view model discipline, complexity,
-/// and server-side rendering architecture.
+/// Quantitatively evaluates ASP.NET Razor (.cshtml) views for:
+/// - Presentation separation
+/// - ViewModel discipline
+/// - Rendering complexity
+/// - Data access isolation
+/// - Dependency discipline
+/// - UI componentization
 ///
 /// Produces RazorComplianceScore (0-100)
-/// and project-wide RazorHealthIndex.
+/// and RazorHealthIndex.
 /// </summary>
 public sealed class RazorEvaluator : BaseArchitectureEvaluator
 {
     private readonly FrontendPolicy _policy;
 
 
-    public override string Name => "RazorEvaluator";
+    public override string Name =>
+        "RazorEvaluator";
+
 
     public override string[] SupportedLanguages =>
     [
         "Razor",
         "C#"
     ];
+
 
     public override string[] SupportedFrameworks =>
     [
@@ -37,52 +46,70 @@ public sealed class RazorEvaluator : BaseArchitectureEvaluator
     ];
 
 
+
     private static readonly Regex ModelDeclarationRx =
-        new(@"@\s*model\s+([\w\.]+)",
+        new(
+            @"@\s*model\s+([\w\.]+)",
             RegexOptions.Compiled);
+
 
 
     private static readonly Regex InlineCodeBlockRx =
-        new(@"@\s*\{",
+        new(
+            @"@\s*\{",
             RegexOptions.Compiled);
+
 
 
     private static readonly Regex ConditionalRx =
-        new(@"@\s*(if|else|for|foreach|while)\b",
+        new(
+            @"@\s*(if|else|for|foreach|while)\b",
             RegexOptions.Compiled);
+
 
 
     private static readonly Regex EntityModelRx =
-        new(@"@\s*model\s+.*(Entity|Model)\b",
+        new(
+            @"@\s*model\s+.*(Entity|Model)\b",
             RegexOptions.Compiled |
             RegexOptions.IgnoreCase);
+
 
 
     private static readonly Regex ViewModelRx =
-        new(@"@\s*model\s+.*ViewModel\b",
+        new(
+            @"@\s*model\s+.*ViewModel\b",
             RegexOptions.Compiled |
             RegexOptions.IgnoreCase);
+
 
 
     private static readonly Regex DatabaseLeakRx =
-        new(@"\b(DbContext|SqlConnection|EntityFramework|DbSet|ExecuteSql)\b",
+        new(
+            @"\b(DbContext|SqlConnection|EntityFramework|DbSet|ExecuteSql)\b",
             RegexOptions.Compiled |
             RegexOptions.IgnoreCase);
+
 
 
     private static readonly Regex ServiceInjectionRx =
-        new(@"@\s*inject\s+",
+        new(
+            @"@\s*inject\s+",
             RegexOptions.Compiled |
             RegexOptions.IgnoreCase);
 
 
+
     private static readonly Regex TagHelperRx =
-        new(@"<[\w\-]+\s",
+        new(
+            @"<[\w\-]+\s",
             RegexOptions.Compiled);
 
 
+
     private static readonly Regex HtmlHelperRx =
-        new(@"Html\.(Action|Partial|RenderPartial|Display|Editor)",
+        new(
+            @"Html\.(Action|Partial|RenderPartial|Display|Editor)",
             RegexOptions.Compiled |
             RegexOptions.IgnoreCase);
 
@@ -93,25 +120,33 @@ public sealed class RazorEvaluator : BaseArchitectureEvaluator
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.Frontend ?? new FrontendPolicy();
+        _policy =
+            options.Value.Frontend
+            ?? new FrontendPolicy();
     }
 
 
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath,
-        CancellationToken token)
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
+        var results =
+            new List<ArchitectureEvaluatorResult>();
 
 
         var files =
-            Directory.EnumerateFiles(
-                    projectPath,
-                    "*.cshtml",
-                    SearchOption.AllDirectories)
-                .Where(f => !IsExcludedDir(f))
-                .ToList();
+            ResolveSourceFiles(
+                projectPath,
+                ".cshtml");
+
+
+
+        if (files.Count == 0)
+        {
+            return results;
+        }
 
 
 
@@ -127,209 +162,99 @@ public sealed class RazorEvaluator : BaseArchitectureEvaluator
             token.ThrowIfCancellationRequested();
 
 
-            var content =
-                await File.ReadAllTextAsync(file, token);
+            string content;
 
 
-            var lineCount =
-                content.Split('\n').Length;
-
-
-            var modelMatch =
-                ModelDeclarationRx.Match(content);
-
-
-            bool hasModel =
-                modelMatch.Success;
-
-
-            bool usesViewModel =
-                ViewModelRx.IsMatch(content);
-
-
-            bool exposesEntity =
-                EntityModelRx.IsMatch(content);
-
-
-            bool hasInlineCode =
-                InlineCodeBlockRx.IsMatch(content);
-
-
-            bool hasDatabaseLeak =
-                DatabaseLeakRx.IsMatch(content);
-
-
-            bool injectsServices =
-                ServiceInjectionRx.IsMatch(content);
-
-
-            bool usesTagHelpers =
-                TagHelperRx.IsMatch(content);
-
-
-            bool usesHtmlHelpers =
-                HtmlHelperRx.IsMatch(content);
-
-
-            int conditionalCount =
-                ConditionalRx.Matches(content).Count;
-
-
-
-            // Complexity
-
-            double complexityScore = 1.0;
-
-            if (_policy.MaxComponentComplexity > 0 &&
-                lineCount > _policy.MaxComponentComplexity)
+            try
             {
-                complexityScore =
-                    Math.Max(
-                        0,
-                        1 -
-                        (double)lineCount /
-                        (_policy.MaxComponentComplexity * 2));
+                content =
+                    await File.ReadAllTextAsync(
+                        file,
+                        token);
+            }
+            catch
+            {
+                continue;
             }
 
 
 
-            // Presentation separation
-
-            double separationScore =
-                hasInlineCode
-                    ? 0.5
-                    : 1.0;
+            var analysis =
+                AnalyzeView(
+                    content);
 
 
 
-            // Model discipline
-
-            double modelScore =
-                usesViewModel
-                    ? 1.0
-                    : exposesEntity
-                        ? 0.2
-                        : 0.7;
-
-
-
-            // Data access isolation
-
-            double dataIsolationScore =
-                hasDatabaseLeak
-                    ? 0.0
-                    : 1.0;
-
-
-
-            // Service injection
-
-            double dependencyScore =
-                injectsServices
-                    ? 0.5
-                    : 1.0;
-
-
-
-            // Reusable UI elements
-
-            double componentizationScore =
-                usesTagHelpers || usesHtmlHelpers
-                    ? 1.0
-                    : 0.8;
-
-
-
-            double complianceScore =
-                ComputeCompliance(
-                    complexityScore,
-                    separationScore,
-                    modelScore,
-                    dataIsolationScore,
-                    dependencyScore,
-                    componentizationScore);
-
-
-
-            results.Add(new ArchitectureEvaluatorResult(Name, file)
-            {
-                Category = "Frontend",
-
-                Metrics = new Dictionary<string, double>
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    file)
                 {
-                    ["ComplexityScore"] = complexityScore,
-                    ["PresentationSeparationScore"] = separationScore,
-                    ["ViewModelScore"] = modelScore,
-                    ["DataIsolationScore"] = dataIsolationScore,
-                    ["DependencyScore"] = dependencyScore,
-                    ["ComponentizationScore"] = componentizationScore,
-                    ["RazorComplianceScore"] = complianceScore
-                },
+                    Category =
+                        "Frontend",
 
+                    Metrics =
+                    {
+                        ["ComplexityScore"] =
+                            analysis.ComplexityScore,
 
-                Metadata = new Dictionary<string, string>
-                {
-                    ["FileName"] = Path.GetFileName(file),
-                    ["Framework"] = "ASP.NET Razor",
-                    ["Language"] = "Razor",
-                    ["LineCount"] = lineCount.ToString(),
-                    ["HasModel"] = hasModel.ToString(),
-                    ["UsesViewModel"] = usesViewModel.ToString(),
-                    ["EntityExposure"] = exposesEntity.ToString(),
-                    ["ConditionalCount"] = conditionalCount.ToString()
-                }
-            });
+                        ["PresentationSeparationScore"] =
+                            analysis.SeparationScore,
+
+                        ["ViewModelScore"] =
+                            analysis.ModelScore,
+
+                        ["DataIsolationScore"] =
+                            analysis.DataIsolationScore,
+
+                        ["DependencyScore"] =
+                            analysis.DependencyScore,
+
+                        ["ComponentizationScore"] =
+                            analysis.ComponentizationScore,
+
+                        ["RazorComplianceScore"] =
+                            analysis.ComplianceScore
+                    },
+
+                    Metadata =
+                    {
+                        ["FileName"] =
+                            Path.GetFileName(file),
+
+                        ["Framework"] =
+                            Context?.Framework
+                            ?? "ASP.NET Razor",
+
+                        ["Language"] =
+                            Context?.Language
+                            ?? "Razor",
+
+                        ["LineCount"] =
+                            analysis.LineCount.ToString(),
+
+                        ["HasModel"] =
+                            analysis.HasModel.ToString(),
+
+                        ["UsesViewModel"] =
+                            analysis.UsesViewModel.ToString(),
+
+                        ["EntityExposure"] =
+                            analysis.ExposesEntity.ToString(),
+
+                        ["ConditionalCount"] =
+                            analysis.ConditionalCount.ToString()
+                    }
+                });
         }
 
 
 
         if (results.Count > 0)
         {
-            double avgCompliance =
-                results.Average(
-                    r => r.Metrics.GetValueOrDefault(
-                        "RazorComplianceScore",
-                        0));
-
-
-            double avgComplexity =
-                results.Average(
-                    r => r.Metrics.GetValueOrDefault(
-                        "ComplexityScore",
-                        0));
-
-
-            double avgIsolation =
-                results.Average(
-                    r => r.Metrics.GetValueOrDefault(
-                        "DataIsolationScore",
-                        0));
-
-
-
-            results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
-            {
-                Category = "FrontendSummary",
-
-                Metrics = new Dictionary<string, double>
-                {
-                    ["RazorViewCount"] = results.Count,
-                    ["AverageComplianceScore"] = avgCompliance,
-                    ["AverageComplexityScore"] = avgComplexity,
-                    ["AverageDataIsolation"] = avgIsolation,
-
-                    ["RazorHealthIndex"] =
-                        avgCompliance * 0.7 +
-                        avgIsolation * 100 * 0.3
-                },
-
-
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Evaluator"] = Name,
-                    ["Framework"] = "ASP.NET Razor"
-                }
-            });
+            AddSummary(
+                results,
+                projectPath);
         }
 
 
@@ -340,7 +265,230 @@ public sealed class RazorEvaluator : BaseArchitectureEvaluator
             results.Count);
 
 
+
         return results;
+    }
+
+
+
+    private RazorMetrics AnalyzeView(
+        string content)
+    {
+        var lineCount =
+            content.Count(
+                c => c == '\n') + 1;
+
+
+
+        var hasModel =
+            ModelDeclarationRx.IsMatch(content);
+
+
+        var usesViewModel =
+            ViewModelRx.IsMatch(content);
+
+
+        var exposesEntity =
+            EntityModelRx.IsMatch(content);
+
+
+        var hasInlineCode =
+            InlineCodeBlockRx.IsMatch(content);
+
+
+        var hasDatabaseLeak =
+            DatabaseLeakRx.IsMatch(content);
+
+
+        var injectsServices =
+            ServiceInjectionRx.IsMatch(content);
+
+
+        var usesTagHelpers =
+            TagHelperRx.IsMatch(content);
+
+
+        var usesHtmlHelpers =
+            HtmlHelperRx.IsMatch(content);
+
+
+
+        var conditionalCount =
+            ConditionalRx.Matches(content).Count;
+
+
+
+        var complexityScore =
+            CalculateComplexity(
+                lineCount);
+
+
+
+        var separationScore =
+            hasInlineCode
+                ? 0.5
+                : 1;
+
+
+
+        var modelScore =
+            usesViewModel
+                ? 1
+                : exposesEntity
+                    ? 0.2
+                    : 0.7;
+
+
+
+        var dataIsolationScore =
+            hasDatabaseLeak
+                ? 0
+                : 1;
+
+
+
+        var dependencyScore =
+            injectsServices
+                ? 0.5
+                : 1;
+
+
+
+        var componentizationScore =
+            usesTagHelpers || usesHtmlHelpers
+                ? 1
+                : 0.8;
+
+
+
+        return new RazorMetrics
+        {
+            LineCount = lineCount,
+
+            HasModel = hasModel,
+
+            UsesViewModel = usesViewModel,
+
+            ExposesEntity = exposesEntity,
+
+            ConditionalCount = conditionalCount,
+
+            ComplexityScore = complexityScore,
+
+            SeparationScore = separationScore,
+
+            ModelScore = modelScore,
+
+            DataIsolationScore = dataIsolationScore,
+
+            DependencyScore = dependencyScore,
+
+            ComponentizationScore = componentizationScore,
+
+            ComplianceScore =
+                ComputeCompliance(
+                    complexityScore,
+                    separationScore,
+                    modelScore,
+                    dataIsolationScore,
+                    dependencyScore,
+                    componentizationScore)
+        };
+    }
+
+
+
+    private double CalculateComplexity(
+        int lineCount)
+    {
+        if (_policy.MaxComponentComplexity <= 0 ||
+            lineCount <= _policy.MaxComponentComplexity)
+        {
+            return 1;
+        }
+
+
+        return Math.Max(
+            0,
+            1 -
+            (double)lineCount /
+            (_policy.MaxComponentComplexity * 2));
+    }
+
+
+
+    private static void AddSummary(
+        List<ArchitectureEvaluatorResult> results,
+        string projectPath)
+    {
+        var viewResults =
+            results.ToList();
+
+
+
+        var averageCompliance =
+            viewResults.Average(
+                r =>
+                    r.Metrics.GetValueOrDefault(
+                        "RazorComplianceScore",
+                        0));
+
+
+
+        var averageComplexity =
+            viewResults.Average(
+                r =>
+                    r.Metrics.GetValueOrDefault(
+                        "ComplexityScore",
+                        0));
+
+
+
+        var averageIsolation =
+            viewResults.Average(
+                r =>
+                    r.Metrics.GetValueOrDefault(
+                        "DataIsolationScore",
+                        0));
+
+
+
+        results.Add(
+            new ArchitectureEvaluatorResult(
+                "RazorEvaluator",
+                projectPath)
+            {
+                Category =
+                    "FrontendSummary",
+
+                Metrics =
+                {
+                    ["RazorViewCount"] =
+                        viewResults.Count,
+
+                    ["AverageComplianceScore"] =
+                        averageCompliance,
+
+                    ["AverageComplexityScore"] =
+                        averageComplexity,
+
+                    ["AverageDataIsolation"] =
+                        averageIsolation,
+
+                    ["RazorHealthIndex"] =
+                        averageCompliance * 0.7 +
+                        averageIsolation * 100 * 0.3
+                },
+
+                Metadata =
+                {
+                    ["Evaluator"] =
+                        "RazorEvaluator",
+
+                    ["Framework"] =
+                        "ASP.NET Razor"
+                }
+            });
     }
 
 
@@ -353,7 +501,7 @@ public sealed class RazorEvaluator : BaseArchitectureEvaluator
         double dependency,
         double componentization)
     {
-        double score =
+        var score =
             complexity * 0.20 +
             separation * 0.20 +
             model * 0.20 +
@@ -362,6 +510,37 @@ public sealed class RazorEvaluator : BaseArchitectureEvaluator
             componentization * 0.10;
 
 
-        return Math.Round(score * 100, 2);
+        return Math.Round(
+            score * 100,
+            2);
+    }
+
+
+
+    private sealed class RazorMetrics
+    {
+        public int LineCount { get; init; }
+
+        public bool HasModel { get; init; }
+
+        public bool UsesViewModel { get; init; }
+
+        public bool ExposesEntity { get; init; }
+
+        public int ConditionalCount { get; init; }
+
+        public double ComplexityScore { get; init; }
+
+        public double SeparationScore { get; init; }
+
+        public double ModelScore { get; init; }
+
+        public double DataIsolationScore { get; init; }
+
+        public double DependencyScore { get; init; }
+
+        public double ComponentizationScore { get; init; }
+
+        public double ComplianceScore { get; init; }
     }
 }

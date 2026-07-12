@@ -1,4 +1,5 @@
 ﻿using Aegis.Architecture.Diagnostics;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
@@ -8,7 +9,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Aegis.Architecture.Evaluators.Architecture;
-
 
 public sealed class CircularDependencyEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
@@ -87,7 +87,7 @@ public sealed class CircularDependencyEvaluator
 
 
             results.Add(
-                CreateViolation(
+                CreateCycleResult(
                     cycle));
         }
 
@@ -99,41 +99,48 @@ public sealed class CircularDependencyEvaluator
             $"Circular dependency analysis completed. Violations: {results.Count}");
 
 
+
         return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(
             results);
     }
 
 
 
-    private ArchitectureEvaluatorResult CreateViolation(
+    private ArchitectureEvaluatorResult CreateCycleResult(
         IReadOnlyCollection<string> cycle)
     {
-        return new ArchitectureEvaluatorResult(
-            Name,
-            cycle.First())
-        {
-            Category = "CircularDependency",
+        var result =
+            CreateResult(
+                cycle.First(),
+                nameof(ArchitectureRuleCategory.Architecture));
 
-            Metrics =
-            {
-                ["HasCycle"] = 1,
-                ["CycleLength"] = cycle.Count
-            },
 
-            Metadata =
-            {
-                ["Cycle"] =
-                    string.Join(
-                        " -> ",
-                        cycle),
+        result.Metrics["HasCycle"] =
+            1;
 
-                ["Language"] =
-                    Context?.Language ?? "Unknown",
+        result.Metrics["CycleLength"] =
+            cycle.Count;
 
-                ["Framework"] =
-                    Context?.Framework ?? "Unknown"
-            }
-        };
+        result.Metrics["CircularDependencyViolation"] =
+            1;
+
+        result.Metrics["CircularDependencyCompliance"] =
+            0;
+
+
+        result.Metadata["Cycle"] =
+            string.Join(
+                " -> ",
+                cycle);
+
+        result.Metadata["Language"] =
+            Context?.Language ?? "Unknown";
+
+        result.Metadata["Framework"] =
+            Context?.Framework ?? "Unknown";
+
+
+        return result;
     }
 
 
@@ -247,7 +254,9 @@ public sealed class CircularDependencyEvaluator
 
 
 
-        if (graph.TryGetValue(node, out var targets))
+        if (graph.TryGetValue(
+                node,
+                out var targets))
         {
             foreach (var target in targets)
             {
@@ -267,3 +276,4 @@ public sealed class CircularDependencyEvaluator
         active.Remove(node);
     }
 }
+

@@ -235,6 +235,44 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
 
 
 
+    /// <summary>
+    /// Builds an ArchitectureEvaluatorResult with the real file path always captured in
+    /// Metadata["FilePath"], regardless of what's passed as Target.
+    ///
+    /// Before this helper existed, evaluators each picked their own convention for Target —
+    /// some passed the full file path, some a bare filename (Path.GetFileName(file)), some
+    /// a directory — and none populated Metadata["FilePath"] at all. RuleEngineCore's layer
+    /// resolution depends on a real, matchable file path being present, so only evaluators
+    /// that happened to pass a full path as Target resolved to a real layer; the rest always
+    /// fell back to "Unclassified". Using this helper (instead of constructing
+    /// ArchitectureEvaluatorResult directly) fixes that for any evaluator that adopts it.
+    /// </summary>
+    protected ArchitectureEvaluatorResult CreateResult(
+        string file,
+        string? category = null)
+    {
+        var result =
+            new ArchitectureEvaluatorResult(
+                Name,
+                Path.GetFileName(file))
+            {
+                Category = category,
+
+                Metrics =
+                    new Dictionary<string, double>(),
+
+                Metadata =
+                    new Dictionary<string, string>
+                    {
+                        ["FilePath"] = file
+                    }
+            };
+
+        return result;
+    }
+
+
+
     protected static IEnumerable<ArchitectureRuleresult>
         ConvertToRuleResults(
             IEnumerable<ArchitectureEvaluatorResult> evalResults,
@@ -276,7 +314,7 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
     /// Only /back and /front domains are analyzed.
     /// This avoids scanning external clients such as Unity projects.
     /// </summary>
-  
+
 
 
     /// <summary>

@@ -1,10 +1,14 @@
-﻿using Aegis.Architecture.Evaluators;
+﻿using System.Text.RegularExpressions;
+
+using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
+
+using Franz.Common.DependencyInjection;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.DesignPatterns;
 
@@ -13,7 +17,9 @@ namespace Aegis.Architecture.Evaluators.DesignPatterns;
 /// Computes a SingletonComplianceScore (0–100) based on thread safety,
 /// initialization strategy, and pattern adherence consistency.
 /// </summary>
-public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
+public sealed class SingletonPatternEvaluator :
+    BaseArchitectureEvaluator,
+    IScopedDependency
 {
     private readonly DesignPatternPolicy _policy;
 
@@ -26,7 +32,8 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
     [
         "C#",
         "Java",
-        "Python"
+        "Python",
+        "TypeScript"
     ];
 
 
@@ -35,9 +42,12 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
         "ASP.NET",
         "Spring",
         "Flask",
-        "FastAPI"
+        "FastAPI",
+        "CleanArchitecture",
+        "Hexagonal",
+        "DDD",
+        "Microservices"
     ];
-
 
 
     private static readonly Regex SingletonClassRx =
@@ -47,19 +57,16 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
             RegexOptions.Singleline);
 
 
-
     private static readonly Regex GetInstanceRx =
         new(
             @"getInstance\s*\(",
             RegexOptions.Compiled);
 
 
-
     private static readonly Regex ThreadLockRx =
         new(
             @"lock\s*\(|synchronized\s*\(",
             RegexOptions.Compiled);
-
 
 
     private static readonly Regex PythonSingletonRx =
@@ -75,7 +82,7 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
         : base(logger)
     {
         _policy =
-            options.Value.Architecture?.DesignPatterns
+            options.Value.Architecture.DesignPatterns
             ?? new DesignPatternPolicy();
     }
 
@@ -93,11 +100,11 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
         if (!_policy.EnforceSingletonPattern)
         {
             _logger.LogInformation(
-                "⏭ Singleton pattern enforcement disabled by policy.");
+                "⏭ {Evaluator} disabled by policy.",
+                Name);
 
             return results;
         }
-
 
 
         var files =
@@ -105,15 +112,14 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
                 projectPath,
                 ".cs",
                 ".java",
-                ".py");
-
+                ".py",
+                ".ts");
 
 
         if (files.Count == 0)
         {
             return results;
         }
-
 
 
         foreach (var file in files)
@@ -130,8 +136,13 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
                         file,
                         token);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(
+                    ex,
+                    "Unable to read singleton candidate file {File}",
+                    file);
+
                 continue;
             }
 
@@ -145,7 +156,6 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
                 PythonSingletonRx.IsMatch(content);
 
 
-
             if (!isSingleton)
             {
                 continue;
@@ -155,7 +165,6 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
 
             var classMatch =
                 SingletonClassRx.Match(content);
-
 
 
             var className =
@@ -199,29 +208,29 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
 
             var threadSafetyScore =
                 hasThreadSafety
-                    ? 1
-                    : 0;
+                    ? 1d
+                    : 0d;
 
 
 
             var lazyInitializationScore =
                 isLazy
-                    ? 1
-                    : 0;
+                    ? 1d
+                    : 0d;
 
 
 
             var instanceDiscipline =
                 multipleInstances
-                    ? 0
-                    : 1;
+                    ? 0d
+                    : 1d;
 
 
 
             var namingAdherence =
                 namingValid
-                    ? 1
-                    : 0;
+                    ? 1d
+                    : 0d;
 
 
 
@@ -273,6 +282,10 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
 
                         ["Framework"] =
                             Context?.Framework
+                            ?? "Unknown",
+
+                        ["Layer"] =
+                            Context?.Layer
                             ?? "Unknown",
 
                         ["ThreadSafetyDetected"] =
@@ -362,11 +375,13 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
 
                         ["OverallSingletonHealth"] =
                             averageScore *
-                            (1 -
-                             violations /
-                             (double)Math.Max(
-                                 1,
-                                 singletonResults.Count))
+                            (
+                                1 -
+                                violations /
+                                (double)Math.Max(
+                                    1,
+                                    singletonResults.Count)
+                            )
                     },
 
                     Metadata =
@@ -386,7 +401,6 @@ public sealed class SingletonPatternEvaluator : BaseArchitectureEvaluator
             "✅ {Evaluator} completed with {Count} metric entries",
             Name,
             results.Count);
-
 
 
         return results;

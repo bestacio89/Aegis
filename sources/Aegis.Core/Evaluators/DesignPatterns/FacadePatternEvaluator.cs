@@ -1,28 +1,39 @@
 ﻿using System.Text.RegularExpressions;
 
-using Aegis.Architecture.Evaluators;
+using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
+using Aegis.Shared.Diagnostics;
+
+using Franz.Common.DependencyInjection;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Aegis.Architecture.Evaluators.DesignPatterns;
 
+
 /// <summary>
-/// Evaluates Facade pattern compliance:
-/// - Measures dependency coupling (services, repositories, clients)
-/// - Evaluates public surface exposure
-/// - Detects orchestration complexity and excessive service calls.
-/// Outputs quantitative metrics for rule evaluation.
+/// Evaluates Facade pattern characteristics.
+///
+/// Produces structural facts:
+/// - dependency surface
+/// - orchestration complexity
+/// - public API exposure
+///
+/// Rule interpretation belongs to RuleEngine.
 /// </summary>
-public sealed class FacadePatternEvaluator : BaseArchitectureEvaluator
+public sealed class FacadePatternEvaluator
+    : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly DesignPatternPolicy _policy;
 
 
-    public override string Name => "FacadePatternEvaluator";
+
+    public override string Name =>
+        "FacadePatternEvaluator";
+
 
 
     public override string[] SupportedLanguages =>
@@ -33,16 +44,19 @@ public sealed class FacadePatternEvaluator : BaseArchitectureEvaluator
     ];
 
 
+
     public override string[] SupportedFrameworks =>
     [
-        "Application",
-        "Service",
-        "Domain"
+        "ASP.NET",
+        "Spring",
+        "NestJS",
+        "CleanArchitecture",
+        "DDD"
     ];
 
 
 
-    private static readonly string[] SupportedExtensions =
+    private static readonly string[] Extensions =
     [
         ".cs",
         ".java",
@@ -65,7 +79,7 @@ public sealed class FacadePatternEvaluator : BaseArchitectureEvaluator
 
 
 
-    private static readonly Regex DirectServiceCallRx =
+    private static readonly Regex DirectCallRx =
         new(
             @"\w*(Service|Repository|Client)\.\w+\s*\(",
             RegexOptions.Compiled);
@@ -78,48 +92,48 @@ public sealed class FacadePatternEvaluator : BaseArchitectureEvaluator
         : base(logger)
     {
         _policy =
-            options.Value.Architecture.DesignPatterns ?? new();
+            options.Value.Architecture.DesignPatterns
+            ?? new DesignPatternPolicy();
     }
 
 
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath,
-        CancellationToken token)
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
+        var results =
+            new List<ArchitectureEvaluatorResult>();
+
 
 
         if (!_policy.EnforceFacadePattern)
         {
-            _logger.LogInformation(
-                "🏛️ Facade pattern enforcement disabled by policy.");
+            AegisDiagnostics.Report(
+                Name,
+                DiagnosticLevel.Trace,
+                "Facade pattern evaluation disabled.");
 
             return results;
         }
+
+
+
+        if (Context is null)
+            return results;
 
 
 
         var files =
-            EnumerateApplicationFiles(projectPath)
-                .Where(IsSupportedFile)
-                .ToList();
+            ResolveSourceFiles(
+                projectPath,
+                Extensions);
 
 
 
         if (files.Count == 0)
-        {
-            _logger.LogInformation(
-                "🏛️ No relevant files found for Facade evaluation.");
-
             return results;
-        }
-
-
-
-        _logger.LogTrace(
-            "🏛️ Scanning {Count} files for Facade pattern metrics.",
-            files.Count);
 
 
 
@@ -128,76 +142,57 @@ public sealed class FacadePatternEvaluator : BaseArchitectureEvaluator
             token.ThrowIfCancellationRequested();
 
 
-            string content;
 
-            try
-            {
-                content =
-                    await File.ReadAllTextAsync(file, token);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Unable to read file {File}",
-                    file);
-
-                continue;
-            }
+            var content =
+                await File.ReadAllTextAsync(
+                    file,
+                    token);
 
 
 
-            int publicMethods =
-                PublicMethodRx.Matches(content).Count;
-
-
-            int dependencies =
-                DependencyFieldRx.Matches(content).Count;
-
-
-            int serviceCalls =
-                DirectServiceCallRx.Matches(content).Count;
+            var publicMethods =
+                PublicMethodRx.Matches(content)
+                .Count;
 
 
 
-            double dependencyRatio =
-                dependencies /
-                (double)Math.Max(
-                    1,
+            var dependencies =
+                DependencyFieldRx.Matches(content)
+                .Count;
+
+
+
+            var serviceCalls =
+                DirectCallRx.Matches(content)
+                .Count;
+
+
+
+            var dependencyRatio =
+                CalculateRatio(
+                    dependencies,
                     _policy.MaxDependenciesPerFacade);
 
 
 
-            double publicSurfaceRatio =
-                publicMethods /
-                (double)Math.Max(
-                    1,
+            var surfaceRatio =
+                CalculateRatio(
+                    publicMethods,
                     _policy.MaxPublicMethodsPerFacade);
 
 
 
-            double orchestrationRatio =
-                serviceCalls /
-                (double)Math.Max(
-                    1,
+            var orchestrationRatio =
+                CalculateRatio(
+                    serviceCalls,
                     _policy.MaxServiceCallsPerFacade);
 
 
 
-            double complianceScore =
-                ComputeCompliance(
-                    dependencyRatio,
-                    publicSurfaceRatio,
-                    orchestrationRatio);
-
-
-
             results.Add(
-                new ArchitectureEvaluatorResult(Name, file)
-                {
-                    Category = "DesignPattern",
-
-                    Metrics =
+                CreateResult(
+                    file,
+                    new()
                     {
                         ["DependencyCount"] =
                             dependencies,
@@ -212,112 +207,29 @@ public sealed class FacadePatternEvaluator : BaseArchitectureEvaluator
                             dependencyRatio,
 
                         ["PublicSurfaceRatio"] =
-                            publicSurfaceRatio,
+                            surfaceRatio,
 
                         ["OrchestrationRatio"] =
-                            orchestrationRatio,
-
-                        ["FacadeComplianceScore"] =
-                            complianceScore
-                    },
-
-                    Metadata =
-                    {
-                        ["FileName"] =
-                            Path.GetFileName(file),
-
-                        ["Language"] =
-                            Context?.Language ?? "Unknown",
-
-                        ["Framework"] =
-                            Context?.Framework ?? "Unknown",
-
-                        ["Policy_MaxDependenciesPerFacade"] =
-                            _policy.MaxDependenciesPerFacade.ToString(),
-
-                        ["Policy_MaxPublicMethodsPerFacade"] =
-                            _policy.MaxPublicMethodsPerFacade.ToString(),
-
-                        ["Policy_MaxServiceCallsPerFacade"] =
-                            _policy.MaxServiceCallsPerFacade.ToString()
-                    }
-                });
+                            orchestrationRatio
+                    }));
         }
 
 
 
         if (results.Count > 0)
         {
-            double avgCompliance =
-                results.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "FacadeComplianceScore",
-                            0));
-
-
-            double avgDependencies =
-                results.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "DependencyCount",
-                            0));
-
-
-            double avgMethods =
-                results.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "PublicMethodCount",
-                            0));
-
-
-
             results.Add(
-                new ArchitectureEvaluatorResult(Name, projectPath)
-                {
-                    Category = "DesignPatternSummary",
-
-                    Metrics =
-                    {
-                        ["FacadeCount"] =
-                            results.Count,
-
-                        ["AverageComplianceScore"] =
-                            avgCompliance,
-
-                        ["AverageDependencyCount"] =
-                            avgDependencies,
-
-                        ["AveragePublicMethodCount"] =
-                            avgMethods,
-
-                        ["OverallFacadeHealth"] =
-                            avgCompliance *
-                            (1 -
-                             avgDependencies /
-                             Math.Max(
-                                 1,
-                                 _policy.MaxDependenciesPerFacade))
-                    },
-
-                    Metadata =
-                    {
-                        ["Evaluator"] =
-                            Name,
-
-                        ["PolicyEnabled"] =
-                            _policy.EnforceFacadePattern.ToString()
-                    }
-                });
+                CreateSummary(
+                    projectPath,
+                    results));
         }
 
 
 
-        _logger.LogInformation(
-            "🏛️ {Evaluator} completed with {Count} metric entries",
+        AegisDiagnostics.Report(
             Name,
-            results.Count);
+            DiagnosticLevel.Info,
+            $"Facade evaluation completed with {results.Count} entries.");
 
 
 
@@ -326,30 +238,111 @@ public sealed class FacadePatternEvaluator : BaseArchitectureEvaluator
 
 
 
-    private static bool IsSupportedFile(string file)
+    private ArchitectureEvaluatorResult CreateResult(
+        string file,
+        Dictionary<string, double> metrics)
     {
-        return SupportedExtensions.Any(
-            ext =>
-                file.EndsWith(
-                    ext,
-                    StringComparison.OrdinalIgnoreCase));
+        return new ArchitectureEvaluatorResult(
+            Name,
+            file)
+        {
+            ProjectName =
+                Context?.ProjectName ?? string.Empty,
+
+            Language =
+                Context?.Language ?? "Unknown",
+
+            Framework =
+                Context?.Framework,
+
+            Layer =
+                ResolveLayer(file),
+
+            DetectionConfidence =
+                Context?.Confidence ?? 0,
+
+
+            Category =
+                "DesignPattern",
+
+
+            Metrics =
+                metrics,
+
+
+            Metadata =
+            {
+                ["Language"] =
+                    Context?.Language ?? "Unknown",
+
+                ["Framework"] =
+                    Context?.Framework ?? "Unknown"
+            }
+        };
     }
 
 
 
-    private static double ComputeCompliance(
-        double dependencyRatio,
-        double publicRatio,
-        double orchestrationRatio)
+    private ArchitectureEvaluatorResult CreateSummary(
+        string projectPath,
+        IEnumerable<ArchitectureEvaluatorResult> results)
     {
-        double score =
-            (1 - Math.Min(dependencyRatio, 1)) * 0.4 +
-            (1 - Math.Min(publicRatio, 1)) * 0.3 +
-            (1 - Math.Min(orchestrationRatio, 1)) * 0.3;
+        return new ArchitectureEvaluatorResult(
+            Name,
+            projectPath)
+        {
+            ProjectName =
+                Context?.ProjectName ?? string.Empty,
+
+            Category =
+                "DesignPatternSummary",
+
+            Metrics =
+            {
+                ["FacadeCount"] =
+                    results.Count(),
+
+                ["AverageDependencyCount"] =
+                    results.Average(
+                        x =>
+                            x.Metrics.GetValueOrDefault(
+                                "DependencyCount"))
+            },
+
+            Metadata =
+            {
+                ["Evaluator"] =
+                    Name
+            }
+        };
+    }
 
 
-        return Math.Round(
-            score * 100,
-            2);
+
+    private string ResolveLayer(
+        string file)
+    {
+        return Context?
+            .Layers
+            .FirstOrDefault(
+                layer =>
+                    layer.Files.Contains(
+                        file,
+                        StringComparer.OrdinalIgnoreCase))
+            ?.Name
+            ??
+            "Unknown";
+    }
+
+
+
+    private static double CalculateRatio(
+        int value,
+        int maximum)
+    {
+        return value /
+            (double)Math.Max(
+                1,
+                maximum);
     }
 }

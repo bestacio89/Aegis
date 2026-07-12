@@ -200,27 +200,21 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         string content,
         INamingConventionPolicy convention)
     {
+        // CreateResult (from BaseArchitectureEvaluator) always sets Metadata["FilePath"]
+        // to the real file path, regardless of what Target ends up being used for. This
+        // evaluator happened to pass the full path as Target before, so it wasn't broken —
+        // but it wasn't using the reliable, guaranteed path either. Any evaluator-specific
+        // Metrics/Metadata still get added the same way afterward.
         var result =
-            new ArchitectureEvaluatorResult(
-                Name,
-                file)
-            {
-                Category =
-                    nameof(ArchitectureRuleCategory.Naming),
+            CreateResult(
+                file,
+                nameof(ArchitectureRuleCategory.Naming));
 
-                Metrics =
-                    new Dictionary<string, double>(),
+        result.Metadata["FileName"] =
+            Path.GetFileName(file);
 
-                Metadata =
-                    new Dictionary<string, string>
-                    {
-                        ["FileName"] =
-                            Path.GetFileName(file),
-
-                        ["Language"] =
-                            Context?.Language ?? "Unknown"
-                    }
-            };
+        result.Metadata["Language"] =
+            Context?.Language ?? "Unknown";
 
 
 

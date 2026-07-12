@@ -1,10 +1,9 @@
-﻿using System.Text.RegularExpressions;
-using Aegis.Architecture.Diagnostics;
-using Aegis.Architecture.Evaluators;
+﻿using System.Text.Json;
+using System.Text.RegularExpressions;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
-using Aegis.Shared.Diagnostics;
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -107,44 +106,39 @@ public sealed class ApiConsistencyEvaluator
             string projectPath,
             CancellationToken token)
     {
-        var results =
-            new List<ArchitectureEvaluatorResult>();
-
-
-
         if (Context is null)
         {
             _logger.LogWarning(
                 "{Evaluator} skipped. Missing architecture context.",
                 Name);
 
-            return results;
+            return [];
         }
 
 
 
         var files =
-            ResolveApiFiles(
+            ResolveSourceFiles(
                 projectPath,
-                Context);
+                GetExtensions(Context.Language))
+            .Where(IsApiBoundaryFile)
+            .ToList();
 
 
 
-        if (!files.Any())
+        if (files.Count == 0)
         {
             _logger.LogDebug(
                 "{Evaluator}: no API files detected.",
                 Name);
 
-            return results;
+            return [];
         }
 
 
 
-        AegisDiagnostics.Report(
-            Name,
-            DiagnosticLevel.Trace,
-            $"Analyzing {files.Count()} API boundary files.");
+        var results =
+            new List<ArchitectureEvaluatorResult>();
 
 
 
@@ -168,6 +162,7 @@ public sealed class ApiConsistencyEvaluator
             }
 
 
+
             results.Add(
                 EvaluateFile(
                     file,
@@ -177,9 +172,11 @@ public sealed class ApiConsistencyEvaluator
 
 
         if (results.Count > 0)
+        {
             AddSummary(
                 results,
                 projectPath);
+        }
 
 
 
@@ -191,6 +188,7 @@ public sealed class ApiConsistencyEvaluator
 
         return results;
     }
+
 
 
 
@@ -236,7 +234,7 @@ public sealed class ApiConsistencyEvaluator
             }
 
 
-        
+         
         }
 
 
@@ -290,55 +288,102 @@ public sealed class ApiConsistencyEvaluator
 
 
 
-        return new ArchitectureEvaluatorResult(
-            Name,
-            file)
+        var result =
+            CreateResult(
+                file,
+                nameof(ArchitectureRuleCategory.Architecture));
+
+
+
+        result.Metrics["RouteConsistencyScore"] =
+            routeScore;
+
+        result.Metrics["TrailingSlashScore"] =
+            slashScore;
+
+        result.Metrics["RouteDuplicationScore"] =
+            duplicationScore;
+
+        result.Metrics["ApiVersioningScore"] =
+            versionScore;
+
+        result.Metrics["EndpointDiscoveryScore"] =
+            maturityScore;
+
+
+        result.Metrics["UppercaseRouteViolations"] =
+            uppercaseViolations;
+
+        result.Metrics["TrailingSlashViolations"] =
+            trailingSlashViolations;
+
+        result.Metrics["DuplicateRouteViolations"] =
+            duplicateSegments;
+
+        result.Metrics["MissingVersionViolations"] =
+            missingVersioning;
+
+
+        result.Metrics["ApiConsistencyIndex"] =
+            Math.Round(
+                apiConsistency,
+                2);
+
+
+
+        result.Metadata["FileName"] =
+            Path.GetFileName(file);
+
+        result.Metadata["Language"] =
+            Context?.Language
+            ?? "Unknown";
+
+        result.Metadata["Framework"] =
+            Context?.Framework
+            ?? "Unknown";
+
+        result.Metadata["RouteCount"] =
+            routes.Count.ToString();
+
+        result.Metadata["Routes"] =
+            JsonSerializer.Serialize(routes);
+
+
+
+        return result;
+    }
+
+
+
+
+
+    private static string[] GetExtensions(
+        string language)
+    {
+        return language switch
         {
-            Category = "Architecture",
+            "C#" =>
+            [
+                ".cs"
+            ],
 
-            Metrics =
-            {
-                ["RouteConsistencyScore"] = routeScore,
-                ["TrailingSlashScore"] = slashScore,
-                ["RouteDuplicationScore"] = duplicationScore,
-                ["ApiVersioningScore"] = versionScore,
-                ["EndpointDiscoveryScore"] = maturityScore,
+            "Java" =>
+            [
+                ".java"
+            ],
 
-                ["UppercaseRouteViolations"] =
-                    uppercaseViolations,
+            "TypeScript" =>
+            [
+                ".ts"
+            ],
 
-                ["TrailingSlashViolations"] =
-                    trailingSlashViolations,
+            "JavaScript" =>
+            [
+                ".js"
+            ],
 
-                ["DuplicateRouteViolations"] =
-                    duplicateSegments,
-
-                ["MissingVersionViolations"] =
-                    missingVersioning,
-
-
-                ["ApiConsistencyIndex"] =
-                    Math.Round(
-                        apiConsistency,
-                        2)
-            },
-
-            Metadata =
-            {
-                ["FileName"] =
-                    Path.GetFileName(file),
-
-                ["Language"] =
-                    Context?.Language
-                    ?? "Unknown",
-
-                ["Framework"] =
-                    Context?.Framework
-                    ?? "Unknown",
-
-                ["RouteCount"] =
-                    routes.Count.ToString()
-            }
+            _ =>
+            []
         };
     }
 
@@ -346,54 +391,32 @@ public sealed class ApiConsistencyEvaluator
 
 
 
-    private IEnumerable<string> ResolveApiFiles(
-        string projectPath,
-        ProjectArchitectureContext context)
+    private static bool IsApiBoundaryFile(
+        string file)
     {
-        var extensions =
-            context.Language switch
-            {
-                "C#" =>
-                    new[] { ".cs" },
-
-                "Java" =>
-                    new[] { ".java" },
-
-                "TypeScript" =>
-                    new[] { ".ts" },
-
-                "JavaScript" =>
-                    new[] { ".js" },
-
-                _ =>
-                    Array.Empty<string>()
-            };
+        var name =
+            Path.GetFileNameWithoutExtension(file);
 
 
-        return Directory
-            .EnumerateFiles(
-                projectPath,
-                "*.*",
-                SearchOption.AllDirectories)
-            .Where(f =>
-                extensions.Any(x =>
-                    f.EndsWith(
-                        x,
-                        StringComparison.OrdinalIgnoreCase)))
-            .Where(f =>
-                !IsExcludedDir(f))
-            .Where(f =>
-                f.Contains(
+        return name.Contains(
                     "controller",
                     StringComparison.OrdinalIgnoreCase)
-                ||
-                f.Contains(
-                    "api",
+            ||
+            name.Contains(
+                    "endpoint",
                     StringComparison.OrdinalIgnoreCase)
-                ||
-                f.Contains(
+            ||
+            name.Contains(
                     "route",
-                    StringComparison.OrdinalIgnoreCase));
+                    StringComparison.OrdinalIgnoreCase)
+            ||
+            name.Contains(
+                    "resource",
+                    StringComparison.OrdinalIgnoreCase)
+            ||
+            name.Contains(
+                    "api",
+                    StringComparison.OrdinalIgnoreCase);
     }
 
 

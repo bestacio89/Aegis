@@ -3,30 +3,15 @@ using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
 using Aegis.Shared.Diagnostics;
-
 using Franz.Common.DependencyInjection;
-
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.BackEnd;
 
-/// <summary>
-/// Evaluates application security practices from detected application boundaries.
-///
-/// The evaluator consumes the centralized architecture context and produces
-/// security facts only. Rule interpretation, severity and remediation decisions
-/// are handled by the RuleEngine.
-///
-/// Responsibilities:
-/// - Hardcoded secret detection
-/// - Dependency pinning analysis
-/// - Unsafe compilation settings
-/// - Weak cryptography/TLS detection
-/// </summary>
+
 public sealed class SecurityEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
 {
@@ -188,7 +173,7 @@ public sealed class SecurityEvaluator
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Info,
-            $"Security evaluation completed with {results.Count} entries.");
+            $"Security evaluation completed with {results.Count} results.");
 
 
 
@@ -210,7 +195,6 @@ public sealed class SecurityEvaluator
         foreach (var file in GetSecurityFiles(projectPath))
         {
             token.ThrowIfCancellationRequested();
-
 
 
             var content =
@@ -265,12 +249,12 @@ public sealed class SecurityEvaluator
 
 
 
-            var fileName =
+            var name =
                 Path.GetFileName(file);
 
 
 
-            if (fileName.Equals(
+            if (name.Equals(
                     "package.json",
                     StringComparison.OrdinalIgnoreCase))
             {
@@ -296,7 +280,7 @@ public sealed class SecurityEvaluator
 
 
 
-            if (fileName.Equals(
+            if (name.Equals(
                     "requirements.txt",
                     StringComparison.OrdinalIgnoreCase))
             {
@@ -484,6 +468,7 @@ public sealed class SecurityEvaluator
                             ?? string.Empty;
 
 
+
                         return
                             version.Contains("*")
                             ||
@@ -534,9 +519,9 @@ public sealed class SecurityEvaluator
             .Where(
                 file =>
                     SecurityExtensions.Any(
-                        ext =>
+                        extension =>
                             file.EndsWith(
-                                ext,
+                                extension,
                                 StringComparison.OrdinalIgnoreCase)));
     }
 
@@ -552,16 +537,16 @@ public sealed class SecurityEvaluator
             file)
         {
             ProjectName =
-                Context?.ProjectName ?? string.Empty,
+                Context?.ProjectName,
 
             Language =
-                Context?.Language ?? "Unknown",
+                Context?.Language,
 
             Framework =
                 Context?.Framework,
 
-            Category =
-                category,
+            File =
+                file,
 
             Layer =
                 ResolveLayer(file),
@@ -569,8 +554,14 @@ public sealed class SecurityEvaluator
             DetectionConfidence =
                 Context?.Confidence ?? 0,
 
+
+            Category =
+                category,
+
+
             Metrics =
                 metrics,
+
 
             Metadata =
             {
@@ -578,7 +569,11 @@ public sealed class SecurityEvaluator
                     Context?.Language ?? "Unknown",
 
                 ["Framework"] =
-                    Context?.Framework ?? "Unknown"
+                    Context?.Framework ?? "Unknown",
+
+                ["Layer"] =
+                    ResolveLayer(file)
+                    ?? "Unknown"
             }
         };
     }
@@ -594,16 +589,28 @@ public sealed class SecurityEvaluator
             projectPath)
         {
             ProjectName =
-                Context?.ProjectName ?? string.Empty,
+                Context?.ProjectName,
+
+            Language =
+                Context?.Language,
+
+            Framework =
+                Context?.Framework,
+
+            DetectionConfidence =
+                Context?.Confidence ?? 0,
+
 
             Category =
                 "SecuritySummary",
+
 
             Metrics =
             {
                 ["Findings"] =
                     results.Count()
             },
+
 
             Metadata =
             {

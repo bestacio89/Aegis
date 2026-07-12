@@ -3,13 +3,11 @@ using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
 using Aegis.Shared.Diagnostics;
-
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Aegis.Architecture.Evaluators.BackEnd;
-
 
 public sealed class DependencyGraphEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
@@ -160,61 +158,58 @@ public sealed class DependencyGraphEvaluator
 
 
 
-            results.Add(
-                new ArchitectureEvaluatorResult(
-                    Name,
-                    group.Key)
-                {
-                    ProjectName =
-                        Context.ProjectName,
-
-                    Language =
-                        Context.Language,
-
-                    Framework =
-                        Context.Framework,
-
-                    Layer =
-                        group.Key,
-
-                    DetectionConfidence =
-                        Context.Confidence,
+            var result =
+                CreateResult(
+                    group.Key,
+                    "DependencyGraphViolation");
 
 
-                    Category =
-                        "DependencyGraphViolation",
+
+            result.ProjectName =
+                Context.ProjectName;
+
+            result.Language =
+                Context.Language;
+
+            result.Framework =
+                Context.Framework;
+
+            result.Layer =
+                group.Key;
+
+            result.DetectionConfidence =
+                Context.Confidence;
 
 
-                    Metrics =
-                    {
-                        ["DependencyCount"] =
-                            dependencyCount,
 
-                        ["RelationCount"] =
-                            group.Count(),
+            result.Metrics["DependencyCount"] =
+                dependencyCount;
 
-                        ["MaxDependenciesThreshold"] =
-                            _policy.MaxDependenciesPerModule,
+            result.Metrics["RelationCount"] =
+                group.Count();
 
-                        ["Violation"] =
-                            1
-                    },
+            result.Metrics["MaxDependenciesThreshold"] =
+                _policy.MaxDependenciesPerModule;
+
+            result.Metrics["Violation"] =
+                1;
 
 
-                    Metadata =
-                    {
-                        ["Rule"] =
-                            "DEP001",
 
-                        ["Layer"] =
-                            group.Key,
+            result.Metadata["Rule"] =
+                "DEP001";
 
-                        ["Dependencies"] =
-                            string.Join(
-                                ", ",
-                                dependencies.Take(10))
-                    }
-                });
+            result.Metadata["Layer"] =
+                group.Key;
+
+            result.Metadata["Dependencies"] =
+                string.Join(
+                    ", ",
+                    dependencies.Take(10));
+
+
+
+            results.Add(result);
         }
     }
 
@@ -228,54 +223,51 @@ public sealed class DependencyGraphEvaluator
 
 
 
-        results.Add(
-            new ArchitectureEvaluatorResult(
-                Name,
-                Context.RootPath)
-            {
-                ProjectName =
-                    Context.ProjectName,
-
-                Language =
-                    Context.Language,
-
-                Framework =
-                    Context.Framework,
-
-                DetectionConfidence =
-                    Context.Confidence,
+        var result =
+            CreateResult(
+                Context.RootPath,
+                "DependencyGraphSummary");
 
 
-                Category =
-                    "DependencyGraphSummary",
+
+        result.ProjectName =
+            Context.ProjectName;
+
+        result.Language =
+            Context.Language;
+
+        result.Framework =
+            Context.Framework;
+
+        result.DetectionConfidence =
+            Context.Confidence;
 
 
-                Metrics =
-                {
-                    ["TotalRelations"] =
-                        Context.Dependencies.Count,
 
-                    ["TotalLayers"] =
-                        Context.Dependencies
-                            .Select(x => x.SourceLayer)
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .Count(),
+        result.Metrics["TotalRelations"] =
+            Context.Dependencies.Count;
 
-                    ["AverageDependencies"] =
-                        CalculateAverageDependencies()
-                },
+        result.Metrics["TotalLayers"] =
+            Context.Dependencies
+                .Select(x => x.SourceLayer)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+
+        result.Metrics["AverageDependencies"] =
+            CalculateAverageDependencies();
 
 
-                Metadata =
-                {
-                    ["Language"] =
-                        Context.Language,
 
-                    ["Framework"] =
-                        Context.Framework
-                        ?? "Unknown"
-                }
-            });
+        result.Metadata["Language"] =
+            Context.Language;
+
+        result.Metadata["Framework"] =
+            Context.Framework
+            ?? "Unknown";
+
+
+
+        results.Add(result);
     }
 
 

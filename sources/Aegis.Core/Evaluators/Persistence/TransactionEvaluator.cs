@@ -1,9 +1,12 @@
 ﻿using System.Text.RegularExpressions;
+
 using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Persistence;
+
 using Franz.Common.DependencyInjection;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,10 +19,11 @@ namespace Aegis.Architecture.Evaluators.Persistence;
 /// - transaction scope maturity
 /// - persistence safety signals
 ///
-/// Framework agnostic.
 /// Produces:
 /// - TransactionIntegrityIndex
 /// - DataConsistencyHealthIndex
+///
+/// Framework agnostic.
 /// </summary>
 public sealed class TransactionEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
@@ -28,7 +32,7 @@ public sealed class TransactionEvaluator
 
 
     public override string Name =>
-        "TransactionEvaluator";
+        nameof(TransactionEvaluator);
 
 
     public override string[] SupportedLanguages =>
@@ -92,14 +96,12 @@ public sealed class TransactionEvaluator
 
 
 
-
-
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath,
-        CancellationToken token)
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
-        var results =
-            new List<ArchitectureEvaluatorResult>();
+        var results = new List<ArchitectureEvaluatorResult>();
 
 
         if (!_policy.Enabled)
@@ -114,14 +116,7 @@ public sealed class TransactionEvaluator
 
 
         var files =
-            Directory
-                .EnumerateFiles(
-                    projectPath,
-                    "*.*",
-                    SearchOption.AllDirectories)
-                .Where(IsSupportedFile)
-                .Where(f => !IsExcludedDir(f))
-                .ToList();
+            GetSourceFiles(projectPath);
 
 
 
@@ -137,19 +132,14 @@ public sealed class TransactionEvaluator
             token.ThrowIfCancellationRequested();
 
 
-            string content;
+            var content =
+                await TryReadFileAsync(
+                    file,
+                    token);
 
-            try
-            {
-                content =
-                    await File.ReadAllTextAsync(
-                        file,
-                        token);
-            }
-            catch
-            {
+
+            if (content is null)
                 continue;
-            }
 
 
 
@@ -176,10 +166,8 @@ public sealed class TransactionEvaluator
             results.Count);
 
 
-
         return results;
     }
-
 
 
 
@@ -189,73 +177,37 @@ public sealed class TransactionEvaluator
         string file,
         string content)
     {
-        double commit = 1;
-        double rollback = 1;
-        double isolation = 1;
-        double safety = 1;
-
-
-
-        bool hasTransaction =
+        var hasTransaction =
             TransactionRegex.IsMatch(content);
 
 
 
-        if (hasTransaction)
-        {
-            if (_policy.RequireExplicitCommit &&
-                !CommitRegex.IsMatch(content))
-            {
-                commit -= 0.4;
-            }
+        var commitScore =
+            EvaluateCommit(content, hasTransaction);
 
 
 
-            if (_policy.RequireRollbackOnFailure &&
-                !RollbackRegex.IsMatch(content))
-            {
-                rollback -= 0.4;
-            }
+        var rollbackScore =
+            EvaluateRollback(content, hasTransaction);
 
 
 
-            if (_policy.MaxTransactionBlockLines > 0)
-            {
-                var lines =
-                    content.Split('\n').Length;
-
-
-                if (lines >
-                    _policy.MaxTransactionBlockLines)
-                {
-                    isolation -= 0.15;
-                }
-            }
-        }
+        var isolationScore =
+            EvaluateIsolation(content, hasTransaction);
 
 
 
-        if (_policy.DetectRawSqlConcatenation &&
-            RawSqlRegex.IsMatch(content))
-        {
-            safety -= 0.4;
-        }
-
-
-
-        commit = Normalize(commit);
-        rollback = Normalize(rollback);
-        isolation = Normalize(isolation);
-        safety = Normalize(safety);
+        var safetyScore =
+            EvaluateSafety(content);
 
 
 
         var integrity =
             ComputeIntegrity(
-                commit,
-                rollback,
-                isolation,
-                safety);
+                commitScore,
+                rollbackScore,
+                isolationScore,
+                safetyScore);
 
 
 
@@ -263,24 +215,23 @@ public sealed class TransactionEvaluator
             Name,
             file)
         {
-            Category =
-                "Persistence",
+            Category = "Persistence",
 
 
             Metrics =
             new Dictionary<string, double>
             {
                 ["CommitScore"] =
-                    commit * 100,
+                    commitScore * 100,
 
                 ["RollbackScore"] =
-                    rollback * 100,
+                    rollbackScore * 100,
 
                 ["IsolationScore"] =
-                    isolation * 100,
+                    isolationScore * 100,
 
                 ["SafetyScore"] =
-                    safety * 100,
+                    safetyScore * 100,
 
                 ["TransactionIntegrityIndex"] =
                     integrity
@@ -309,11 +260,97 @@ public sealed class TransactionEvaluator
 
 
 
+    private double EvaluateCommit(
+        string content,
+        bool hasTransaction)
+    {
+        if (!hasTransaction ||
+            !_policy.RequireExplicitCommit)
+        {
+            return 1;
+        }
+
+
+        return CommitRegex.IsMatch(content)
+            ? 1
+            : 0.6;
+    }
+
+
+
+
+
+    private double EvaluateRollback(
+        string content,
+        bool hasTransaction)
+    {
+        if (!hasTransaction ||
+            !_policy.RequireRollbackOnFailure)
+        {
+            return 1;
+        }
+
+
+        return RollbackRegex.IsMatch(content)
+            ? 1
+            : 0.6;
+    }
+
+
+
+
+
+    private double EvaluateIsolation(
+        string content,
+        bool hasTransaction)
+    {
+        if (!hasTransaction ||
+            _policy.MaxTransactionBlockLines <= 0)
+        {
+            return 1;
+        }
+
+
+        var lineCount =
+            content.Split('\n').Length;
+
+
+        return lineCount >
+               _policy.MaxTransactionBlockLines
+            ? 0.85
+            : 1;
+    }
+
+
+
+
+
+    private double EvaluateSafety(
+        string content)
+    {
+        if (!_policy.DetectRawSqlConcatenation)
+            return 1;
+
+
+        return RawSqlRegex.IsMatch(content)
+            ? 0.6
+            : 1;
+    }
+
+
+
+
+
     private static void AddSummary(
         List<ArchitectureEvaluatorResult> results,
         string projectPath)
     {
-        var index =
+        var analyzedCount =
+            results.Count;
+
+
+
+        var integrity =
             results.Average(x =>
                 x.Metrics.GetValueOrDefault(
                     "TransactionIntegrityIndex",
@@ -331,7 +368,7 @@ public sealed class TransactionEvaluator
 
         results.Add(
             new ArchitectureEvaluatorResult(
-                "TransactionEvaluator",
+                nameof(TransactionEvaluator),
                 projectPath)
             {
                 Category =
@@ -342,13 +379,13 @@ public sealed class TransactionEvaluator
                 new Dictionary<string, double>
                 {
                     ["AnalyzedFiles"] =
-                        results.Count,
+                        analyzedCount,
 
                     ["AverageTransactionIntegrityIndex"] =
-                        index,
+                        integrity,
 
                     ["DataConsistencyHealthIndex"] =
-                        index * 0.6 +
+                        integrity * 0.6 +
                         safety * 0.4
                 },
 
@@ -357,7 +394,7 @@ public sealed class TransactionEvaluator
                 new Dictionary<string, string>
                 {
                     ["Evaluator"] =
-                        "TransactionEvaluator"
+                        nameof(TransactionEvaluator)
                 }
             });
     }
@@ -386,28 +423,59 @@ public sealed class TransactionEvaluator
 
 
 
-    private static double Normalize(double value)
-        => Math.Max(
-            0,
-            Math.Min(
-                1,
-                value));
+    private static List<string> GetSourceFiles(
+        string projectPath)
+    {
+        return Directory
+            .EnumerateFiles(
+                projectPath,
+                "*.*",
+                SearchOption.AllDirectories)
+            .Where(IsSupportedFile)
+            .Where(f => !IsExcludedDir(f))
+            .ToList();
+    }
 
 
 
 
 
-    private static bool IsSupportedFile(string file)
+    private static async Task<string?> TryReadFileAsync(
+        string file,
+        CancellationToken token)
+    {
+        try
+        {
+            return await File.ReadAllTextAsync(
+                file,
+                token);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+
+
+
+
+    private static bool IsSupportedFile(
+        string file)
     {
         return
             file.EndsWith(".cs",
-                StringComparison.OrdinalIgnoreCase) ||
+                StringComparison.OrdinalIgnoreCase)
+            ||
             file.EndsWith(".java",
-                StringComparison.OrdinalIgnoreCase) ||
+                StringComparison.OrdinalIgnoreCase)
+            ||
             file.EndsWith(".py",
-                StringComparison.OrdinalIgnoreCase) ||
+                StringComparison.OrdinalIgnoreCase)
+            ||
             file.EndsWith(".ts",
-                StringComparison.OrdinalIgnoreCase) ||
+                StringComparison.OrdinalIgnoreCase)
+            ||
             file.EndsWith(".js",
                 StringComparison.OrdinalIgnoreCase);
     }
@@ -416,22 +484,33 @@ public sealed class TransactionEvaluator
 
 
 
-    private static string DetectLanguage(string path)
+    private static string DetectLanguage(
+        string path)
     {
-        if (path.EndsWith(".cs"))
+        if (path.EndsWith(".cs",
+            StringComparison.OrdinalIgnoreCase))
             return "C#";
 
-        if (path.EndsWith(".java"))
+
+        if (path.EndsWith(".java",
+            StringComparison.OrdinalIgnoreCase))
             return "Java";
 
-        if (path.EndsWith(".py"))
+
+        if (path.EndsWith(".py",
+            StringComparison.OrdinalIgnoreCase))
             return "Python";
 
-        if (path.EndsWith(".ts"))
+
+        if (path.EndsWith(".ts",
+            StringComparison.OrdinalIgnoreCase))
             return "TypeScript";
 
-        if (path.EndsWith(".js"))
+
+        if (path.EndsWith(".js",
+            StringComparison.OrdinalIgnoreCase))
             return "JavaScript";
+
 
         return "Unknown";
     }

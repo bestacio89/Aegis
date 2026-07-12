@@ -1,4 +1,6 @@
-﻿using Aegis.Architecture.Diagnostics;
+﻿using System.Text.RegularExpressions;
+using Aegis.Architecture.Diagnostics;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
@@ -6,10 +8,8 @@ using Aegis.Shared.Diagnostics;
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.Architecture;
-
 
 /// <summary>
 /// Evaluates Node.js and TypeScript backend architecture practices.
@@ -32,10 +32,8 @@ public sealed class NodeEvaluator
     private readonly NodePolicy _policy;
 
 
-
     public override string Name =>
         "NodeEvaluator";
-
 
 
     public override string[] SupportedLanguages =>
@@ -43,7 +41,6 @@ public sealed class NodeEvaluator
         "JavaScript",
         "TypeScript"
     ];
-
 
 
     public override string[] SupportedFrameworks =>
@@ -54,12 +51,10 @@ public sealed class NodeEvaluator
     ];
 
 
-
     private static readonly Regex EvalRegex =
         new(
             @"\beval\s*\(",
             RegexOptions.Compiled);
-
 
 
     private static readonly Regex ChildProcessRegex =
@@ -68,12 +63,10 @@ public sealed class NodeEvaluator
             RegexOptions.Compiled);
 
 
-
     private static readonly Regex CallbackRegex =
         new(
             @"function\s*\([^)]*\)\s*\{[^{}]*(function\s*\([^)]*\)\s*\{){3,}",
             RegexOptions.Compiled);
-
 
 
     private static readonly Regex AsyncFunctionRegex =
@@ -82,12 +75,10 @@ public sealed class NodeEvaluator
             RegexOptions.Compiled);
 
 
-
     private static readonly Regex RequireRegex =
         new(
             @"\brequire\s*\(",
             RegexOptions.Compiled);
-
 
 
     public NodeEvaluator(
@@ -111,10 +102,8 @@ public sealed class NodeEvaluator
             new List<ArchitectureEvaluatorResult>();
 
 
-
         if (Context is null)
             return results;
-
 
 
         if (!IsSupportedNodeProject(Context))
@@ -128,22 +117,24 @@ public sealed class NodeEvaluator
         }
 
 
-
         var files =
-            ResolveFiles(projectPath);
-
+            ResolveSourceFiles(
+                projectPath,
+                Context.Language == "TypeScript"
+                    ? ".ts"
+                    : ".js",
+                ".mjs",
+                ".cjs");
 
 
         if (files.Count == 0)
             return results;
 
 
-
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Trace,
             $"Evaluating {files.Count} Node files.");
-
 
 
         foreach (var file in files)
@@ -155,12 +146,10 @@ public sealed class NodeEvaluator
                 continue;
 
 
-
             var content =
                 await File.ReadAllTextAsync(
                     file,
                     token);
-
 
 
             EvaluateSecurityPatterns(
@@ -168,14 +157,10 @@ public sealed class NodeEvaluator
                 content,
                 results);
 
-
-
             EvaluateAsyncPatterns(
                 file,
                 content,
                 results);
-
-
 
             EvaluateModuleSystem(
                 file,
@@ -184,12 +169,10 @@ public sealed class NodeEvaluator
         }
 
 
-
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Info,
             $"Node evaluation completed with {results.Count} violation(s).");
-
 
 
         return results;
@@ -214,7 +197,6 @@ public sealed class NodeEvaluator
         }
 
 
-
         if (_policy.DisallowChildProcess &&
             ChildProcessRegex.IsMatch(content))
         {
@@ -225,7 +207,6 @@ public sealed class NodeEvaluator
                     "Direct child_process usage detected.",
                     "Security"));
         }
-
 
 
         if (CallbackRegex.IsMatch(content))
@@ -250,10 +231,8 @@ public sealed class NodeEvaluator
             return;
 
 
-
         if (!AsyncFunctionRegex.IsMatch(content))
             return;
-
 
 
         if (content.Contains(
@@ -262,7 +241,6 @@ public sealed class NodeEvaluator
         {
             return;
         }
-
 
 
         results.Add(
@@ -284,26 +262,21 @@ public sealed class NodeEvaluator
             return;
 
 
-
         if (!RequireRegex.IsMatch(content))
             return;
 
 
-
         var usesEsm =
-            Context?.PatternsDetected
-                .Any(
-                    x =>
-                        x.Equals(
-                            "ESModule",
-                            StringComparison.OrdinalIgnoreCase))
+            Context?.PatternsDetected.Any(
+                x =>
+                    x.Equals(
+                        "ESModule",
+                        StringComparison.OrdinalIgnoreCase))
             == true;
-
 
 
         if (!usesEsm)
             return;
-
 
 
         results.Add(
@@ -322,38 +295,28 @@ public sealed class NodeEvaluator
         string message,
         string category)
     {
-        return new ArchitectureEvaluatorResult(
-            Name,
-            file)
-        {
-            Category = "NodeArchitecture",
+        var result =
+            CreateResult(
+                file,
+                nameof(ArchitectureRuleCategory.Architecture));
 
-            Metrics =
-            {
-                ["Violation"] = 1
-            },
 
-            Metadata =
-            {
-                ["Rule"] =
-                    rule,
+        result.Metrics["Violation"] = 1;
+        result.Metrics["ArchitectureCompliance"] = 0;
 
-                ["Message"] =
-                    message,
 
-                ["Category"] =
-                    category,
+        result.Metadata["Rule"] = rule;
+        result.Metadata["Message"] = message;
+        result.Metadata["Category"] = category;
+        result.Metadata["Language"] =
+            Context?.Language ?? "Unknown";
+        result.Metadata["Framework"] =
+            Context?.Framework ?? "Unknown";
+        result.Metadata["Layer"] =
+            ResolveLayer(file) ?? "Unknown";
 
-                ["Language"] =
-                    Context?.Language ?? "Unknown",
 
-                ["Framework"] =
-                    Context?.Framework ?? "Unknown",
-
-                ["Layer"] =
-                    ResolveLayer(file) ?? "Unknown"
-            }
-        };
+        return result;
     }
 
 
@@ -378,55 +341,6 @@ public sealed class NodeEvaluator
                     "Next",
                     StringComparison.OrdinalIgnoreCase) == true
             );
-    }
-
-
-
-    private List<string> ResolveFiles(
-        string root)
-    {
-        if (Context is null)
-            return [];
-
-
-
-        var extensions =
-            Context.Language switch
-            {
-                "TypeScript" =>
-                [
-                    ".ts"
-                ],
-
-                "JavaScript" =>
-                [
-                    ".js",
-                    ".mjs",
-                    ".cjs"
-                ],
-
-                _ =>
-                    Array.Empty<string>()
-            };
-
-
-
-        return Directory
-            .EnumerateFiles(
-                root,
-                "*.*",
-                SearchOption.AllDirectories)
-            .Where(
-                file =>
-                    extensions.Any(
-                        ext =>
-                            file.EndsWith(
-                                ext,
-                                StringComparison.OrdinalIgnoreCase)))
-            .Where(
-                file =>
-                    !IsExcludedDir(file))
-            .ToList();
     }
 
 
@@ -456,25 +370,6 @@ public sealed class NodeEvaluator
             ||
             file.Contains(
                 "node_modules",
-                StringComparison.OrdinalIgnoreCase);
-    }
-
-
-
-    private static bool IsExcludedDir(
-        string file)
-    {
-        return
-            file.Contains(
-                $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.Contains(
-                $"{Path.DirectorySeparatorChar}dist{Path.DirectorySeparatorChar}",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.Contains(
-                $"{Path.DirectorySeparatorChar}build{Path.DirectorySeparatorChar}",
                 StringComparison.OrdinalIgnoreCase);
     }
 }

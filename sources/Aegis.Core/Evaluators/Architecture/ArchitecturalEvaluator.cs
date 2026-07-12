@@ -1,4 +1,5 @@
 ﻿using Aegis.Architecture.Diagnostics;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
@@ -85,7 +86,7 @@ public sealed class ArchitecturalEvaluator :
 
 
             results.Add(
-                CreateResult(
+                CreateDependencyResult(
                     dependency,
                     allowed));
         }
@@ -135,45 +136,52 @@ public sealed class ArchitecturalEvaluator :
 
 
 
-    private ArchitectureEvaluatorResult CreateResult(
+    private ArchitectureEvaluatorResult CreateDependencyResult(
         ArchitectureDependencyContext dependency,
         bool allowed)
     {
-        return new ArchitectureEvaluatorResult(
-            Name,
-            dependency.File)
-        {
-            Category = "Architecture",
+        var result =
+            CreateResult(
+                dependency.File,
+                nameof(ArchitectureRuleCategory.Architecture));
 
-            Metrics =
-            {
-                ["AllowedDependency"] =
-                    allowed ? 1 : 0
-            },
 
-            Metadata =
-            {
-                ["Source"] = dependency.Source,
-                ["Target"] = dependency.Target,
+        result.Metrics["AllowedDependency"] =
+            allowed ? 1 : 0;
 
-                ["SourceLayer"] =
-                    dependency.SourceLayer,
+        result.Metrics["DependencyViolation"] =
+            allowed ? 0 : 1;
 
-                ["TargetLayer"] =
-                    dependency.TargetLayer,
+        result.Metrics["ArchitectureCompliance"] =
+            allowed ? 100 : 0;
 
-                ["DependencyType"] =
-                    dependency.DependencyType,
 
-                ["Language"] =
-                    Context?.Language ?? "Unknown",
+        result.Metadata["Source"] =
+            dependency.Source;
 
-                ["Framework"] =
-                    Context?.Framework ?? "Unknown",
+        result.Metadata["Target"] =
+            dependency.Target;
 
-                ["Allowed"] =
-                    allowed.ToString()
-            }
-        };
+        result.Metadata["SourceLayer"] =
+            dependency.SourceLayer;
+
+        result.Metadata["TargetLayer"] =
+            dependency.TargetLayer;
+
+        result.Metadata["DependencyType"] =
+            dependency.DependencyType;
+
+        result.Metadata["Language"] =
+            Context?.Language ?? "Unknown";
+
+        result.Metadata["Framework"] =
+            Context?.Framework ?? "Unknown";
+
+        result.Metadata["Allowed"] =
+            allowed.ToString();
+
+
+        return result;
     }
 }
+

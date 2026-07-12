@@ -13,25 +13,13 @@ using YamlDotNet.RepresentationModel;
 
 namespace Aegis.Architecture.Evaluators.Infrastructure;
 
-/// <summary>
-/// Cross-platform configuration architecture evaluator.
-/// Evaluates configuration hygiene across application, container,
-/// CI/CD, Kubernetes, and dependency management environments.
-///
-/// Produces:
-/// - SyntaxComplianceScore
-/// - SecretExposureScore
-/// - InfrastructureSafetyScore
-/// - DependencyPinningScore
-/// - ConfigurationIntegrityScore
-///
-/// Aggregates into InfrastructureHealthIndex.
-/// </summary>
 public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 {
     private readonly ConfigurationPolicy _policy;
 
-    public override string Name => "ConfigurationEvaluator";
+    public override string Name =>
+        "ConfigurationEvaluator";
+
 
     public override string[] SupportedLanguages =>
     [
@@ -41,6 +29,7 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         "JavaScript",
         "TypeScript"
     ];
+
 
     public override string[] SupportedFrameworks =>
     [
@@ -61,13 +50,16 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
     private static readonly Regex UnsafeDockerCommandRx =
         new(
             @"\b(chmod\s+777|curl\s+.*\|\s*sh|wget\s+.*\|\s*sh|rm\s+-rf\s+/|apt-get\s+install)\b",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            RegexOptions.Compiled |
+            RegexOptions.IgnoreCase);
 
 
     private static readonly Regex UnsafePipelineCommandRx =
         new(
             @"\b(sudo|chmod\s+777|curl\s+.*\|\s*sh|wget\s+.*\|\s*sh|bash\s+-c)\b",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            RegexOptions.Compiled |
+            RegexOptions.IgnoreCase);
+
 
 
     public ConfigurationEvaluator(
@@ -75,15 +67,20 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.Configuration ?? new ConfigurationPolicy();
+        _policy =
+            options.Value.Configuration
+            ?? new ConfigurationPolicy();
     }
 
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath,
-        CancellationToken token)
+
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
         var results = new List<ArchitectureEvaluatorResult>();
+
 
         if (!_policy.Enabled)
         {
@@ -95,7 +92,8 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         }
 
 
-        var configurationFiles =
+
+        var files =
             Directory.EnumerateFiles(
                     projectPath,
                     "*.*",
@@ -105,21 +103,27 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
                 .ToList();
 
 
+
         _logger.LogInformation(
             "🌍 Running {Evaluator} on {Count} configuration files",
             Name,
-            configurationFiles.Count);
+            files.Count);
 
 
-        foreach (var file in configurationFiles)
+
+        foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
+
 
             string content;
 
             try
             {
-                content = await File.ReadAllTextAsync(file, token);
+                content =
+                    await File.ReadAllTextAsync(
+                        file,
+                        token);
             }
             catch
             {
@@ -127,13 +131,32 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
             }
 
 
-            double syntaxScore = EvaluateSyntax(file, content);
-            double secretScore = EvaluateSecrets(content);
-            double safetyScore = EvaluateInfrastructureSafety(file, content);
-            double dependencyScore = EvaluateDependencyDiscipline(file, content);
+
+            var syntaxScore =
+                EvaluateSyntax(
+                    file,
+                    content);
 
 
-            double integrityScore =
+            var secretScore =
+                EvaluateSecrets(
+                    content);
+
+
+            var safetyScore =
+                EvaluateInfrastructureSafety(
+                    file,
+                    content);
+
+
+            var dependencyScore =
+                EvaluateDependencyDiscipline(
+                    file,
+                    content);
+
+
+
+            var integrityScore =
                 ComputeIntegrity(
                     syntaxScore,
                     secretScore,
@@ -141,112 +164,31 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
                     dependencyScore);
 
 
+
             results.Add(
-                new ArchitectureEvaluatorResult(Name, file)
-                {
-                    Category = DetectCategory(file),
-
-                    Metrics = new Dictionary<string, double>
-                    {
-                        ["SyntaxComplianceScore"] = syntaxScore,
-                        ["SecretExposureScore"] = secretScore,
-                        ["InfrastructureSafetyScore"] = safetyScore,
-                        ["DependencyPinningScore"] = dependencyScore,
-                        ["ConfigurationIntegrityScore"] = integrityScore
-                    },
-
-                    Metadata = new Dictionary<string, string>
-                    {
-                        ["FileName"] = Path.GetFileName(file),
-                        ["FileType"] = Path.GetExtension(file),
-                        ["Language"] = Context?.Language ?? "Unknown",
-                        ["Framework"] = DetectFramework(file),
-                        ["Target"] = file,
-                        ["PolicyEnabled"] = _policy.Enabled.ToString()
-                    }
-                });
+                CreateFileResult(
+                    file,
+                    syntaxScore,
+                    secretScore,
+                    safetyScore,
+                    dependencyScore,
+                    integrityScore));
         }
+
 
 
         if (results.Count > 0)
         {
-            var evaluatedCount = results.Count;
-
-
-            double avgIntegrity =
-                results.Average(
-                    r => r.Metrics.GetValueOrDefault(
-                        "ConfigurationIntegrityScore",
-                        0));
-
-
-            double avgSyntax =
-                results.Average(
-                    r => r.Metrics.GetValueOrDefault(
-                        "SyntaxComplianceScore",
-                        0));
-
-
-            double avgSecrets =
-                results.Average(
-                    r => r.Metrics.GetValueOrDefault(
-                        "SecretExposureScore",
-                        0));
-
-
-            double avgSafety =
-                results.Average(
-                    r => r.Metrics.GetValueOrDefault(
-                        "InfrastructureSafetyScore",
-                        0));
-
-
-            double avgDependencies =
-                results.Average(
-                    r => r.Metrics.GetValueOrDefault(
-                        "DependencyPinningScore",
-                        0));
+            var evaluatedResults =
+                results.ToList();
 
 
             results.Add(
-                new ArchitectureEvaluatorResult(Name, projectPath)
-                {
-                    Category = "InfrastructureSummary",
-
-                    Metrics = new Dictionary<string, double>
-                    {
-                        ["ConfigurationFileCount"] = evaluatedCount,
-
-                        ["AverageIntegrityScore"] = avgIntegrity,
-
-                        ["AverageSyntaxCompliance"] = avgSyntax,
-
-                        ["AverageSecretProtection"] = avgSecrets,
-
-                        ["AverageInfrastructureSafety"] = avgSafety,
-
-                        ["AverageDependencyDiscipline"] = avgDependencies,
-
-
-                        ["InfrastructureHealthIndex"] =
-                            avgIntegrity * 0.5 +
-                            avgSafety * 0.3 +
-                            avgSecrets * 0.2
-                    },
-
-                    Metadata = new Dictionary<string, string>
-                    {
-                        ["Evaluator"] = Name,
-                        ["PolicyEnabled"] =
-                            _policy.Enabled.ToString(),
-
-                        ["CheckedFrameworks"] =
-                            string.Join(
-                                ", ",
-                                SupportedFrameworks)
-                    }
-                });
+                CreateSummaryResult(
+                    projectPath,
+                    evaluatedResults));
         }
+
 
 
         _logger.LogInformation(
@@ -255,7 +197,166 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
             results.Count);
 
 
+
         return results;
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateFileResult(
+        string file,
+        double syntax,
+        double secrets,
+        double safety,
+        double dependencies,
+        double integrity)
+    {
+        return new ArchitectureEvaluatorResult(
+            Name,
+            file)
+        {
+            Category =
+                DetectCategory(file),
+
+            Metrics =
+            {
+                ["SyntaxComplianceScore"] =
+                    syntax,
+
+                ["SecretExposureScore"] =
+                    secrets,
+
+                ["InfrastructureSafetyScore"] =
+                    safety,
+
+                ["DependencyPinningScore"] =
+                    dependencies,
+
+                ["ConfigurationIntegrityScore"] =
+                    integrity
+            },
+
+            Metadata =
+            {
+                ["FileName"] =
+                    Path.GetFileName(file),
+
+                ["FileType"] =
+                    Path.GetExtension(file),
+
+                ["Language"] =
+                    Context?.Language
+                    ?? "Unknown",
+
+                ["Framework"] =
+                    DetectFramework(file),
+
+                ["Target"] =
+                    file,
+
+                ["PolicyEnabled"] =
+                    _policy.Enabled.ToString()
+            }
+        };
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateSummaryResult(
+        string projectPath,
+        IReadOnlyCollection<ArchitectureEvaluatorResult> results)
+    {
+        var avgIntegrity =
+            Average(
+                results,
+                "ConfigurationIntegrityScore");
+
+
+        var avgSyntax =
+            Average(
+                results,
+                "SyntaxComplianceScore");
+
+
+        var avgSecrets =
+            Average(
+                results,
+                "SecretExposureScore");
+
+
+        var avgSafety =
+            Average(
+                results,
+                "InfrastructureSafetyScore");
+
+
+        var avgDependencies =
+            Average(
+                results,
+                "DependencyPinningScore");
+
+
+
+        return new ArchitectureEvaluatorResult(
+            Name,
+            projectPath)
+        {
+            Category =
+                "InfrastructureSummary",
+
+            Metrics =
+            {
+                ["ConfigurationFileCount"] =
+                    results.Count,
+
+                ["AverageIntegrityScore"] =
+                    avgIntegrity,
+
+                ["AverageSyntaxCompliance"] =
+                    avgSyntax,
+
+                ["AverageSecretProtection"] =
+                    avgSecrets,
+
+                ["AverageInfrastructureSafety"] =
+                    avgSafety,
+
+                ["AverageDependencyDiscipline"] =
+                    avgDependencies,
+
+                ["InfrastructureHealthIndex"] =
+                    avgIntegrity * 0.5 +
+                    avgSafety * 0.3 +
+                    avgSecrets * 0.2
+            },
+
+            Metadata =
+            {
+                ["Evaluator"] =
+                    Name,
+
+                ["PolicyEnabled"] =
+                    _policy.Enabled.ToString(),
+
+                ["CheckedFrameworks"] =
+                    string.Join(
+                        ", ",
+                        SupportedFrameworks)
+            }
+        };
+    }
+
+
+
+    private static double Average(
+        IEnumerable<ArchitectureEvaluatorResult> results,
+        string metric)
+    {
+        return results.Average(
+            r =>
+                r.Metrics.GetValueOrDefault(
+                    metric,
+                    0));
     }
 
 
@@ -268,23 +369,30 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
             return 1;
 
 
+
         try
         {
-            if (file.EndsWith(".json",
-                StringComparison.OrdinalIgnoreCase))
+            if (file.EndsWith(
+                    ".json",
+                    StringComparison.OrdinalIgnoreCase))
             {
                 JsonDocument.Parse(content);
             }
 
 
-            if (file.EndsWith(".yaml",
+            if (file.EndsWith(
+                    ".yaml",
                     StringComparison.OrdinalIgnoreCase)
                 ||
-                file.EndsWith(".yml",
+                file.EndsWith(
+                    ".yml",
                     StringComparison.OrdinalIgnoreCase))
             {
-                var yaml = new YamlStream();
-                yaml.Load(new StringReader(content));
+                var yaml =
+                    new YamlStream();
+
+                yaml.Load(
+                    new StringReader(content));
             }
 
 
@@ -298,19 +406,19 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 
 
 
-    private double EvaluateSecrets(string content)
+    private double EvaluateSecrets(
+        string content)
     {
-        if (_policy.ForbiddenKeys.Length == 0)
-            return 1;
-
-
-        foreach (var forbidden in _policy.ForbiddenKeys)
+        if (_policy.ForbiddenKeys.Length > 0)
         {
-            if (content.Contains(
-                    forbidden,
-                    StringComparison.OrdinalIgnoreCase))
+            foreach (var key in _policy.ForbiddenKeys)
             {
-                return 0;
+                if (content.Contains(
+                        key,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return 0;
+                }
             }
         }
 
@@ -330,35 +438,24 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
             return 1;
 
 
-        if (file.Contains(
-                "Dockerfile",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.Contains(
-                "docker-compose",
-                StringComparison.OrdinalIgnoreCase))
+        var category =
+            DetectCategory(file);
+
+
+        return category switch
         {
-            return UnsafeDockerCommandRx.IsMatch(content)
-                ? 0.5
-                : 1;
-        }
+            "Container" =>
+                UnsafeDockerCommandRx.IsMatch(content)
+                    ? 0.5
+                    : 1,
 
+            "Pipeline" =>
+                UnsafePipelineCommandRx.IsMatch(content)
+                    ? 0.5
+                    : 1,
 
-        if (file.Contains(
-                ".github",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.Contains(
-                ".gitlab",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return UnsafePipelineCommandRx.IsMatch(content)
-                ? 0.5
-                : 1;
-        }
-
-
-        return 1;
+            _ => 1
+        };
     }
 
 
@@ -367,16 +464,8 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         string file,
         string content)
     {
-        if (!file.Contains(
-                "requirements",
-                StringComparison.OrdinalIgnoreCase)
-            &&
-            !file.Contains(
-                "package",
-                StringComparison.OrdinalIgnoreCase))
-        {
+        if (!IsDependencyFile(file))
             return 1;
-        }
 
 
         var lines =
@@ -385,8 +474,10 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
                 StringSplitOptions.RemoveEmptyEntries);
 
 
+
         if (lines.Length == 0)
             return 1;
+
 
 
         var unpinned =
@@ -401,10 +492,25 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
                     !line.Contains("^"));
 
 
+
         return Math.Max(
             0,
             1 -
             (double)unpinned / lines.Length);
+    }
+
+
+
+    private static bool IsDependencyFile(
+        string file)
+    {
+        return file.Contains(
+                   "requirements",
+                   StringComparison.OrdinalIgnoreCase)
+               ||
+               file.Contains(
+                   "package",
+                   StringComparison.OrdinalIgnoreCase);
     }
 
 
@@ -427,13 +533,13 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 
 
 
-    private static bool IsConfigurationFile(string file)
+    private static bool IsConfigurationFile(
+        string file)
     {
         var normalized =
             file.Replace(
                 '\\',
                 '/');
-
 
         return
             file.EndsWith(".json",
@@ -463,7 +569,8 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 
 
 
-    private static string DetectCategory(string file)
+    private static string DetectCategory(
+        string file)
     {
         if (file.Contains(
                 "Docker",
@@ -471,12 +578,10 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
             return "Container";
 
 
-        if (file.Contains(
-                ".github",
+        if (file.Contains(".github",
                 StringComparison.OrdinalIgnoreCase)
             ||
-            file.Contains(
-                ".gitlab",
+            file.Contains(".gitlab",
                 StringComparison.OrdinalIgnoreCase))
             return "Pipeline";
 
@@ -499,37 +604,25 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 
 
 
-    private static string DetectFramework(string file)
+    private static string DetectFramework(
+        string file)
     {
-        if (file.Contains(
+        return DetectCategory(file) switch
+        {
+            "Container" =>
                 "Docker",
-                StringComparison.OrdinalIgnoreCase))
-            return "Docker";
 
+            "Pipeline" =>
+                "CI/CD",
 
-        if (file.Contains(
-                ".github",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.Contains(
-                ".gitlab",
-                StringComparison.OrdinalIgnoreCase))
-            return "CI/CD";
+            "Kubernetes" =>
+                "Kubernetes",
 
+            "Environment" =>
+                "Environment",
 
-        if (file.EndsWith(".yaml",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".yml",
-                StringComparison.OrdinalIgnoreCase))
-            return "Kubernetes";
-
-
-        if (file.EndsWith(".env",
-                StringComparison.OrdinalIgnoreCase))
-            return "Environment";
-
-
-        return "Generic";
+            _ =>
+                "Generic"
+        };
     }
 }

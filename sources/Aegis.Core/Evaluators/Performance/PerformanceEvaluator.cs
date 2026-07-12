@@ -1,9 +1,12 @@
 ﻿using System.Text.RegularExpressions;
+
 using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Performance;
+
 using Franz.Common.DependencyInjection;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -20,9 +23,6 @@ namespace Aegis.Architecture.Evaluators.Performance;
 /// Produces:
 /// - PerformanceHealthIndex
 /// - EfficiencyHealthIndex
-///
-/// Framework agnostic.
-/// Framework-specific optimizations belong to dedicated evaluators.
 /// </summary>
 public sealed class PerformanceEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
@@ -106,8 +106,6 @@ public sealed class PerformanceEvaluator
 
 
 
-
-
     public PerformanceEvaluator(
         ILogger<PerformanceEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
@@ -120,11 +118,10 @@ public sealed class PerformanceEvaluator
 
 
 
-
-
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath,
-        CancellationToken token)
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
         var results =
             new List<ArchitectureEvaluatorResult>();
@@ -142,14 +139,7 @@ public sealed class PerformanceEvaluator
 
 
         var files =
-            Directory
-                .EnumerateFiles(
-                    projectPath,
-                    "*.*",
-                    SearchOption.AllDirectories)
-                .Where(IsSupportedFile)
-                .Where(f => !IsExcludedDir(f))
-                .ToList();
+            EnumerateSourceFiles(projectPath);
 
 
 
@@ -165,26 +155,26 @@ public sealed class PerformanceEvaluator
             token.ThrowIfCancellationRequested();
 
 
-            string content;
-
             try
             {
-                content =
+                var content =
                     await File.ReadAllTextAsync(
                         file,
                         token);
+
+
+                results.Add(
+                    EvaluateFile(
+                        file,
+                        content));
             }
-            catch
+            catch (Exception ex)
             {
-                continue;
+                _logger.LogDebug(
+                    ex,
+                    "Unable to evaluate file {File}",
+                    file);
             }
-
-
-
-            results.Add(
-                EvaluateFile(
-                    file,
-                    content));
         }
 
 
@@ -204,12 +194,8 @@ public sealed class PerformanceEvaluator
             results.Count);
 
 
-
         return results;
     }
-
-
-
 
 
 
@@ -217,19 +203,69 @@ public sealed class PerformanceEvaluator
         string file,
         string content)
     {
-        double algorithmic = 1;
-        double concurrency = 1;
-        double async = 1;
-        double io = 1;
+        var score =
+            AnalyzePerformanceSignals(
+                content);
 
 
 
-        var loopCount =
-            LoopRegex.Matches(content).Count;
+        return new ArchitectureEvaluatorResult(
+            Name,
+            file)
+        {
+            Category =
+                "Performance",
+
+            Metrics =
+            {
+                ["AlgorithmicEfficiencyScore"] =
+                    score.Algorithmic * 100,
+
+                ["ConcurrencyScore"] =
+                    score.Concurrency * 100,
+
+                ["AsyncMaturityScore"] =
+                    score.Async * 100,
+
+                ["IOMaturityScore"] =
+                    score.IO * 100,
+
+                ["PerformanceHealthIndex"] =
+                    score.Health
+            },
+
+            Metadata =
+            {
+                ["FileName"] =
+                    Path.GetFileName(file),
+
+                ["Language"] =
+                    DetectLanguage(file),
+
+                ["Evaluator"] =
+                    Name
+            }
+        };
+    }
 
 
 
-        if (loopCount > 0 &&
+    private PerformanceScore AnalyzePerformanceSignals(
+        string content)
+    {
+        var algorithmic = 1d;
+        var concurrency = 1d;
+        var async = 1d;
+        var io = 1d;
+
+
+
+        var hasLoop =
+            LoopRegex.IsMatch(content);
+
+
+
+        if (hasLoop &&
             NestedLoopRegex.IsMatch(content))
         {
             algorithmic -= 0.20;
@@ -238,9 +274,8 @@ public sealed class PerformanceEvaluator
 
 
         if (_policy.DetectStringConcatenationInLoops &&
-            StringConcatenationRegex.IsMatch(content) &&
-            content.Contains("for",
-                StringComparison.OrdinalIgnoreCase))
+            hasLoop &&
+            StringConcatenationRegex.IsMatch(content))
         {
             algorithmic -= 0.05;
         }
@@ -280,80 +315,38 @@ public sealed class PerformanceEvaluator
 
 
         if (_policy.SuggestAsyncStreams &&
-            content.Contains("foreach") &&
-            !content.Contains("await"))
+            hasLoop &&
+            !content.Contains(
+                "await",
+                StringComparison.OrdinalIgnoreCase))
         {
             async -= 0.10;
         }
 
 
 
-        algorithmic =
-            Normalize(algorithmic);
-
-        concurrency =
-            Normalize(concurrency);
-
-        async =
-            Normalize(async);
-
-        io =
-            Normalize(io);
+        algorithmic = Normalize(algorithmic);
+        concurrency = Normalize(concurrency);
+        async = Normalize(async);
+        io = Normalize(io);
 
 
 
-        var health =
-            ComputePerformanceHealth(
-                algorithmic,
-                concurrency,
-                async,
-                io);
-
-
-
-        return new ArchitectureEvaluatorResult(
-            Name,
-            file)
+        return new PerformanceScore
         {
-            Category = "Performance",
+            Algorithmic = algorithmic,
+            Concurrency = concurrency,
+            Async = async,
+            IO = io,
 
-            Metrics =
-            new Dictionary<string, double>
-            {
-                ["AlgorithmicEfficiencyScore"] =
-                    algorithmic * 100,
-
-                ["ConcurrencyScore"] =
-                    concurrency * 100,
-
-                ["AsyncMaturityScore"] =
-                    async * 100,
-
-                ["IOMaturityScore"] =
-                    io * 100,
-
-                ["PerformanceHealthIndex"] =
-                    health
-            },
-
-
-            Metadata =
-            new Dictionary<string, string>
-            {
-                ["FileName"] =
-                    Path.GetFileName(file),
-
-                ["Language"] =
-                    DetectLanguage(file),
-
-                ["Evaluator"] =
-                    Name
-            }
+            Health =
+                ComputePerformanceHealth(
+                    algorithmic,
+                    concurrency,
+                    async,
+                    io)
         };
     }
-
-
-
 
 
 
@@ -361,11 +354,17 @@ public sealed class PerformanceEvaluator
         List<ArchitectureEvaluatorResult> results,
         string projectPath)
     {
+        var analyzedFiles =
+            results.Count;
+
+
+
         var health =
-            results.Average(x =>
-                x.Metrics.GetValueOrDefault(
-                    "PerformanceHealthIndex",
-                    0));
+            results.Average(
+                x =>
+                    x.Metrics.GetValueOrDefault(
+                        "PerformanceHealthIndex",
+                        0));
 
 
 
@@ -378,10 +377,9 @@ public sealed class PerformanceEvaluator
                     "PerformanceSummary",
 
                 Metrics =
-                new Dictionary<string, double>
                 {
                     ["AnalyzedFiles"] =
-                        results.Count,
+                        analyzedFiles,
 
                     ["AveragePerformanceHealthIndex"] =
                         health,
@@ -391,7 +389,6 @@ public sealed class PerformanceEvaluator
                 },
 
                 Metadata =
-                new Dictionary<string, string>
                 {
                     ["Evaluator"] =
                         "PerformanceEvaluator"
@@ -401,6 +398,18 @@ public sealed class PerformanceEvaluator
 
 
 
+    private static List<string> EnumerateSourceFiles(
+        string projectPath)
+    {
+        return Directory
+            .EnumerateFiles(
+                projectPath,
+                "*.*",
+                SearchOption.AllDirectories)
+            .Where(IsSupportedFile)
+            .Where(f => !IsExcludedDir(f))
+            .ToList();
+    }
 
 
 
@@ -410,69 +419,88 @@ public sealed class PerformanceEvaluator
         double async,
         double io)
     {
-        var score =
-            algorithmic * 0.35 +
-            concurrency * 0.30 +
-            async * 0.20 +
-            io * 0.15;
-
-
         return Math.Round(
-            score * 100,
+            (
+                algorithmic * 0.35 +
+                concurrency * 0.30 +
+                async * 0.20 +
+                io * 0.15
+            ) * 100,
             2);
     }
 
 
 
-
-
-    private static double Normalize(double value)
-        => Math.Max(
-            0,
-            Math.Min(
-                1,
-                value));
-
-
+    private static double Normalize(
+        double value)
+        =>
+            Math.Clamp(
+                value,
+                0,
+                1);
 
 
 
-    private static bool IsSupportedFile(string file)
+    private static bool IsSupportedFile(
+        string file)
     {
         return
-            file.EndsWith(".cs",
-                StringComparison.OrdinalIgnoreCase) ||
-            file.EndsWith(".java",
-                StringComparison.OrdinalIgnoreCase) ||
-            file.EndsWith(".py",
-                StringComparison.OrdinalIgnoreCase) ||
-            file.EndsWith(".ts",
-                StringComparison.OrdinalIgnoreCase) ||
-            file.EndsWith(".js",
-                StringComparison.OrdinalIgnoreCase);
+            file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+            ||
+            file.EndsWith(".java", StringComparison.OrdinalIgnoreCase)
+            ||
+            file.EndsWith(".py", StringComparison.OrdinalIgnoreCase)
+            ||
+            file.EndsWith(".ts", StringComparison.OrdinalIgnoreCase)
+            ||
+            file.EndsWith(".js", StringComparison.OrdinalIgnoreCase);
     }
 
 
 
-
-
-    private static string DetectLanguage(string path)
+    private static string DetectLanguage(
+        string path)
     {
-        if (path.EndsWith(".cs"))
+        if (path.EndsWith(".cs",
+                StringComparison.OrdinalIgnoreCase))
             return "C#";
 
-        if (path.EndsWith(".java"))
+
+        if (path.EndsWith(".java",
+                StringComparison.OrdinalIgnoreCase))
             return "Java";
 
-        if (path.EndsWith(".py"))
+
+        if (path.EndsWith(".py",
+                StringComparison.OrdinalIgnoreCase))
             return "Python";
 
-        if (path.EndsWith(".ts"))
+
+        if (path.EndsWith(".ts",
+                StringComparison.OrdinalIgnoreCase))
             return "TypeScript";
 
-        if (path.EndsWith(".js"))
+
+        if (path.EndsWith(".js",
+                StringComparison.OrdinalIgnoreCase))
             return "JavaScript";
 
+
         return "Unknown";
+    }
+
+
+
+    private sealed class PerformanceScore
+    {
+        public double Algorithmic { get; init; }
+
+        public double Concurrency { get; init; }
+
+        public double Async { get; init; }
+
+        public double IO { get; init; }
+
+        public double Health { get; init; }
     }
 }

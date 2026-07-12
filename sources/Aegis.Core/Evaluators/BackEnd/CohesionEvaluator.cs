@@ -1,4 +1,6 @@
-﻿using Aegis.Architecture.Diagnostics;
+﻿using System.Text.RegularExpressions;
+using Aegis.Architecture.Diagnostics;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
@@ -6,10 +8,8 @@ using Aegis.Shared.Diagnostics;
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.BackEnd;
-
 
 /// <summary>
 /// Evaluates class cohesion by analyzing member distribution
@@ -27,10 +27,8 @@ public sealed class CohesionEvaluator
     private readonly CohesionPolicy _policy;
 
 
-
     public override string Name =>
         "CohesionEvaluator";
-
 
 
     public override string[] SupportedLanguages =>
@@ -39,7 +37,6 @@ public sealed class CohesionEvaluator
         "Java",
         "Python"
     ];
-
 
 
     public override string[] SupportedFrameworks =>
@@ -79,7 +76,6 @@ public sealed class CohesionEvaluator
             new List<ArchitectureEvaluatorResult>();
 
 
-
         if (Context is null)
             return results;
 
@@ -88,8 +84,7 @@ public sealed class CohesionEvaluator
         var files =
             ResolveSourceFiles(
                 projectPath,
-                Context);
-
+                GetExtensions(Context.Language));
 
 
         if (files.Count == 0)
@@ -117,7 +112,6 @@ public sealed class CohesionEvaluator
             token.ThrowIfCancellationRequested();
 
 
-
             var content =
                 await File.ReadAllTextAsync(
                     file,
@@ -130,10 +124,8 @@ public sealed class CohesionEvaluator
                 token.ThrowIfCancellationRequested();
 
 
-
                 var className =
                     match.Groups[1].Value;
-
 
 
                 var classBlock =
@@ -153,17 +145,14 @@ public sealed class CohesionEvaluator
                         classBlock);
 
 
-
                 var methodCount =
                     CountMethods(
                         classBlock);
 
 
-
                 var memberCount =
                     fieldCount +
                     methodCount;
-
 
 
                 var ratio =
@@ -221,7 +210,6 @@ public sealed class CohesionEvaluator
             new List<string>();
 
 
-
         if (memberCount >
             _policy.MaxMembersPerClass)
         {
@@ -230,14 +218,12 @@ public sealed class CohesionEvaluator
         }
 
 
-
         if (ratio >
             _policy.MaxMethodFieldRatio)
         {
             violations.Add(
                 "COH002");
         }
-
 
 
         return violations;
@@ -254,117 +240,84 @@ public sealed class CohesionEvaluator
         double ratio,
         IReadOnlyCollection<string> rules)
     {
-        return new ArchitectureEvaluatorResult(
-            Name,
-            file)
-        {
-            ProjectName =
-                Context?.ProjectName,
-
-            Language =
-                Context?.Language,
-
-            Framework =
-                Context?.Framework,
-
-            Layer =
-                ResolveLayer(file),
+        var result =
+            CreateResult(
+                file,
+                nameof(ArchitectureRuleCategory.Architecture));
 
 
-            Category =
-                "CohesionViolation",
+        result.Metrics["FieldCount"] =
+            fieldCount;
+
+        result.Metrics["MethodCount"] =
+            methodCount;
+
+        result.Metrics["MemberCount"] =
+            memberCount;
+
+        result.Metrics["MethodFieldRatio"] =
+            ratio;
+
+        result.Metrics["Violation"] =
+            1;
+
+        result.Metrics["CohesionCompliance"] =
+            0;
 
 
-            Metrics =
-            {
-                ["FieldCount"] =
-                    fieldCount,
 
-                ["MethodCount"] =
-                    methodCount,
+        result.Metadata["ClassName"] =
+            className;
 
-                ["MemberCount"] =
-                    memberCount,
+        result.Metadata["Rules"] =
+            string.Join(
+                ",",
+                rules);
 
-                ["MethodFieldRatio"] =
-                    ratio,
+        result.Metadata["MaxMembersPerClass"] =
+            _policy.MaxMembersPerClass.ToString();
 
-                ["Violation"] =
-                    1
-            },
+        result.Metadata["MaxMethodFieldRatio"] =
+            _policy.MaxMethodFieldRatio.ToString();
+
+        result.Metadata["Language"] =
+            Context?.Language ?? "Unknown";
+
+        result.Metadata["Framework"] =
+            Context?.Framework ?? "Unknown";
+
+        result.Metadata["Layer"] =
+            ResolveLayer(file) ?? "Unknown";
 
 
-            Metadata =
-            {
-                ["ClassName"] =
-                    className,
-
-                ["Rules"] =
-                    string.Join(
-                        ",",
-                        rules),
-
-                ["MaxMembersPerClass"] =
-                    _policy.MaxMembersPerClass.ToString(),
-
-                ["MaxMethodFieldRatio"] =
-                    _policy.MaxMethodFieldRatio.ToString(),
-
-                ["Language"] =
-                    Context?.Language ?? "Unknown",
-
-                ["Framework"] =
-                    Context?.Framework ?? "Unknown"
-            }
-        };
+        return result;
     }
 
 
 
-    private static List<string> ResolveSourceFiles(
-        string root,
-        ProjectArchitectureContext context)
+    private static string[] GetExtensions(
+        string language)
     {
-        var extensions =
-            context.Language switch
-            {
-                "C#" =>
-                [
-                    ".cs"
-                ],
+        return language switch
+        {
+            "C#" =>
+            [
+                ".cs"
+            ],
 
-                "Java" =>
-                [
-                    ".java"
-                ],
+            "Java" =>
+            [
+                ".java"
+            ],
 
-                "Python" =>
-                [
-                    ".py"
-                ],
+            "Python" =>
+            [
+                ".py"
+            ],
 
-                _ =>
-                    Array.Empty<string>()
-            };
-
-
-
-        return Directory
-            .EnumerateFiles(
-                root,
-                "*.*",
-                SearchOption.AllDirectories)
-            .Where(
-                file =>
-                    extensions.Any(
-                        ext =>
-                            file.EndsWith(
-                                ext,
-                                StringComparison.OrdinalIgnoreCase)))
-            .Where(
-                file =>
-                    !IsExcludedDir(file))
-            .ToList();
+            _ =>
+            []
+        };
     }
 
 
@@ -432,11 +385,9 @@ public sealed class CohesionEvaluator
                 depth++;
 
 
-
             if (content[i] == '}')
             {
                 depth--;
-
 
 
                 if (depth == 0)

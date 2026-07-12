@@ -1,4 +1,5 @@
 ﻿using System.Text.RegularExpressions;
+
 using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -24,7 +25,10 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
 {
     private readonly FrontendPolicy _policy;
 
-    public override string Name => "ReactEvaluator";
+
+    public override string Name =>
+        "ReactEvaluator";
+
 
     public override string[] SupportedLanguages =>
     [
@@ -32,30 +36,48 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
         "JavaScript"
     ];
 
+
     public override string[] SupportedFrameworks =>
     [
         "React"
     ];
 
+
+
     private static readonly Regex HookRx =
-        new(@"\buse[A-Z]\w*\s*\(",
+        new(
+            @"\buse[A-Z]\w*\s*\(",
             RegexOptions.Compiled);
+
+
 
     private static readonly Regex NonPascalComponentRx =
-        new(@"(function|const)\s+[a-z]\w*",
+        new(
+            @"(function|const)\s+[a-z]\w*",
             RegexOptions.Compiled);
+
+
 
     private static readonly Regex PropTypeRx =
-        new(@"[Pp]rop[Tt]ypes\s*=",
+        new(
+            @"[Pp]rop[Tt]ypes\s*=",
             RegexOptions.Compiled);
+
+
 
     private static readonly Regex TsInterfaceRx =
-        new(@"interface\s+[A-Z][A-Za-z0-9_]*\s*\{",
+        new(
+            @"interface\s+[A-Z][A-Za-z0-9_]*\s*\{",
             RegexOptions.Compiled);
 
+
+
     private static readonly Regex ClassLifecycleRx =
-        new(@"componentDid(Mount|Update|Unmount)",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        new(
+            @"componentDid(Mount|Update|Unmount)",
+            RegexOptions.Compiled |
+            RegexOptions.IgnoreCase);
+
 
 
     public ReactEvaluator(
@@ -63,29 +85,25 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.Frontend ?? new FrontendPolicy();
+        _policy =
+            options.Value.Frontend
+            ?? new FrontendPolicy();
     }
 
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath,
-        CancellationToken token)
+
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
-
-        var language = Context?.Language ?? "Unknown";
-        var framework = Context?.Framework ?? "Unknown";
+        var results =
+            new List<ArchitectureEvaluatorResult>();
 
 
-        var files = Directory
-            .EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-            .Where(f =>
-                f.EndsWith(".jsx", StringComparison.OrdinalIgnoreCase) ||
-                f.EndsWith(".tsx", StringComparison.OrdinalIgnoreCase) ||
-                f.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ||
-                f.EndsWith(".ts", StringComparison.OrdinalIgnoreCase))
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
+        var files =
+            ResolveReactFiles(projectPath);
+
 
 
         if (files.Count == 0)
@@ -95,6 +113,7 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
 
             return results;
         }
+
 
 
         _logger.LogInformation(
@@ -108,11 +127,15 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
         {
             token.ThrowIfCancellationRequested();
 
+
             string content;
 
             try
             {
-                content = await File.ReadAllTextAsync(file, token);
+                content =
+                    await File.ReadAllTextAsync(
+                        file,
+                        token);
             }
             catch
             {
@@ -120,111 +143,77 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
             }
 
 
-            var fileName = Path.GetFileName(file);
 
-            bool isJavaScript =
-                file.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ||
-                file.EndsWith(".jsx", StringComparison.OrdinalIgnoreCase);
+            var fileName =
+                Path.GetFileName(file);
 
 
-            bool hasProps =
-                content.Contains("props",
+
+            var isJavaScript =
+                file.EndsWith(
+                    ".js",
+                    StringComparison.OrdinalIgnoreCase)
+                ||
+                file.EndsWith(
+                    ".jsx",
                     StringComparison.OrdinalIgnoreCase);
 
 
 
-            double hookDisciplineScore = 1.0;
-            double namingScore = 1.0;
-            double typingScore = 1.0;
-            double complexityScore = 1.0;
-            double modernizationScore = 1.0;
+            var hasProps =
+                content.Contains(
+                    "props",
+                    StringComparison.OrdinalIgnoreCase);
 
 
 
-            int hookCount = HookRx.Matches(content).Count;
+            var hookCount =
+                HookRx.Matches(content).Count;
 
-            int lineCount =
+
+
+            var lineCount =
                 content.Split('\n').Length;
 
 
 
-            // Hook rules
-            if (_policy.CheckHooksRules &&
-                HookRx.IsMatch(content) &&
-                content.Contains("if (",
-                    StringComparison.Ordinal))
-            {
-                hookDisciplineScore = 0;
-            }
+            var hookScore =
+                CalculateHookScore(
+                    content,
+                    hookCount);
 
 
 
-            // Legacy React classes
-            if (ClassLifecycleRx.IsMatch(content))
-            {
-                modernizationScore = 0.5;
-            }
+            var namingScore =
+                CalculateNamingScore(
+                    content);
 
 
 
-            // Component naming
-            if (_policy.EnforceComponentPascalCase &&
-                NonPascalComponentRx.IsMatch(content))
-            {
-                namingScore = 0.5;
-            }
+            var typingScore =
+                CalculateTypingScore(
+                    content,
+                    isJavaScript,
+                    hasProps);
 
 
 
-            // Props typing
-            if (hasProps)
-            {
-                if (isJavaScript &&
-                    !PropTypeRx.IsMatch(content))
-                {
-                    typingScore = 0.5;
-                }
-
-                if (!isJavaScript &&
-                    !TsInterfaceRx.IsMatch(content))
-                {
-                    typingScore = 0.5;
-                }
-            }
+            var complexityScore =
+                CalculateComplexityScore(
+                    lineCount);
 
 
 
-            // Component complexity
-            if (_policy.MaxComponentComplexity > 0 &&
-                lineCount > _policy.MaxComponentComplexity)
-            {
-                complexityScore =
-                    Math.Max(
-                        0,
-                        1 -
-                        (double)lineCount /
-                        (_policy.MaxComponentComplexity * 2));
-            }
+            var modernizationScore =
+                ClassLifecycleRx.IsMatch(content)
+                    ? 0.5
+                    : 1.0;
 
 
 
-            // Excessive hooks
-            if (_policy.MaxHooksPerComponent > 0 &&
-                hookCount > _policy.MaxHooksPerComponent)
-            {
-                hookDisciplineScore *=
-                    Math.Max(
-                        0.5,
-                        1 -
-                        hookCount /
-                        (double)(_policy.MaxHooksPerComponent * 2));
-            }
-
-
-
-            double complianceScore =
+            var complianceScore =
                 ComputeCompliance(
-                    hookDisciplineScore,
+                    hookScore,
                     namingScore,
                     typingScore,
                     complexityScore,
@@ -232,97 +221,76 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
 
 
 
-            results.Add(new ArchitectureEvaluatorResult(Name, file)
-            {
-                Category = "Frontend",
-
-                Metrics = new Dictionary<string, double>
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    file)
                 {
-                    ["HookDisciplineScore"] = hookDisciplineScore,
-                    ["NamingScore"] = namingScore,
-                    ["TypingScore"] = typingScore,
-                    ["ComplexityScore"] = complexityScore,
-                    ["ModernizationScore"] = modernizationScore,
-                    ["HookCount"] = hookCount,
-                    ["LineCount"] = lineCount,
-                    ["ReactComplianceScore"] = complianceScore
-                },
+                    Category =
+                        "Frontend",
 
+                    Metrics =
+                    {
+                        ["HookDisciplineScore"] =
+                            hookScore,
 
-                Metadata = new Dictionary<string, string>
-                {
-                    ["FileName"] = fileName,
-                    ["Language"] = language,
-                    ["Framework"] = framework,
-                    ["Layer"] = Context?.Layer ?? "Unknown",
-                    ["Target"] = file,
-                    ["IsJavaScript"] = isJavaScript.ToString(),
-                    ["HasProps"] = hasProps.ToString()
-                }
-            });
+                        ["NamingScore"] =
+                            namingScore,
+
+                        ["TypingScore"] =
+                            typingScore,
+
+                        ["ComplexityScore"] =
+                            complexityScore,
+
+                        ["ModernizationScore"] =
+                            modernizationScore,
+
+                        ["HookCount"] =
+                            hookCount,
+
+                        ["LineCount"] =
+                            lineCount,
+
+                        ["ReactComplianceScore"] =
+                            complianceScore
+                    },
+
+                    Metadata =
+                    {
+                        ["FileName"] =
+                            fileName,
+
+                        ["Language"] =
+                            Context?.Language
+                            ?? "Unknown",
+
+                        ["Framework"] =
+                            Context?.Framework
+                            ?? "Unknown",
+
+                        ["Layer"] =
+                            Context?.Layer
+                            ?? "Unknown",
+
+                        ["Target"] =
+                            file,
+
+                        ["IsJavaScript"] =
+                            isJavaScript.ToString(),
+
+                        ["HasProps"] =
+                            hasProps.ToString()
+                    }
+                });
         }
 
 
 
-        if (results.Count > 0)
-        {
-            double avgCompliance =
-                results.Average(r =>
-                    r.Metrics.GetValueOrDefault(
-                        "ReactComplianceScore",
-                        0));
+        AddSummary(
+            results,
+            projectPath);
 
-
-            double avgHook =
-                results.Average(r =>
-                    r.Metrics.GetValueOrDefault(
-                        "HookDisciplineScore",
-                        0));
-
-
-            double avgTyping =
-                results.Average(r =>
-                    r.Metrics.GetValueOrDefault(
-                        "TypingScore",
-                        0));
-
-
-            double avgComplexity =
-                results.Average(r =>
-                    r.Metrics.GetValueOrDefault(
-                        "ComplexityScore",
-                        0));
-
-
-
-            results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
-            {
-                Category = "FrontendSummary",
-
-                Metrics = new Dictionary<string, double>
-                {
-                    ["ReactFileCount"] = files.Count,
-                    ["AverageComplianceScore"] = avgCompliance,
-                    ["AverageHookDiscipline"] = avgHook,
-                    ["AverageTyping"] = avgTyping,
-                    ["AverageComplexity"] = avgComplexity,
-                    ["ReactHealthIndex"] =
-                        avgCompliance * 0.6 +
-                        avgHook * 0.4
-                },
-
-
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Evaluator"] = Name,
-                    ["Language"] = language,
-                    ["Framework"] = framework,
-                    ["Layer"] = Context?.Layer ?? "Unknown",
-                    ["PolicyEnabled"] =
-                        _policy.CheckHooksRules.ToString()
-                }
-            });
-        }
 
 
         _logger.LogInformation(
@@ -331,7 +299,236 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
             results.Count);
 
 
+
         return results;
+    }
+
+
+
+    private static List<string> ResolveReactFiles(
+        string projectPath)
+    {
+        return Directory
+            .EnumerateFiles(
+                projectPath,
+                "*.*",
+                SearchOption.AllDirectories)
+            .Where(
+                f =>
+                    f.EndsWith(
+                        ".jsx",
+                        StringComparison.OrdinalIgnoreCase)
+                    ||
+                    f.EndsWith(
+                        ".tsx",
+                        StringComparison.OrdinalIgnoreCase)
+                    ||
+                    f.EndsWith(
+                        ".js",
+                        StringComparison.OrdinalIgnoreCase)
+                    ||
+                    f.EndsWith(
+                        ".ts",
+                        StringComparison.OrdinalIgnoreCase))
+            .Where(
+                f =>
+                    !IsExcludedDir(f))
+            .ToList();
+    }
+
+
+
+    private double CalculateHookScore(
+        string content,
+        int hookCount)
+    {
+        double score = 1.0;
+
+
+        if (_policy.CheckHooksRules &&
+            HookRx.IsMatch(content) &&
+            content.Contains(
+                "if (",
+                StringComparison.Ordinal))
+        {
+            score = 0;
+        }
+
+
+        if (_policy.MaxHooksPerComponent > 0 &&
+            hookCount > _policy.MaxHooksPerComponent)
+        {
+            score *= Math.Max(
+                0.5,
+                1 -
+                hookCount /
+                (double)(_policy.MaxHooksPerComponent * 2));
+        }
+
+
+        return score;
+    }
+
+
+
+    private double CalculateNamingScore(
+        string content)
+    {
+        if (_policy.EnforceComponentPascalCase &&
+            NonPascalComponentRx.IsMatch(content))
+        {
+            return 0.5;
+        }
+
+
+        return 1.0;
+    }
+
+
+
+    private static double CalculateTypingScore(
+        string content,
+        bool isJavaScript,
+        bool hasProps)
+    {
+        if (!hasProps)
+        {
+            return 1.0;
+        }
+
+
+        if (isJavaScript &&
+            !PropTypeRx.IsMatch(content))
+        {
+            return 0.5;
+        }
+
+
+        if (!isJavaScript &&
+            !TsInterfaceRx.IsMatch(content))
+        {
+            return 0.5;
+        }
+
+
+        return 1.0;
+    }
+
+
+
+    private double CalculateComplexityScore(
+        int lineCount)
+    {
+        if (_policy.MaxComponentComplexity <= 0 ||
+            lineCount <= _policy.MaxComponentComplexity)
+        {
+            return 1.0;
+        }
+
+
+        return Math.Max(
+            0,
+            1 -
+            (double)lineCount /
+            (_policy.MaxComponentComplexity * 2));
+    }
+
+
+
+    private void AddSummary(
+        List<ArchitectureEvaluatorResult> results,
+        string projectPath)
+    {
+        if (results.Count == 0)
+        {
+            return;
+        }
+
+
+        var avgCompliance =
+            results.Average(
+                r =>
+                    r.Metrics.GetValueOrDefault(
+                        "ReactComplianceScore",
+                        0));
+
+
+        var avgHook =
+            results.Average(
+                r =>
+                    r.Metrics.GetValueOrDefault(
+                        "HookDisciplineScore",
+                        0));
+
+
+        var avgTyping =
+            results.Average(
+                r =>
+                    r.Metrics.GetValueOrDefault(
+                        "TypingScore",
+                        0));
+
+
+        var avgComplexity =
+            results.Average(
+                r =>
+                    r.Metrics.GetValueOrDefault(
+                        "ComplexityScore",
+                        0));
+
+
+
+        results.Add(
+            new ArchitectureEvaluatorResult(
+                Name,
+                projectPath)
+            {
+                Category =
+                    "FrontendSummary",
+
+                Metrics =
+                {
+                    ["ReactFileCount"] =
+                        results.Count,
+
+                    ["AverageComplianceScore"] =
+                        avgCompliance,
+
+                    ["AverageHookDiscipline"] =
+                        avgHook,
+
+                    ["AverageTyping"] =
+                        avgTyping,
+
+                    ["AverageComplexity"] =
+                        avgComplexity,
+
+                    ["ReactHealthIndex"] =
+                        avgCompliance * 0.6 +
+                        (avgHook * 100) * 0.4
+                },
+
+                Metadata =
+                {
+                    ["Evaluator"] =
+                        Name,
+
+                    ["Language"] =
+                        Context?.Language
+                        ?? "Unknown",
+
+                    ["Framework"] =
+                        Context?.Framework
+                        ?? "Unknown",
+
+                    ["Layer"] =
+                        Context?.Layer
+                        ?? "Unknown",
+
+                    ["PolicyEnabled"] =
+                        _policy.CheckHooksRules.ToString()
+                }
+            });
     }
 
 
@@ -343,7 +540,7 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
         double complexity,
         double modernization)
     {
-        double score =
+        var score =
             hookDiscipline * 0.30 +
             naming * 0.15 +
             typing * 0.20 +
@@ -351,6 +548,8 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
             modernization * 0.15;
 
 
-        return Math.Round(score * 100, 2);
+        return Math.Round(
+            score * 100,
+            2);
     }
 }

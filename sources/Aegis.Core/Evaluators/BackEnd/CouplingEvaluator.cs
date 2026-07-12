@@ -9,7 +9,6 @@ using Microsoft.Extensions.Options;
 
 namespace Aegis.Architecture.Evaluators.BackEnd;
 
-
 public sealed class CouplingEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
 {
@@ -173,9 +172,7 @@ public sealed class CouplingEvaluator
 
 
         if (boundary is null)
-        {
             return false;
-        }
 
 
 
@@ -205,61 +202,58 @@ public sealed class CouplingEvaluator
     private ArchitectureEvaluatorResult CreateArchitecturalViolation(
         ArchitectureDependencyContext dependency)
     {
-        return new ArchitectureEvaluatorResult(
-            Name,
-            dependency.File)
-        {
-            ProjectName =
-                Context?.ProjectName,
-
-            Language =
-                Context?.Language,
-
-            Framework =
-                Context?.Framework,
-
-            Layer =
-                dependency.SourceLayer,
-
-            DetectionConfidence =
-                Context?.Confidence ?? 0,
+        var result =
+            CreateResult(
+                dependency.File,
+                "ArchitecturalCouplingViolation");
 
 
-            Category =
-                "ArchitecturalCouplingViolation",
+        result.ProjectName =
+            Context?.ProjectName;
+
+        result.Language =
+            Context?.Language;
+
+        result.Framework =
+            Context?.Framework;
+
+        result.Layer =
+            dependency.SourceLayer;
+
+        result.DetectionConfidence =
+            Context?.Confidence ?? 0;
 
 
-            Metrics =
-            {
-                ["InternalDependency"] =
-                    1,
 
-                ["Violation"] =
-                    1
-            },
+        result.Metrics["InternalDependency"] =
+            1;
+
+        result.Metrics["Violation"] =
+            1;
 
 
-            Metadata =
-            {
-                ["Rule"] =
-                    "CPL001",
 
-                ["Source"] =
-                    dependency.Source,
+        result.Metadata["Rule"] =
+            "CPL001";
 
-                ["SourceLayer"] =
-                    dependency.SourceLayer,
+        result.Metadata["Source"] =
+            dependency.Source;
 
-                ["Target"] =
-                    dependency.Target,
+        result.Metadata["SourceLayer"] =
+            dependency.SourceLayer;
 
-                ["TargetLayer"] =
-                    dependency.TargetLayer,
+        result.Metadata["Target"] =
+            dependency.Target;
 
-                ["DependencyType"] =
-                    dependency.DependencyType
-            }
-        };
+        result.Metadata["TargetLayer"] =
+            dependency.TargetLayer;
+
+        result.Metadata["DependencyType"] =
+            dependency.DependencyType;
+
+
+
+        return result;
     }
 
 
@@ -285,50 +279,47 @@ public sealed class CouplingEvaluator
 
 
 
-        results.Add(
-            new ArchitectureEvaluatorResult(
-                Name,
-                Context.RootPath)
-            {
-                ProjectName =
-                    Context.ProjectName,
-
-                Language =
-                    Context.Language,
-
-                Framework =
-                    Context.Framework,
+        var result =
+            CreateResult(
+                Context.RootPath,
+                "ExternalCouplingViolation");
 
 
-                Category =
-                    "ExternalCouplingViolation",
+
+        result.ProjectName =
+            Context.ProjectName;
+
+        result.Language =
+            Context.Language;
+
+        result.Framework =
+            Context.Framework;
 
 
-                Metrics =
-                {
-                    ["ExternalDependencyCount"] =
-                        dependencyCount,
 
-                    ["MaxExternalDependencies"] =
-                        _policy.MaxExternalDependencies,
+        result.Metrics["ExternalDependencyCount"] =
+            dependencyCount;
 
-                    ["Violation"] =
-                        1
-                },
+        result.Metrics["MaxExternalDependencies"] =
+            _policy.MaxExternalDependencies;
+
+        result.Metrics["Violation"] =
+            1;
 
 
-                Metadata =
-                {
-                    ["Rule"] =
-                        "CPL002",
 
-                    ["Language"] =
-                        Context.Language,
+        result.Metadata["Rule"] =
+            "CPL002";
 
-                    ["Framework"] =
-                        Context.Framework
-                        ?? "Unknown"
-                }
-            });
+        result.Metadata["Language"] =
+            Context.Language;
+
+        result.Metadata["Framework"] =
+            Context.Framework
+            ?? "Unknown";
+
+
+
+        results.Add(result);
     }
 }

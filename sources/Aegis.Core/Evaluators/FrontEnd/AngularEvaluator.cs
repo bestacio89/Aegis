@@ -1,16 +1,19 @@
-﻿using Aegis.Architecture.Evaluators;
+﻿using System.Text.RegularExpressions;
+
+using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.FrontEnd;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.FrontEnd;
 
 /// <summary>
-/// Quantitatively evaluates Angular (.ts) sources for structure, naming, and modular discipline.
-/// Produces AngularComplianceScore (0–100) and component-level metrics for maintainability.
+/// Quantitatively evaluates Angular (.ts) sources for structure, naming,
+/// and modular discipline.
+/// Produces AngularComplianceScore (0–100) and component-level metrics.
 /// </summary>
 public sealed class AngularEvaluator : BaseArchitectureEvaluator
 {
@@ -18,7 +21,7 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
 
     public override string Name =>
-        "AngularEvaluator";
+        nameof(AngularEvaluator);
 
 
     public override string[] SupportedLanguages =>
@@ -50,7 +53,7 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
     private static readonly Regex SelectorRx =
         new(
-            @"selector\s*:\s*'([^']+)'",
+            @"selector\s*:\s*['""]([^'""]+)['""]",
             RegexOptions.Compiled);
 
 
@@ -62,9 +65,9 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
 
 
-    private static readonly Regex PascalCaseRx =
+    private static readonly Regex ClassDeclarationRx =
         new(
-            @"class\s+([a-z]\w*)\s+implements\s+OnInit",
+            @"class\s+(\w+)",
             RegexOptions.Compiled);
 
 
@@ -108,6 +111,9 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
         if (files.Count == 0)
         {
+            _logger.LogInformation(
+                "🅰️ No Angular TypeScript files found.");
+
             return results;
         }
 
@@ -127,8 +133,13 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
                         file,
                         token);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(
+                    ex,
+                    "Unable to read Angular file {File}",
+                    file);
+
                 continue;
             }
 
@@ -149,110 +160,44 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
 
 
-            var selectorScore = 1.0;
-            var complexityScore = 1.0;
-            var namingScore = 1.0;
-            var modularityScore = 1.0;
+            var selectorScore = 1d;
+            var complexityScore = 1d;
+            var namingScore = 1d;
+            var modularityScore = 1d;
 
 
 
             if (_policy.EnforceSelectorNaming &&
                 isComponent)
             {
-                var selectorMatch =
-                    SelectorRx.Match(content);
-
-
-                if (!selectorMatch.Success)
-                {
-                    selectorScore = 0;
-                }
-                else
-                {
-                    var selector =
-                        selectorMatch.Groups[1].Value;
-
-
-                    if (!_policy.AllowedSelectorPrefixes.Any(
-                            p =>
-                                selector.StartsWith(
-                                    p,
-                                    StringComparison.Ordinal)))
-                    {
-                        selectorScore = 0.5;
-                    }
-                }
+                selectorScore =
+                    EvaluateSelector(content);
             }
 
 
 
             if (_policy.MaxComponentComplexity > 0 &&
-                TemplateInlineRx.IsMatch(content))
+                isComponent)
             {
-                var template =
-                    TemplateInlineRx
-                        .Match(content)
-                        .Groups[1]
-                        .Value;
-
-
-                var lineCount =
-                    template.Split('\n').Length;
-
-
-                if (lineCount > _policy.MaxComponentComplexity)
-                {
-                    complexityScore =
-                        Math.Max(
-                            0,
-                            1 -
-                            (double)lineCount /
-                            (_policy.MaxComponentComplexity * 2));
-                }
+                complexityScore =
+                    EvaluateTemplateComplexity(content);
             }
 
 
 
             if (_policy.EnforceComponentPascalCase &&
-                PascalCaseRx.IsMatch(content))
+                isComponent)
             {
-                namingScore = 0.5;
+                namingScore =
+                    EvaluateComponentNaming(content);
             }
 
 
 
-            if (isModule &&
-                content.Contains(
-                    "bootstrap:",
-                    StringComparison.Ordinal))
+            if (isModule)
             {
-                modularityScore = 0;
-            }
-
-
-
-            if (_policy.MaxComponentsPerModule > 0 &&
-                isModule)
-            {
-                foreach (Match declaration in DeclarationsRx.Matches(content))
-                {
-                    var count =
-                        declaration.Groups[1]
-                            .Value
-                            .Split(',')
-                            .Length;
-
-
-                    if (count > _policy.MaxComponentsPerModule)
-                    {
-                        modularityScore =
-                            Math.Max(
-                                0,
-                                1 -
-                                (double)count /
-                                (_policy.MaxComponentsPerModule * 2));
-                    }
-                }
+                modularityScore =
+                    EvaluateModuleStructure(content);
             }
 
 
@@ -319,7 +264,11 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
         if (results.Count > 0)
         {
             var angularResults =
-                results.ToList();
+                results
+                    .Where(
+                        r =>
+                            r.Category == "Frontend")
+                    .ToList();
 
 
 
@@ -395,7 +344,12 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
                             Name,
 
                         ["PolicyEnabled"] =
-                            "True",
+                            _policy.EnforceSelectorNaming ||
+                            _policy.EnforceComponentPascalCase ||
+                            _policy.MaxComponentComplexity > 0 ||
+                            _policy.MaxComponentsPerModule > 0
+                                ? "True"
+                                : "False",
 
                         ["Framework"] =
                             Context?.Framework
@@ -407,13 +361,142 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
 
         _logger.LogInformation(
-            "✅ {Evaluator} completed with {Count} metric entries",
+            "🅰️ {Evaluator} completed with {Count} metric entries",
             Name,
             results.Count);
 
 
 
         return results;
+    }
+
+
+
+    private double EvaluateSelector(
+        string content)
+    {
+        var match =
+            SelectorRx.Match(content);
+
+
+        if (!match.Success)
+        {
+            return 0;
+        }
+
+
+        return _policy.AllowedSelectorPrefixes.Any(
+            prefix =>
+                match.Groups[1]
+                    .Value
+                    .StartsWith(
+                        prefix,
+                        StringComparison.Ordinal))
+            ? 1d
+            : 0.5d;
+    }
+
+
+
+    private double EvaluateTemplateComplexity(
+        string content)
+    {
+        var match =
+            TemplateInlineRx.Match(content);
+
+
+        if (!match.Success)
+        {
+            return 1d;
+        }
+
+
+        var lines =
+            match.Groups[1]
+                .Value
+                .Split('\n')
+                .Length;
+
+
+        if (lines <= _policy.MaxComponentComplexity)
+        {
+            return 1d;
+        }
+
+
+        return Math.Max(
+            0,
+            1 -
+            (double)lines /
+            (_policy.MaxComponentComplexity * 2));
+    }
+
+
+
+    private static double EvaluateComponentNaming(
+        string content)
+    {
+        var match =
+            ClassDeclarationRx.Match(content);
+
+
+        if (!match.Success)
+        {
+            return 0;
+        }
+
+
+        var className =
+            match.Groups[1].Value;
+
+
+        return char.IsUpper(className[0])
+            ? 1d
+            : 0.5d;
+    }
+
+
+
+    private double EvaluateModuleStructure(
+        string content)
+    {
+        if (content.Contains(
+                "bootstrap:",
+                StringComparison.Ordinal))
+        {
+            return 0;
+        }
+
+
+        if (_policy.MaxComponentsPerModule <= 0)
+        {
+            return 1d;
+        }
+
+
+        foreach (Match declaration in DeclarationsRx.Matches(content))
+        {
+            var count =
+                declaration.Groups[1]
+                    .Value
+                    .Split(
+                        ',',
+                        StringSplitOptions.RemoveEmptyEntries)
+                    .Length;
+
+
+            if (count > _policy.MaxComponentsPerModule)
+            {
+                return Math.Max(
+                    0,
+                    1 -
+                    (double)count /
+                    (_policy.MaxComponentsPerModule * 2));
+            }
+        }
+
+
+        return 1d;
     }
 
 

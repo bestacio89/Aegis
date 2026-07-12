@@ -1,4 +1,5 @@
 ﻿using System.Text.RegularExpressions;
+
 using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -9,10 +10,15 @@ using Microsoft.Extensions.Options;
 
 namespace Aegis.Architecture.Evaluators.FrontEnd;
 
+
 /// <summary>
-/// Quantitatively evaluates Blazor (.razor) components for
-/// component boundaries, lifecycle discipline, dependency injection,
-/// state management, and rendering architecture.
+/// Quantitatively evaluates Blazor (.razor) components for:
+/// - Component boundaries
+/// - Code-behind discipline
+/// - Dependency injection usage
+/// - Lifecycle management
+/// - Event handling practices
+/// - Rendering architecture
 ///
 /// Produces BlazorComplianceScore (0-100)
 /// and project-wide BlazorHealthIndex.
@@ -21,7 +27,10 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 {
     private readonly FrontendPolicy _policy;
 
-    public override string Name => "BlazorEvaluator";
+
+    public override string Name =>
+        "BlazorEvaluator";
+
 
     public override string[] SupportedLanguages =>
     [
@@ -29,43 +38,69 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
         "C#"
     ];
 
+
     public override string[] SupportedFrameworks =>
     [
         "Blazor",
         "ASP.NET Core"
     ];
 
+
+
     private static readonly Regex ComponentRx =
-        new(@"@\s*page\s+""[^""]+""|@code\s*\{|@inherits\s+\w+",
+        new(
+            @"@\s*page\s+""[^""]+""|@\s*code\s*\{|@\s*inherits\s+\w+",
             RegexOptions.Compiled);
+
+
 
     private static readonly Regex InlineCodeRx =
-        new(@"@code\s*\{",
+        new(
+            @"@\s*code\s*\{",
             RegexOptions.Compiled);
+
+
 
     private static readonly Regex InjectRx =
-        new(@"@\s*inject\s+\w+\s+\w+",
+        new(
+            @"@\s*inject\s+\w+\s+\w+",
             RegexOptions.Compiled);
+
+
 
     private static readonly Regex ManualInstantiationRx =
-        new(@"\bnew\s+\w+(Service|Repository|Manager)\s*\(",
+        new(
+            @"\bnew\s+\w+(Service|Repository|Manager)\s*\(",
             RegexOptions.Compiled);
+
+
 
     private static readonly Regex LifecycleRx =
-        new(@"\b(OnInitialized|OnInitializedAsync|OnParametersSet|OnParametersSetAsync|OnAfterRender|OnAfterRenderAsync|Dispose|DisposeAsync)\b",
+        new(
+            @"\b(OnInitialized|OnInitializedAsync|OnParametersSet|OnParametersSetAsync|OnAfterRender|OnAfterRenderAsync|Dispose|DisposeAsync)\b",
             RegexOptions.Compiled);
+
+
 
     private static readonly Regex EventCallbackRx =
-        new(@"EventCallback|EventCallback<",
+        new(
+            @"EventCallback(?:<|>)?",
             RegexOptions.Compiled);
+
+
 
     private static readonly Regex AsyncVoidRx =
-        new(@"async\s+void\s+\w+\s*\(",
+        new(
+            @"async\s+void\s+\w+\s*\(",
             RegexOptions.Compiled);
 
+
+
     private static readonly Regex RenderModeRx =
-        new(@"@rendermode\s+\w+",
+        new(
+            @"@rendermode\s+\w+",
             RegexOptions.Compiled);
+
 
 
     public BlazorEvaluator(
@@ -73,191 +108,150 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.Frontend ?? new FrontendPolicy();
+        _policy =
+            options.Value.Frontend
+            ?? new FrontendPolicy();
     }
 
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath,
-        CancellationToken token)
-    {
-        var results = new List<ArchitectureEvaluatorResult>();
 
-        var files = Directory.EnumerateFiles(
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
+    {
+        var results =
+            new List<ArchitectureEvaluatorResult>();
+
+
+        var files =
+            ResolveSourceFiles(
                 projectPath,
-                "*.razor",
-                SearchOption.AllDirectories)
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
+                ".razor");
+
+
+
+        if (files.Count == 0)
+        {
+            return results;
+        }
+
 
 
         _logger.LogInformation(
-            "🟣 Running {Evaluator} on {Count} Blazor components",
+            "🟣 Running {Evaluator} on {Count} files",
             Name,
             files.Count);
+
 
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
-            var content = await File.ReadAllTextAsync(file, token);
 
-            var lineCount = content.Split('\n').Length;
-
-
-            bool isComponent = ComponentRx.IsMatch(content);
-            bool hasInlineCode = InlineCodeRx.IsMatch(content);
-            bool hasInjection = InjectRx.IsMatch(content);
-            bool hasManualConstruction = ManualInstantiationRx.IsMatch(content);
-            bool hasLifecycle = LifecycleRx.IsMatch(content);
-            bool hasEventCallback = EventCallbackRx.IsMatch(content);
-            bool hasAsyncVoid = AsyncVoidRx.IsMatch(content);
-            bool hasRenderMode = RenderModeRx.IsMatch(content);
+            string content;
 
 
-            if (!isComponent)
-                continue;
-
-
-            // Component size discipline
-            double complexityScore = 1.0;
-
-            if (_policy.MaxComponentComplexity > 0 &&
-                lineCount > _policy.MaxComponentComplexity)
+            try
             {
-                complexityScore =
-                    Math.Max(
-                        0,
-                        1 -
-                        (double)lineCount /
-                        (_policy.MaxComponentComplexity * 2));
+                content =
+                    await File.ReadAllTextAsync(
+                        file,
+                        token);
+            }
+            catch
+            {
+                continue;
             }
 
 
-            // Inline code penalty
-            double codeBehindScore =
-                hasInlineCode
-                    ? 0.5
-                    : 1.0;
 
-
-            // DI discipline
-            double dependencyScore =
-                hasManualConstruction
-                    ? 0.0
-                    : 1.0;
-
-
-            // Lifecycle discipline
-            double lifecycleScore =
-                hasLifecycle
-                    ? 1.0
-                    : 0.8;
-
-
-            // Event handling
-            double eventScore =
-                hasAsyncVoid
-                    ? 0.3
-                    : hasEventCallback
-                        ? 1.0
-                        : 0.8;
-
-
-            // Rendering awareness
-            double renderModeScore =
-                hasRenderMode
-                    ? 1.0
-                    : 0.9;
-
-
-            double complianceScore =
-                ComputeCompliance(
-                    complexityScore,
-                    codeBehindScore,
-                    dependencyScore,
-                    lifecycleScore,
-                    eventScore,
-                    renderModeScore);
-
-
-            results.Add(new ArchitectureEvaluatorResult(Name, file)
+            if (!ComponentRx.IsMatch(content))
             {
-                Category = "Frontend",
+                continue;
+            }
 
-                Metrics = new Dictionary<string, double>
-                {
-                    ["ComplexityScore"] = complexityScore,
-                    ["CodeBehindScore"] = codeBehindScore,
-                    ["DependencyInjectionScore"] = dependencyScore,
-                    ["LifecycleScore"] = lifecycleScore,
-                    ["EventHandlingScore"] = eventScore,
-                    ["RenderModeScore"] = renderModeScore,
-                    ["BlazorComplianceScore"] = complianceScore
-                },
 
-                Metadata = new Dictionary<string, string>
+
+            var metrics =
+                AnalyzeComponent(
+                    content);
+
+
+
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    file)
                 {
-                    ["FileName"] = Path.GetFileName(file),
-                    ["Framework"] = "Blazor",
-                    ["Language"] = "Razor",
-                    ["LineCount"] = lineCount.ToString(),
-                    ["HasInlineCode"] = hasInlineCode.ToString(),
-                    ["HasInjection"] = hasInjection.ToString(),
-                    ["HasLifecycle"] = hasLifecycle.ToString(),
-                    ["HasRenderMode"] = hasRenderMode.ToString()
-                }
-            });
+                    Category =
+                        "Frontend",
+
+                    Metrics =
+                    {
+                        ["ComplexityScore"] =
+                            metrics.ComplexityScore,
+
+                        ["CodeBehindScore"] =
+                            metrics.CodeBehindScore,
+
+                        ["DependencyInjectionScore"] =
+                            metrics.DependencyScore,
+
+                        ["LifecycleScore"] =
+                            metrics.LifecycleScore,
+
+                        ["EventHandlingScore"] =
+                            metrics.EventScore,
+
+                        ["RenderModeScore"] =
+                            metrics.RenderModeScore,
+
+                        ["BlazorComplianceScore"] =
+                            metrics.ComplianceScore
+                    },
+
+                    Metadata =
+                    {
+                        ["FileName"] =
+                            Path.GetFileName(file),
+
+                        ["Framework"] =
+                            Context?.Framework
+                            ?? "Blazor",
+
+                        ["Language"] =
+                            Context?.Language
+                            ?? "Razor",
+
+                        ["LineCount"] =
+                            metrics.LineCount.ToString(),
+
+                        ["HasInlineCode"] =
+                            metrics.HasInlineCode.ToString(),
+
+                        ["HasInjection"] =
+                            metrics.HasInjection.ToString(),
+
+                        ["HasLifecycle"] =
+                            metrics.HasLifecycle.ToString(),
+
+                        ["HasRenderMode"] =
+                            metrics.HasRenderMode.ToString()
+                    }
+                });
         }
+
 
 
         if (results.Count > 0)
         {
-            var avgScore =
-                results.Average(
-                    r => r.Metrics.GetValueOrDefault(
-                        "BlazorComplianceScore",
-                        0));
-
-
-            var avgComplexity =
-                results.Average(
-                    r => r.Metrics.GetValueOrDefault(
-                        "ComplexityScore",
-                        0));
-
-
-            var avgDI =
-                results.Average(
-                    r => r.Metrics.GetValueOrDefault(
-                        "DependencyInjectionScore",
-                        0));
-
-
-            results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
-            {
-                Category = "FrontendSummary",
-
-                Metrics = new Dictionary<string, double>
-                {
-                    ["BlazorComponentCount"] = results.Count,
-                    ["AverageComplianceScore"] = avgScore,
-                    ["AverageComplexityScore"] = avgComplexity,
-                    ["AverageDependencyScore"] = avgDI,
-
-                    ["BlazorHealthIndex"] =
-                        avgScore * 0.6 +
-                        avgDI * 100 * 0.4
-                },
-
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Evaluator"] = Name,
-                    ["Framework"] = "Blazor"
-                }
-            });
+            AddSummaryResult(
+                results,
+                projectPath);
         }
+
 
 
         _logger.LogInformation(
@@ -266,8 +260,235 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
             results.Count);
 
 
+
         return results;
     }
+
+
+
+    private ComponentMetrics AnalyzeComponent(
+        string content)
+    {
+        var lineCount =
+            content.Count(
+                c => c == '\n') + 1;
+
+
+
+        var hasInlineCode =
+            InlineCodeRx.IsMatch(content);
+
+
+        var hasInjection =
+            InjectRx.IsMatch(content);
+
+
+        var hasManualInstantiation =
+            ManualInstantiationRx.IsMatch(content);
+
+
+        var hasLifecycle =
+            LifecycleRx.IsMatch(content);
+
+
+        var hasEventCallback =
+            EventCallbackRx.IsMatch(content);
+
+
+        var hasAsyncVoid =
+            AsyncVoidRx.IsMatch(content);
+
+
+        var hasRenderMode =
+            RenderModeRx.IsMatch(content);
+
+
+
+        var complexityScore =
+            CalculateComplexity(
+                lineCount);
+
+
+
+        var codeBehindScore =
+            hasInlineCode
+                ? 0.5
+                : 1.0;
+
+
+
+        var dependencyScore =
+            hasManualInstantiation
+                ? 0
+                : 1;
+
+
+
+        var lifecycleScore =
+            hasLifecycle
+                ? 1
+                : 0.8;
+
+
+
+        var eventScore =
+            hasAsyncVoid
+                ? 0.3
+                : hasEventCallback
+                    ? 1
+                    : 0.8;
+
+
+
+        var renderModeScore =
+            hasRenderMode
+                ? 1
+                : 0.9;
+
+
+
+        return new ComponentMetrics
+        {
+            LineCount = lineCount,
+
+            HasInlineCode = hasInlineCode,
+
+            HasInjection = hasInjection,
+
+            HasLifecycle = hasLifecycle,
+
+            HasRenderMode = hasRenderMode,
+
+            ComplexityScore = complexityScore,
+
+            CodeBehindScore = codeBehindScore,
+
+            DependencyScore = dependencyScore,
+
+            LifecycleScore = lifecycleScore,
+
+            EventScore = eventScore,
+
+            RenderModeScore = renderModeScore,
+
+            ComplianceScore =
+                ComputeCompliance(
+                    complexityScore,
+                    codeBehindScore,
+                    dependencyScore,
+                    lifecycleScore,
+                    eventScore,
+                    renderModeScore)
+        };
+    }
+
+
+
+    private double CalculateComplexity(
+        int lineCount)
+    {
+        if (_policy.MaxComponentComplexity <= 0)
+        {
+            return 1;
+        }
+
+
+        if (lineCount <= _policy.MaxComponentComplexity)
+        {
+            return 1;
+        }
+
+
+        return Math.Max(
+            0,
+            1 -
+            (double)lineCount /
+            (_policy.MaxComponentComplexity * 2));
+    }
+
+
+
+    private void AddSummaryResult(
+        List<ArchitectureEvaluatorResult> results,
+        string projectPath)
+    {
+        var componentResults =
+            results.ToList();
+
+
+
+        var averageCompliance =
+            componentResults.Average(
+                r =>
+                    r.Metrics.GetValueOrDefault(
+                        "BlazorComplianceScore",
+                        0));
+
+
+
+        var averageComplexity =
+            componentResults.Average(
+                r =>
+                    r.Metrics.GetValueOrDefault(
+                        "ComplexityScore",
+                        0));
+
+
+
+        var averageDependency =
+            componentResults.Average(
+                r =>
+                    r.Metrics.GetValueOrDefault(
+                        "DependencyInjectionScore",
+                        0));
+
+
+
+        results.Add(
+            new ArchitectureEvaluatorResult(
+                Name,
+                projectPath)
+            {
+                Category =
+                    "FrontendSummary",
+
+                Metrics =
+                {
+                    ["BlazorComponentCount"] =
+                        componentResults.Count,
+
+                    ["AverageComplianceScore"] =
+                        averageCompliance,
+
+                    ["AverageComplexityScore"] =
+                        averageComplexity,
+
+                    ["AverageDependencyScore"] =
+                        averageDependency,
+
+                    ["BlazorHealthIndex"] =
+                        averageCompliance *
+                        0.6 +
+                        averageDependency *
+                        100 *
+                        0.4
+                },
+
+                Metadata =
+                {
+                    ["Evaluator"] =
+                        Name,
+
+                    ["Framework"] =
+                        Context?.Framework
+                        ?? "Blazor",
+
+                    ["PolicyEnabled"] =
+                        "True"
+                }
+            });
+    }
+
 
 
     private static double ComputeCompliance(
@@ -287,6 +508,37 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
             renderMode * 0.10;
 
 
-        return Math.Round(score * 100, 2);
+        return Math.Round(
+            score * 100,
+            2);
+    }
+
+
+
+    private sealed class ComponentMetrics
+    {
+        public int LineCount { get; init; }
+
+        public bool HasInlineCode { get; init; }
+
+        public bool HasInjection { get; init; }
+
+        public bool HasLifecycle { get; init; }
+
+        public bool HasRenderMode { get; init; }
+
+        public double ComplexityScore { get; init; }
+
+        public double CodeBehindScore { get; init; }
+
+        public double DependencyScore { get; init; }
+
+        public double LifecycleScore { get; init; }
+
+        public double EventScore { get; init; }
+
+        public double RenderModeScore { get; init; }
+
+        public double ComplianceScore { get; init; }
     }
 }

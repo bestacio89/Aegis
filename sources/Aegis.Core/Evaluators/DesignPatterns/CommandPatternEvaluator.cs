@@ -1,27 +1,32 @@
-﻿using Aegis.Architecture.Diagnostics;
+﻿using System.Text.RegularExpressions;
+
+using Aegis.Architecture.Diagnostics;
 using Aegis.Architecture.Evaluators;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
 using Aegis.Shared.Diagnostics;
 
+using Franz.Common.DependencyInjection;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.DesignPatterns;
 
-/// <summary>
-/// Evaluates adherence to the Command Pattern:
-/// - Ensures Command/Handler pairing
-/// - Detects overgrown (God) commands
-/// - Flags handler invocations and forbidden dependencies
-/// </summary>
-public sealed class CommandPatternEvaluator : BaseArchitectureEvaluator
+
+public sealed class CommandPatternEvaluator
+    : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly DesignPatternPolicy _policy;
 
-    public override string Name => "CommandPatternEvaluator";
+
+
+    public override string Name =>
+        "CommandPatternEvaluator";
+
+
 
     public override string[] SupportedLanguages =>
     [
@@ -32,6 +37,8 @@ public sealed class CommandPatternEvaluator : BaseArchitectureEvaluator
         "JavaScript"
     ];
 
+
+
     public override string[] SupportedFrameworks =>
     [
         "ASP.NET",
@@ -41,15 +48,26 @@ public sealed class CommandPatternEvaluator : BaseArchitectureEvaluator
     ];
 
 
-    private static readonly Regex CommandClassRx =
-        new(@"class\s+(\w+Command)\b", RegexOptions.Compiled);
 
-    private static readonly Regex HandlerClassRx =
-        new(@"class\s+(\w+Handler)\b", RegexOptions.Compiled);
-
-    private static readonly Regex MethodRx =
-        new(@"\b(public|private|protected)\s+\w+\s*\(",
+    private static readonly Regex CommandClassRegex =
+        new(
+            @"class\s+(\w+Command)\b",
             RegexOptions.Compiled);
+
+
+
+    private static readonly Regex HandlerClassRegex =
+        new(
+            @"class\s+(\w+Handler)\b",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex MethodRegex =
+        new(
+            @"\b(public|private|protected)\s+\w+\s*\(",
+            RegexOptions.Compiled);
+
 
 
     public CommandPatternEvaluator(
@@ -57,79 +75,84 @@ public sealed class CommandPatternEvaluator : BaseArchitectureEvaluator
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.Architecture.DesignPatterns ?? new();
+        _policy =
+            options.Value.Architecture.DesignPatterns
+            ?? new();
     }
 
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath,
-        CancellationToken token)
+
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
+        var results =
+            new List<ArchitectureEvaluatorResult>();
+
+
+
+        if (Context is null)
+            return results;
+
+
 
         if (!_policy.EnforceCommandPattern)
         {
             AegisDiagnostics.Report(
                 Name,
-                DiagnosticLevel.Info,
-                "⚙️ Command pattern enforcement disabled by policy.");
+                DiagnosticLevel.Trace,
+                "Command pattern evaluation disabled by policy.");
 
             return results;
         }
 
 
-        var files = EnumerateApplicationFiles(projectPath)
-            .Where(file =>
-                file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
-                file.EndsWith(".java", StringComparison.OrdinalIgnoreCase) ||
-                file.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) ||
-                file.EndsWith(".py", StringComparison.OrdinalIgnoreCase))
-            .ToList();
+
+        var files =
+            ResolveSourceFiles(
+                projectPath,
+                ResolveExtensions());
+
 
 
         if (files.Count == 0)
-        {
-            AegisDiagnostics.Report(
-                Name,
-                DiagnosticLevel.Info,
-                "No relevant files found for Command Pattern evaluation.");
-
             return results;
-        }
 
 
-        var allHandlers = new HashSet<string>(
-            StringComparer.OrdinalIgnoreCase);
+
+        AegisDiagnostics.Report(
+            Name,
+            DiagnosticLevel.Trace,
+            $"Evaluating command pattern across {files.Count} files.");
 
 
-        // Collect handler names first
+
+        var handlers =
+            await DiscoverHandlersAsync(
+                files,
+                token);
+
+
+
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
-            var content =
-                await File.ReadAllTextAsync(file, token);
-
-            foreach (Match handler in HandlerClassRx.Matches(content))
-            {
-                allHandlers.Add(handler.Groups[1].Value);
-            }
-        }
-
-
-        // Evaluate commands
-        foreach (var file in files)
-        {
-            token.ThrowIfCancellationRequested();
 
             var content =
-                await File.ReadAllTextAsync(file, token);
+                await File.ReadAllTextAsync(
+                    file,
+                    token);
 
 
-            foreach (Match cmdMatch in CommandClassRx.Matches(content))
+
+            foreach (Match commandMatch in CommandClassRegex.Matches(content))
             {
                 var commandName =
-                    cmdMatch.Groups[1].Value;
+                    commandMatch.Groups[1].Value;
+
+
 
                 var expectedHandler =
                     commandName.Replace(
@@ -138,163 +161,350 @@ public sealed class CommandPatternEvaluator : BaseArchitectureEvaluator
                         StringComparison.OrdinalIgnoreCase);
 
 
+
                 bool hasHandler =
-                    allHandlers.Contains(expectedHandler);
+                    handlers.Contains(
+                        expectedHandler);
 
 
-                int methodCount =
-                    MethodRx.Matches(content).Count;
+
+                var methodCount =
+                    MethodRegex.Matches(content)
+                        .Count;
 
 
-                int forbiddenMatches =
-                    _policy.ForbiddenInCommand.Count(
-                        forbidden =>
-                            content.Contains(
-                                forbidden,
-                                StringComparison.OrdinalIgnoreCase));
+
+                var forbiddenDependencies =
+                    CountForbiddenDependencies(
+                        content);
 
 
-                int handlerInvocations =
-                    _policy.HandlerInvocationHints.Count(
-                        hint =>
-                            Regex.IsMatch(
-                                content,
-                                $@"\b{hint}\s*\(",
-                                RegexOptions.IgnoreCase));
+
+                var handlerInvocations =
+                    CountHandlerInvocations(
+                        content);
 
 
-                double handlerPairScore =
-                    hasHandler ? 1.0 : 0.0;
 
-
-                double complexityRatio =
-                    Math.Min(
-                        1.0,
-                        methodCount /
-                        (double)Math.Max(
-                            1,
-                            _policy.MaxMethodsPerCommand));
-
-
-                double forbiddenRatio =
-                    Math.Min(
-                        1.0,
-                        forbiddenMatches / 3.0);
-
-
-                double invocationPenalty =
-                    Math.Min(
-                        1.0,
-                        handlerInvocations / 2.0);
-
-
-                double complianceScore =
+                var compliance =
                     ComputeCompliance(
-                        handlerPairScore,
-                        complexityRatio,
-                        forbiddenRatio,
-                        invocationPenalty);
+                        hasHandler,
+                        methodCount,
+                        forbiddenDependencies,
+                        handlerInvocations);
 
 
-                results.Add(new ArchitectureEvaluatorResult(Name, file)
-                {
-                    Category = "DesignPattern",
 
-                    Metrics = new Dictionary<string, double>
-                    {
-                        ["HasHandlerPair"] = handlerPairScore,
-                        ["MethodCount"] = methodCount,
-                        ["ComplexityRatio"] = complexityRatio,
-                        ["ForbiddenDependencyCount"] = forbiddenMatches,
-                        ["HandlerInvocationCount"] = handlerInvocations,
-                        ["CommandComplianceScore"] = complianceScore
-                    },
-
-                    Metadata = new Dictionary<string, string>
-                    {
-                        ["CommandName"] = commandName,
-                        ["ExpectedHandler"] = expectedHandler,
-                        ["Language"] =
-                            Context?.Language ?? "Unknown",
-                        ["Framework"] =
-                            Context?.Framework ?? "Unknown",
-                        ["Policy_RequireCommandHandlerPair"] =
-                            _policy.RequireCommandHandlerPair.ToString(),
-                        ["Policy_MaxMethodsPerCommand"] =
-                            _policy.MaxMethodsPerCommand.ToString()
-                    }
-                });
+                results.Add(
+                    CreateResult(
+                        file,
+                        commandName,
+                        expectedHandler,
+                        hasHandler,
+                        methodCount,
+                        forbiddenDependencies,
+                        handlerInvocations,
+                        compliance));
             }
         }
 
 
+
         if (results.Count > 0)
         {
-            double avgScore =
-                results.Average(
-                    result =>
-                        result.Metrics.GetValueOrDefault(
-                            "CommandComplianceScore",
-                            0));
-
-
-            double missingHandlers =
-                results.Count(
-                    result =>
-                        result.Metrics.GetValueOrDefault(
-                            "HasHandlerPair",
-                            1) == 0);
-
-
-            results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
-            {
-                Category = "DesignPatternSummary",
-
-                Metrics = new Dictionary<string, double>
-                {
-                    ["CommandCount"] = results.Count,
-                    ["AverageCommandCompliance"] = avgScore,
-                    ["MissingHandlerCount"] = missingHandlers,
-                    ["OverallPatternHealth"] =
-                        avgScore *
-                        (1 - missingHandlers /
-                         Math.Max(1, results.Count))
-                },
-
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Evaluator"] = Name,
-                    ["PolicyEnabled"] =
-                        _policy.EnforceCommandPattern.ToString()
-                }
-            });
+            results.Add(
+                CreateSummary(
+                    projectPath,
+                    results));
         }
+
 
 
         AegisDiagnostics.Report(
             Name,
-            results.Count > 0
-                ? DiagnosticLevel.Info
-                : DiagnosticLevel.Warning,
-            $"⚔️ Command pattern evaluation completed with {results.Count} metric entries.");
+            DiagnosticLevel.Info,
+            $"Command pattern evaluation completed with {results.Count} entries.");
+
 
 
         return results;
     }
 
 
-    private static double ComputeCompliance(
-        double hasHandler,
-        double complexity,
-        double forbidden,
-        double invocations)
-    {
-        double score =
-            hasHandler * 0.4 +
-            (1 - complexity) * 0.25 +
-            (1 - forbidden) * 0.2 +
-            (1 - invocations) * 0.15;
 
-        return Math.Round(score * 100, 2);
+    private string[] ResolveExtensions()
+    {
+        return Context?.Language switch
+        {
+            "C#" =>
+            [
+                ".cs"
+            ],
+
+            "Java" =>
+            [
+                ".java"
+            ],
+
+            "Python" =>
+            [
+                ".py"
+            ],
+
+            "TypeScript" =>
+            [
+                ".ts"
+            ],
+
+            "JavaScript" =>
+            [
+                ".js"
+            ],
+
+            _ =>
+            [
+                ".cs",
+                ".java",
+                ".py",
+                ".ts",
+                ".js"
+            ]
+        };
+    }
+
+
+
+    private static async Task<HashSet<string>>
+        DiscoverHandlersAsync(
+            IEnumerable<string> files,
+            CancellationToken token)
+    {
+        var handlers =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+
+
+        foreach (var file in files)
+        {
+            token.ThrowIfCancellationRequested();
+
+
+            var content =
+                await File.ReadAllTextAsync(
+                    file,
+                    token);
+
+
+
+            foreach (Match match in HandlerClassRegex.Matches(content))
+            {
+                handlers.Add(
+                    match.Groups[1].Value);
+            }
+        }
+
+
+
+        return handlers;
+    }
+
+
+
+    private int CountForbiddenDependencies(
+        string content)
+    {
+        return _policy.ForbiddenInCommand
+            .Count(
+                forbidden =>
+                    content.Contains(
+                        forbidden,
+                        StringComparison.OrdinalIgnoreCase));
+    }
+
+
+
+    private int CountHandlerInvocations(
+        string content)
+    {
+        return _policy.HandlerInvocationHints
+            .Count(
+                hint =>
+                    Regex.IsMatch(
+                        content,
+                        $@"\b{hint}\s*\(",
+                        RegexOptions.IgnoreCase));
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateResult(
+        string file,
+        string commandName,
+        string expectedHandler,
+        bool hasHandler,
+        int methods,
+        int forbidden,
+        int invocations,
+        double compliance)
+    {
+        return new ArchitectureEvaluatorResult(
+            Name,
+            file)
+        {
+            ProjectName =
+                Context?.ProjectName,
+
+            Language =
+                Context?.Language,
+
+            Framework =
+                Context?.Framework,
+
+            Layer =
+                ResolveLayer(file),
+
+            DetectionConfidence =
+                Context?.Confidence ?? 0,
+
+
+            Category =
+                nameof(
+                    ArchitectureRuleCategory.DesignPatterns),
+
+
+            Metrics =
+            {
+                ["HasHandlerPair"] =
+                    hasHandler ? 1 : 0,
+
+                ["MethodCount"] =
+                    methods,
+
+                ["ForbiddenDependencyCount"] =
+                    forbidden,
+
+                ["HandlerInvocationCount"] =
+                    invocations,
+
+                ["CommandComplianceScore"] =
+                    compliance
+            },
+
+
+            Metadata =
+            {
+                ["CommandName"] =
+                    commandName,
+
+                ["ExpectedHandler"] =
+                    expectedHandler,
+
+                ["ArchitectureStyle"] =
+                    Context?.ArchitectureStyle
+                    ?? "Unknown",
+
+                ["Layer"] =
+                    ResolveLayer(file)
+                    ?? "Unknown"
+            }
+        };
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateSummary(
+        string projectPath,
+        IEnumerable<ArchitectureEvaluatorResult> results)
+    {
+        var list =
+            results.ToList();
+
+
+
+        return new ArchitectureEvaluatorResult(
+            Name,
+            projectPath)
+        {
+            ProjectName =
+                Context?.ProjectName,
+
+            Category =
+                "DesignPatternSummary",
+
+
+            Metrics =
+            {
+                ["CommandCount"] =
+                    list.Count,
+
+                ["AverageCommandCompliance"] =
+                    list.Average(
+                        x =>
+                            x.Metrics.GetValueOrDefault(
+                                "CommandComplianceScore"))
+            }
+        };
+    }
+
+
+
+    private string? ResolveLayer(
+        string file)
+    {
+        return Context?
+            .Layers
+            .FirstOrDefault(
+                layer =>
+                    layer.Files.Contains(
+                        file,
+                        StringComparer.OrdinalIgnoreCase))
+            ?.Name;
+    }
+
+
+
+    private double ComputeCompliance(
+        bool hasHandler,
+        int methods,
+        int forbidden,
+        int invocations)
+    {
+        var complexity =
+            Math.Min(
+                1,
+                methods /
+                (double)Math.Max(
+                    1,
+                    _policy.MaxMethodsPerCommand));
+
+
+
+        var forbiddenRatio =
+            Math.Min(
+                1,
+                forbidden / 3d);
+
+
+
+        var invocationRatio =
+            Math.Min(
+                1,
+                invocations / 2d);
+
+
+
+        return Math.Round(
+            (
+                (hasHandler ? 1 : 0) * .4
+                +
+                (1 - complexity) * .25
+                +
+                (1 - forbiddenRatio) * .2
+                +
+                (1 - invocationRatio) * .15
+            )
+            * 100,
+            2);
     }
 }

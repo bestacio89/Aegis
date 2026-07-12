@@ -1,10 +1,14 @@
-﻿using Aegis.Architecture.Evaluators;
+﻿using System.Text.RegularExpressions;
+
+using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
+
+using Franz.Common.DependencyInjection;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.DesignPatterns;
 
@@ -14,22 +18,25 @@ namespace Aegis.Architecture.Evaluators.DesignPatterns;
 /// - Interface abstraction
 /// - Async compliance
 /// - Persistence leaks
-/// - Excessive repository complexity ("God Repository")
-/// Produces RepositoryComplianceScore (0–100).
+/// - Excessive repository complexity
+/// Produces RepositoryComplianceScore (0-100).
 /// </summary>
-public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
+public sealed class RepositoryPatternEvaluator :
+    BaseArchitectureEvaluator,
+    IScopedDependency
 {
     private readonly DesignPatternPolicy _policy;
 
-
-    public override string Name => "RepositoryPatternEvaluator";
+    public override string Name =>
+        "RepositoryPatternEvaluator";
 
 
     public override string[] SupportedLanguages =>
     [
         "C#",
         "Java",
-        "Python"
+        "Python",
+        "TypeScript"
     ];
 
 
@@ -39,9 +46,12 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
         "Spring",
         "Django",
         "FastAPI",
-        "Flask"
+        "Flask",
+        "CleanArchitecture",
+        "Hexagonal",
+        "DDD",
+        "Microservices"
     ];
-
 
 
     private static readonly Regex RepoClassRx =
@@ -50,19 +60,16 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
             RegexOptions.Compiled);
 
 
-
     private static readonly Regex InterfaceRx =
         new(
             @"\binterface\s+I(\w+Repository)\b",
             RegexOptions.Compiled);
 
 
-
     private static readonly Regex MethodRx =
         new(
-            @"\b(public|protected|private|def)\s+\w+\s*\(",
+            @"\b(public|protected|private|def|function)\s+\w+\s*\(",
             RegexOptions.Compiled);
-
 
 
     private static readonly Regex FieldRx =
@@ -71,12 +78,11 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
             RegexOptions.Compiled);
 
 
-
     private static readonly Regex AsyncRx =
         new(
-            @"async\s+|\bCompletableFuture<",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
+            @"async\s+|\bCompletableFuture<|\bTask<",
+            RegexOptions.IgnoreCase |
+            RegexOptions.Compiled);
 
 
     private static readonly string[] LeakIndicators =
@@ -92,7 +98,6 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
     ];
 
 
-
     public RepositoryPatternEvaluator(
         ILogger<RepositoryPatternEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
@@ -102,7 +107,6 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
             options.Value.Architecture.DesignPatterns
             ?? new DesignPatternPolicy();
     }
-
 
 
     protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
@@ -115,46 +119,26 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
         if (!_policy.EnforceRepositoryPattern)
         {
             _logger.LogInformation(
-                "🧩 Repository pattern enforcement disabled by policy.");
+                "🧩 {Evaluator} disabled by policy.",
+                Name);
 
             return results;
         }
 
 
-
         var files =
-            Context?.Language switch
-            {
-                "C#" =>
-                    ResolveSourceFiles(
-                        projectPath,
-                        ".cs"),
-
-                "Java" =>
-                    ResolveSourceFiles(
-                        projectPath,
-                        ".java"),
-
-                "Python" =>
-                    ResolveSourceFiles(
-                        projectPath,
-                        ".py"),
-
-                _ =>
-                    ResolveSourceFiles(
-                        projectPath,
-                        ".cs",
-                        ".java",
-                        ".py")
-            };
-
+            ResolveSourceFiles(
+                projectPath,
+                ".cs",
+                ".java",
+                ".py",
+                ".ts");
 
 
         _logger.LogInformation(
-            "📦 Running {Evaluator} on {Count} files",
+            "📦 Running {Evaluator} on {Count} files.",
             Name,
             files.Count);
-
 
 
         foreach (var file in files)
@@ -171,35 +155,32 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
                         file,
                         token);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(
+                    ex,
+                    "Unable to read repository candidate file {File}",
+                    file);
+
                 continue;
             }
 
 
-
             foreach (Match match in RepoClassRx.Matches(content))
             {
-                var repoName =
+                var repositoryName =
                     match.Groups[1].Value;
 
 
-                var fileName =
-                    Path.GetFileName(file);
-
-
-
-                bool hasInterface =
+                var hasInterface =
                     InterfaceRx.IsMatch(content);
 
 
-
-                bool hasAsync =
+                var hasAsync =
                     AsyncRx.IsMatch(content);
 
 
-
-                bool hasLeak =
+                var hasPersistenceLeak =
                     LeakIndicators.Any(
                         indicator =>
                             content.Contains(
@@ -207,67 +188,49 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
                                 StringComparison.OrdinalIgnoreCase));
 
 
-
-                bool correctNaming =
-                    repoName.EndsWith(
+                var namingCompliance =
+                    repositoryName.EndsWith(
                         _policy.RepositorySuffix,
                         StringComparison.Ordinal);
 
 
-
-                int methodCount =
+                var methodCount =
                     MethodRx.Matches(content).Count;
 
 
-
-                int fieldCount =
+                var fieldCount =
                     FieldRx.Matches(content).Count;
 
 
-
-                double interfaceAdherence =
-                    hasInterface
-                        ? 1.0
-                        : 0.0;
+                var interfaceScore =
+                    hasInterface ? 1d : 0d;
 
 
-
-                double asyncCompliance =
-                    hasAsync
-                        ? 1.0
-                        : 0.0;
+                var asyncScore =
+                    hasAsync ? 1d : 0d;
 
 
-
-                double leakRisk =
-                    hasLeak
-                        ? 1.0
-                        : 0.0;
+                var leakScore =
+                    hasPersistenceLeak ? 1d : 0d;
 
 
-
-                double namingCompliance =
-                    correctNaming
-                        ? 1.0
-                        : 0.0;
+                var namingScore =
+                    namingCompliance ? 1d : 0d;
 
 
-
-                double complexityScore =
+                var complexity =
                     ComputeComplexity(
                         methodCount,
                         fieldCount);
 
 
-
-                double complianceScore =
+                var compliance =
                     ComputeCompliance(
-                        interfaceAdherence,
-                        asyncCompliance,
-                        leakRisk,
-                        namingCompliance,
-                        complexityScore);
-
+                        interfaceScore,
+                        asyncScore,
+                        leakScore,
+                        namingScore,
+                        complexity);
 
 
                 results.Add(
@@ -281,28 +244,28 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
                         Metrics =
                         {
                             ["InterfaceAdherence"] =
-                                interfaceAdherence,
+                                interfaceScore,
 
                             ["AsyncCompliance"] =
-                                asyncCompliance,
+                                asyncScore,
 
                             ["LeakRisk"] =
-                                leakRisk,
+                                leakScore,
 
                             ["NamingCompliance"] =
-                                namingCompliance,
+                                namingScore,
 
                             ["RepositoryComplexity"] =
-                                complexityScore,
+                                complexity,
 
                             ["RepositoryComplianceScore"] =
-                                complianceScore
+                                compliance
                         },
 
                         Metadata =
                         {
                             ["RepositoryName"] =
-                                repoName,
+                                repositoryName,
 
                             ["Language"] =
                                 Context?.Language
@@ -310,6 +273,10 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
 
                             ["Framework"] =
                                 Context?.Framework
+                                ?? "Unknown",
+
+                            ["Layer"] =
+                                Context?.Layer
                                 ?? "Unknown",
 
                             ["MethodCount"] =
@@ -322,15 +289,17 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
                                 hasInterface.ToString(),
 
                             ["HasPersistenceLeak"] =
-                                hasLeak.ToString(),
+                                hasPersistenceLeak.ToString(),
 
                             ["HasAsyncMethods"] =
-                                hasAsync.ToString()
+                                hasAsync.ToString(),
+
+                            ["PolicyEnabled"] =
+                                _policy.EnforceRepositoryPattern.ToString()
                         }
                     });
             }
         }
-
 
 
         if (results.Count > 0)
@@ -339,8 +308,7 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
                 results.ToList();
 
 
-
-            double avgCompliance =
+            var averageCompliance =
                 repositoryResults.Average(
                     r =>
                         r.Metrics.GetValueOrDefault(
@@ -348,8 +316,7 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
                             0));
 
 
-
-            double avgComplexity =
+            var averageComplexity =
                 repositoryResults.Average(
                     r =>
                         r.Metrics.GetValueOrDefault(
@@ -357,23 +324,20 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
                             0));
 
 
-
-            double leakCount =
+            var leakCount =
                 repositoryResults.Count(
                     r =>
                         r.Metrics.GetValueOrDefault(
                             "LeakRisk",
-                            0) == 1);
+                            0) > 0);
 
 
-
-            double asyncAdherence =
+            var asyncCompliance =
                 repositoryResults.Average(
                     r =>
                         r.Metrics.GetValueOrDefault(
                             "AsyncCompliance",
                             0));
-
 
 
             results.Add(
@@ -390,24 +354,26 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
                             repositoryResults.Count,
 
                         ["AverageComplianceScore"] =
-                            avgCompliance,
+                            averageCompliance,
 
                         ["AverageComplexity"] =
-                            avgComplexity,
+                            averageComplexity,
 
                         ["AverageAsyncCompliance"] =
-                            asyncAdherence,
+                            asyncCompliance,
 
                         ["LeakCount"] =
                             leakCount,
 
                         ["OverallRepositoryHealth"] =
-                            avgCompliance *
-                            (1 -
-                             leakCount /
-                             Math.Max(
-                                 1,
-                                 repositoryResults.Count))
+                            averageCompliance *
+                            (
+                                1 -
+                                leakCount /
+                                (double)Math.Max(
+                                    1,
+                                    repositoryResults.Count)
+                            )
                     },
 
                     Metadata =
@@ -422,24 +388,21 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
         }
 
 
-
         _logger.LogInformation(
-            "✅ {Evaluator} completed with {Count} metric entries",
+            "✅ {Evaluator} completed with {Count} metric entries.",
             Name,
             results.Count);
-
 
 
         return results;
     }
 
 
-
     private static double ComputeComplexity(
         int methodCount,
         int fieldCount)
     {
-        double normalized =
+        var normalized =
             Math.Min(
                 1.0,
                 methodCount / 30.0 +
@@ -452,7 +415,6 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
     }
 
 
-
     private static double ComputeCompliance(
         double interfaceAdherence,
         double asyncCompliance,
@@ -460,7 +422,7 @@ public sealed class RepositoryPatternEvaluator : BaseArchitectureEvaluator
         double namingCompliance,
         double complexity)
     {
-        double score =
+        var score =
             interfaceAdherence * 0.25 +
             asyncCompliance * 0.15 +
             (1 - leakRisk) * 0.35 +

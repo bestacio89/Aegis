@@ -1,17 +1,20 @@
-﻿using Aegis.Architecture.Evaluators;
+﻿using System.Text.RegularExpressions;
+
+using Aegis.Architecture.Evaluators;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.DesignPatterns;
 
 /// <summary>
 /// Quantitatively evaluates Strategy pattern implementation quality.
 /// Measures adherence to polymorphism, interface abstraction, class isolation,
-/// and naming convention. Produces a StrategyComplianceScore (0–100).
+/// and naming convention. Produces a StrategyComplianceScore (0-100).
 /// </summary>
 public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
 {
@@ -19,7 +22,7 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
 
 
     public override string Name =>
-        "StrategyPatternEvaluator";
+        nameof(StrategyPatternEvaluator);
 
 
     public override string[] SupportedLanguages =>
@@ -43,7 +46,7 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
 
     private static readonly Regex StrategyClassRx =
         new(
-            @"class\s+(\w+Strategy)\b",
+            @"class\s+\w*Strategy\b",
             RegexOptions.Compiled);
 
 
@@ -55,19 +58,11 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
 
 
 
-    private static readonly Regex SwitchOrIfRx =
+    private static readonly Regex StrategyConditionalRx =
         new(
-            @"\b(switch|if\s*\(.*Strategy.*\))",
+            @"\b(switch|if)\s*\([^)]*(Strategy|strategy)[^)]*\)",
             RegexOptions.Compiled |
             RegexOptions.IgnoreCase);
-
-
-
-    private static readonly Regex MultiStrategyRx =
-        new(
-            @"class\s+\w+\b[^{]*{[^}]*class\s+\w+Strategy\b",
-            RegexOptions.Singleline |
-            RegexOptions.Compiled);
 
 
 
@@ -114,6 +109,9 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
 
         if (files.Count == 0)
         {
+            _logger.LogInformation(
+                "🎯 No source files found for Strategy evaluation.");
+
             return results;
         }
 
@@ -133,8 +131,13 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
                         file,
                         token);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(
+                    ex,
+                    "Unable to read file {File}",
+                    file);
+
                 continue;
             }
 
@@ -145,66 +148,68 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
 
 
 
-            var hasStrategy =
+            var classStrategyDetected =
                 StrategyClassRx.IsMatch(content);
 
 
 
-            var hasInterface =
+            var interfaceDetected =
                 InterfaceRx.IsMatch(content);
 
 
 
-            var usesSwitchLogic =
-                SwitchOrIfRx.IsMatch(content);
+            var conditionalStrategyUsage =
+                StrategyConditionalRx.IsMatch(content);
 
 
 
-            var hasMultipleStrategies =
-                MultiStrategyRx.IsMatch(content);
-
-
-
-            var correctNaming =
-                fileName.EndsWith(
-                    _policy.StrategySuffix +
-                    Path.GetExtension(file),
-                    StringComparison.OrdinalIgnoreCase);
-
-
-
-            if (!hasStrategy && !usesSwitchLogic)
+            if (!classStrategyDetected &&
+                !interfaceDetected &&
+                !conditionalStrategyUsage)
             {
                 continue;
             }
 
 
 
-            var interfaceAdherence =
-                hasInterface
-                    ? 1
-                    : 0;
+            var strategyCount =
+                StrategyClassRx.Matches(content).Count;
 
 
 
-            var conditionalPenalty =
-                usesSwitchLogic
-                    ? 1
-                    : 0;
-
-
-
-            var isolationScore =
-                hasMultipleStrategies
-                    ? 0
-                    : 1;
+            var multipleStrategies =
+                strategyCount > 1;
 
 
 
             var namingCompliance =
-                correctNaming
-                    ? 1
-                    : 0;
+                Path.GetFileNameWithoutExtension(file)
+                    .Contains(
+                        _policy.StrategySuffix,
+                        StringComparison.OrdinalIgnoreCase)
+                    ? 1d
+                    : 0d;
+
+
+
+            var interfaceAdherence =
+                interfaceDetected
+                    ? 1d
+                    : 0d;
+
+
+
+            var isolationScore =
+                multipleStrategies
+                    ? 0d
+                    : 1d;
+
+
+
+            var conditionalPenalty =
+                conditionalStrategyUsage
+                    ? 1d
+                    : 0d;
 
 
 
@@ -223,12 +228,16 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
                     file)
                 {
                     Category =
-                        "DesignPattern",
+                        nameof(
+                            ArchitectureRuleCategory.DesignPatterns),
 
                     Metrics =
                     {
+                        ["StrategyCount"] =
+                            strategyCount,
+
                         ["HasStrategy"] =
-                            hasStrategy
+                            classStrategyDetected
                                 ? 1
                                 : 0,
 
@@ -262,13 +271,13 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
                             ?? "Unknown",
 
                         ["HasInterface"] =
-                            hasInterface.ToString(),
+                            interfaceDetected.ToString(),
 
-                        ["UsesSwitchLogic"] =
-                            usesSwitchLogic.ToString(),
+                        ["UsesStrategyConditionalLogic"] =
+                            conditionalStrategyUsage.ToString(),
 
                         ["MultipleStrategiesInFile"] =
-                            hasMultipleStrategies.ToString(),
+                            multipleStrategies.ToString(),
 
                         ["PatternSuffix"] =
                             _policy.StrategySuffix
@@ -281,7 +290,13 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
         if (results.Count > 0)
         {
             var strategyResults =
-                results.ToList();
+                results
+                    .Where(
+                        r =>
+                            r.Category ==
+                            nameof(
+                                ArchitectureRuleCategory.DesignPatterns))
+                    .ToList();
 
 
 
@@ -308,7 +323,7 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
                     r =>
                         r.Metrics.GetValueOrDefault(
                             "ConditionalPenalty",
-                            0) == 1);
+                            0) > 0);
 
 
 
@@ -318,6 +333,20 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
                         r.Metrics.GetValueOrDefault(
                             "IsolationScore",
                             0) == 0);
+
+
+
+            var violationFactor =
+                Math.Max(
+                    0,
+                    1 -
+                    (
+                        conditionalViolations +
+                        isolationViolations
+                    ) /
+                    (double)Math.Max(
+                        1,
+                        strategyResults.Count));
 
 
 
@@ -348,12 +377,7 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
 
                         ["OverallStrategyHealth"] =
                             averageScore *
-                            (1 -
-                             (conditionalViolations +
-                              isolationViolations) /
-                             (double)Math.Max(
-                                 1,
-                                 strategyResults.Count))
+                            violationFactor
                     },
 
                     Metadata =
@@ -373,7 +397,6 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
             "🎯 {Evaluator} completed with {Count} metric entries",
             Name,
             results.Count);
-
 
 
         return results;

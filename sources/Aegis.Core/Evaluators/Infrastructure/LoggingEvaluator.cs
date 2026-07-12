@@ -10,25 +10,13 @@ using Microsoft.Extensions.Options;
 
 namespace Aegis.Architecture.Evaluators.Infrastructure;
 
-/// <summary>
-/// Evaluates logging discipline and observability maturity across
-/// .NET, Java, Python, Node.js, and TypeScript ecosystems.
-///
-/// Produces:
-/// - StructuredLoggingScore
-/// - LogLevelComplianceScore
-/// - SensitiveDataProtectionScore
-/// - LoggingNoiseScore
-/// - LoggingIntegrityScore
-///
-/// Aggregates into ObservabilityHealthIndex.
-/// </summary>
 public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 {
     private readonly LoggingPolicy _policy;
 
 
-    public override string Name => "LoggingEvaluator";
+    public override string Name =>
+        "LoggingEvaluator";
 
 
     public override string[] SupportedLanguages =>
@@ -49,14 +37,6 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
         "Winston",
         "Python.Logging"
     ];
-
-
-
-    private static readonly Regex ConsoleLoggingRx =
-        new(
-            @"(Console\.Write(Line)?|print|System\.out\.println|console\.log)\s*\(",
-            RegexOptions.IgnoreCase |
-            RegexOptions.Compiled);
 
 
 
@@ -88,16 +68,20 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.Logging ?? new LoggingPolicy();
+        _policy =
+            options.Value.Logging
+            ?? new LoggingPolicy();
     }
 
 
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath,
-        CancellationToken token)
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
+        var results =
+            new List<ArchitectureEvaluatorResult>();
 
 
         if (!_policy.Enabled)
@@ -155,160 +139,60 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
 
 
-            double structuredScore =
+            var structured =
                 EvaluateStructuredLogging(
                     content,
                     language);
 
 
-
-            double levelScore =
+            var levels =
                 EvaluateLogLevels(
                     content);
 
 
-
-            double securityScore =
+            var security =
                 EvaluateSensitiveDataExposure(
                     content);
 
 
-
-            double noiseScore =
+            var noise =
                 EvaluateLoggingNoise(
                     content);
 
 
 
-            double integrityScore =
+            var integrity =
                 ComputeIntegrity(
-                    structuredScore,
-                    levelScore,
-                    securityScore,
-                    noiseScore);
+                    structured,
+                    levels,
+                    security,
+                    noise);
 
 
 
             results.Add(
-                new ArchitectureEvaluatorResult(Name, file)
-                {
-                    Category = "Infrastructure",
-
-                    Metrics = new Dictionary<string, double>
-                    {
-                        ["StructuredLoggingScore"] = structuredScore,
-
-                        ["LogLevelComplianceScore"] = levelScore,
-
-                        ["SensitiveDataProtectionScore"] = securityScore,
-
-                        ["LoggingNoiseScore"] = noiseScore,
-
-                        ["LoggingIntegrityScore"] = integrityScore
-                    },
-
-
-                    Metadata = new Dictionary<string, string>
-                    {
-                        ["FileName"] =
-                            Path.GetFileName(file),
-
-                        ["Target"] =
-                            file,
-
-                        ["Language"] =
-                            language,
-
-                        ["Frameworks"] =
-                            string.Join(
-                                ", ",
-                                DetectFrameworks(language)),
-
-                        ["PolicyEnabled"] =
-                            _policy.Enabled.ToString()
-                    }
-                });
+                CreateFileResult(
+                    file,
+                    language,
+                    structured,
+                    levels,
+                    security,
+                    noise,
+                    integrity));
         }
 
 
 
         if (results.Count > 0)
         {
-            int analyzedFiles =
-                results.Count;
-
-
-
-            double avgIntegrity =
-                results.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "LoggingIntegrityScore",
-                            0));
-
-
-
-            double avgStructured =
-                results.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "StructuredLoggingScore",
-                            0));
-
-
-
-            double avgSecurity =
-                results.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "SensitiveDataProtectionScore",
-                            0));
-
+            var analyzedResults =
+                results.ToList();
 
 
             results.Add(
-                new ArchitectureEvaluatorResult(Name, projectPath)
-                {
-                    Category = "InfrastructureSummary",
-
-                    Metrics = new Dictionary<string, double>
-                    {
-                        ["AnalyzedFiles"] =
-                            analyzedFiles,
-
-
-                        ["AverageIntegrityScore"] =
-                            avgIntegrity,
-
-
-                        ["AverageStructuredLogging"] =
-                            avgStructured,
-
-
-                        ["AverageSecurityProtection"] =
-                            avgSecurity,
-
-
-                        ["ObservabilityHealthIndex"] =
-                            avgIntegrity * 0.55 +
-                            avgStructured * 0.25 +
-                            avgSecurity * 0.20
-                    },
-
-
-                    Metadata = new Dictionary<string, string>
-                    {
-                        ["Evaluator"] = Name,
-
-                        ["PolicyEnabled"] =
-                            _policy.Enabled.ToString(),
-
-                        ["SupportedFrameworks"] =
-                            string.Join(
-                                ", ",
-                                SupportedFrameworks)
-                    }
-                });
+                CreateSummaryResult(
+                    projectPath,
+                    analyzedResults));
         }
 
 
@@ -319,7 +203,147 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             results.Count);
 
 
+
         return results;
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateFileResult(
+        string file,
+        string language,
+        double structured,
+        double levels,
+        double security,
+        double noise,
+        double integrity)
+    {
+        return new ArchitectureEvaluatorResult(
+            Name,
+            file)
+        {
+            Category =
+                "Infrastructure",
+
+            Metrics =
+            {
+                ["StructuredLoggingScore"] =
+                    structured,
+
+                ["LogLevelComplianceScore"] =
+                    levels,
+
+                ["SensitiveDataProtectionScore"] =
+                    security,
+
+                ["LoggingNoiseScore"] =
+                    noise,
+
+                ["LoggingIntegrityScore"] =
+                    integrity
+            },
+
+            Metadata =
+            {
+                ["FileName"] =
+                    Path.GetFileName(file),
+
+                ["Target"] =
+                    file,
+
+                ["Language"] =
+                    language,
+
+                ["Frameworks"] =
+                    string.Join(
+                        ", ",
+                        DetectFrameworks(language)),
+
+                ["PolicyEnabled"] =
+                    _policy.Enabled.ToString()
+            }
+        };
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateSummaryResult(
+        string projectPath,
+        IReadOnlyCollection<ArchitectureEvaluatorResult> results)
+    {
+        var integrity =
+            Average(
+                results,
+                "LoggingIntegrityScore");
+
+
+        var structured =
+            Average(
+                results,
+                "StructuredLoggingScore");
+
+
+        var security =
+            Average(
+                results,
+                "SensitiveDataProtectionScore");
+
+
+
+        return new ArchitectureEvaluatorResult(
+            Name,
+            projectPath)
+        {
+            Category =
+                "InfrastructureSummary",
+
+            Metrics =
+            {
+                ["AnalyzedFiles"] =
+                    results.Count,
+
+                ["AverageIntegrityScore"] =
+                    integrity,
+
+                ["AverageStructuredLogging"] =
+                    structured,
+
+                ["AverageSecurityProtection"] =
+                    security,
+
+                ["ObservabilityHealthIndex"] =
+                    integrity * 0.55 +
+                    structured * 0.25 +
+                    security * 0.20
+            },
+
+            Metadata =
+            {
+                ["Evaluator"] =
+                    Name,
+
+                ["PolicyEnabled"] =
+                    _policy.Enabled.ToString(),
+
+                ["SupportedFrameworks"] =
+                    string.Join(
+                        ", ",
+                        SupportedFrameworks)
+            }
+        };
+    }
+
+
+
+    private static double Average(
+        IEnumerable<ArchitectureEvaluatorResult> results,
+        string metric)
+    {
+        return results.Average(
+            r =>
+                r.Metrics.GetValueOrDefault(
+                    metric,
+                    0));
     }
 
 
@@ -332,12 +356,14 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             return 1;
 
 
+
         if (!_policy.FrameworkHints.TryGetValue(
                 language,
                 out var frameworks))
         {
             return 0.5;
         }
+
 
 
         return frameworks.Any(
@@ -360,7 +386,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             return 1;
 
 
-        return LogLevelRx.IsMatch(content)
+        return StructuredLoggerRx.IsMatch(content)
             ? 1
             : 0.5;
     }
@@ -388,7 +414,8 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             return 1;
 
 
-        int count =
+
+        var count =
             InterpolationRx.Matches(content)
                 .Count;
 
@@ -448,30 +475,24 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
     private static string DetectLanguage(
         string path)
     {
-        if (path.EndsWith(".cs",
-            StringComparison.OrdinalIgnoreCase))
-            return "C#";
+        return Path.GetExtension(path)
+            .ToLowerInvariant() switch
+        {
+            ".cs" =>
+                "C#",
 
+            ".java" =>
+                "Java",
 
-        if (path.EndsWith(".java",
-            StringComparison.OrdinalIgnoreCase))
-            return "Java";
+            ".py" =>
+                "Python",
 
+            ".ts" or ".js" =>
+                "Node",
 
-        if (path.EndsWith(".py",
-            StringComparison.OrdinalIgnoreCase))
-            return "Python";
-
-
-        if (path.EndsWith(".ts",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            path.EndsWith(".js",
-                StringComparison.OrdinalIgnoreCase))
-            return "Node";
-
-
-        return "Unknown";
+            _ =>
+                "Unknown"
+        };
     }
 
 
@@ -479,22 +500,10 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
     private IEnumerable<string> DetectFrameworks(
         string language)
     {
-        if (_policy.FrameworkHints.TryGetValue(
+        return _policy.FrameworkHints.TryGetValue(
                 language,
-                out var frameworks))
-        {
-            return frameworks;
-        }
-
-
-        return Array.Empty<string>();
+                out var frameworks)
+            ? frameworks
+            : Array.Empty<string>();
     }
-
-
-
-    private static readonly Regex LogLevelRx =
-        new(
-            @"\b(Log(ger)?\s*\.\s*(Trace|Debug|Information|Info|Warn|Warning|Error|Fatal)|logger\.log)\s*\(",
-            RegexOptions.IgnoreCase |
-            RegexOptions.Compiled);
 }

@@ -16,15 +16,14 @@ namespace Aegis.Architecture.Evaluators.Dependency;
 
 
 /// <summary>
-/// Evaluates dependency manifests for declared references.
+/// Evaluates dependency manifest metadata discovered during project analysis.
 ///
-/// This evaluator does not determine real source usage.
-/// It produces dependency metadata consumed by the RuleEngine.
+/// This evaluator does not determine source usage.
+/// It produces deterministic dependency facts consumed by the RuleEngine.
 ///
 /// Responsibilities:
-/// - Detect dependency manifests
-/// - Count declared references
-/// - Detect duplicate declarations
+/// - Analyze declared dependency references
+/// - Count manifest references
 /// - Produce dependency metrics
 ///
 /// Source usage analysis belongs to language-specific analyzers.
@@ -107,7 +106,12 @@ public sealed class UnusedReferenceEvaluator
 
 
 
-        foreach (var file in manifests)
+        if (manifests.Count == 0)
+            return results;
+
+
+
+        foreach (var manifest in manifests)
         {
             token.ThrowIfCancellationRequested();
 
@@ -115,7 +119,7 @@ public sealed class UnusedReferenceEvaluator
 
             var metrics =
                 await AnalyzeManifestAsync(
-                    file,
+                    manifest,
                     token);
 
 
@@ -126,44 +130,9 @@ public sealed class UnusedReferenceEvaluator
 
 
             results.Add(
-                new ArchitectureEvaluatorResult(
-                    Name,
-                    file)
-                {
-                    ProjectName =
-                        Context.ProjectName,
-
-                    Language =
-                        Context.Language,
-
-                    Framework =
-                        Context.Framework,
-
-                    DetectionConfidence =
-                        Context.Confidence,
-
-                    Category =
-                        nameof(
-                            ArchitectureRuleCategory.Dependency),
-
-
-                    Metrics =
-                        metrics,
-
-
-                    Metadata =
-                    {
-                        ["Manifest"] =
-                            Path.GetFileName(file),
-
-                        ["Language"] =
-                            Context.Language,
-
-                        ["Framework"] =
-                            Context.Framework
-                            ?? "Unknown"
-                    }
-                });
+                CreateResult(
+                    manifest,
+                    metrics));
         }
 
 
@@ -183,6 +152,50 @@ public sealed class UnusedReferenceEvaluator
 
 
         return results;
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateResult(
+        string file,
+        Dictionary<string, double> metrics)
+    {
+        return new ArchitectureEvaluatorResult(
+            Name,
+            file)
+        {
+            ProjectName =
+                Context?.ProjectName ?? string.Empty,
+
+            Language =
+                Context?.Language ?? "Unknown",
+
+            Framework =
+                Context?.Framework,
+
+            DetectionConfidence =
+                Context?.Confidence ?? 0,
+
+            Category =
+                nameof(ArchitectureRuleCategory.Dependency),
+
+
+            Metrics =
+                metrics,
+
+
+            Metadata =
+            {
+                ["Manifest"] =
+                    Path.GetFileName(file),
+
+                ["Language"] =
+                    Context?.Language ?? "Unknown",
+
+                ["Framework"] =
+                    Context?.Framework ?? "Unknown"
+            }
+        };
     }
 
 
@@ -213,15 +226,10 @@ public sealed class UnusedReferenceEvaluator
         {
             case ".csproj":
                 {
-                    var references =
+                    metrics["DeclaredReferences"] =
                         CountOccurrences(
                             content,
                             "<PackageReference");
-
-
-                    metrics["DeclaredReferences"] =
-                        references;
-
 
                     break;
                 }
@@ -236,18 +244,14 @@ public sealed class UnusedReferenceEvaluator
                             JsonDocument.Parse(content);
 
 
-                        var count =
+                        metrics["DeclaredReferences"] =
                             CountJsonDependencies(
                                 json.RootElement);
-
-
-                        metrics["DeclaredReferences"] =
-                            count;
                     }
                     catch
                     {
+                        // Invalid manifests are ignored.
                     }
-
 
                     break;
                 }
@@ -256,20 +260,16 @@ public sealed class UnusedReferenceEvaluator
 
             case ".txt":
                 {
-                    var count =
+                    metrics["DeclaredReferences"] =
                         content
                             .Split(
                                 '\n',
                                 StringSplitOptions.RemoveEmptyEntries)
                             .Count(
-                                x =>
-                                    !x.TrimStart()
-                                     .StartsWith("#"));
-
-
-                    metrics["DeclaredReferences"] =
-                        count;
-
+                                line =>
+                                    !line
+                                        .TrimStart()
+                                        .StartsWith("#"));
 
                     break;
                 }
@@ -288,6 +288,7 @@ public sealed class UnusedReferenceEvaluator
         var count = 0;
 
 
+
         foreach (var propertyName in new[]
         {
             "dependencies",
@@ -302,11 +303,13 @@ public sealed class UnusedReferenceEvaluator
             }
 
 
+
             count +=
                 dependencies
                     .EnumerateObject()
                     .Count();
         }
+
 
 
         return count;
@@ -319,7 +322,9 @@ public sealed class UnusedReferenceEvaluator
         string value)
     {
         var count = 0;
+
         var index = 0;
+
 
 
         while ((index =
@@ -329,8 +334,10 @@ public sealed class UnusedReferenceEvaluator
                 StringComparison.OrdinalIgnoreCase)) >= 0)
         {
             count++;
+
             index += value.Length;
         }
+
 
 
         return count;
@@ -355,6 +362,7 @@ public sealed class UnusedReferenceEvaluator
             Framework =
                 Context?.Framework,
 
+
             Category =
                 "DependencySummary",
 
@@ -366,10 +374,10 @@ public sealed class UnusedReferenceEvaluator
 
                 ["DeclaredReferences"] =
                     results.Sum(
-                        x =>
-                            x.Metrics
-                             .GetValueOrDefault(
-                                 "DeclaredReferences"))
+                        result =>
+                            result.Metrics
+                                .GetValueOrDefault(
+                                    "DeclaredReferences"))
             },
 
 

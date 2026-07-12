@@ -1,12 +1,12 @@
-﻿using Aegis.Architecture.Diagnostics;
+﻿using System.Text.RegularExpressions;
+using Aegis.Architecture.Diagnostics;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Diagnostics;
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.Architecture;
-
 
 /// <summary>
 /// Evaluates documentation coverage of public architectural elements.
@@ -23,10 +23,8 @@ public sealed class DocumentationEvaluator
     private const double MinimumDocumentationCoverage = 80.0;
 
 
-
     public override string Name =>
         "DocumentationEvaluator";
-
 
 
     public override string[] SupportedLanguages =>
@@ -39,12 +37,10 @@ public sealed class DocumentationEvaluator
     ];
 
 
-
     public override string[] SupportedFrameworks =>
     [
         "*"
     ];
-
 
 
     private static readonly Regex PublicDeclarationRegex =
@@ -79,8 +75,7 @@ public sealed class DocumentationEvaluator
         var files =
             ResolveSourceFiles(
                 projectPath,
-                Context);
-
+                GetExtensions(Context.Language));
 
 
         if (files.Count == 0)
@@ -89,7 +84,6 @@ public sealed class DocumentationEvaluator
 
 
         var totalDeclarations = 0;
-
         var documentedDeclarations = 0;
 
 
@@ -103,23 +97,18 @@ public sealed class DocumentationEvaluator
                 continue;
 
 
-
             var content =
                 await File.ReadAllTextAsync(
                     file,
                     token);
 
 
-
             var declarations =
-                PublicDeclarationRegex
-                    .Matches(content);
-
+                PublicDeclarationRegex.Matches(content);
 
 
             if (declarations.Count == 0)
                 continue;
-
 
 
             var documented =
@@ -128,11 +117,8 @@ public sealed class DocumentationEvaluator
                     Context.Language);
 
 
-
             totalDeclarations +=
                 declarations.Count;
-
-
 
             documentedDeclarations +=
                 Math.Min(
@@ -172,7 +158,6 @@ public sealed class DocumentationEvaluator
             $"Documentation evaluation completed. Coverage: {coverage:0.0}%");
 
 
-
         return results;
     }
 
@@ -184,103 +169,83 @@ public sealed class DocumentationEvaluator
         int totalDeclarations,
         int documentedDeclarations)
     {
-        return new ArchitectureEvaluatorResult(
-            Name,
-            projectPath)
-        {
-            Category = "Documentation",
+        var result =
+            CreateResult(
+                projectPath,
+                nameof(ArchitectureRuleCategory.Documentation));
 
 
-            Metrics =
-            {
-                ["DocumentationCoverage"] =
-                    coverage,
+        result.Metrics["DocumentationCoverage"] =
+            coverage;
 
-                ["TotalDeclarations"] =
-                    totalDeclarations,
+        result.Metrics["DocumentationCompliance"] =
+            coverage;
 
-                ["DocumentedDeclarations"] =
-                    documentedDeclarations,
+        result.Metrics["DocumentationViolation"] =
+            1;
 
-                ["MissingDocumentation"] =
-                    totalDeclarations -
-                    documentedDeclarations
-            },
+        result.Metrics["TotalDeclarations"] =
+            totalDeclarations;
+
+        result.Metrics["DocumentedDeclarations"] =
+            documentedDeclarations;
+
+        result.Metrics["MissingDocumentation"] =
+            totalDeclarations -
+            documentedDeclarations;
 
 
-            Metadata =
-            {
-                ["Language"] =
-                    Context?.Language ?? "Unknown",
+        result.Metadata["Language"] =
+            Context?.Language ?? "Unknown";
 
-                ["Framework"] =
-                    Context?.Framework ?? "Unknown",
+        result.Metadata["Framework"] =
+            Context?.Framework ?? "Unknown";
 
-                ["RequiredCoverage"] =
-                    $"{MinimumDocumentationCoverage:0.0}%",
+        result.Metadata["RequiredCoverage"] =
+            $"{MinimumDocumentationCoverage:0.0}%";
 
-                ["ActualCoverage"] =
-                    $"{coverage:0.0}%"
-            }
-        };
+        result.Metadata["ActualCoverage"] =
+            $"{coverage:0.0}%";
+
+
+        return result;
     }
 
 
 
-    private static List<string> ResolveSourceFiles(
-        string root,
-        ProjectArchitectureContext context)
+    private static string[] GetExtensions(
+        string language)
     {
-        var extensions =
-            context.Language switch
-            {
-                "C#" =>
-                [
-                    ".cs"
-                ],
+        return language switch
+        {
+            "C#" =>
+            [
+                ".cs"
+            ],
 
-                "Java" =>
-                [
-                    ".java"
-                ],
+            "Java" =>
+            [
+                ".java"
+            ],
 
-                "Python" =>
-                [
-                    ".py"
-                ],
+            "Python" =>
+            [
+                ".py"
+            ],
 
-                "TypeScript" =>
-                [
-                    ".ts"
-                ],
+            "TypeScript" =>
+            [
+                ".ts"
+            ],
 
-                "JavaScript" =>
-                [
-                    ".js"
-                ],
+            "JavaScript" =>
+            [
+                ".js"
+            ],
 
-                _ =>
-                    Array.Empty<string>()
-            };
-
-
-
-        return Directory
-            .EnumerateFiles(
-                root,
-                "*.*",
-                SearchOption.AllDirectories)
-            .Where(
-                file =>
-                    extensions.Any(
-                        extension =>
-                            file.EndsWith(
-                                extension,
-                                StringComparison.OrdinalIgnoreCase)))
-            .Where(
-                file =>
-                    !IsExcludedDirectory(file))
-            .ToList();
+            _ =>
+            []
+        };
     }
 
 
@@ -297,13 +262,11 @@ public sealed class DocumentationEvaluator
                     @"///\s*<summary>")
                 .Count,
 
-
             "Java" =>
                 Regex.Matches(
                     content,
                     @"/\*\*")
                 .Count,
-
 
             "Python" =>
                 Regex.Matches(
@@ -311,13 +274,11 @@ public sealed class DocumentationEvaluator
                     "\"\"\"")
                 .Count / 2,
 
-
             "TypeScript" or "JavaScript" =>
                 Regex.Matches(
                     content,
                     @"/\*\*")
                 .Count,
-
 
             _ => 0
         };
@@ -335,21 +296,6 @@ public sealed class DocumentationEvaluator
             ||
             file.Contains(
                 "Generated",
-                StringComparison.OrdinalIgnoreCase);
-    }
-
-
-
-    private static bool IsExcludedDirectory(
-        string file)
-    {
-        return
-            file.Contains(
-                $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.Contains(
-                $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
                 StringComparison.OrdinalIgnoreCase);
     }
 }

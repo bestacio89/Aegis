@@ -1,9 +1,12 @@
 ﻿using System.Text.RegularExpressions;
-using Aegis.Architecture.Evaluators;
-using Aegis.Shared.Architecture.Enums;
+
+using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
+using Aegis.Shared.Diagnostics;
+
+using Franz.Common.DependencyInjection;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -11,21 +14,28 @@ using Microsoft.Extensions.Options;
 namespace Aegis.Architecture.Evaluators.DesignPatterns;
 
 
+
 /// <summary>
-/// Detects and quantifies "God Class" anti-patterns by analyzing:
-/// - Class size (lines)
-/// - Method density
-/// - Cohesion (property vs method ratio)
-/// - Anemic domain tendencies
-/// Outputs metrics and an overall GodClassScore (0–100).
+/// Detects God Class tendencies.
+///
+/// Produces structural metrics:
+/// - class size
+/// - method density
+/// - property/method distribution
+/// - complexity indicators
+///
+/// RuleEngine determines severity and remediation.
 /// </summary>
-public sealed class GodClassEvaluator : BaseArchitectureEvaluator
+public sealed class GodClassEvaluator
+    : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly DesignPatternPolicy _policy;
 
 
+
     public override string Name =>
         "GodClassEvaluator";
+
 
 
     public override string[] SupportedLanguages =>
@@ -35,6 +45,7 @@ public sealed class GodClassEvaluator : BaseArchitectureEvaluator
         "Python",
         "TypeScript"
     ];
+
 
 
     public override string[] SupportedFrameworks =>
@@ -80,28 +91,30 @@ public sealed class GodClassEvaluator : BaseArchitectureEvaluator
 
 
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath,
-        CancellationToken token)
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
         var results =
             new List<ArchitectureEvaluatorResult>();
 
 
 
+        if (Context is null)
+            return results;
+
+
+
         if (!_policy.DetectGodClasses)
         {
-            _logger.LogInformation(
-                "💤 GodClassEvaluator disabled by policy.");
+            AegisDiagnostics.Report(
+                Name,
+                DiagnosticLevel.Trace,
+                "God class evaluation disabled.");
 
             return results;
         }
-
-
-
-        var scaling =
-            GetScalingFactor(
-                Context?.Layer);
 
 
 
@@ -116,18 +129,7 @@ public sealed class GodClassEvaluator : BaseArchitectureEvaluator
 
 
         if (files.Count == 0)
-        {
-            _logger.LogInformation(
-                "💀 No source files found for God Class evaluation.");
-
             return results;
-        }
-
-
-
-        _logger.LogTrace(
-            "💀 Scanning {Count} files for God Class tendencies...",
-            files.Count);
 
 
 
@@ -145,8 +147,14 @@ public sealed class GodClassEvaluator : BaseArchitectureEvaluator
                         file,
                         token);
             }
-            catch
+            catch (Exception ex)
             {
+                AegisDiagnostics.Report(
+                    Name,
+                    DiagnosticLevel.Warning,
+                    $"Unable to read {file}.",
+                    ex);
+
                 continue;
             }
 
@@ -158,56 +166,52 @@ public sealed class GodClassEvaluator : BaseArchitectureEvaluator
                     match.Groups[1].Value;
 
 
+                var layer =
+                    ResolveLayer(file);
+
+
+
+                var scaling =
+                    GetScalingFactor(
+                        layer);
+
+
 
                 var methodCount =
-                    MethodRx
-                        .Matches(content)
-                        .Count;
+                    MethodRx.Matches(content)
+                    .Count;
 
 
 
                 var propertyCount =
-                    PropertyRx
-                        .Matches(content)
-                        .Count;
+                    PropertyRx.Matches(content)
+                    .Count;
 
 
 
                 var lineCount =
                     content.Count(
-                        c => c == '\n') + 1;
+                        c =>
+                            c == '\n')
+                    + 1;
 
 
 
                 var maxMethods =
-                    (int)(
+                    (int)
+                    (
                         _policy.MaxMethodsPerClass *
-                        scaling);
+                        scaling
+                    );
 
 
 
                 var maxLines =
-                    (int)(
+                    (int)
+                    (
                         _policy.MaxLinesPerClass *
-                        scaling);
-
-
-
-                var methodDensity =
-                    methodCount /
-                    (double)Math.Max(
-                        1,
-                        lineCount);
-
-
-
-                var propertyRatio =
-                    methodCount + propertyCount > 0
-                        ?
-                        propertyCount /
-                        (double)(methodCount + propertyCount)
-                        :
-                        0;
+                        scaling
+                    );
 
 
 
@@ -227,7 +231,20 @@ public sealed class GodClassEvaluator : BaseArchitectureEvaluator
 
 
 
-                var godFactor =
+                var propertyRatio =
+                    methodCount + propertyCount == 0
+                        ? 0
+                        :
+                        propertyCount /
+                        (double)
+                        (
+                            methodCount +
+                            propertyCount
+                        );
+
+
+
+                var severity =
                     ComputeGodFactor(
                         lineRatio,
                         methodRatio,
@@ -235,79 +252,20 @@ public sealed class GodClassEvaluator : BaseArchitectureEvaluator
 
 
 
-                var complianceScore =
-                    Math.Round(
-                        (1 - Math.Min(1, godFactor)) * 100,
-                        2);
-
-
-
                 results.Add(
-                    new ArchitectureEvaluatorResult(
-                        Name,
-                        file)
-                    {
-                        Category =
-                            nameof(
-                                ArchitectureRuleCategory.DesignPatterns),
-
-                        Metrics =
-                        {
-                            ["LineCount"] =
-                                lineCount,
-
-                            ["MethodCount"] =
-                                methodCount,
-
-                            ["PropertyCount"] =
-                                propertyCount,
-
-                            ["MethodDensity"] =
-                                methodDensity,
-
-                            ["LineRatio"] =
-                                lineRatio,
-
-                            ["MethodRatio"] =
-                                methodRatio,
-
-                            ["PropertyRatio"] =
-                                propertyRatio,
-
-                            ["GodClassSeverity"] =
-                                godFactor,
-
-                            ["GodClassComplianceScore"] =
-                                complianceScore
-                        },
-
-                        Metadata =
-                        {
-                            ["ClassName"] =
-                                className,
-
-                            ["Language"] =
-                                Context?.Language
-                                ?? "Unknown",
-
-                            ["Framework"] =
-                                Context?.Framework
-                                ?? "Unknown",
-
-                            ["Layer"] =
-                                Context?.Layer
-                                ?? "Unknown",
-
-                            ["ScalingFactor"] =
-                                scaling.ToString("0.00"),
-
-                            ["Policy_MaxLinesPerClass"] =
-                                _policy.MaxLinesPerClass.ToString(),
-
-                            ["Policy_MaxMethodsPerClass"] =
-                                _policy.MaxMethodsPerClass.ToString()
-                        }
-                    });
+                    CreateResult(
+                        file,
+                        className,
+                        layer,
+                        lineCount,
+                        methodCount,
+                        propertyCount,
+                        severity,
+                        methodCount /
+                            (double)Math.Max(
+                                1,
+                                lineCount),
+                        propertyRatio));
             }
         }
 
@@ -315,93 +273,190 @@ public sealed class GodClassEvaluator : BaseArchitectureEvaluator
 
         if (results.Count > 0)
         {
-            var classResults =
-                results.ToList();
-
-
-
-            var averageCompliance =
-                classResults.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "GodClassComplianceScore",
-                            0));
-
-
-
-            var averageSeverity =
-                classResults.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "GodClassSeverity",
-                            0));
-
-
-
             results.Add(
-                new ArchitectureEvaluatorResult(
-                    Name,
-                    projectPath)
-                {
-                    Category =
-                        "DesignPatternSummary",
-
-                    Metrics =
-                    {
-                        ["ClassCount"] =
-                            classResults.Count,
-
-                        ["AverageComplianceScore"] =
-                            averageCompliance,
-
-                        ["AverageLineCount"] =
-                            classResults.Average(
-                                r =>
-                                    r.Metrics.GetValueOrDefault(
-                                        "LineCount",
-                                        0)),
-
-                        ["AverageMethodCount"] =
-                            classResults.Average(
-                                r =>
-                                    r.Metrics.GetValueOrDefault(
-                                        "MethodCount",
-                                        0)),
-
-                        ["AverageGodClassSeverity"] =
-                            averageSeverity,
-
-                        ["OverallDesignHealth"] =
-                            averageCompliance *
-                            (
-                                1 -
-                                Math.Min(
-                                    averageSeverity,
-                                    1)
-                            )
-                    },
-
-                    Metadata =
-                    {
-                        ["Evaluator"] =
-                            Name,
-
-                        ["PolicyEnabled"] =
-                            _policy.DetectGodClasses.ToString()
-                    }
-                });
+                CreateSummary(
+                    projectPath,
+                    results));
         }
 
 
 
-        _logger.LogInformation(
-            "💀 {Evaluator} completed with {Count} metric entries",
+        AegisDiagnostics.Report(
             Name,
-            results.Count);
+            DiagnosticLevel.Info,
+            $"God class evaluation completed with {results.Count} entries.");
 
 
 
         return results;
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateResult(
+        string file,
+        string className,
+        string layer,
+        int lines,
+        int methods,
+        int properties,
+        double severity,
+        double density,
+        double propertyRatio)
+    {
+        return new ArchitectureEvaluatorResult(
+            Name,
+            file)
+        {
+            ProjectName =
+                Context!.ProjectName,
+
+            Language =
+                Context.Language,
+
+            Framework =
+                Context.Framework,
+
+
+            Layer =
+                layer,
+
+
+            DetectionConfidence =
+                Context.Confidence,
+
+
+            Category =
+                "DesignPattern",
+
+
+            Metrics =
+            {
+                ["LineCount"] =
+                    lines,
+
+                ["MethodCount"] =
+                    methods,
+
+                ["PropertyCount"] =
+                    properties,
+
+                ["MethodDensity"] =
+                    density,
+
+                ["PropertyRatio"] =
+                    propertyRatio,
+
+                ["GodClassSeverity"] =
+                    severity,
+
+                ["GodClassComplianceScore"] =
+                    Math.Round(
+                        (1 -
+                         Math.Min(
+                             severity,
+                             1))
+                        * 100,
+                        2)
+            },
+
+
+            Metadata =
+            {
+                ["ClassName"] =
+                    className,
+
+                ["Language"] =
+                    Context.Language,
+
+                ["Framework"] =
+                    Context.Framework
+                    ?? "Unknown",
+
+                ["Layer"] =
+                    layer
+            }
+        };
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateSummary(
+        string projectPath,
+        IEnumerable<ArchitectureEvaluatorResult> entries)
+    {
+        var results =
+            entries.ToList();
+
+
+
+        return new ArchitectureEvaluatorResult(
+            Name,
+            projectPath)
+        {
+            ProjectName =
+                Context?.ProjectName ?? string.Empty,
+
+
+            Category =
+                "DesignPatternSummary",
+
+
+            Metrics =
+            {
+                ["ClassCount"] =
+                    results.Count,
+
+                ["AverageComplianceScore"] =
+                    results.Average(
+                        x =>
+                            x.Metrics.GetValueOrDefault(
+                                "GodClassComplianceScore")),
+
+
+                ["AverageSeverity"] =
+                    results.Average(
+                        x =>
+                            x.Metrics.GetValueOrDefault(
+                                "GodClassSeverity"))
+            },
+
+
+            Metadata =
+            {
+                ["Evaluator"] =
+                    Name
+            }
+        };
+    }
+
+
+
+    private string ResolveLayer(
+        string file)
+    {
+        return Context?
+            .Layers
+            .FirstOrDefault(
+                layer =>
+                    layer.Files.Contains(
+                        file,
+                        StringComparer.OrdinalIgnoreCase))
+            ?.Name
+            ??
+            "Unknown";
+    }
+
+
+
+    private double GetScalingFactor(
+        string layer)
+    {
+        return _policy.LayerScaling.TryGetValue(
+            layer,
+            out var scale)
+            ? scale
+            : 1.0;
     }
 
 
@@ -411,32 +466,10 @@ public sealed class GodClassEvaluator : BaseArchitectureEvaluator
         double methodRatio,
         double propertyRatio)
     {
-        var score =
+        return Math.Min(
             lineRatio * 0.4 +
             methodRatio * 0.4 +
-            propertyRatio * 0.2;
-
-
-        return Math.Min(
-            score,
+            propertyRatio * 0.2,
             2.0);
-    }
-
-
-
-    private double GetScalingFactor(
-        string? layer)
-    {
-        if (string.IsNullOrWhiteSpace(layer))
-        {
-            return 1.0;
-        }
-
-
-        return _policy.LayerScaling.TryGetValue(
-            layer,
-            out var scale)
-            ? scale
-            : 1.0;
     }
 }

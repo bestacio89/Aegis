@@ -1,4 +1,5 @@
-﻿using Aegis.Architecture.Diagnostics;
+﻿using System.Text.RegularExpressions;
+using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
@@ -6,10 +7,8 @@ using Aegis.Shared.Diagnostics;
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.BackEnd;
-
 
 /// <summary>
 /// Evaluates method complexity and size against configured policy.
@@ -98,7 +97,7 @@ public sealed class ComplexityEvaluator
         var files =
             ResolveSourceFiles(
                 projectPath,
-                Context);
+                GetExtensions(Context.Language));
 
 
 
@@ -217,14 +216,12 @@ public sealed class ComplexityEvaluator
         }
 
 
-
         if (lines >
             _policy.MaxLinesPerMethod)
         {
             violations.Add(
                 "CMP002");
         }
-
 
 
         return violations;
@@ -238,113 +235,90 @@ public sealed class ComplexityEvaluator
         int lines,
         IReadOnlyCollection<string> violations)
     {
-        return new ArchitectureEvaluatorResult(
-            Name,
-            file)
-        {
-            ProjectName =
-                Context?.ProjectName,
-
-            Language =
-                Context?.Language,
-
-            Framework =
-                Context?.Framework,
-
-            Layer =
-                ResolveLayer(file),
-
-            DetectionConfidence =
-                Context?.Confidence ?? 0,
-
-            File =
+        var result =
+            CreateResult(
                 file,
-
-            Category =
-                "ComplexityViolation",
+                "ComplexityViolation");
 
 
-            Metrics =
-            {
-                ["CyclomaticComplexity"] =
-                    complexity,
+        result.ProjectName =
+            Context?.ProjectName;
 
-                ["MethodLineCount"] =
-                    lines,
+        result.Language =
+            Context?.Language;
 
-                ["Violation"] =
-                    1
-            },
+        result.Framework =
+            Context?.Framework;
+
+        result.Layer =
+            ResolveLayer(file);
+
+        result.DetectionConfidence =
+            Context?.Confidence ?? 0;
+
+        result.Metrics["CyclomaticComplexity"] =
+            complexity;
+
+        result.Metrics["MethodLineCount"] =
+            lines;
+
+        result.Metrics["Violation"] =
+            1;
+
+        result.Metrics["ComplexityCompliance"] =
+            0;
 
 
-            Metadata =
-            {
-                ["Rules"] =
-                    string.Join(
-                        ",",
-                        violations),
 
-                ["MaxCyclomaticThreshold"] =
-                    _policy.MaxCyclomaticComplexity.ToString(),
+        result.Metadata["Rules"] =
+            string.Join(
+                ",",
+                violations);
 
-                ["MaxLinesThreshold"] =
-                    _policy.MaxLinesPerMethod.ToString(),
+        result.Metadata["MaxCyclomaticThreshold"] =
+            _policy.MaxCyclomaticComplexity.ToString();
 
-                ["Language"] =
-                    Context?.Language ?? "Unknown",
+        result.Metadata["MaxLinesThreshold"] =
+            _policy.MaxLinesPerMethod.ToString();
 
-                ["Framework"] =
-                    Context?.Framework ?? "Unknown"
-            }
-        };
+        result.Metadata["Language"] =
+            Context?.Language ?? "Unknown";
+
+        result.Metadata["Framework"] =
+            Context?.Framework ?? "Unknown";
+
+        result.Metadata["Layer"] =
+            ResolveLayer(file) ?? "Unknown";
+
+
+        return result;
     }
 
 
 
-    private static List<string> ResolveSourceFiles(
-        string root,
-        ProjectArchitectureContext context)
+    private static string[] GetExtensions(
+        string language)
     {
-        var extensions =
-            context.Language switch
-            {
-                "C#" =>
-                [
-                    ".cs"
-                ],
+        return language switch
+        {
+            "C#" =>
+            [
+                ".cs"
+            ],
 
-                "Java" =>
-                [
-                    ".java"
-                ],
+            "Java" =>
+            [
+                ".java"
+            ],
 
-                "Python" =>
-                [
-                    ".py"
-                ],
+            "Python" =>
+            [
+                ".py"
+            ],
 
-                _ =>
-                    Array.Empty<string>()
-            };
-
-
-
-        return Directory
-            .EnumerateFiles(
-                root,
-                "*.*",
-                SearchOption.AllDirectories)
-            .Where(
-                file =>
-                    extensions.Any(
-                        ext =>
-                            file.EndsWith(
-                                ext,
-                                StringComparison.OrdinalIgnoreCase)))
-            .Where(
-                file =>
-                    !IsExcludedDir(file))
-            .ToList();
+            _ =>
+            []
+        };
     }
 
 
@@ -390,11 +364,9 @@ public sealed class ComplexityEvaluator
                 depth++;
 
 
-
             if (content[i] == '}')
             {
                 depth--;
-
 
 
                 if (depth == 0)

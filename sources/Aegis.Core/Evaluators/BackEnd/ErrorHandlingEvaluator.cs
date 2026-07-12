@@ -1,16 +1,14 @@
-﻿using Aegis.Architecture.Diagnostics;
+﻿using System.Text.RegularExpressions;
+using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
 using Aegis.Shared.Diagnostics;
-
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.BackEnd;
-
 
 public sealed class ErrorHandlingEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
@@ -77,28 +75,10 @@ public sealed class ErrorHandlingEvaluator
 
 
 
-        var extensions =
-            Context.Language switch
-            {
-                "C#" =>
-                [".cs"],
-
-                "Java" =>
-                [".java"],
-
-                "Python" =>
-                [".py"],
-
-                _ =>
-                    Array.Empty<string>()
-            };
-
-
-
         var files =
             ResolveSourceFiles(
                 projectPath,
-                extensions);
+                GetExtensions(Context.Language));
 
 
 
@@ -119,6 +99,7 @@ public sealed class ErrorHandlingEvaluator
             token.ThrowIfCancellationRequested();
 
 
+
             var content =
                 await File.ReadAllTextAsync(
                     file,
@@ -137,66 +118,10 @@ public sealed class ErrorHandlingEvaluator
 
 
 
-            var layer =
-                ResolveLayer(file);
-
-
-
             results.Add(
-                new ArchitectureEvaluatorResult(
-                    Name,
-                    file)
-                {
-                    ProjectName =
-                        Context.ProjectName,
-
-                    Language =
-                        Context.Language,
-
-                    Framework =
-                        Context.Framework,
-
-                    Layer =
-                        layer,
-
-                    DetectionConfidence =
-                        Context.Confidence,
-
-
-                    Category =
-                        "ErrorHandling",
-
-
-                    Metrics =
-                    {
-                        ["TotalCatchBlocks"] =
-                            metrics.TotalCatchBlocks,
-
-                        ["EmptyCatchBlocks"] =
-                            metrics.EmptyCatchBlocks,
-
-                        ["GenericCatchBlocks"] =
-                            metrics.GenericCatchBlocks,
-
-                        ["SwallowedExceptions"] =
-                            metrics.SwallowedExceptions
-                    },
-
-
-                    Metadata =
-                    {
-                        ["Language"] =
-                            Context.Language,
-
-                        ["Framework"] =
-                            Context.Framework
-                            ?? "Unknown",
-
-                        ["Layer"] =
-                            layer
-                            ?? "Unknown"
-                    }
-                });
+                CreateResult(
+                    file,
+                    metrics));
         }
 
 
@@ -215,6 +140,73 @@ public sealed class ErrorHandlingEvaluator
 
 
         return results;
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateResult(
+        string file,
+        (
+            int TotalCatchBlocks,
+            int EmptyCatchBlocks,
+            int GenericCatchBlocks,
+            int SwallowedExceptions) metrics)
+    {
+        var layer =
+            ResolveLayer(file);
+
+
+
+        var result =
+            CreateResult(
+                file,
+                "ErrorHandling");
+
+
+
+        result.ProjectName =
+            Context?.ProjectName;
+
+        result.Language =
+            Context?.Language;
+
+        result.Framework =
+            Context?.Framework;
+
+        result.Layer =
+            layer;
+
+        result.DetectionConfidence =
+            Context?.Confidence ?? 0;
+
+
+
+        result.Metrics["TotalCatchBlocks"] =
+            metrics.TotalCatchBlocks;
+
+        result.Metrics["EmptyCatchBlocks"] =
+            metrics.EmptyCatchBlocks;
+
+        result.Metrics["GenericCatchBlocks"] =
+            metrics.GenericCatchBlocks;
+
+        result.Metrics["SwallowedExceptions"] =
+            metrics.SwallowedExceptions;
+
+
+
+        result.Metadata["Language"] =
+            Context?.Language ?? "Unknown";
+
+        result.Metadata["Framework"] =
+            Context?.Framework ?? "Unknown";
+
+        result.Metadata["Layer"] =
+            layer ?? "Unknown";
+
+
+
+        return result;
     }
 
 
@@ -239,9 +231,11 @@ public sealed class ErrorHandlingEvaluator
             total++;
 
 
+
             var exceptionType =
                 match.Groups["type"]
                     .Value;
+
 
 
             var body =
@@ -323,18 +317,41 @@ public sealed class ErrorHandlingEvaluator
     private string? ResolveLayer(
         string file)
     {
-        if (Context is null)
-            return null;
-
-
-
-        return Context.Layers
+        return Context?
+            .Layers
             .FirstOrDefault(
                 layer =>
                     layer.Files.Contains(
                         file,
                         StringComparer.OrdinalIgnoreCase))
             ?.Name;
+    }
+
+
+
+    private static string[] GetExtensions(
+        string language)
+    {
+        return language switch
+        {
+            "C#" =>
+            [
+                ".cs"
+            ],
+
+            "Java" =>
+            [
+                ".java"
+            ],
+
+            "Python" =>
+            [
+                ".py"
+            ],
+
+            _ =>
+            []
+        };
     }
 
 
@@ -351,27 +368,30 @@ public sealed class ErrorHandlingEvaluator
 
 
 
-        results.Add(
+        var summary =
             new ArchitectureEvaluatorResult(
                 "ErrorHandlingEvaluator",
                 projectPath)
             {
                 Category =
-                    "ErrorHandlingSummary",
+                    "ErrorHandlingSummary"
+            };
 
 
-                Metrics =
-                {
-                    ["FilesWithCatchBlocks"] =
-                        fileResults.Count,
 
-                    ["TotalCatchBlocks"] =
-                        fileResults.Sum(
-                            x =>
-                                x.Metrics
-                                    .GetValueOrDefault(
-                                        "TotalCatchBlocks"))
-                }
-            });
+        summary.Metrics["FilesWithCatchBlocks"] =
+            fileResults.Count;
+
+
+
+        summary.Metrics["TotalCatchBlocks"] =
+            fileResults.Sum(
+                x =>
+                    x.Metrics.GetValueOrDefault(
+                        "TotalCatchBlocks"));
+
+
+
+        results.Add(summary);
     }
 }

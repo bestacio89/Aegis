@@ -3,7 +3,6 @@ using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
 using Aegis.Shared.Diagnostics;
-
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -69,40 +68,10 @@ public sealed class MaintainabilityEvaluator
 
 
 
-        var extensions =
-            Context.Language switch
-            {
-                "C#" =>
-                    new[] { ".cs" },
-
-                "Java" =>
-                    new[] { ".java" },
-
-                "Python" =>
-                    new[] { ".py" },
-
-                _ =>
-                    Array.Empty<string>()
-            };
-
-
-
-        if (extensions.Length == 0)
-        {
-            AegisDiagnostics.Report(
-                Name,
-                DiagnosticLevel.Trace,
-                $"Unsupported language {Context.Language}.");
-
-            return results;
-        }
-
-
-
         var files =
             ResolveSourceFiles(
                 projectPath,
-                extensions);
+                Context);
 
 
 
@@ -118,6 +87,14 @@ public sealed class MaintainabilityEvaluator
 
 
 
+        AegisDiagnostics.Report(
+            Name,
+            DiagnosticLevel.Trace,
+            $"Analyzing maintainability for {files.Count} files " +
+            $"({Context.Language}/{Context.Framework}).");
+
+
+
         double totalComplexity = 0;
 
         double totalCommentDensity = 0;
@@ -129,6 +106,10 @@ public sealed class MaintainabilityEvaluator
             token.ThrowIfCancellationRequested();
 
 
+            if (IsExcludedFile(file))
+                continue;
+
+
 
             var content =
                 await File.ReadAllTextAsync(
@@ -137,91 +118,26 @@ public sealed class MaintainabilityEvaluator
 
 
 
-            var lineCount =
-                content.Split(
-                    '\n',
-                    StringSplitOptions.RemoveEmptyEntries)
-                .Length;
+            var metrics =
+                AnalyzeMaintainability(
+                    content);
 
 
 
-            var commentCount =
-                CountComments(content);
+            totalComplexity +=
+                metrics.Complexity;
 
 
 
-            var complexity =
-                CountComplexity(content);
-
-
-
-            var commentDensity =
-                lineCount == 0
-                    ? 0
-                    :
-                    (double)commentCount /
-                    lineCount *
-                    100;
-
-
-
-            totalComplexity += complexity;
-
-            totalCommentDensity += commentDensity;
+            totalCommentDensity +=
+                metrics.CommentDensity;
 
 
 
             results.Add(
-                new ArchitectureEvaluatorResult(
-                    Name,
-                    file)
-                {
-                    ProjectName =
-                        Context.ProjectName,
-
-                    Language =
-                        Context.Language,
-
-                    Framework =
-                        Context.Framework,
-
-                    Layer =
-                        ResolveLayer(file),
-
-                    DetectionConfidence =
-                        Context.Confidence,
-
-
-                    Category =
-                        "Maintainability",
-
-
-                    Metrics =
-                    {
-                        ["Complexity"] =
-                            complexity,
-
-                        ["LineCount"] =
-                            lineCount,
-
-                        ["CommentCount"] =
-                            commentCount,
-
-                        ["CommentDensity"] =
-                            commentDensity
-                    },
-
-
-                    Metadata =
-                    {
-                        ["Language"] =
-                            Context.Language,
-
-                        ["Framework"] =
-                            Context.Framework
-                            ?? "Unknown"
-                    }
-                });
+                CreateResult(
+                    file,
+                    metrics));
         }
 
 
@@ -229,7 +145,7 @@ public sealed class MaintainabilityEvaluator
         results.Add(
             CreateSummary(
                 projectPath,
-                files.Count,
+                results.Count,
                 totalComplexity,
                 totalCommentDensity));
 
@@ -243,6 +159,72 @@ public sealed class MaintainabilityEvaluator
 
 
         return results;
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateResult(
+        string file,
+        MaintainabilityMetrics metrics)
+    {
+        return new ArchitectureEvaluatorResult(
+            Name,
+            file)
+        {
+            ProjectName =
+                Context?.ProjectName,
+
+            Language =
+                Context?.Language,
+
+            Framework =
+                Context?.Framework,
+
+            Layer =
+                ResolveLayer(file),
+
+            DetectionConfidence =
+                Context?.Confidence ?? 0,
+
+            File =
+                file,
+
+
+            Category =
+                "Maintainability",
+
+
+            Metrics =
+            {
+                ["Complexity"] =
+                    metrics.Complexity,
+
+                ["LineCount"] =
+                    metrics.LineCount,
+
+                ["CommentCount"] =
+                    metrics.CommentCount,
+
+                ["CommentDensity"] =
+                    metrics.CommentDensity
+            },
+
+
+            Metadata =
+            {
+                ["Language"] =
+                    Context?.Language
+                    ?? "Unknown",
+
+                ["Framework"] =
+                    Context?.Framework
+                    ?? "Unknown",
+
+                ["Layer"] =
+                    ResolveLayer(file)
+                    ?? "Unknown"
+            }
+        };
     }
 
 
@@ -276,22 +258,24 @@ public sealed class MaintainabilityEvaluator
 
             Metrics =
             {
-                ["FileCount"] =
+                ["AnalyzedFiles"] =
                     fileCount,
 
                 ["AverageComplexity"] =
                     fileCount == 0
                         ? 0
                         :
-                        totalComplexity /
-                        fileCount,
+                        Math.Round(
+                            totalComplexity / fileCount,
+                            2),
 
                 ["AverageCommentDensity"] =
                     fileCount == 0
                         ? 0
                         :
-                        totalCommentDensity /
-                        fileCount
+                        Math.Round(
+                            totalCommentDensity / fileCount,
+                            2)
             },
 
 
@@ -306,6 +290,94 @@ public sealed class MaintainabilityEvaluator
                     ?? "Unknown"
             }
         };
+    }
+
+
+
+    private MaintainabilityMetrics AnalyzeMaintainability(
+        string content)
+    {
+        var lineCount =
+            content.Split(
+                '\n',
+                StringSplitOptions.RemoveEmptyEntries)
+            .Length;
+
+
+
+        var commentCount =
+            CountComments(content);
+
+
+
+        var complexity =
+            CountComplexity(content);
+
+
+
+        var commentDensity =
+            lineCount == 0
+                ? 0
+                :
+                (double)commentCount /
+                lineCount *
+                100;
+
+
+
+        return new MaintainabilityMetrics(
+            complexity,
+            lineCount,
+            commentCount,
+            commentDensity);
+    }
+
+
+
+    private static List<string> ResolveSourceFiles(
+        string root,
+        ProjectArchitectureContext context)
+    {
+        var extensions =
+            context.Language switch
+            {
+                "C#" =>
+                [
+                    ".cs"
+                ],
+
+                "Java" =>
+                [
+                    ".java"
+                ],
+
+                "Python" =>
+                [
+                    ".py"
+                ],
+
+                _ =>
+                    Array.Empty<string>()
+            };
+
+
+
+        return Directory
+            .EnumerateFiles(
+                root,
+                "*.*",
+                SearchOption.AllDirectories)
+            .Where(
+                file =>
+                    extensions.Any(
+                        ext =>
+                            file.EndsWith(
+                                ext,
+                                StringComparison.OrdinalIgnoreCase)))
+            .Where(
+                file =>
+                    !IsExcludedDir(file))
+            .ToList();
     }
 
 
@@ -332,19 +404,20 @@ public sealed class MaintainabilityEvaluator
 
 
     private static int CountComplexity(
-      string content)
+        string content)
     {
         string[] keywords =
         [
             "if",
-        "for",
-        "while",
-        "switch",
-        "case",
-        "catch",
-        "&&",
-        "||"
+            "for",
+            "while",
+            "switch",
+            "case",
+            "catch",
+            "&&",
+            "||"
         ];
+
 
 
         return keywords.Sum(
@@ -354,6 +427,7 @@ public sealed class MaintainabilityEvaluator
                     Regex.Escape(keyword))
                 .Count);
     }
+
 
 
     private static int CountComments(
@@ -370,4 +444,46 @@ public sealed class MaintainabilityEvaluator
                 RegexOptions.Multiline)
             .Count;
     }
+
+
+
+    private static bool IsExcludedFile(
+        string file)
+    {
+        return
+            file.Contains(
+                "Generated",
+                StringComparison.OrdinalIgnoreCase)
+            ||
+            file.Contains(
+                "Test",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+
+
+    private static bool IsExcludedDir(
+        string file)
+    {
+        return
+            file.Contains(
+                $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase)
+            ||
+            file.Contains(
+                $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase)
+            ||
+            file.Contains(
+                $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+
+
+    private sealed record MaintainabilityMetrics(
+        int Complexity,
+        int LineCount,
+        int CommentCount,
+        double CommentDensity);
 }

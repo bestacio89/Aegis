@@ -16,17 +16,16 @@ namespace Aegis.Architecture.Evaluators.Dependency;
 
 
 /// <summary>
-/// Evaluates dependency metadata from detected dependency files.
+/// Evaluates dependency version metadata discovered by architecture detectors.
 ///
-/// The evaluator does not resolve package versions against external registries.
-/// It produces deterministic dependency facts consumed by the RuleEngine.
+/// The evaluator consumes dependency manifests already identified during
+/// project analysis and produces deterministic dependency facts.
 ///
 /// Responsibilities:
-/// - Detect dependency manifests
 /// - Extract declared versions
 /// - Calculate dependency metrics
 ///
-/// Future registry comparison belongs to a dedicated dependency intelligence service.
+/// Registry comparison belongs to dependency intelligence services.
 /// </summary>
 public sealed class PackageVersionEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
@@ -108,15 +107,13 @@ public sealed class PackageVersionEvaluator
 
         var files =
             EnumerateApplicationFiles(projectPath)
-                .Where(IsDependencyFile)
+                .Where(IsDependencyManifest)
                 .ToList();
 
 
 
         if (files.Count == 0)
-        {
             return results;
-        }
 
 
 
@@ -147,7 +144,7 @@ public sealed class PackageVersionEvaluator
                 AegisDiagnostics.Report(
                     Name,
                     DiagnosticLevel.Warning,
-                    $"Unable to read dependency file {file}.",
+                    $"Unable to read dependency manifest {file}.",
                     ex);
 
                 continue;
@@ -160,105 +157,19 @@ public sealed class PackageVersionEvaluator
 
 
 
-            if (versions.Count == 0)
-                continue;
-
-
-
             results.Add(
-                new ArchitectureEvaluatorResult(
-                    Name,
-                    file)
-                {
-                    ProjectName =
-                        Context.ProjectName,
-
-                    Language =
-                        Context.Language,
-
-                    Framework =
-                        Context.Framework,
-
-                    DetectionConfidence =
-                        Context.Confidence,
-
-                    Category =
-                        nameof(
-                            ArchitectureRuleCategory.Dependency),
-
-
-                    Metrics =
-                    {
-                        ["DeclaredVersionCount"] =
-                            versions.Count,
-
-                        ["ManifestDetected"] =
-                            1
-                    },
-
-
-                    Metadata =
-                    {
-                        ["DependencyFile"] =
-                            Path.GetFileName(file),
-
-                        ["PackageCount"] =
-                            versions.Count.ToString(),
-
-                        ["Language"] =
-                            Context.Language,
-
-                        ["Framework"] =
-                            Context.Framework
-                            ?? "Unknown"
-                    }
-                });
+                CreateResult(
+                    file,
+                    versions.Count));
         }
 
 
 
         results.Add(
-            new ArchitectureEvaluatorResult(
-                Name,
-                Context.ProjectName)
-            {
-                ProjectName =
-                    Context.ProjectName,
-
-                Language =
-                    Context.Language,
-
-                Framework =
-                    Context.Framework,
-
-                Category =
-                    "DependencySummary",
-
-
-                Metrics =
-                {
-                    ["ManifestCount"] =
-                        files.Count,
-
-                    ["VersionDeclarations"] =
-                        results.Sum(
-                            x =>
-                                x.Metrics
-                                 .GetValueOrDefault(
-                                     "DeclaredVersionCount"))
-                },
-
-
-                Metadata =
-                {
-                    ["Language"] =
-                        Context.Language,
-
-                    ["Framework"] =
-                        Context.Framework
-                        ?? "Unknown"
-                }
-            });
+            CreateSummary(
+                projectPath,
+                files.Count,
+                results));
 
 
 
@@ -274,7 +185,105 @@ public sealed class PackageVersionEvaluator
 
 
 
-    private static bool IsDependencyFile(
+    private ArchitectureEvaluatorResult CreateResult(
+        string file,
+        int versionCount)
+    {
+        return new ArchitectureEvaluatorResult(
+            Name,
+            file)
+        {
+            ProjectName =
+                Context?.ProjectName,
+
+            Language =
+                Context?.Language,
+
+            Framework =
+                Context?.Framework,
+
+            DetectionConfidence =
+                Context?.Confidence ?? 0,
+
+            Category =
+                nameof(ArchitectureRuleCategory.Dependency),
+
+
+            Metrics =
+            {
+                ["DeclaredVersionCount"] =
+                    versionCount,
+
+                ["ManifestDetected"] =
+                    1
+            },
+
+
+            Metadata =
+            {
+                ["DependencyFile"] =
+                    Path.GetFileName(file),
+
+                ["Language"] =
+                    Context?.Language ?? "Unknown",
+
+                ["Framework"] =
+                    Context?.Framework ?? "Unknown"
+            }
+        };
+    }
+
+
+
+    private ArchitectureEvaluatorResult CreateSummary(
+        string projectPath,
+        int manifestCount,
+        IEnumerable<ArchitectureEvaluatorResult> results)
+    {
+        return new ArchitectureEvaluatorResult(
+            Name,
+            projectPath)
+        {
+            ProjectName =
+                Context?.ProjectName,
+
+            Language =
+                Context?.Language,
+
+            Framework =
+                Context?.Framework,
+
+            Category =
+                "DependencySummary",
+
+
+            Metrics =
+            {
+                ["ManifestCount"] =
+                    manifestCount,
+
+                ["VersionDeclarations"] =
+                    results.Sum(
+                        x =>
+                            x.Metrics.GetValueOrDefault(
+                                "DeclaredVersionCount"))
+            },
+
+
+            Metadata =
+            {
+                ["Language"] =
+                    Context?.Language ?? "Unknown",
+
+                ["Framework"] =
+                    Context?.Framework ?? "Unknown"
+            }
+        };
+    }
+
+
+
+    private static bool IsDependencyManifest(
         string file)
     {
         return

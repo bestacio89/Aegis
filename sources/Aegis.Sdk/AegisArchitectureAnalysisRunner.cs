@@ -174,7 +174,7 @@ public sealed class AegisArchitectureAnalysisRunner
                 RuleName = result.RuleName,
                 Severity = result.Severity,
                 Category = result.Category.ToString(),
-                Target = result.Target,
+                Target = Path.GetFileName(result.FilePath),
                 Message = result.Message,
                 ImpactScore = result.ImpactScore,
                 WeightedImpact = result.WeightedImpact,

@@ -68,7 +68,7 @@ public partial class App : Application
         // STEP 4: build real host
         // -------------------------------
         return Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
-            .UseLog()
+            .UseDesktopLog()
             .ConfigureAppConfiguration((context, config) =>
             {
                 config.AddConfiguration(configuration);

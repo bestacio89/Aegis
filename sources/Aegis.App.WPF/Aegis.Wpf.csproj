@@ -54,7 +54,7 @@
   <ItemGroup>
 
     <!-- WPF UI -->
-    <PackageReference Include="Franz.Common.EntityFramework.PostGres" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.EntityFramework.PostGres" Version="2.2.17" />
     <PackageReference Include="LiveChartsCore.SkiaSharpView" Version="2.0.5" />
     <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
     <PackageReference Include="MahApps.Metro" Version="2.4.11" />
@@ -63,10 +63,10 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 
     <!-- Logging -->
-    <PackageReference Include="Franz.Common.Logging" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.Logging" Version="2.2.17" />
 
     <!-- Dependency Injection -->
-    <PackageReference Include="Franz.Common.DependencyInjection" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.DependencyInjection" Version="2.2.17" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -77,7 +77,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
 
     <!-- WebView for in-app HTML reports -->
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4022.49" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
 
     <!-- Charts -->
 

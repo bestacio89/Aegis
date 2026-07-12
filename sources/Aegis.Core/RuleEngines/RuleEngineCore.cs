@@ -155,14 +155,37 @@ public sealed class RuleEngineCore
                 rule.Category);
 
 
+        // The evaluator's real file path lives in Metadata (e.g. NamingEvaluator sets
+        // Metadata["FilePath"] = file); fact.Target is a coarser identifier (often just a
+        // bare filename) and belongs in the Target field, not FilePath. Previously both
+        // FilePath and Target were wrong: FilePath held fact.Target, and the dedicated
+        // Target field (meant for class/metric-level detail per its own doc comment) was
+        // never set at all.
+        var filePath =
+            fact.Metadata?.GetValueOrDefault("FilePath")
+            ?? fact.Target;
+
+
+        // fact.Source is the evaluator's display name ("Naming Convention Evaluator"),
+        // not a namespace — using it here was mislabeling every row. The real namespace,
+        // when an evaluator captures one, lives in Metadata.
+        var @namespace =
+            fact.Metadata?.GetValueOrDefault("Namespace");
+
+
+        var layer =
+            ResolveLayer(
+                filePath,
+                context);
+
 
         return new ArchitectureRuleresult(
             rule.Id,
             rule.Name,
             category,
             rule.Severity,
-            fact.Target,
-            fact.Source,
+            filePath,
+            @namespace,
             $"[{fact.Source}] Metric '{metric}' = {value:0.##}, threshold = {threshold:0.##}. {rule.Recommendation}",
             DateTimeOffset.UtcNow,
             isCompliant: false)
@@ -172,12 +195,55 @@ public sealed class RuleEngineCore
 
 
             Domain =
-                fact.Domain ?? "General",
+                layer,
+
+
+            Target =
+                fact.Target,
 
 
             AnalyzerVersion =
                 context.DetectorVersion
         };
+    }
+
+
+
+    /// <summary>
+    /// Resolves which real, detected architecture layer (from context.Modules/Layers —
+    /// e.g. Api, Application, Domain, Infrastructure) a violated file belongs to, by matching
+    /// the file's path against each module's root path. Falls back to "Unclassified" — not
+    /// "General" — when no module claims the file, since "Unclassified" honestly signals
+    /// "we couldn't attribute this" rather than reading as an intentional category.
+    /// </summary>
+    private static string ResolveLayer(
+        string? filePath,
+        ProjectArchitectureContext context)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            return "Unclassified";
+        }
+
+
+        var module =
+            context.Modules
+                .Where(m => !string.IsNullOrWhiteSpace(m.Path))
+                // Most specific (longest) path wins, in case modules are nested.
+                .OrderByDescending(m => m.Path.Length)
+                .FirstOrDefault(m =>
+                    filePath.StartsWith(
+                        m.Path,
+                        StringComparison.OrdinalIgnoreCase));
+
+
+        var layerName =
+            module?.Layers.FirstOrDefault()?.Name;
+
+
+        return string.IsNullOrWhiteSpace(layerName)
+            ? "Unclassified"
+            : layerName;
     }
 
 

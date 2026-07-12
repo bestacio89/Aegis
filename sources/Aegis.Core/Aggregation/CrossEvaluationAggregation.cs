@@ -132,6 +132,10 @@ public sealed class CrossEvaluatorAggregator
 
         if (rules.Count == 0)
         {
+            PopulateAllLayersAsClean(
+                report,
+                context);
+
             report.Metrics.ProjectHealthIndex = 100;
 
             report.ComputeCompliance();
@@ -148,15 +152,53 @@ public sealed class CrossEvaluatorAggregator
 
 
 
-        foreach (var group in weighted.GroupBy(
-                     x => string.IsNullOrWhiteSpace(x.Domain)
-                         ? "General"
-                         : x.Domain))
+        // Left-join every known layer (from context.Modules) against the actual violation
+        // groups, so a fully compliant layer (e.g. Domain with zero findings) still gets a
+        // 0-violation / 100-health entry instead of being silently absent from report.Domains
+        // — absence previously read as "not evaluated" rather than "evaluated and clean."
+        var groupedByLayer =
+            weighted
+                .GroupBy(x =>
+                    string.IsNullOrWhiteSpace(x.Domain)
+                        ? "Unclassified"
+                        : x.Domain)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.ToList(),
+                    StringComparer.OrdinalIgnoreCase);
+
+
+        var knownLayers =
+            GetKnownLayerNames(
+                context);
+
+
+        foreach (var layerName in knownLayers)
         {
+            var rulesForLayer =
+                groupedByLayer.TryGetValue(layerName, out var list)
+                    ? list
+                    : new List<ArchitectureRuleresult>();
+
             report.Domains.Add(
                 ComputeDomainSummary(
-                    group.Key,
-                    group.ToList()));
+                    layerName,
+                    rulesForLayer));
+        }
+
+
+        // Any violation whose layer wasn't in the known-layers list (e.g. genuinely
+        // "Unclassified" files, or a module the layer detector didn't recognize) still needs
+        // to be represented rather than silently dropped.
+        foreach (var kvp in groupedByLayer)
+        {
+            if (!knownLayers.Contains(kvp.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                report.Domains.Add(
+                    ComputeDomainSummary(
+                        kvp.Key,
+                        kvp.Value));
+            }
         }
 
 
@@ -183,21 +225,80 @@ public sealed class CrossEvaluatorAggregator
 
 
 
+    /// <summary>
+    /// Populates report.Domains with every known layer at full health when there are zero
+    /// violations project-wide — without this, a perfectly clean scan would leave Domains
+    /// empty instead of showing every layer as compliant.
+    /// </summary>
+    private void PopulateAllLayersAsClean(
+        AegisArchitectureReport report,
+        ProjectArchitectureContext? context)
+    {
+        foreach (var layerName in GetKnownLayerNames(context))
+        {
+            report.Domains.Add(
+                ComputeDomainSummary(
+                    layerName,
+                    new List<ArchitectureRuleresult>()));
+        }
+    }
+
+
+
+    private static List<string> GetKnownLayerNames(
+        ProjectArchitectureContext? context)
+    {
+        if (context is null)
+        {
+            return new List<string>();
+        }
+
+
+        return context.Modules
+            .SelectMany(m => m.Layers)
+            .Select(l => l.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+
+
     private ArchitectureDomainSummary ComputeDomainSummary(
         string domain,
         List<ArchitectureRuleresult> rules)
     {
+        // An empty rule list means "this layer was evaluated and found clean" — not
+        // "1 rule evaluated, 1 violation," which is what Math.Max(1, rules.Count) previously
+        // produced for every genuinely clean layer once full-layer enumeration was added.
+        if (rules.Count == 0)
+        {
+            return new ArchitectureDomainSummary
+            {
+                Domain = domain,
+
+                RulesEvaluated = 0,
+
+                Violations = 0,
+
+                WeightedScore = 1,
+
+                MaintainabilityIndex = 1 * _maintainabilityFactor,
+
+                HealthIndex = 1 * _globalHealthWeight
+            };
+        }
+
+
+
         var total =
-            Math.Max(
-                1,
-                rules.Count);
+            rules.Count;
 
 
 
         var compliant =
             rules.Count(
                 x => x.IsCompliant);
-
 
 
         return new ArchitectureDomainSummary
@@ -222,12 +323,10 @@ public sealed class CrossEvaluatorAggregator
 
 
             HealthIndex =
-                rules.Count == 0
-                    ? 1
-                    : rules.Average(
-                        x => x.ImpactScore)
-                    *
-                    _globalHealthWeight
+                rules.Average(
+                    x => x.ImpactScore)
+                *
+                _globalHealthWeight
         };
     }
 

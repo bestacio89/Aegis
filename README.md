@@ -1,3 +1,5 @@
+<p align="center"> <img width="200" src="./Docs/assets/AEGISISAGP.png" alt="Nexus Logo"/> </p>
+
 # Aegis
 
 > Deterministic security & architecture analysis for modern .NET platforms  

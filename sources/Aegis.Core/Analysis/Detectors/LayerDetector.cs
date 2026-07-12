@@ -1,7 +1,4 @@
 ﻿using Aegis.Shared.Architecture.Models;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Aegis.Core.Analysis.Detectors
 {
@@ -11,34 +8,22 @@ namespace Aegis.Core.Analysis.Detectors
         {
             foreach (var module in ctx.Modules)
             {
-                var name = module.Name.ToLowerInvariant();
-
-
-                var layer =
-                    name.Contains("api")
-                        ? "Api" :
-
-                    name.Contains("application")
-                        ? "Application" :
-
-                    name.Contains("contract")
-                        ? "Contracts" :
-
-                    name.Contains("domain")
-                        ? "Domain" :
-
-                    name.Contains("infra")
-                        ? "Infrastructure" :
-
-                    "Unknown";
-
-
+                // The layer IS the real project/module (e.g. "Aegis.Core", "Aegis.Shared",
+                // "Aegis.App.WPF") — not a guessed semantic bucket like "Api"/"Domain"/
+                // "Infrastructure" derived from keyword matching on the folder name.
+                //
+                // Keyword matching meant any project whose name didn't happen to contain
+                // one of a handful of English substrings collapsed into a single "Unknown"
+                // bucket together with every other unmatched project — exactly the
+                // "combined stuff that doesn't work" problem. Using the real project name
+                // means every distinct project stays its own distinct, honestly-labeled
+                // layer, with no guessing and no shared catch-all bucket.
                 module.Layers.Add(
                     new ProjectLayerContext
                     {
-                        Name = layer,
+                        Name = module.Name,
                         Path = module.Path,
-                        Confidence = 0.85
+                        Confidence = 1.0
                     });
             }
         }

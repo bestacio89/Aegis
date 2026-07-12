@@ -70,12 +70,27 @@
 
         <!-- KPI -->
 
-        <StackPanel Grid.Row="1"
-                    Orientation="Horizontal"
-                    Margin="0,10,0,0">
+        <Grid Grid.Row="1"
+              Margin="0,10,0,0">
+
+            <Grid.ColumnDefinitions>
+
+                <ColumnDefinition Width="1*"/>
+
+                <ColumnDefinition Width="1*"/>
+
+                <ColumnDefinition Width="1*"/>
+
+                <ColumnDefinition Width="2*"/>
+
+            </Grid.ColumnDefinitions>
 
 
-            <Border Style="{StaticResource Card.Kpi}">
+
+            <!-- LAYERS -->
+
+            <Border Grid.Column="0"
+                    Style="{StaticResource Card.Kpi}">
 
                 <StackPanel>
 
@@ -91,7 +106,10 @@
 
 
 
-            <Border Style="{StaticResource Card.Kpi}">
+            <!-- VIOLATIONS -->
+
+            <Border Grid.Column="1"
+                    Style="{StaticResource Card.Kpi}">
 
                 <StackPanel>
 
@@ -108,7 +126,10 @@
 
 
 
-            <Border Style="{StaticResource Card.Kpi}">
+            <!-- HEALTH -->
+
+            <Border Grid.Column="2"
+                    Style="{StaticResource Card.Kpi}">
 
                 <StackPanel>
 
@@ -125,22 +146,37 @@
 
 
 
-            <Border Style="{StaticResource Card.Kpi}">
+            <!-- DOMINANT LAYER -->
 
-                <StackPanel>
+            <Border Grid.Column="3"
+                    Style="{StaticResource Card.Kpi}"
+                    HorizontalAlignment="Stretch">
+
+                <Grid>
+
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
 
                     <TextBlock Text="DOMINANT LAYER"
                                Style="{StaticResource Text.Eyebrow}"/>
 
-                    <TextBlock Text="{Binding DominantLayer}"
-                               Style="{StaticResource Text.KpiValue}"/>
 
-                </StackPanel>
+                    <TextBlock Grid.Row="1"
+                               Text="{Binding DominantLayer}"
+                               Style="{StaticResource Text.KpiValue}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"/>
+
+                </Grid>
 
             </Border>
 
 
-        </StackPanel>
+        </Grid>
+
 
 
 
@@ -211,6 +247,7 @@
 
 
         </Grid>
+
 
 
 
@@ -321,6 +358,5 @@
 
 
     </Grid>
-
 
 </UserControl>

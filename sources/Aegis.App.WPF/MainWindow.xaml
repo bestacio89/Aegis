@@ -51,11 +51,11 @@
 
         <Grid.RowDefinitions>
 
-            <RowDefinition Height="88"/>
+            <RowDefinition Height="82"/>
 
             <RowDefinition Height="*"/>
 
-            <RowDefinition Height="34"/>
+            <RowDefinition Height="42"/>
 
         </Grid.RowDefinitions>
 
@@ -63,7 +63,7 @@
 
         <Grid.ColumnDefinitions>
 
-            <ColumnDefinition Width="76"/>
+            <ColumnDefinition Width="84"/>
 
             <ColumnDefinition Width="*"/>
 
@@ -74,7 +74,6 @@
 
 
         <!-- HEADER -->
-
 
         <Border Grid.Row="0"
                 Grid.ColumnSpan="2"
@@ -88,7 +87,7 @@
 
                 <Grid.ColumnDefinitions>
 
-                    <ColumnDefinition Width="260"/>
+                    <ColumnDefinition Width="240"/>
 
                     <ColumnDefinition Width="*"/>
 
@@ -99,9 +98,7 @@
 
 
 
-
                 <!-- BRAND -->
-
 
                 <StackPanel VerticalAlignment="Center">
 
@@ -111,7 +108,7 @@
                                FontWeight="Bold"/>
 
 
-                    <TextBlock Text="Architecture Intelligence Platform"
+                    <TextBlock Text="Architecture Intelligence"
                                Style="{StaticResource Text.Eyebrow}"/>
 
 
@@ -121,17 +118,15 @@
 
 
 
-
                 <!-- REPOSITORY -->
 
-
                 <StackPanel Grid.Column="1"
-                            VerticalAlignment="Center">
+                            VerticalAlignment="Center"
+                            Margin="24,0">
 
 
                     <TextBlock Text="Repository"
                                Style="{StaticResource Text.Eyebrow}"/>
-
 
 
                     <DockPanel Margin="0,6,0,0">
@@ -139,8 +134,9 @@
 
                         <Button Content="Browse"
                                 DockPanel.Dock="Right"
-                                Margin="12,0,0,0"
+                                Width="90"
                                 Height="32"
+                                Margin="12,0,0,0"
                                 Style="{StaticResource Button.Primary}"
                                 Command="{Binding SelectRepositoryCommand}"/>
 
@@ -170,9 +166,7 @@
 
 
 
-
                 <!-- ACTIONS -->
-
 
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
@@ -181,38 +175,22 @@
 
                     <Button Content="Analyze"
                             Height="34"
-                            Width="100"
+                            Width="110"
                             Style="{StaticResource Button.Primary}"
                             Command="{Binding RunAnalysisCommand}"/>
 
 
-                    <ComboBox Width="120"
+                    <ComboBox Width="130"
                               Height="34"
-                              Margin="10,0"
+                              Margin="12,0"
                               ItemsSource="{Binding ExportFormats}"
                               SelectedItem="{Binding SelectedExportFormat}"/>
 
 
                     <Button Content="Export"
-                            Height="34"
                             Width="90"
+                            Height="34"
                             Command="{Binding ExportResultsCommand}"/>
-
-
-
-                    <ProgressBar Width="150"
-                                 Height="10"
-                                 Margin="20,0,8,0"
-                                 Minimum="0"
-                                 Maximum="100"
-                                 Value="{Binding AnalysisProgress}"
-                                 Foreground="{StaticResource Brush.AccentStructural}"/>
-
-
-
-                    <TextBlock Text="{Binding AnalysisProgress,StringFormat={}{0:F0}%}"
-                               VerticalAlignment="Center"
-                               Style="{StaticResource Text.Eyebrow}"/>
 
 
                 </StackPanel>
@@ -229,7 +207,7 @@
 
 
 
-        <!-- NAVIGATION RAIL -->
+        <!-- NAVIGATION -->
 
 
         <Border Grid.Row="1"
@@ -239,48 +217,47 @@
                 BorderThickness="0,0,1,0">
 
 
-            <StackPanel Margin="0,12">
-
-
-                <!-- HOME -->
+            <StackPanel Margin="0,16">
 
 
                 <Button Style="{StaticResource Button.Icon}"
-                        Height="60"
+                        Height="56"
                         ToolTip="Home"
                         Content="&#xE80F;"
                         Command="{Binding ShowHomeCommand}"/>
 
 
 
-                <Separator Margin="12,8"/>
-
+                <Separator Margin="14,12"/>
 
 
 
                 <Button Style="{StaticResource Button.Icon}"
-                        Height="60"
+                        Height="56"
                         ToolTip="Sections"
                         Content="&#xE8FD;"
                         Command="{Binding ShowSectionWorkspaceCommand}"/>
 
 
+
                 <Button Style="{StaticResource Button.Icon}"
-                        Height="60"
+                        Height="56"
                         ToolTip="Layers"
                         Content="&#xE81E;"
                         Command="{Binding ShowLayerWorkspaceCommand}"/>
 
 
+
                 <Button Style="{StaticResource Button.Icon}"
-                        Height="60"
+                        Height="56"
                         ToolTip="Rules"
                         Content="&#xE8C6;"
                         Command="{Binding ShowRuleWorkspaceCommand}"/>
 
 
+
                 <Button Style="{StaticResource Button.Icon}"
-                        Height="60"
+                        Height="56"
                         ToolTip="Reports"
                         Content="&#xE8A5;"
                         Command="{Binding ShowReportVisualizationCommand}"/>
@@ -302,9 +279,7 @@
 
         <Border Grid.Row="1"
                 Grid.Column="1"
-                Background="{StaticResource Brush.Ink}"
-                BorderBrush="{StaticResource Brush.Line}"
-                BorderThickness="1">
+                Background="{StaticResource Brush.Ink}">
 
 
             <ContentControl Content="{Binding ActiveWorkspaceViewModel}"
@@ -320,27 +295,49 @@
 
 
 
-        <!-- STATUS -->
+        <!-- STATUS BAR -->
 
 
         <Border Grid.Row="2"
                 Grid.ColumnSpan="2"
                 Background="{StaticResource Brush.Panel}"
                 BorderBrush="{StaticResource Brush.Line}"
-                BorderThickness="0,1,0,0"
-                Padding="12,6">
+                BorderThickness="0,1,0,0">
 
 
-            <DockPanel>
+            <DockPanel Margin="16,0">
 
 
                 <TextBlock Text="{Binding SelectedWorkspace, TargetNullValue=Home}"
-                           Style="{StaticResource Text.Eyebrow}"/>
+                           Style="{StaticResource Text.Eyebrow}"
+                           VerticalAlignment="Center"/>
 
 
-                <TextBlock DockPanel.Dock="Right"
-                           Text="{Binding AnalysisProgress,StringFormat=Progress {0:F0}%}"
-                           Style="{StaticResource Text.Eyebrow}"/>
+
+                <StackPanel DockPanel.Dock="Right"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+
+
+                    <TextBlock Text="Analysis"
+                               Style="{StaticResource Text.Eyebrow}"
+                               Margin="0,0,12,0"/>
+
+
+                    <ProgressBar Width="160"
+                                 Height="8"
+                                 Minimum="0"
+                                 Maximum="100"
+                                 Value="{Binding AnalysisProgress}"
+                                 Foreground="{StaticResource Brush.AccentStructural}"/>
+
+
+                    <TextBlock Text="{Binding AnalysisProgress,StringFormat={}{0:F0}%}"
+                               Style="{StaticResource Text.Eyebrow}"
+                               Margin="10,0,0,0"/>
+
+
+                </StackPanel>
 
 
             </DockPanel>

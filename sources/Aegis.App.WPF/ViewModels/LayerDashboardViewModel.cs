@@ -115,13 +115,20 @@ public sealed partial class LayerDashboardViewModel : ObservableObject
             foreach (var domain in report.Domains
                          .OrderByDescending(x => x.Violations))
             {
+                // HealthIndex/WeightedScore are stored as 0-1 fractions (1.0 = 100%),
+                // matching the convention used everywhere else in the pipeline
+                // (e.g. AegisArchitectureReport.ComputeCompliance multiplies HealthIndex
+                // by 100 before display). The XAML here binds Health/Compliance with a
+                // plain {0:F1}% format, which does NOT auto-scale like {0:P0} does — so
+                // without this *100, a fully healthy layer (1.0) rendered as "1.0%"
+                // instead of "100.0%".
                 Layers.Add(
                     new LayerDashboardItem(
                         domain.Domain,
                         domain.RulesEvaluated,
                         domain.Violations,
-                        domain.HealthIndex,
-                        domain.WeightedScore));
+                        domain.HealthIndex * 100,
+                        domain.WeightedScore * 100));
             }
 
 
@@ -159,7 +166,7 @@ public sealed partial class LayerDashboardViewModel : ObservableObject
                 Layers.Count == 0
                     ? 100
                     : Layers.Average(x =>
-                        x.Health*10);
+                        x.Health);
 
 
 

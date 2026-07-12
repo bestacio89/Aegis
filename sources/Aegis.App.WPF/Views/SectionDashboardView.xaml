@@ -174,7 +174,7 @@
                                Style="{StaticResource Text.Eyebrow}"/>
 
 
-                    <TextBlock Text="{Binding AverageScore, StringFormat={}{0:P0}}"
+                    <TextBlock Text="{Binding AverageScore, StringFormat={}{0:0}%}"
                                Style="{StaticResource Text.KpiValue}"
                                Foreground="{StaticResource Brush.AccentStructural}"/>
 

@@ -46,6 +46,12 @@
         <Setter Property="FontSize" Value="28"/>
         <Setter Property="FontWeight" Value="Bold"/>
         <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}"/>
+
+        <!-- Content adapts naturally -->
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="TextTrimming" Value="None"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
     <Style x:Key="Text.Title" TargetType="TextBlock">

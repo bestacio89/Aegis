@@ -26,11 +26,12 @@
 
             <RowDefinition Height="Auto"/>
 
-            <RowDefinition Height="240"/>
+            <RowDefinition Height="260"/>
 
             <RowDefinition Height="*"/>
 
         </Grid.RowDefinitions>
+
 
 
 
@@ -85,80 +86,141 @@
 
 
 
+
+
+
         <!-- KPI -->
 
-        <StackPanel Grid.Row="1"
-                    Orientation="Horizontal"
-                    Margin="0,10,0,0">
+        <Grid Grid.Row="1"
+              Margin="0,10,0,0">
 
 
-            <Border Style="{StaticResource Card.Kpi}">
+            <Grid.ColumnDefinitions>
+
+                <ColumnDefinition Width="*"/>
+
+                <ColumnDefinition Width="*"/>
+
+                <ColumnDefinition Width="*"/>
+
+                <ColumnDefinition Width="*"/>
+
+            </Grid.ColumnDefinitions>
+
+
+
+
+
+            <!-- TOTAL -->
+
+            <Border Grid.Column="0"
+                    Style="{StaticResource Card.Kpi}">
+
 
                 <StackPanel>
+
 
                     <TextBlock Text="TOTAL FINDINGS"
                                Style="{StaticResource Text.Eyebrow}"/>
 
+
                     <TextBlock Text="{Binding TotalViolations}"
                                Style="{StaticResource Text.KpiValue}"/>
 
+
                 </StackPanel>
+
 
             </Border>
 
 
 
-            <Border Style="{StaticResource Card.Kpi}">
+
+
+            <!-- CRITICAL -->
+
+            <Border Grid.Column="1"
+                    Style="{StaticResource Card.Kpi}">
+
 
                 <StackPanel>
 
+
                     <TextBlock Text="CRITICAL"
                                Style="{StaticResource Text.Eyebrow}"/>
+
 
                     <TextBlock Text="{Binding CriticalCount}"
                                Style="{StaticResource Text.KpiValue}"
                                Foreground="{StaticResource Brush.StatusCritical}"/>
 
+
                 </StackPanel>
+
 
             </Border>
 
 
 
-            <Border Style="{StaticResource Card.Kpi}">
+
+
+            <!-- BLOCKERS -->
+
+            <Border Grid.Column="2"
+                    Style="{StaticResource Card.Kpi}">
+
 
                 <StackPanel>
 
+
                     <TextBlock Text="BLOCKERS"
                                Style="{StaticResource Text.Eyebrow}"/>
+
 
                     <TextBlock Text="{Binding BlockerCount}"
                                Style="{StaticResource Text.KpiValue}"
                                Foreground="{StaticResource Brush.StatusBlocker}"/>
 
+
                 </StackPanel>
+
 
             </Border>
 
 
 
-            <Border Style="{StaticResource Card.Kpi}">
+
+
+            <!-- WARNINGS -->
+
+            <Border Grid.Column="3"
+                    Style="{StaticResource Card.Kpi}">
+
 
                 <StackPanel>
 
+
                     <TextBlock Text="WARNINGS"
                                Style="{StaticResource Text.Eyebrow}"/>
+
 
                     <TextBlock Text="{Binding WarningCount}"
                                Style="{StaticResource Text.KpiValue}"
                                Foreground="{StaticResource Brush.StatusWarning}"/>
 
+
                 </StackPanel>
+
 
             </Border>
 
 
-        </StackPanel>
+        </Grid>
+
+
+
+
+
 
 
 
@@ -171,11 +233,12 @@
 
             <Grid.ColumnDefinitions>
 
-                <ColumnDefinition Width="330"/>
+                <ColumnDefinition Width="380"/>
 
                 <ColumnDefinition Width="*"/>
 
             </Grid.ColumnDefinitions>
+
 
 
 
@@ -217,7 +280,9 @@
 
 
 
+
                         <StackPanel Orientation="Horizontal">
+
 
                             <Border Style="{StaticResource StatusChip}"
                                     Background="{StaticResource Brush.AccentStructural}"/>
@@ -228,6 +293,7 @@
 
 
                         </StackPanel>
+
 
 
 
@@ -249,6 +315,9 @@
 
 
 
+
+
+
             <!-- CATEGORY -->
 
             <Grid Grid.Column="1"
@@ -265,8 +334,10 @@
 
 
 
+
                 <Border Grid.Row="0"
                         Style="{StaticResource Card.TopRule}"/>
+
 
 
 
@@ -287,6 +358,8 @@
 
 
 
+
+
                         <StackPanel Orientation="Horizontal">
 
 
@@ -299,6 +372,8 @@
 
 
                         </StackPanel>
+
+
 
 
 
@@ -326,8 +401,11 @@
 
 
 
-        <!-- FINDINGS LEDGER -->
 
+
+
+
+        <!-- FINDINGS LEDGER -->
 
         <Grid Grid.Row="3"
               Margin="0,10,0,0">
@@ -343,13 +421,18 @@
 
 
 
+
+
             <Border Grid.Row="0"
                     Style="{StaticResource Card.TopRule}"/>
 
 
 
+
+
             <Border Grid.Row="1"
                     Style="{StaticResource Card.Structural}">
+
 
 
                 <Grid>
@@ -365,6 +448,8 @@
 
 
 
+
+
                     <StackPanel Orientation="Horizontal"
                                 Margin="0,0,0,10">
 
@@ -373,7 +458,7 @@
                                 Background="{StaticResource Brush.AccentStructural}"/>
 
 
-                        <TextBlock Text="Architecture Findings"
+                        <TextBlock Text="Architecture Findings Ledger"
                                    Style="{StaticResource Text.SectionTitle}"/>
 
 
@@ -382,19 +467,41 @@
 
 
 
+
+
+
+
                     <DataGrid Grid.Row="1"
                               ItemsSource="{Binding RuleResults}"
                               AutoGenerateColumns="False"
+
+                              IsReadOnly="True"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserReorderColumns="False"
+                              CanUserResizeRows="False"
+                              CanUserSortColumns="True"
+
+                              SelectionMode="Single"
+                              SelectionUnit="FullRow"
+
+                              HeadersVisibility="Column"
+
                               Style="{StaticResource Grid.Ledger}"
                               ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}">
+
+
+
 
 
                         <DataGrid.Columns>
 
 
 
+
+
                             <DataGridTemplateColumn Header="Severity"
-                                                    Width="120">
+                                                    Width="110">
 
 
                                 <DataGridTemplateColumn.CellTemplate>
@@ -429,27 +536,36 @@
 
 
 
+
                             <DataGridTextColumn Header="Rule"
                                                 Binding="{Binding RuleName}"
-                                                Width="220"/>
+                                                Width="180"/>
+
+
 
 
 
                             <DataGridTextColumn Header="Category"
                                                 Binding="{Binding Category}"
-                                                Width="150"/>
+                                                Width="140"/>
+
+
 
 
 
                             <DataGridTextColumn Header="Target"
                                                 Binding="{Binding Target}"
-                                                Width="240"/>
+                                                Width="220"/>
+
+
 
 
 
                             <DataGridTextColumn Header="Impact"
                                                 Binding="{Binding Impact, StringFormat={}{0:F2}}"
-                                                Width="100"/>
+                                                Width="90"/>
+
+
 
 
 
@@ -458,10 +574,13 @@
                                                 Width="*"/>
 
 
+
                         </DataGrid.Columns>
 
 
+
                     </DataGrid>
+
 
 
                 </Grid>

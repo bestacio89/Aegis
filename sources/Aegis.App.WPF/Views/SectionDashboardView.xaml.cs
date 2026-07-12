@@ -1,9 +1,9 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
-using Aegis.App.Wpf.ViewModels;
+using Aegis.Wpf.ViewModels;
 using Elastic.Apm.Api;
 
-namespace Aegis.App.Wpf.Views;
+namespace Aegis.Wpf.Views;
 
 public partial class SectionDashboardView: UserControl
 {

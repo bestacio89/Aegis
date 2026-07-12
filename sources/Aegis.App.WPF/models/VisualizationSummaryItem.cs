@@ -1,4 +1,4 @@
-﻿namespace Aegis.App.Wpf.Models;
+﻿namespace Aegis.Wpf.Models;
 
 public sealed record VisualizationSummaryItem(
     string Title,

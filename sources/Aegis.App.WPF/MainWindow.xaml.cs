@@ -1,7 +1,7 @@
 ﻿using System.Windows;
-using Aegis.App.Wpf.ViewModels;
+using Aegis.Wpf.ViewModels;
 
-namespace Aegis.App.Wpf
+namespace Aegis.Wpf
 {
     public partial class MainWindow : Window
     {

@@ -1,9 +1,12 @@
-﻿using Aegis.App.Wpf.Models;
+﻿using Aegis.Wpf.Models;
 using Aegis.Shared.Architecture.Models;
+
 using CommunityToolkit.Mvvm.ComponentModel;
+
 using System.Collections.ObjectModel;
 
-namespace Aegis.App.Wpf.ViewModels;
+
+namespace Aegis.Wpf.ViewModels;
 
 public sealed partial class ReportVisualizationViewModel
     : ObservableObject
@@ -16,9 +19,15 @@ public sealed partial class ReportVisualizationViewModel
 
 
 
+    // ==========================================================
+    // SUMMARY
+    // ==========================================================
+
     public ObservableCollection<VisualizationSummaryItem>
         SummaryItems
-    { get; }
+    {
+        get;
+    }
 
 
 
@@ -40,42 +49,58 @@ public sealed partial class ReportVisualizationViewModel
 
 
 
-    /// <summary>
-    /// Populated directly from the live AegisArchitectureReport / ProjectArchitectureContext
-    /// rather than the unused DashboardSnapshot pipeline (DashBoardSnapshotBuilder has no
-    /// live consumers anywhere in the app — see RefreshDashboards in MainViewModel, which
-    /// reads the same two live objects for Layers/Sections rather than that dead builder).
-    /// </summary>
+    [ObservableProperty]
+    private string architectureSummary =
+        "-";
+
+
+
+    // ==========================================================
+    // UPDATE FROM REPORT
+    // ==========================================================
+
     public void Update(
         AegisArchitectureReport report,
-        ProjectArchitectureContext context)
+        ProjectArchitectureContext? context = null)
     {
         SummaryItems.Clear();
 
 
 
         ProjectName =
-            report.ProjectName ?? "-";
+            string.IsNullOrWhiteSpace(report.ProjectName)
+                ? "-"
+                : report.ProjectName;
 
+
+
+        var health =
+            report.Metrics.ProjectHealthIndex;
+
+
+
+        HealthStatus =
+            health switch
+            {
+                >= 90 => "Excellent",
+                >= 80 => "Healthy",
+                >= 50 => "At Risk",
+                _ => "Critical"
+            };
 
 
 
         ExecutiveMessage =
-            report.TotalViolations == 0
-                ? "Architecture compliance is healthy. No violations detected."
-                : $"Architecture review detected {report.TotalViolations} findings requiring attention.";
+            BuildExecutiveMessage(
+                report,
+                health);
 
 
 
-        var healthIndex =
-            report.Metrics?.ProjectHealthIndex ?? 0;
-
-        HealthStatus =
-            healthIndex >= 80
-                ? "Compliant"
-                : healthIndex >= 50
-                    ? "At Risk"
-                    : "Critical";
+        ArchitectureSummary =
+            BuildArchitectureSummary(
+                report,
+                context);
 
 
 
@@ -83,7 +108,23 @@ public sealed partial class ReportVisualizationViewModel
             new(
                 "Files scanned",
                 report.TotalFilesScanned.ToString(),
-                "Source files analyzed by Aegis"));
+                "Files evaluated during analysis"));
+
+
+
+        SummaryItems.Add(
+            new(
+                "Facts collected",
+                report.TotalFacts.ToString(),
+                "Raw architecture observations produced by evaluators"));
+
+
+
+        SummaryItems.Add(
+            new(
+                "Rules evaluated",
+                report.Results.Count.ToString(),
+                "Architecture rules processed by the rule engine"));
 
 
 
@@ -91,38 +132,89 @@ public sealed partial class ReportVisualizationViewModel
             new(
                 "Violations",
                 report.TotalViolations.ToString(),
-                "Architecture rule violations"));
+                "Detected architectural deviations"));
 
 
 
         SummaryItems.Add(
             new(
-                "Framework",
-                context.Framework ?? "Unknown",
-                "Detected technology stack"));
+                "Domains",
+                report.Domains.Count.ToString(),
+                "Architecture domains evaluated"));
 
 
 
         SummaryItems.Add(
             new(
-                "Architecture",
-                context.ArchitectureStyle ?? "Unknown",
-                "Detected architectural pattern"));
-
-
-
-        SummaryItems.Add(
-            new(
-                "Confidence",
-                $"{context.Confidence:P0}",
-                "Detection confidence score"));
+                "Compliance",
+                $"{report.Metrics.WeightedCompliance * 100:0.##}%",
+                "Weighted rule compliance score"));
 
 
 
         SummaryItems.Add(
             new(
                 "Health index",
-                $"{healthIndex:0.##}%",
-                "Weighted compliance across all evaluated categories"));
+                $"{health:0.##}%",
+                "Aggregated architecture health score"));
+    }
+
+
+
+    // ==========================================================
+    // HELPERS
+    // ==========================================================
+
+    private static string BuildExecutiveMessage(
+        AegisArchitectureReport report,
+        double health)
+    {
+        if (report.TotalViolations == 0)
+        {
+            return
+                "Architecture evaluation completed successfully. No violations detected.";
+        }
+
+
+        return
+            $"Architecture review detected {report.TotalViolations} findings. " +
+            $"Current health index is {health:0.##}%.";
+    }
+
+
+
+    private static string BuildArchitectureSummary(
+        AegisArchitectureReport report,
+        ProjectArchitectureContext? context)
+    {
+        var language =
+            string.IsNullOrWhiteSpace(report.Language)
+                ? "Unknown"
+                : report.Language;
+
+
+
+        var framework =
+            string.IsNullOrWhiteSpace(report.Framework)
+                ? "Unknown"
+                : report.Framework;
+
+
+
+        var architecture =
+            context?.ArchitectureStyle
+            ?? report.Facts
+                .SelectMany(x => x.Metadata)
+                .FirstOrDefault(x =>
+                    x.Key.Equals(
+                        "ArchitectureStyle",
+                        StringComparison.OrdinalIgnoreCase))
+                .Value
+            ?? "Unknown";
+
+
+
+        return
+            $"{language}/{framework} - {architecture}";
     }
 }

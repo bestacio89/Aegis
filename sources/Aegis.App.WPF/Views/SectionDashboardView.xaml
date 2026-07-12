@@ -1,162 +1,422 @@
-﻿<UserControl x:Class="Aegis.App.Wpf.Views.SectionDashboardView"
+﻿<UserControl x:Class="Aegis.Wpf.Views.SectionDashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
-             xmlns:conv="clr-namespace:Aegis.App.Wpf.Converters"
+             xmlns:conv="clr-namespace:Aegis.Wpf.Converters"
 
              Background="{StaticResource Brush.Ink}"
              Foreground="{StaticResource Brush.TextPrimary}"
              FontFamily="{StaticResource Font.Body}">
 
+
     <UserControl.Resources>
+
         <conv:ComplianceStatusToBrushConverter x:Key="ComplianceStatusToBrushConverter"/>
+
     </UserControl.Resources>
+
+
 
     <Grid Margin="16">
 
+
         <Grid.RowDefinitions>
+
             <RowDefinition Height="Auto"/>
+
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="230"/>
+
+            <RowDefinition Height="240"/>
+
             <RowDefinition Height="*"/>
+
         </Grid.RowDefinitions>
 
+
+
+
         <!-- HEADER -->
+
         <Grid>
+
+
             <Grid.RowDefinitions>
+
                 <RowDefinition Height="3"/>
+
                 <RowDefinition Height="Auto"/>
+
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
 
-            <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+
+            <Border Grid.Row="0"
+                    Style="{StaticResource Card.TopRule}"/>
+
+
+
+            <Border Grid.Row="1"
+                    Style="{StaticResource Card.Structural}">
+
+
                 <StackPanel>
-                    <TextBlock Text="ARCHITECTURE OVERVIEW" Style="{StaticResource Text.Eyebrow}"
-                               FontSize="12" Foreground="{StaticResource Brush.AccentStructural}"/>
+
+
+                    <TextBlock Text="ARCHITECTURE OVERVIEW"
+                               Style="{StaticResource Text.Eyebrow}"
+                               Foreground="{StaticResource Brush.AccentStructural}"/>
+
+
+
                     <TextBlock Text="Structural compliance assessment across analyzed architecture sections"
                                Foreground="{StaticResource Brush.TextMuted}"
-                               FontSize="12" Margin="0,4,0,0"/>
+                               FontSize="12"
+                               Margin="0,4,0,0"/>
+
+
                 </StackPanel>
+
+
             </Border>
+
+
         </Grid>
 
-        <!-- KPIS -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,4,0,0">
+
+
+
+
+        <!-- KPI -->
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    Margin="0,10,0,0">
+
 
             <Border Style="{StaticResource Card.Kpi}">
+
+
                 <StackPanel>
-                    <TextBlock Text="SECTIONS" Style="{StaticResource Text.Eyebrow}"/>
-                    <TextBlock Text="{Binding TotalSections}" Style="{StaticResource Text.KpiValue}"/>
+
+
+                    <TextBlock Text="SECTIONS"
+                               Style="{StaticResource Text.Eyebrow}"/>
+
+
+                    <TextBlock Text="{Binding TotalSections}"
+                               Style="{StaticResource Text.KpiValue}"/>
+
+
                 </StackPanel>
+
+
             </Border>
 
+
+
+
+
             <Border Style="{StaticResource Card.Kpi}">
+
+
                 <StackPanel>
-                    <TextBlock Text="COMPLIANT" Style="{StaticResource Text.Eyebrow}"/>
-                    <TextBlock Text="{Binding CompliantCount}" Style="{StaticResource Text.KpiValue}"
+
+
+                    <TextBlock Text="COMPLIANT"
+                               Style="{StaticResource Text.Eyebrow}"/>
+
+
+                    <TextBlock Text="{Binding CompliantCount}"
+                               Style="{StaticResource Text.KpiValue}"
                                Foreground="{StaticResource Brush.StatusCompliant}"/>
+
+
                 </StackPanel>
+
+
             </Border>
 
+
+
+
+
             <Border Style="{StaticResource Card.Kpi}">
+
+
                 <StackPanel>
-                    <TextBlock Text="AT RISK" Style="{StaticResource Text.Eyebrow}"/>
-                    <TextBlock Text="{Binding NonCompliantCount}" Style="{StaticResource Text.KpiValue}"
+
+
+                    <TextBlock Text="AT RISK"
+                               Style="{StaticResource Text.Eyebrow}"/>
+
+
+                    <TextBlock Text="{Binding NonCompliantCount}"
+                               Style="{StaticResource Text.KpiValue}"
                                Foreground="{StaticResource Brush.StatusCritical}"/>
+
+
                 </StackPanel>
+
+
             </Border>
+
+
+
+
+
+            <Border Style="{StaticResource Card.Kpi}">
+
+
+                <StackPanel>
+
+
+                    <TextBlock Text="AVERAGE SCORE"
+                               Style="{StaticResource Text.Eyebrow}"/>
+
+
+                    <TextBlock Text="{Binding AverageScore, StringFormat={}{0:P0}}"
+                               Style="{StaticResource Text.KpiValue}"
+                               Foreground="{StaticResource Brush.AccentStructural}"/>
+
+
+                </StackPanel>
+
+
+            </Border>
+
 
         </StackPanel>
 
+
+
+
+
+
         <!-- VISUAL SUMMARY -->
-        <Grid Grid.Row="2" Margin="0,4,0,0">
+
+        <Grid Grid.Row="2"
+              Margin="0,10,0,0">
+
 
             <Grid.ColumnDefinitions>
+
                 <ColumnDefinition Width="330"/>
+
                 <ColumnDefinition Width="*"/>
+
             </Grid.ColumnDefinitions>
 
+
+
+
+
+            <!-- COMPLIANCE -->
+
             <Grid>
+
+
                 <Grid.RowDefinitions>
+
                     <RowDefinition Height="3"/>
+
                     <RowDefinition Height="*"/>
+
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
 
-                <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+
+                <Border Grid.Row="0"
+                        Style="{StaticResource Card.TopRule}"/>
+
+
+
+                <Border Grid.Row="1"
+                        Style="{StaticResource Card.Structural}">
+
+
                     <Grid>
+
+
                         <Grid.RowDefinitions>
+
                             <RowDefinition Height="Auto"/>
+
                             <RowDefinition Height="*"/>
+
                         </Grid.RowDefinitions>
 
+
+
                         <StackPanel Orientation="Horizontal">
+
+
                             <Border Style="{StaticResource StatusChip}"
                                     Background="{StaticResource Brush.AccentStructural}"/>
-                            <TextBlock Text="Compliance Status" Style="{StaticResource Text.SectionTitle}"/>
+
+
+                            <TextBlock Text="Compliance Status"
+                                       Style="{StaticResource Text.SectionTitle}"/>
+
+
                         </StackPanel>
 
-                        <lvc:PieChart Grid.Row="1" Margin="0,8"
+
+
+
+                        <lvc:PieChart Grid.Row="1"
+                                      Margin="0,8"
                                       Series="{Binding CompliancePieSeries}"
                                       LegendPosition="Right"/>
+
+
                     </Grid>
+
+
                 </Border>
+
+
             </Grid>
 
-            <Grid Grid.Column="1" Margin="8,0,0,0">
+
+
+
+
+            <!-- RISK -->
+
+            <Grid Grid.Column="1"
+                  Margin="8,0,0,0">
+
+
                 <Grid.RowDefinitions>
+
                     <RowDefinition Height="3"/>
+
                     <RowDefinition Height="*"/>
+
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
 
-                <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+
+                <Border Grid.Row="0"
+                        Style="{StaticResource Card.TopRule}"/>
+
+
+
+                <Border Grid.Row="1"
+                        Style="{StaticResource Card.Structural}">
+
+
                     <Grid>
+
+
                         <Grid.RowDefinitions>
+
                             <RowDefinition Height="Auto"/>
+
                             <RowDefinition Height="*"/>
+
                         </Grid.RowDefinitions>
 
+
+
                         <StackPanel Orientation="Horizontal">
+
+
                             <Border Style="{StaticResource StatusChip}"
                                     Background="{StaticResource Brush.AccentStructural}"/>
-                            <TextBlock Text="Section Risk Distribution" Style="{StaticResource Text.SectionTitle}"/>
+
+
+                            <TextBlock Text="Section Risk Distribution"
+                                       Style="{StaticResource Text.SectionTitle}"/>
+
+
                         </StackPanel>
 
-                        <lvc:CartesianChart Grid.Row="1" Margin="0,8"
+
+
+
+                        <lvc:CartesianChart Grid.Row="1"
+                                            Margin="0,8"
                                             Series="{Binding SectionCategorySeries}"
                                             XAxes="{Binding CategoryAxes}"
-                                            YAxes="{Binding ValueAxes}"/>
+                                            YAxes="{Binding ValueAxes}"
+                                            Background="Transparent"
+                                            DrawMarginFrame="{x:Null}"/>
+
+
                     </Grid>
+
+
                 </Border>
+
+
             </Grid>
+
 
         </Grid>
 
-        <!-- SECTION FINDINGS -->
-        <Grid Grid.Row="3" Margin="0,4,0,0">
+
+
+
+
+
+        <!-- SECTION LEDGER -->
+
+
+        <Grid Grid.Row="3"
+              Margin="0,10,0,0">
+
+
             <Grid.RowDefinitions>
+
                 <RowDefinition Height="3"/>
+
                 <RowDefinition Height="*"/>
+
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
 
-            <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+
+            <Border Grid.Row="0"
+                    Style="{StaticResource Card.TopRule}"/>
+
+
+
+            <Border Grid.Row="1"
+                    Style="{StaticResource Card.Structural}">
+
+
                 <Grid>
+
+
                     <Grid.RowDefinitions>
+
                         <RowDefinition Height="Auto"/>
+
                         <RowDefinition Height="*"/>
+
                     </Grid.RowDefinitions>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+
+
+
+                    <StackPanel Orientation="Horizontal"
+                                Margin="0,0,0,10">
+
+
                         <Border Style="{StaticResource StatusChip}"
                                 Background="{StaticResource Brush.AccentStructural}"/>
-                        <TextBlock Text="Architecture Sections" Style="{StaticResource Text.SectionTitle}"/>
+
+
+                        <TextBlock Text="Architecture Sections"
+                                   Style="{StaticResource Text.SectionTitle}"/>
+
+
                     </StackPanel>
+
+
+
+
 
                     <DataGrid Grid.Row="1"
                               ItemsSource="{Binding SectionResults}"
@@ -164,37 +424,88 @@
                               Style="{StaticResource Grid.Ledger}"
                               ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}">
 
+
                         <DataGrid.Columns>
 
-                            <DataGridTextColumn Header="Section" Binding="{Binding SectionName}" Width="180"/>
 
-                            <DataGridTemplateColumn Header="Status" Width="130">
+
+                            <DataGridTextColumn Header="Section"
+                                                Binding="{Binding SectionName}"
+                                                Width="180"/>
+
+
+
+                            <DataGridTextColumn Header="Category"
+                                                Binding="{Binding Category}"
+                                                Width="150"/>
+
+
+
+
+                            <DataGridTemplateColumn Header="Status"
+                                                    Width="130">
+
+
                                 <DataGridTemplateColumn.CellTemplate>
+
+
                                     <DataTemplate>
+
+
                                         <Border Background="{Binding ComplianceStatus, Converter={StaticResource ComplianceStatusToBrushConverter}}"
-                                                CornerRadius="3" Padding="8,3" HorizontalAlignment="Left">
+                                                CornerRadius="3"
+                                                Padding="8,3">
+
+
                                             <TextBlock Text="{Binding ComplianceStatus}"
                                                        Foreground="{StaticResource Brush.Ink}"
-                                                       FontFamily="{StaticResource Font.Body}"
-                                                       FontSize="11" FontWeight="SemiBold"/>
+                                                       FontWeight="SemiBold"
+                                                       FontSize="11"/>
+
+
                                         </Border>
+
+
                                     </DataTemplate>
+
+
                                 </DataGridTemplateColumn.CellTemplate>
+
+
                             </DataGridTemplateColumn>
 
-                            <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="140"/>
 
-                            <DataGridTextColumn Header="Score" Binding="{Binding Score, StringFormat={}{0:P0}}" Width="80"/>
 
-                            <DataGridTextColumn Header="Remarks" Binding="{Binding Remarks}" Width="*"/>
+
+
+                            <DataGridTextColumn Header="Score"
+                                                Binding="{Binding Score, StringFormat={}{0:P0}}"
+                                                Width="100"/>
+
+
+
+
+                            <DataGridTextColumn Header="Remarks"
+                                                Binding="{Binding Remarks}"
+                                                Width="*"/>
+
 
                         </DataGrid.Columns>
 
+
                     </DataGrid>
+
+
                 </Grid>
+
+
             </Border>
+
+
         </Grid>
 
+
     </Grid>
+
 
 </UserControl>

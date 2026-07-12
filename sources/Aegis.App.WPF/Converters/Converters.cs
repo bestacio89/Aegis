@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Windows.Data;
 using System.Windows.Media;
 
-namespace Aegis.App.Wpf.Converters;
+namespace Aegis.Wpf.Converters;
 
 /// <summary>
 /// Maps ArchitectureRuleSeverity to a status chip color. Deliberately separate from the

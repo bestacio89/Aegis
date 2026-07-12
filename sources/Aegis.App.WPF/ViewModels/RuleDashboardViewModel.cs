@@ -1,14 +1,22 @@
-﻿using Aegis.App.Wpf.models;
+﻿using Aegis.Wpf.models;
+using Aegis.Wpf.Models;
 using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models;
+
 using CommunityToolkit.Mvvm.ComponentModel;
+
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
-using Microsoft.Extensions.Logging;
-using SkiaSharp;
-using System.Collections.ObjectModel;
 
-namespace Aegis.App.Wpf.ViewModels;
+using Microsoft.Extensions.Logging;
+
+using SkiaSharp;
+
+using System.Collections.ObjectModel;
+using System.IO;
+
+namespace Aegis.Wpf.ViewModels;
 
 public sealed partial class RuleDashboardViewModel : ObservableObject
 {
@@ -25,24 +33,21 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
     }
 
 
-    // =========================
+
+    // ==========================================================
     // GRID
-    // =========================
+    // ==========================================================
 
     public ObservableCollection<RuleDashboardItem> RuleResults { get; }
 
 
 
-    // =========================
+    // ==========================================================
     // KPI
-    // =========================
+    // ==========================================================
 
     [ObservableProperty]
     private int totalViolations;
-
-
-    [ObservableProperty]
-    private int criticalCount;
 
 
     [ObservableProperty]
@@ -50,18 +55,30 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
 
 
     [ObservableProperty]
-    private int highCount;
+    private int criticalCount;
 
+
+    [ObservableProperty]
+    private int highCount;
 
 
     [ObservableProperty]
     private string mostAffectedCategory = "-";
 
 
+    [ObservableProperty]
+    private double projectHealth;
 
-    // =========================
+
+
+    [ObservableProperty]
+    private double weightedCompliance;
+
+
+
+    // ==========================================================
     // CHARTS
-    // =========================
+    // ==========================================================
 
     [ObservableProperty]
     private ISeries[] severitySeries = [];
@@ -80,50 +97,60 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
 
 
 
-    // =========================
-    // UPDATE FROM ANALYSIS
-    // =========================
+    // ==========================================================
+    // UPDATE FROM REPORT
+    // ==========================================================
 
     public void Update(
-        IReadOnlyCollection<RuleDashboardItem> rules)
+        AegisArchitectureReport report)
     {
         try
         {
             RuleResults.Clear();
 
 
-            foreach (var rule in rules)
-                RuleResults.Add(rule);
+            foreach (var result in report.Results)
+            {
+                RuleResults.Add(
+                    new RuleDashboardItem(
+                        result.RuleName,
+                        result.Category,
+                        result.Severity,
+                        Path.GetFileName(result.Target),
+                        result.Message,
+                        result.WeightedImpact));
+            }
 
 
 
             TotalViolations =
-                RuleResults.Count;
-
-
-            CriticalCount =
-                RuleResults.Count(x =>
-                    x.Severity ==
-                    ArchitectureRuleSeverity.Critical);
+                report.TotalViolations;
 
 
 
             BlockerCount =
-                RuleResults.Count(x =>
+                report.Results.Count(x =>
                     x.Severity ==
                     ArchitectureRuleSeverity.Blocker);
 
 
 
+            CriticalCount =
+                report.Results.Count(x =>
+                    x.Severity ==
+                    ArchitectureRuleSeverity.Critical);
+
+
+
             HighCount =
-                RuleResults.Count(x =>
+                report.Results.Count(x =>
                     x.Severity ==
                     ArchitectureRuleSeverity.High);
 
 
 
             MostAffectedCategory =
-                RuleResults
+                report.Results
                     .GroupBy(x => x.Category.ToString())
                     .OrderByDescending(x => x.Count())
                     .FirstOrDefault()
@@ -132,35 +159,53 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
 
 
 
+            ProjectHealth =
+                report.Metrics.ProjectHealthIndex;
+
+
+
+            WeightedCompliance =
+                report.Metrics.ProjectHealthIndex;
+
+
+
             BuildSeverityChart();
 
-            BuildCategoryChart();
+            BuildCategoryChart(report);
+
 
 
             _logger.LogInformation(
-                "Rule dashboard updated. {Count} rules.",
-                TotalViolations);
+                "Rule dashboard updated from report. {Rules} findings.",
+                RuleResults.Count);
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
-                "Rule dashboard update failed.");
+                "Failed updating rule dashboard.");
         }
     }
 
 
 
+    // ==========================================================
+    // CHART BUILDERS
+    // ==========================================================
+
     private void BuildSeverityChart()
     {
         var grouped =
-            RuleResults
-                .GroupBy(x => x.Severity)
-                .Select(x => new
-                {
-                    Severity = x.Key,
-                    Count = x.Count()
-                })
+            Enum.GetValues<ArchitectureRuleSeverity>()
+                .Select(severity =>
+                    new
+                    {
+                        Severity = severity,
+
+                        Count =
+                            RuleResults.Count(x =>
+                                x.Severity == severity)
+                    })
                 .ToList();
 
 
@@ -168,27 +213,6 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
         SeveritySeries =
             grouped.Select(x =>
             {
-                var color = x.Severity switch
-                {
-                    ArchitectureRuleSeverity.Blocker
-                        => SKColors.DarkRed,
-
-                    ArchitectureRuleSeverity.Critical
-                        => SKColors.IndianRed,
-
-                    ArchitectureRuleSeverity.High
-                        => SKColors.Orange,
-
-                    ArchitectureRuleSeverity.Medium
-                        => SKColors.Gold,
-
-                    ArchitectureRuleSeverity.Info
-                        => SKColors.SkyBlue,
-
-                    _ => SKColors.Gray
-                };
-
-
                 return new PieSeries<int>
                 {
                     Values =
@@ -200,39 +224,51 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
                         x.Severity.ToString(),
 
                     Fill =
-                        new SolidColorPaint(color)
+                        new SolidColorPaint(
+                            GetSeverityColor(x.Severity))
                 };
 
-            }).ToArray();
+            })
+            .ToArray();
     }
 
 
 
-    private void BuildCategoryChart()
+    private void BuildCategoryChart(
+        AegisArchitectureReport report)
     {
-        var grouped =
-            RuleResults
-                .GroupBy(x => x.Category)
-                .Select(x => new
-                {
-                    Category = x.Key,
-                    Count = x.Count()
-                })
-                .OrderByDescending(x => x.Count)
+        /*
+         * Use ComplianceScores as the source of truth.
+         *
+         * This guarantees that clean categories appear:
+         *
+         * Security       100%
+         * Architecture   95%
+         * Dependency     80%
+         *
+         * instead of only showing categories
+         * where violations happened.
+         */
+
+
+        var categories =
+            report.ComplianceScores
+                .OrderBy(x => x.Value)
                 .ToList();
 
 
 
         CategorySeries =
         [
-            new ColumnSeries<int>
+            new ColumnSeries<double>
             {
                 Values =
-                    grouped
-                        .Select(x => x.Count)
+                    categories
+                        .Select(x => x.Value)
                         .ToArray(),
 
-                Name = "Violations",
+                Name =
+                    "Compliance %",
 
                 Fill =
                     new SolidColorPaint(
@@ -247,11 +283,12 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
             new Axis
             {
                 Labels =
-                    grouped
-                        .Select(x => x.Category.ToString())
+                    categories
+                        .Select(x =>
+                            x.Key.ToString())
                         .ToArray(),
 
-                LabelsRotation = 15
+                LabelsRotation = 25
             }
         ];
 
@@ -261,8 +298,43 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
         [
             new Axis
             {
-                Name = "Count"
+                Name =
+                    "Compliance %",
+
+                MinLimit = 0,
+
+                MaxLimit = 100
             }
         ];
+    }
+
+
+
+    private static SKColor GetSeverityColor(
+        ArchitectureRuleSeverity severity)
+    {
+        return severity switch
+        {
+            ArchitectureRuleSeverity.Blocker =>
+                SKColors.DarkRed,
+
+            ArchitectureRuleSeverity.Critical =>
+                SKColors.IndianRed,
+
+            ArchitectureRuleSeverity.High =>
+                SKColors.Orange,
+
+            ArchitectureRuleSeverity.Medium =>
+                SKColors.Gold,
+
+            ArchitectureRuleSeverity.Low =>
+                SKColors.LightGreen,
+
+            ArchitectureRuleSeverity.Info =>
+                SKColors.SkyBlue,
+
+            _ =>
+                SKColors.Gray
+        };
     }
 }

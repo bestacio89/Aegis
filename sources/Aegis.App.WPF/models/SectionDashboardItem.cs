@@ -1,6 +1,6 @@
 ﻿using Aegis.Shared.Architecture.Enums;
 
-namespace Aegis.App.Wpf.Models;
+namespace Aegis.Wpf.Models;
 
 public sealed record SectionDashboardItem(
     string SectionName,

@@ -48,6 +48,13 @@
         <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}"/>
     </Style>
 
+    <Style x:Key="Text.Title" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource Font.Body}"/>
+        <Setter Property="FontSize" Value="22"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}"/>
+    </Style>
+
     <!-- ================= CARD STYLES ================= -->
     <Style x:Key="Card.Structural" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource Brush.Panel}"/>

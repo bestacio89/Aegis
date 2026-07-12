@@ -1,7 +1,6 @@
-﻿using Aegis.App.Wpf.Services.Abstractions;
-using Aegis.App.Wpf.Services.NewFolder;
-using Aegis.App.Wpf.ViewModels;
-using Aegis.App.Wpf.Views;
+﻿
+using Aegis.Wpf.ViewModels;
+using Aegis.Wpf.Views;
 using Aegis.Architecture.Aggregation;
 using Aegis.Architecture.Bootstrap;
 using Aegis.Architecture.RuleEngines;
@@ -26,7 +25,7 @@ using Microsoft.Extensions.Options;
 using System;
 using System.Windows;
 
-namespace Aegis.App.Wpf;
+namespace Aegis.Wpf;
 
 public partial class App : Application
 {
@@ -111,7 +110,7 @@ public partial class App : Application
                 services.AddTransient<SectionDashboardViewModel>();
                 services.AddTransient<RuleDashboardViewModel>();
                 services.AddTransient<ReportVisualizationViewModel>();
-                services.AddTransient<ILayerAnalysisService, LayerAnalysisService>();
+                
 
                 // =========================
                 // VIEWS

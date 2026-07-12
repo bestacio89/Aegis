@@ -10,8 +10,8 @@
     <!-- Upgraded to .NET 10 -->
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
 
-    <AssemblyName>Aegis.App.Wpf</AssemblyName>
-    <RootNamespace>Aegis.App.Wpf</RootNamespace>
+    <AssemblyName>Aegis.Wpf</AssemblyName>
+    <RootNamespace>Aegis.Wpf</RootNamespace>
 
     <Description>
       WPF Dashboard for Aegis — visualization of architecture audits, rule results, and reports.
@@ -24,14 +24,18 @@
   <!-- =============================================
        UI / Views
        ============================================= -->
-  <ItemGroup>
-    <Folder Include="Resources\" />
-  </ItemGroup>
   
  <ItemGroup>
   <Content Include="config\**\*">
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
   </Content>
+ </ItemGroup>
+  
+ <ItemGroup>
+   <Compile Remove="Resources\**" />
+   <EmbeddedResource Remove="Resources\**" />
+   <None Remove="Resources\**" />
+   <Page Remove="Resources\**" />
  </ItemGroup>
   
  <ItemGroup>
@@ -42,7 +46,6 @@
    <Content Include="appsettings.json">
      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
    </Content>
-   <Content Include="Services\aegis.policy.json" />
  </ItemGroup>
 
   <!-- =============================================

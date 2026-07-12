@@ -10,7 +10,7 @@
     <File Path="Directory.Build.props" />
   </Folder>
   <Folder Name="/sources/">
-    <Project Path="sources/Aegis.App.WPF/Aegis.App.Wpf.csproj" />
+    <Project Path="sources/Aegis.App.WPF/Aegis.Wpf.csproj" />
     <Project Path="sources/Aegis.Cli/Aegis.Cli.csproj" />
     <Project Path="sources/Aegis.Core/Aegis.Architecture.csproj" />
     <Project Path="sources/Aegis.Infrastructure/Aegis.Infrastructure.csproj" />

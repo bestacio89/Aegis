@@ -1,6 +1,6 @@
 ﻿using Aegis.Shared.Architecture.Enums;
 
-namespace Aegis.App.Wpf.models;
+namespace Aegis.Wpf.models;
 
 public sealed record RuleDashboardItem(
     string RuleName,

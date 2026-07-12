@@ -2,7 +2,7 @@
 using System.Windows.Data;
 using System.Windows.Media;
 
-namespace Aegis.App.Wpf.Converters;
+namespace Aegis.Wpf.Converters;
 
 /// <summary>
 /// Maps SectionDashboardItem.ComplianceStatus ("Compliant" / "Non-Compliant") to a status color.

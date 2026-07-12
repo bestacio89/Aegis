@@ -1,0 +1,108 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- =============================================
+       AEGIS WPF FRONTEND — .NET 10 Desktop Dashboard
+       ============================================= -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWpf>true</UseWpf>
+
+    <!-- Upgraded to .NET 10 -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+
+    <AssemblyName>Aegis.Wpf</AssemblyName>
+    <RootNamespace>Aegis.Wpf</RootNamespace>
+
+    <Description>
+      WPF Dashboard for Aegis — visualization of architecture audits, rule results, and reports.
+    </Description>
+
+    <!-- Avoid platform warnings -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <!-- =============================================
+       UI / Views
+       ============================================= -->
+  
+ <ItemGroup>
+  <Content Include="config\**\*">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </Content>
+ </ItemGroup>
+  
+ <ItemGroup>
+   <Compile Remove="Resources\**" />
+   <EmbeddedResource Remove="Resources\**" />
+   <None Remove="Resources\**" />
+   <Page Remove="Resources\**" />
+ </ItemGroup>
+  
+ <ItemGroup>
+   <Content Remove="config\api.policy.json" />
+ </ItemGroup>
+  
+ <ItemGroup>
+   <Content Include="appsettings.json">
+     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+   </Content>
+ </ItemGroup>
+
+  <!-- =============================================
+       Dependencies — Updated to .NET 10 compatible versions
+       ============================================= -->
+  <ItemGroup>
+
+    <!-- WPF UI -->
+    <PackageReference Include="Franz.Common.EntityFramework.PostGres" Version="2.2.16" />
+    <PackageReference Include="LiveChartsCore.SkiaSharpView" Version="2.0.5" />
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
+    <PackageReference Include="MahApps.Metro" Version="2.4.11" />
+
+    <!-- MVVM -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+
+    <!-- Logging -->
+    <PackageReference Include="Franz.Common.Logging" Version="2.2.16" />
+
+    <!-- Dependency Injection -->
+    <PackageReference Include="Franz.Common.DependencyInjection" Version="2.2.16" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
+    <!-- Microsoft Extensions (.NET 10 versions) -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+
+    <!-- WebView for in-app HTML reports -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4022.49" />
+
+    <!-- Charts -->
+
+    <!-- Reporting (PDF) -->
+
+    <!-- Razor template engine -->
+    <PackageReference Include="RazorLight" Version="2.3.1" />
+
+    <!-- MVVM helpers -->
+    <PackageReference Include="Refractored.MvvmHelpers" Version="1.6.2" />
+
+    <!-- Logging UI sink -->
+    <PackageReference Include="Serilog.Sinks.ObservableCollection" Version="1.1.0" />
+
+  </ItemGroup>
+
+  <!-- =============================================
+       Internal Project References
+       ============================================= -->
+  <ItemGroup>
+    <ProjectReference Include="..\Aegis.Cli\Aegis.Cli.csproj" />
+    <ProjectReference Include="..\Aegis.Core\Aegis.Architecture.csproj" />
+    <ProjectReference Include="..\Aegis.Infrastructure\Aegis.Infrastructure.csproj" />
+    <ProjectReference Include="..\Aegis.Sdk\Aegis.Sdk.csproj" />
+    <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

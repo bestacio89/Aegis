@@ -1,0 +1,199 @@
+﻿<UserControl x:Class="Aegis.Wpf.Views.ReportVisualizationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource Brush.Ink}"
+             Foreground="{StaticResource Brush.TextPrimary}"
+             FontFamily="{StaticResource Font.Body}">
+
+    <Grid Margin="16">
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+
+        <!-- HEADER -->
+
+        <Grid Grid.Row="0">
+
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+
+            <Border Grid.Row="0"
+                    Style="{StaticResource Card.TopRule}"/>
+
+
+            <Border Grid.Row="1"
+                    Style="{StaticResource Card.Structural}">
+
+                <StackPanel>
+
+                    <TextBlock Text="ARCHITECTURE REPORT"
+                               Style="{StaticResource Text.Eyebrow}"
+                               Foreground="{StaticResource Brush.AccentStructural}"/>
+
+
+                    <TextBlock Text="{Binding ProjectName}"
+                               Style="{StaticResource Text.Title}"
+                               Margin="0,6,0,0"/>
+
+
+                    <TextBlock Text="Generated architecture assessment and executive findings"
+                               Foreground="{StaticResource Brush.TextMuted}"
+                               FontSize="12"
+                               Margin="0,4,0,0"/>
+
+                </StackPanel>
+
+            </Border>
+
+        </Grid>
+
+
+
+        <!-- EXECUTIVE SUMMARY -->
+
+        <Grid Grid.Row="1"
+              Margin="0,10,0,0">
+
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+
+            <Border Grid.Row="0"
+                    Style="{StaticResource Card.TopRule}"/>
+
+
+            <Border Grid.Row="1"
+                    Style="{StaticResource Card.Structural}">
+
+                <StackPanel>
+
+
+                    <StackPanel Orientation="Horizontal">
+
+                        <Border Style="{StaticResource StatusChip}"
+                                Background="{StaticResource Brush.AccentStructural}"/>
+
+
+                        <TextBlock Text="Executive Assessment"
+                                   Style="{StaticResource Text.SectionTitle}"/>
+
+                    </StackPanel>
+
+
+
+                    <TextBlock Text="{Binding ExecutiveMessage}"
+                               TextWrapping="Wrap"
+                               Margin="0,12,0,0"
+                               Foreground="{StaticResource Brush.TextPrimary}"/>
+
+
+
+                    <StackPanel Orientation="Horizontal"
+                                Margin="0,14,0,0">
+
+
+                        <TextBlock Text="Health Status"
+                                   Foreground="{StaticResource Brush.TextMuted}"/>
+
+
+                        <TextBlock Text="{Binding HealthStatus}"
+                                   Margin="12,0,0,0"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource Brush.StatusCompliant}"/>
+
+
+                    </StackPanel>
+
+
+                </StackPanel>
+
+            </Border>
+
+        </Grid>
+
+
+
+
+        <!-- SUMMARY METRICS -->
+
+        <ScrollViewer Grid.Row="2"
+                      Margin="0,10,0,0"
+                      VerticalScrollBarVisibility="Auto">
+
+
+            <ItemsControl ItemsSource="{Binding SummaryItems}">
+
+
+                <ItemsControl.ItemsPanel>
+
+                    <ItemsPanelTemplate>
+
+                        <WrapPanel/>
+
+                    </ItemsPanelTemplate>
+
+                </ItemsControl.ItemsPanel>
+
+
+
+                <ItemsControl.ItemTemplate>
+
+                    <DataTemplate>
+
+
+                        <Border Width="260"
+                                Height="130"
+                                Margin="6"
+                                Style="{StaticResource Card.Structural}">
+
+
+                            <StackPanel>
+
+
+                                <TextBlock Text="{Binding Title}"
+                                           Style="{StaticResource Text.Eyebrow}"/>
+
+
+
+                                <TextBlock Text="{Binding Value}"
+                                           Style="{StaticResource Text.KpiValue}"
+                                           Margin="0,8,0,0"/>
+
+
+
+                                <TextBlock Text="{Binding Description}"
+                                           Foreground="{StaticResource Brush.TextMuted}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"
+                                           Margin="0,8,0,0"/>
+
+
+                            </StackPanel>
+
+
+                        </Border>
+
+
+                    </DataTemplate>
+
+                </ItemsControl.ItemTemplate>
+
+
+            </ItemsControl>
+
+
+        </ScrollViewer>
+
+
+    </Grid>
+
+</UserControl>

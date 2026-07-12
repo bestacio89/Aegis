@@ -14,4 +14,5 @@ public interface IReportRepository : IScopedDependency
     // Session lifecycle
     Task<ReportEntity> CreateSessionAsync(string projectPath, ProjectArchitectureContext context, CancellationToken token = default);
     Task FinalizeReportAsync(int reportId, AegisArchitectureReport report, CancellationToken token = default);
+
 }

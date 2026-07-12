@@ -1,5 +1,7 @@
 ﻿using System.Text.RegularExpressions;
+
 using Aegis.Architecture.Evaluators;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
@@ -16,154 +18,408 @@ namespace Aegis.Architecture.Evaluators.DesignPatterns;
 /// - Interface adherence
 /// - Handler density
 /// - Over-dispatching ("God Mediator")
-/// Outputs a MediatorComplianceScore (0–100).
+/// Outputs a MediatorComplianceScore (0-100).
 /// </summary>
 public sealed class MediatorPatternEvaluator : BaseArchitectureEvaluator
 {
     private readonly DesignPatternPolicy _policy;
 
-    public override string Name => "MediatorPatternEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "Java", "TypeScript", "Python"];
-    public override string[] SupportedFrameworks => ["ASP.NET", "Spring", "NestJS", "Angular", "FastAPI"];
 
-    private static readonly Regex HandlerClassRx = new(@"class\s+(\w+Handler)\b", RegexOptions.Compiled);
-    private static readonly Regex DirectServiceCallRx = new(@"\b(new\s+|await\s+)?\w+(Handler|Service|Command)\s*\.\w+\s*\(", RegexOptions.Compiled);
-    private static readonly Regex MediatorInterfaceRx = new(@"I(Request|Command|Query|Notification)Handler", RegexOptions.Compiled);
+    public override string Name =>
+        "MediatorPatternEvaluator";
 
-    public MediatorPatternEvaluator(ILogger<MediatorPatternEvaluator> logger, IOptions<AegisArchitecturePolicy> options)
+
+    public override string[] SupportedLanguages =>
+    [
+        "C#",
+        "Java",
+        "TypeScript",
+        "Python"
+    ];
+
+
+    public override string[] SupportedFrameworks =>
+    [
+        "ASP.NET",
+        "Spring",
+        "NestJS",
+        "Angular",
+        "FastAPI"
+    ];
+
+
+
+    private static readonly Regex HandlerClassRegex =
+        new(
+            @"class\s+(\w+Handler)\b",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex DirectServiceCallRegex =
+        new(
+            @"\b(new\s+|await\s+)?\w+(Handler|Service|Command)\s*\.\w+\s*\(",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex MediatorInterfaceRegex =
+        new(
+            @"I(Request|Command|Query|Notification)Handler",
+            RegexOptions.Compiled);
+
+
+
+    public MediatorPatternEvaluator(
+        ILogger<MediatorPatternEvaluator> logger,
+        IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.Architecture?.DesignPatterns ?? new DesignPatternPolicy();
+        _policy =
+            options.Value.Architecture.DesignPatterns
+            ?? new DesignPatternPolicy();
     }
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(string projectPath, CancellationToken token)
-    {
-        var results = new List<ArchitectureEvaluatorResult>();
-        var language = Context?.Language ?? "Unknown";
 
-        // 1️⃣ Check if mediator analysis is enabled for the language
-        if (!_policy.MediatorApplicableLanguages.TryGetValue(language, out var enabled) || !enabled)
+
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
+        string projectPath,
+        CancellationToken token)
+    {
+        var results =
+            new List<ArchitectureEvaluatorResult>();
+
+
+        var language =
+            Context?.Language
+            ?? "Unknown";
+
+
+
+        if (!_policy.MediatorApplicableLanguages.TryGetValue(
+                language,
+                out var enabled)
+            || !enabled)
         {
-            _logger.LogInformation("🔇 Mediator analysis skipped for {Lang}", language);
+            _logger.LogInformation(
+                "Mediator evaluation skipped for language {Language}",
+                language);
+
             return results;
         }
 
-        var framework = DetectMediatorFramework(projectPath);
-        _logger.LogInformation("🧭 Detected mediator flavor: {Framework}", framework);
 
-        var files = Directory.EnumerateFiles(projectPath, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
+
+        var files =
+            ResolveSourceFiles(
+                projectPath,
+                ".cs",
+                ".java",
+                ".ts",
+                ".py");
+
+
+
+        if (files.Count == 0)
+        {
+            return results;
+        }
+
+
+
+        var framework =
+            DetectMediatorFramework(files);
+
+
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
+
+
             string content;
-            try { content = await File.ReadAllTextAsync(file, token); }
-            catch { continue; }
 
-            var fileName = Path.GetFileName(file);
-            var handlerMatches = HandlerClassRx.Matches(content);
-            int handlerCount = handlerMatches.Count;
-            int mediatorCalls = _policy.MediatorMethodHints.Sum(m => Regex.Matches(content, m + @"\s*\(", RegexOptions.IgnoreCase).Count);
-            bool hasMediatorInterface = MediatorInterfaceRx.IsMatch(content);
-            bool hasDirectCoupling = DirectServiceCallRx.IsMatch(content);
-            bool usesMediator =
-                _policy.MediatorFrameworkHints
-                    .Where(h => h.Key.Equals(framework, StringComparison.OrdinalIgnoreCase))
-                    .SelectMany(h => h.Value)
-                    .Any(i => content.Contains(i, StringComparison.OrdinalIgnoreCase))
-                || mediatorCalls > 0;
-
-            // --- Derived ratios ---
-            double handlerDensity = handlerCount / (double)Math.Max(1, _policy.MaxHandlersPerFile);
-            double mediatorUsageRatio = Math.Min(mediatorCalls / (double)Math.Max(1, _policy.MaxMediatorCallsPerFile), 1.0);
-            double couplingRisk = hasDirectCoupling ? 1.0 : 0.0;
-            double interfaceAdherence = hasMediatorInterface ? 1.0 : 0.0;
-
-            // --- Compliance scoring ---
-            double complianceScore = ComputeCompliance(interfaceAdherence, mediatorUsageRatio, couplingRisk, handlerDensity);
-
-            results.Add(new ArchitectureEvaluatorResult(Name, file)
+            try
             {
-                Category = "DesignPattern",
-                Metrics = new Dictionary<string, double>
+                content =
+                    await File.ReadAllTextAsync(
+                        file,
+                        token);
+            }
+            catch
+            {
+                continue;
+            }
+
+
+
+            var handlerCount =
+                HandlerClassRegex.Matches(content).Count;
+
+
+
+            var mediatorCalls =
+                _policy.MediatorMethodHints.Sum(
+                    method =>
+                        Regex.Matches(
+                            content,
+                            method + @"\s*\(",
+                            RegexOptions.IgnoreCase)
+                        .Count);
+
+
+
+            var hasMediatorInterface =
+                MediatorInterfaceRegex.IsMatch(content);
+
+
+
+            var hasDirectCoupling =
+                DirectServiceCallRegex.IsMatch(content);
+
+
+
+            var usesMediator =
+                mediatorCalls > 0
+                ||
+                _policy.MediatorFrameworkHints
+                    .Where(
+                        h =>
+                            h.Key.Equals(
+                                framework,
+                                StringComparison.OrdinalIgnoreCase))
+                    .SelectMany(h => h.Value)
+                    .Any(
+                        hint =>
+                            content.Contains(
+                                hint,
+                                StringComparison.OrdinalIgnoreCase));
+
+
+
+            var handlerDensity =
+                handlerCount /
+                (double)Math.Max(
+                    1,
+                    _policy.MaxHandlersPerFile);
+
+
+
+            var mediatorUsageRatio =
+                mediatorCalls /
+                (double)Math.Max(
+                    1,
+                    _policy.MaxMediatorCallsPerFile);
+
+
+
+            mediatorUsageRatio =
+                Math.Min(
+                    mediatorUsageRatio,
+                    1);
+
+
+
+            var couplingRisk =
+                hasDirectCoupling
+                    ? 1
+                    : 0;
+
+
+
+            var interfaceAdherence =
+                hasMediatorInterface
+                    ? 1
+                    : 0;
+
+
+
+            var compliance =
+                ComputeCompliance(
+                    interfaceAdherence,
+                    mediatorUsageRatio,
+                    couplingRisk,
+                    handlerDensity);
+
+
+
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    file)
                 {
-                    ["HandlerCount"] = handlerCount,
-                    ["MediatorCallCount"] = mediatorCalls,
-                    ["HandlerDensity"] = handlerDensity,
-                    ["MediatorUsageRatio"] = mediatorUsageRatio,
-                    ["CouplingRisk"] = couplingRisk,
-                    ["InterfaceAdherence"] = interfaceAdherence,
-                    ["MediatorComplianceScore"] = complianceScore
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["FileName"] = fileName,
-                    ["Framework"] = framework,
-                    ["Language"] = language,
-                    ["HasMediatorInterface"] = hasMediatorInterface.ToString(),
-                    ["HasDirectCoupling"] = hasDirectCoupling.ToString(),
-                    ["Policy_MaxHandlersPerFile"] = _policy.MaxHandlersPerFile.ToString(),
-                    ["Policy_MaxMediatorCallsPerFile"] = _policy.MaxMediatorCallsPerFile.ToString()
-                }
-            });
+                    Category =
+                        nameof(
+                            ArchitectureRuleCategory.DesignPatterns),
+
+                    Metrics =
+                    {
+                        ["HandlerCount"] =
+                            handlerCount,
+
+                        ["MediatorCallCount"] =
+                            mediatorCalls,
+
+                        ["UsesMediator"] =
+                            usesMediator
+                                ? 1
+                                : 0,
+
+                        ["HandlerDensity"] =
+                            handlerDensity,
+
+                        ["MediatorUsageRatio"] =
+                            mediatorUsageRatio,
+
+                        ["CouplingRisk"] =
+                            couplingRisk,
+
+                        ["InterfaceAdherence"] =
+                            interfaceAdherence,
+
+                        ["MediatorComplianceScore"] =
+                            compliance
+                    },
+
+                    Metadata =
+                    {
+                        ["Framework"] =
+                            framework,
+
+                        ["Language"] =
+                            language,
+
+                        ["FileName"] =
+                            Path.GetFileName(file),
+
+                        ["Layer"] =
+                            Context?.Layer
+                            ?? "Unknown"
+                    }
+                });
         }
 
-        // 🧩 Aggregated metrics
+
+
         if (results.Count > 0)
         {
-            double avgCompliance = results.Average(r => r.Metrics.GetValueOrDefault("MediatorComplianceScore", 0));
-            double avgHandlers = results.Average(r => r.Metrics.GetValueOrDefault("HandlerCount", 0));
-            double avgMediatorCalls = results.Average(r => r.Metrics.GetValueOrDefault("MediatorCallCount", 0));
-            double couplingCount = results.Count(r => r.Metrics.GetValueOrDefault("CouplingRisk", 0) == 1);
+            var averageCompliance =
+                results.Average(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "MediatorComplianceScore",
+                            0));
 
-            results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
-            {
-                Category = "DesignPatternSummary",
-                Metrics = new Dictionary<string, double>
+
+
+            var coupledFiles =
+                results.Count(
+                    r =>
+                        r.Metrics.GetValueOrDefault(
+                            "CouplingRisk",
+                            0) > 0);
+
+
+
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    projectPath)
                 {
-                    ["FileCount"] = results.Count,
-                    ["AverageComplianceScore"] = avgCompliance,
-                    ["AverageHandlerCount"] = avgHandlers,
-                    ["AverageMediatorCalls"] = avgMediatorCalls,
-                    ["CoupledFiles"] = couplingCount,
-                    ["OverallMediatorHealth"] = avgCompliance * (1 - couplingCount / Math.Max(1, results.Count))
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Evaluator"] = Name,
-                    ["DetectedFramework"] = framework
-                }
-            });
+                    Category =
+                        "DesignPatternSummary",
+
+                    Metrics =
+                    {
+                        ["AnalyzedFiles"] =
+                            results.Count,
+
+                        ["AverageComplianceScore"] =
+                            averageCompliance,
+
+                        ["CoupledFiles"] =
+                            coupledFiles,
+
+                        ["OverallMediatorHealth"] =
+                            averageCompliance *
+                            (
+                                1 -
+                                coupledFiles /
+                                (double)Math.Max(
+                                    1,
+                                    results.Count)
+                            )
+                    },
+
+                    Metadata =
+                    {
+                        ["Evaluator"] =
+                            Name,
+
+                        ["DetectedFramework"] =
+                            framework
+                    }
+                });
         }
 
-        _logger.LogInformation("✅ {Evaluator} completed with {Count} metric entries", Name, results.Count);
+
+
+        _logger.LogInformation(
+            "Mediator pattern evaluation completed with {Count} entries",
+            results.Count);
+
+
         return results;
     }
 
-    private static double ComputeCompliance(double interfaceAdherence, double mediatorUsageRatio, double couplingRisk, double handlerDensity)
+
+
+    private static double ComputeCompliance(
+        double interfaceAdherence,
+        double mediatorUsageRatio,
+        double couplingRisk,
+        double handlerDensity)
     {
-        // Higher coupling & density reduce score, while adherence & usage increase it.
-        double score =
+        var score =
             interfaceAdherence * 0.3 +
             mediatorUsageRatio * 0.4 +
             (1 - Math.Min(handlerDensity, 1)) * 0.15 +
             (1 - couplingRisk) * 0.15;
 
-        return Math.Round(score * 100, 2);
+
+        return Math.Round(
+            score * 100,
+            2);
     }
 
-    private static string DetectMediatorFramework(string projectPath)
+
+
+    private static string DetectMediatorFramework(
+        IEnumerable<string> files)
     {
-        foreach (var file in Directory.EnumerateFiles(projectPath, "*.cs", SearchOption.AllDirectories))
+        foreach (var file in files)
         {
-            string content = File.ReadAllText(file);
-            if (content.Contains("Franz.Common.Mediator", StringComparison.OrdinalIgnoreCase))
+            var content =
+                File.ReadAllText(file);
+
+
+            if (content.Contains(
+                    "Franz.Common.Mediator",
+                    StringComparison.OrdinalIgnoreCase))
+            {
                 return "FranzMediator";
-            if (content.Contains("MediatR", StringComparison.OrdinalIgnoreCase))
+            }
+
+
+            if (content.Contains(
+                    "MediatR",
+                    StringComparison.OrdinalIgnoreCase))
+            {
                 return "MediatR";
+            }
         }
+
+
         return "Unknown";
     }
 }

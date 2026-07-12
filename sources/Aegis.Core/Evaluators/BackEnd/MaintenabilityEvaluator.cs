@@ -1,5 +1,4 @@
 ﻿using Aegis.Architecture.Diagnostics;
-using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
@@ -12,146 +11,363 @@ using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.BackEnd;
 
-/// <summary>
-/// Measures maintainability across source files, computing metrics such as
-/// cyclomatic complexity, comment density, and maintainability index.
-/// Emits EvaluatorResults consumed by the Rule Engine for governance.
-/// </summary>
-public sealed class MaintainabilityEvaluator : BaseArchitectureEvaluator, IScopedDependency
+
+public sealed class MaintainabilityEvaluator
+    : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly MaintainabilityPolicy _policy;
 
-    public override string Name => "MaintainabilityEvaluator";
 
-    public override string[] SupportedLanguages => ["CSharp", "Java", "Python"];
-    public override string[] SupportedFrameworks => ["ASP.NET", "Spring Boot", "FastAPI"];
+
+    public override string Name =>
+        "MaintainabilityEvaluator";
+
+
+
+    public override string[] SupportedLanguages =>
+    [
+        "C#",
+        "Java",
+        "Python"
+    ];
+
+
+
+    public override string[] SupportedFrameworks =>
+    [
+        "ASP.NET",
+        "Spring Boot",
+        "FastAPI"
+    ];
+
+
 
     public MaintainabilityEvaluator(
         ILogger<MaintainabilityEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy = options.Value.Maintainability ?? new MaintainabilityPolicy();
+        _policy =
+            options.Value.Maintainability
+            ?? new MaintainabilityPolicy();
     }
 
-    /// <summary>
-    /// Scans all source files to compute maintainability metrics and produces EvaluatorResults.
-    /// </summary>
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath, CancellationToken token)
+
+
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
+        var results =
+            new List<ArchitectureEvaluatorResult>();
 
-        // Filter by language
-        var extensions = Context?.Language switch
+
+
+        if (Context is null)
+            return results;
+
+
+
+        var extensions =
+            Context.Language switch
+            {
+                "C#" =>
+                    new[] { ".cs" },
+
+                "Java" =>
+                    new[] { ".java" },
+
+                "Python" =>
+                    new[] { ".py" },
+
+                _ =>
+                    Array.Empty<string>()
+            };
+
+
+
+        if (extensions.Length == 0)
         {
-            "CSharp" => new[] { ".cs" },
-            "Java" => new[] { ".java" },
-            "Python" => new[] { ".py" },
-            _ => new[] { ".cs", ".java", ".py" }
-        };
+            AegisDiagnostics.Report(
+                Name,
+                DiagnosticLevel.Trace,
+                $"Unsupported language {Context.Language}.");
 
-        var files = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-            .Where(f => extensions.Any(ext => f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
-
-        if (files.Count == 0)
-        {
-            AegisDiagnostics.Report(Name, DiagnosticLevel.Info,
-                $"No {Context?.Language ?? "source"} files found for maintainability evaluation.");
             return results;
         }
 
-        AegisDiagnostics.Report(Name, DiagnosticLevel.Trace,
-            $"🧮 Running maintainability analysis on {files.Count} file(s) ({Context?.Language}/{Context?.Framework}).");
 
-        // Track project-level aggregates
-        double totalMaintainability = 0;
+
+        var files =
+            ResolveSourceFiles(
+                projectPath,
+                extensions);
+
+
+
+        if (files.Count == 0)
+        {
+            AegisDiagnostics.Report(
+                Name,
+                DiagnosticLevel.Trace,
+                "No source files found for maintainability analysis.");
+
+            return results;
+        }
+
+
+
         double totalComplexity = 0;
+
         double totalCommentDensity = 0;
+
+
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
-            var content = await File.ReadAllTextAsync(file, token).ConfigureAwait(false);
-            int lineCount = content.Split('\n').Length;
-            int commentCount = CountComments(content);
-            int complexity = CountComplexity(content);
 
-            // Compute maintainability index (simplified heuristic)
-            double maintainabilityIndex = Math.Max(0, 100 - complexity * _policy.ComplexityWeight - lineCount / _policy.LineWeight);
-            double commentDensity = lineCount > 0 ? (double)commentCount / lineCount * 100 : 0;
 
-            totalMaintainability += maintainabilityIndex;
+            var content =
+                await File.ReadAllTextAsync(
+                    file,
+                    token);
+
+
+
+            var lineCount =
+                content.Split(
+                    '\n',
+                    StringSplitOptions.RemoveEmptyEntries)
+                .Length;
+
+
+
+            var commentCount =
+                CountComments(content);
+
+
+
+            var complexity =
+                CountComplexity(content);
+
+
+
+            var commentDensity =
+                lineCount == 0
+                    ? 0
+                    :
+                    (double)commentCount /
+                    lineCount *
+                    100;
+
+
+
             totalComplexity += complexity;
+
             totalCommentDensity += commentDensity;
 
-            // Emit one result per file
-            results.Add(new ArchitectureEvaluatorResult(Name, file)
-            {
-                Category = "Maintainability",
-                Metrics = new Dictionary<string, double>
+
+
+            results.Add(
+                new ArchitectureEvaluatorResult(
+                    Name,
+                    file)
                 {
-                    ["MaintainabilityIndex"] = maintainabilityIndex,
-                    ["Complexity"] = complexity,
-                    ["LineCount"] = lineCount,
-                    ["CommentDensity"] = commentDensity,
-                    ["MinMaintainabilityThreshold"] = _policy.MinMaintainabilityIndex,
-                    ["MinCommentDensityThreshold"] = _policy.MinCommentDensity
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Language"] = Context?.Language ?? "Unknown",
-                    ["Framework"] = Context?.Framework ?? "Unknown",
-                    ["RequireCommentDensityCheck"] = _policy.RequireCommentDensityCheck.ToString(),
-                    ["ComplexityWeight"] = _policy.ComplexityWeight.ToString(),
-                    ["LineWeight"] = _policy.LineWeight.ToString()
-                }
-            });
+                    ProjectName =
+                        Context.ProjectName,
+
+                    Language =
+                        Context.Language,
+
+                    Framework =
+                        Context.Framework,
+
+                    Layer =
+                        ResolveLayer(file),
+
+                    DetectionConfidence =
+                        Context.Confidence,
+
+
+                    Category =
+                        "Maintainability",
+
+
+                    Metrics =
+                    {
+                        ["Complexity"] =
+                            complexity,
+
+                        ["LineCount"] =
+                            lineCount,
+
+                        ["CommentCount"] =
+                            commentCount,
+
+                        ["CommentDensity"] =
+                            commentDensity
+                    },
+
+
+                    Metadata =
+                    {
+                        ["Language"] =
+                            Context.Language,
+
+                        ["Framework"] =
+                            Context.Framework
+                            ?? "Unknown"
+                    }
+                });
         }
 
-        // 📊 Global summary metrics
-        int fileCount = results.Count;
-        if (fileCount > 0)
-        {
-            results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
-            {
-                Category = "MaintainabilitySummary",
-                Metrics = new Dictionary<string, double>
-                {
-                    ["FileCount"] = fileCount,
-                    ["AverageMaintainability"] = totalMaintainability / fileCount,
-                    ["AverageComplexity"] = totalComplexity / fileCount,
-                    ["AverageCommentDensity"] = totalCommentDensity / fileCount
-                },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["Language"] = Context?.Language ?? "Unknown",
-                    ["Framework"] = Context?.Framework ?? "Unknown"
-                }
-            });
-        }
 
-        AegisDiagnostics.Report(Name, DiagnosticLevel.Info,
-            $"✅ Maintainability analysis complete — {results.Count} metric entries collected.");
+
+        results.Add(
+            CreateSummary(
+                projectPath,
+                files.Count,
+                totalComplexity,
+                totalCommentDensity));
+
+
+
+        AegisDiagnostics.Report(
+            Name,
+            DiagnosticLevel.Info,
+            $"Maintainability evaluation completed with {results.Count} results.");
+
+
 
         return results;
     }
 
-    // -------------------------------------------------
-    // Helpers
-    // -------------------------------------------------
-    private static int CountComplexity(string content)
+
+
+    private ArchitectureEvaluatorResult CreateSummary(
+        string projectPath,
+        int fileCount,
+        double totalComplexity,
+        double totalCommentDensity)
     {
-        var keywords = new[] { "if", "for", "while", "switch", "case", "catch", "&&", "||" };
-        return keywords.Sum(k => Regex.Matches(content, $@"\b{k}\b").Count);
+        return new ArchitectureEvaluatorResult(
+            Name,
+            projectPath)
+        {
+            ProjectName =
+                Context?.ProjectName,
+
+            Language =
+                Context?.Language,
+
+            Framework =
+                Context?.Framework,
+
+            DetectionConfidence =
+                Context?.Confidence ?? 0,
+
+
+            Category =
+                "MaintainabilitySummary",
+
+
+            Metrics =
+            {
+                ["FileCount"] =
+                    fileCount,
+
+                ["AverageComplexity"] =
+                    fileCount == 0
+                        ? 0
+                        :
+                        totalComplexity /
+                        fileCount,
+
+                ["AverageCommentDensity"] =
+                    fileCount == 0
+                        ? 0
+                        :
+                        totalCommentDensity /
+                        fileCount
+            },
+
+
+            Metadata =
+            {
+                ["Language"] =
+                    Context?.Language
+                    ?? "Unknown",
+
+                ["Framework"] =
+                    Context?.Framework
+                    ?? "Unknown"
+            }
+        };
     }
 
-    private static int CountComments(string content)
+
+
+    private string ResolveLayer(
+        string file)
     {
-        var pattern = @"(\/\/.*?$|\/\*[\s\S]*?\*\/|#.*?$)";
-        return Regex.Matches(content, pattern, RegexOptions.Multiline).Count;
+        if (Context is null)
+            return "Unknown";
+
+
+
+        return Context.Layers
+            .FirstOrDefault(
+                layer =>
+                    layer.Files.Contains(
+                        file,
+                        StringComparer.OrdinalIgnoreCase))
+            ?.Name
+            ??
+            "Unknown";
+    }
+
+
+
+    private static int CountComplexity(
+      string content)
+    {
+        string[] keywords =
+        [
+            "if",
+        "for",
+        "while",
+        "switch",
+        "case",
+        "catch",
+        "&&",
+        "||"
+        ];
+
+
+        return keywords.Sum(
+            keyword =>
+                Regex.Matches(
+                    content,
+                    Regex.Escape(keyword))
+                .Count);
+    }
+
+
+    private static int CountComments(
+        string content)
+    {
+        const string pattern =
+            @"(//.*?$|/\*[\s\S]*?\*/|#.*?$)";
+
+
+
+        return Regex.Matches(
+                content,
+                pattern,
+                RegexOptions.Multiline)
+            .Count;
     }
 }

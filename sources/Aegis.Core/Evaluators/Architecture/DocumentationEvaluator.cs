@@ -1,121 +1,355 @@
 ﻿using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Diagnostics;
-
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Text.RegularExpressions;
 
 namespace Aegis.Architecture.Evaluators.Architecture;
 
+
 /// <summary>
-/// Evaluates inline documentation coverage across source files.
-/// Produces structured EvaluatorResults with per-file coverage metrics.
+/// Evaluates documentation coverage of public architectural elements.
+///
+/// Documentation evaluation is based on discoverable public contracts,
+/// not raw file comments or line counts.
+///
+/// The evaluator reports only documentation violations.
+/// Successful documentation coverage is handled by aggregate metrics.
 /// </summary>
-public sealed class DocumentationEvaluator : BaseArchitectureEvaluator, IScopedDependency
+public sealed class DocumentationEvaluator
+    : BaseArchitectureEvaluator, IScopedDependency
 {
-    public override string Name => "DocumentationEvaluator";
+    private const double MinimumDocumentationCoverage = 80.0;
 
-    public override string[] SupportedLanguages => ["CSharp", "TypeScript", "JavaScript", "Java", "Python"];
-    public override string[] SupportedFrameworks => ["*"];
 
-    public DocumentationEvaluator(ILogger<DocumentationEvaluator> logger) : base(logger) { }
 
-    /// <summary>
-    /// Analyzes source files for documentation coverage and emits EvaluatorResults.
-    /// </summary>
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath, CancellationToken token)
+    public override string Name =>
+        "DocumentationEvaluator";
+
+
+
+    public override string[] SupportedLanguages =>
+    [
+        "C#",
+        "TypeScript",
+        "JavaScript",
+        "Java",
+        "Python"
+    ];
+
+
+
+    public override string[] SupportedFrameworks =>
+    [
+        "*"
+    ];
+
+
+
+    private static readonly Regex PublicDeclarationRegex =
+        new(
+            @"\b(public|export)\s+(class|interface|function|record)\s+\w+",
+            RegexOptions.Compiled);
+
+
+
+    public DocumentationEvaluator(
+        ILogger<DocumentationEvaluator> logger)
+        : base(logger)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
+    }
 
-        // Determine file extensions by detected language
-        var extensions = Context?.Language switch
-        {
-            "CSharp" => new[] { ".cs" },
-            "TypeScript" => new[] { ".ts" },
-            "JavaScript" => new[] { ".js" },
-            "Java" => new[] { ".java" },
-            "Python" => new[] { ".py" },
-            _ => new[] { ".cs", ".ts", ".js", ".java", ".py" }
-        };
 
-        var files = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-            .Where(f => extensions.Any(ext => f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
+
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
+    {
+        var results =
+            new List<ArchitectureEvaluatorResult>();
+
+
+        if (Context is null)
+            return results;
+
+
+
+        var files =
+            ResolveSourceFiles(
+                projectPath,
+                Context);
+
+
 
         if (files.Count == 0)
-        {
-            AegisDiagnostics.Report(Name, DiagnosticLevel.Info,
-                $"No {Context?.Language ?? "source"} files found for documentation analysis.");
             return results;
-        }
 
-        AegisDiagnostics.Report(Name, DiagnosticLevel.Trace,
-            $"📘 Analyzing {files.Count} {Context?.Language} file(s) for documentation coverage.");
 
-        double totalCoverage = 0;
+
+        var totalDeclarations = 0;
+
+        var documentedDeclarations = 0;
+
+
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
-            var content = await File.ReadAllTextAsync(file, token).ConfigureAwait(false);
-            var lines = content.Split('\n');
-            int totalLines = lines.Length;
-            int docLines = CountDocumentationLines(lines, Context?.Language ?? "CSharp");
 
-            double coverage = totalLines > 0 ? (double)docLines / totalLines * 100 : 0;
-            totalCoverage += coverage;
+            if (IsGeneratedOrTest(file))
+                continue;
 
-            results.Add(new ArchitectureEvaluatorResult(Name, file)
-            {
-                Category = "Documentation",
-                Metrics = { ["DocumentationCoverage"] = coverage },
-                Metadata = new Dictionary<string, string>
-                {
-                    ["File"] = Path.GetFileName(file),
-                    ["Language"] = Context?.Language ?? "Unknown",
-                    ["DocLines"] = docLines.ToString(),
-                    ["TotalLines"] = totalLines.ToString()
-                }
-            });
+
+
+            var content =
+                await File.ReadAllTextAsync(
+                    file,
+                    token);
+
+
+
+            var declarations =
+                PublicDeclarationRegex
+                    .Matches(content);
+
+
+
+            if (declarations.Count == 0)
+                continue;
+
+
+
+            var documented =
+                CountDocumentedDeclarations(
+                    content,
+                    Context.Language);
+
+
+
+            totalDeclarations +=
+                declarations.Count;
+
+
+
+            documentedDeclarations +=
+                Math.Min(
+                    documented,
+                    declarations.Count);
         }
 
-        double avgCoverage = results.Any()
-            ? totalCoverage / results.Count
-            : 0;
 
-        results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
+
+        if (totalDeclarations == 0)
+            return results;
+
+
+
+        var coverage =
+            (double)documentedDeclarations /
+            totalDeclarations *
+            100;
+
+
+
+        if (coverage < MinimumDocumentationCoverage)
         {
-            Category = "Documentation",
-            Metrics = { ["AverageDocumentationCoverage"] = avgCoverage },
-            Metadata = new Dictionary<string, string>
-            {
-                ["Message"] = $"Average documentation coverage: {avgCoverage:0.0}%",
-                ["Language"] = Context?.Language ?? "Unknown"
-            }
-        });
+            results.Add(
+                CreateViolation(
+                    projectPath,
+                    coverage,
+                    totalDeclarations,
+                    documentedDeclarations));
+        }
 
-        AegisDiagnostics.Report(Name,
-            avgCoverage < 10 ? DiagnosticLevel.Warning : DiagnosticLevel.Info,
-            $"📖 Documentation evaluation complete. Average coverage: {avgCoverage:0.0}%.");
+
+
+        AegisDiagnostics.Report(
+            Name,
+            DiagnosticLevel.Info,
+            $"Documentation evaluation completed. Coverage: {coverage:0.0}%");
+
+
 
         return results;
     }
 
-    // ---------------------------------------------
-    // Helpers
-    // ---------------------------------------------
-    private static int CountDocumentationLines(IEnumerable<string> lines, string language)
+
+
+    private ArchitectureEvaluatorResult CreateViolation(
+        string projectPath,
+        double coverage,
+        int totalDeclarations,
+        int documentedDeclarations)
+    {
+        return new ArchitectureEvaluatorResult(
+            Name,
+            projectPath)
+        {
+            Category = "Documentation",
+
+
+            Metrics =
+            {
+                ["DocumentationCoverage"] =
+                    coverage,
+
+                ["TotalDeclarations"] =
+                    totalDeclarations,
+
+                ["DocumentedDeclarations"] =
+                    documentedDeclarations,
+
+                ["MissingDocumentation"] =
+                    totalDeclarations -
+                    documentedDeclarations
+            },
+
+
+            Metadata =
+            {
+                ["Language"] =
+                    Context?.Language ?? "Unknown",
+
+                ["Framework"] =
+                    Context?.Framework ?? "Unknown",
+
+                ["RequiredCoverage"] =
+                    $"{MinimumDocumentationCoverage:0.0}%",
+
+                ["ActualCoverage"] =
+                    $"{coverage:0.0}%"
+            }
+        };
+    }
+
+
+
+    private static List<string> ResolveSourceFiles(
+        string root,
+        ProjectArchitectureContext context)
+    {
+        var extensions =
+            context.Language switch
+            {
+                "C#" =>
+                [
+                    ".cs"
+                ],
+
+                "Java" =>
+                [
+                    ".java"
+                ],
+
+                "Python" =>
+                [
+                    ".py"
+                ],
+
+                "TypeScript" =>
+                [
+                    ".ts"
+                ],
+
+                "JavaScript" =>
+                [
+                    ".js"
+                ],
+
+                _ =>
+                    Array.Empty<string>()
+            };
+
+
+
+        return Directory
+            .EnumerateFiles(
+                root,
+                "*.*",
+                SearchOption.AllDirectories)
+            .Where(
+                file =>
+                    extensions.Any(
+                        extension =>
+                            file.EndsWith(
+                                extension,
+                                StringComparison.OrdinalIgnoreCase)))
+            .Where(
+                file =>
+                    !IsExcludedDirectory(file))
+            .ToList();
+    }
+
+
+
+    private static int CountDocumentedDeclarations(
+        string content,
+        string language)
     {
         return language switch
         {
-            "CSharp" => lines.Count(l => l.TrimStart().StartsWith("///")),
-            "Java" => lines.Count(l => l.TrimStart().StartsWith("*") || l.TrimStart().StartsWith("//")),
-            "Python" => lines.Count(l => l.TrimStart().StartsWith("#") || l.TrimStart().StartsWith("\"\"\"")),
-            "TypeScript" or "JavaScript" => lines.Count(l => l.TrimStart().StartsWith("//") || l.TrimStart().StartsWith("/*")),
-            _ => lines.Count(l => l.TrimStart().StartsWith("/") || l.TrimStart().StartsWith("#"))
+            "C#" =>
+                Regex.Matches(
+                    content,
+                    @"///\s*<summary>")
+                .Count,
+
+
+            "Java" =>
+                Regex.Matches(
+                    content,
+                    @"/\*\*")
+                .Count,
+
+
+            "Python" =>
+                Regex.Matches(
+                    content,
+                    "\"\"\"")
+                .Count / 2,
+
+
+            "TypeScript" or "JavaScript" =>
+                Regex.Matches(
+                    content,
+                    @"/\*\*")
+                .Count,
+
+
+            _ => 0
         };
+    }
+
+
+
+    private static bool IsGeneratedOrTest(
+        string file)
+    {
+        return
+            file.Contains(
+                "Test",
+                StringComparison.OrdinalIgnoreCase)
+            ||
+            file.Contains(
+                "Generated",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+
+
+    private static bool IsExcludedDirectory(
+        string file)
+    {
+        return
+            file.Contains(
+                $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase)
+            ||
+            file.Contains(
+                $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase);
     }
 }

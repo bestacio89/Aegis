@@ -49,7 +49,7 @@ public static class NamingRuleset
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
             Severity = ArchitectureRuleSeverity.Medium,
-            Recommendation = "Use camelCase for method names (e.g., calculateTotal, getUserProfile)."
+            Recommendation = "Use Pascal for method names (e.g., calculateTotal, getUserProfile)."
         },
 
         // ===============================================================

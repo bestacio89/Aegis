@@ -1,7 +1,11 @@
 ﻿using Aegis.Infrastructure.Data;
+using Aegis.Infrastructure.Exporters;
 using Aegis.Infrastructure.Persistence;
 using Aegis.Infrastructure.Repositories;
+using Aegis.Shared.Contracts;
 using Franz.Common.DependencyInjection.Extensions;
+using Franz.Common.EntityFramework.Extensions;
+
 // Franz persistence entrypoint
 using Franz.Common.Http.EntityFramework.Extensions;
 using Microsoft.Extensions.Configuration;
@@ -27,6 +31,7 @@ namespace Aegis.Infrastructure.Extensions
             IConfiguration config)
         {
             // 🧱 Core persistence (auto-detects provider)
+            
             services.AddRelationalDatabase<AegisDbContext>(env, config)
                     .AddEntityRepositories<AegisDbContext>();
 
@@ -38,5 +43,7 @@ namespace Aegis.Infrastructure.Extensions
 
             return services;
         }
+
+   
     }
 }

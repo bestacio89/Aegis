@@ -1,0 +1,39 @@
+{
+  "Enabled": true,
+  "CheckOutdatedPackages": true,
+  "MinDependencyFreshness": 95,
+  "DetectVersionDriftAcrossProjects": true,
+  "DisallowUnpinnedVersions": true,
+  "DisallowLocalFileReferences": true,
+  "DisallowGitDependencies": true,
+  "DisallowWildcardVersions": true,
+  "CheckUnusedReferences": true,
+  "MaxUnusedReferences": 0,
+  "DetectDuplicateDependencies": true,
+  "DetectUnreferencedTransitiveDependencies": true,
+  "MaxDependencyDepth": 5,
+  "WarnOnCrossModuleDependencies": true,
+  "DetectCircularProjectReferences": false,
+  "EnforceDependencyScopeIsolation": true,
+  "AllowedPackageManagers": [ "nuget", "npm", "pip" ],
+  "DisallowedDependencies": [
+    "left-pad",
+    "lodash-es",
+    "Newtonsoft.Json"
+  ],
+  "RequireLockFiles": true,
+  "AllowedLockFiles": [
+    "packages.lock.json",
+    "package-lock.json",
+    "poetry.lock",
+    "Pipfile.lock"
+  ],
+  "WarnIfMultipleLockFiles": true,
+  "MinDependencyHealthScore": 90,
+  "MaxTotalDependencies": 150,
+  "MaxPerModuleDependencies": 40,
+  "MaxOutdatedPercentage": 5,
+  "FailOnCriticalDependencyIssues": true,
+  "FailOnUnpinnedVersions": true,
+  "FailOnHighRiskDependencies": true
+}

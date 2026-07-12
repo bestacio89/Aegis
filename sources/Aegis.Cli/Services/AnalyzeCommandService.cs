@@ -12,47 +12,72 @@ public sealed class AnalyzeCommandService
     private readonly AegisArchitectureAnalysisRunner _runner;
     private readonly ILogger<AnalyzeCommandService> _logger;
 
-    public AnalyzeCommandService(AegisArchitectureAnalysisRunner runner, ILogger<AnalyzeCommandService> logger)
+    public AnalyzeCommandService(
+        AegisArchitectureAnalysisRunner runner,
+        ILogger<AnalyzeCommandService> logger)
     {
         _runner = runner;
         _logger = logger;
     }
 
+
     /// <summary>
     /// Executes the deterministic architecture audit using AegisRunner.
+    /// Returns the complete analysis session result.
     /// </summary>
-    public async Task<int> RunAsync(string projectPath, string? policyPath = null, bool exportJson = true)
+    public async Task<AegisAnalysisSessionResult?> RunAsync(
+        string projectPath,
+        string? policyPath = null,
+        CancellationToken token = default)
     {
         try
         {
-            _logger.LogInformation("🧠 Starting Aegis analysis for: {Path}", projectPath);
+            _logger.LogInformation(
+                "🧠 Starting Aegis analysis for: {Path}",
+                projectPath);
 
-            var resultCode = await _runner.RunSessionAsync(
+
+            var result = await _runner.RunSessionAsync(
                 projectPath: projectPath,
                 policyPath: policyPath,
-                exportJson: exportJson,
-                token: default
-            );
+                token: token);
 
-            switch (resultCode)
+
+            if (!result.Success)
             {
-                case 0:
-                    _logger.LogInformation("✅ Aegis analysis completed successfully. No errors detected.");
-                    break;
-                case -1:
-                    _logger.LogError("❌ Aegis analysis failed during execution. See logs for details.");
-                    break;
-                default:
-                    _logger.LogWarning("⚠️ Aegis analysis completed with non-standard exit code: {Code}", resultCode);
-                    break;
+                _logger.LogError(
+                    "❌ Aegis analysis failed during execution.");
+
+                return null;
             }
 
-            return resultCode;
+
+            _logger.LogInformation(
+                """
+                ✅ Aegis analysis completed successfully.
+
+                Report ID      : {ReportId}
+                Project        : {Project}
+                Files Scanned  : {Files}
+                Violations     : {Violations}
+                Health Index   : {Health:0.00}%
+                """,
+                result.ReportId,
+                result.Report?.ProjectName,
+                result.Report?.TotalFilesScanned,
+                result.Report?.TotalViolations,
+                result.Report?.Metrics.ProjectHealthIndex);
+
+
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "💥 Unexpected exception during Aegis CLI analysis execution.");
-            return -1;
+            _logger.LogError(
+                ex,
+                "💥 Unexpected exception during Aegis CLI analysis execution.");
+
+            return null;
         }
     }
 }

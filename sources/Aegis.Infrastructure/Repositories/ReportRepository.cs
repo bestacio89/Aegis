@@ -4,6 +4,8 @@ using Aegis.Shared.Architecture.Models;
 using Franz.Common.EntityFramework.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Aegis.Infrastructure.Repositories;
 
@@ -38,8 +40,10 @@ public sealed class ReportRepository : IReportRepository
         {
             ProjectName = Path.GetFileName(projectPath),
             Language = context.Language,
-           Framework = context.Metadata?.Framework ?? context.Framework ?? "Unknown",
- 
+            Framework = context.DetectedFrameworks.FirstOrDefault() ?? context.Framework ?? "Unknown",
+
+
+
             ScanDate = DateTime.UtcNow,
             RuleResults = new List<RuleResultEntity>()
         };
@@ -61,7 +65,13 @@ public sealed class ReportRepository : IReportRepository
         entity.FileCount = report.TotalFilesScanned;
         entity.DomainCount = report.Domains.Count;
 
+        entity.ReportJson = JsonSerializer.Serialize(report, new JsonSerializerOptions
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        });
+
         await _db.SaveChangesAsync(token);
-        _logger.LogInformation("✅ Finalized report ID {Id} for {Project}", entity.Id, entity.ProjectName);
+        _logger.LogInformation("✅ Finalized report ID {Id} for {Project} (JSON snapshot persisted, {Bytes} bytes)",
+            entity.Id, entity.ProjectName, entity.ReportJson.Length);
     }
 }

@@ -1,0 +1,11 @@
+{
+  "Coupling": {
+    "MaxImportsPerFile": 20,
+    "MaxInternalModuleRefs": 10,
+    "MaxExternalDependencies": 30,
+    "DeepDependencyScan": true,
+    "DetectCircularDependencies": true,
+    "MaxCouplingRatio": 0.75
+  }
+ 
+}

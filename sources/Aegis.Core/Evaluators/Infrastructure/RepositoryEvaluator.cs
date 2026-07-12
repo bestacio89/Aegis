@@ -10,184 +10,398 @@ using Microsoft.Extensions.Options;
 namespace Aegis.Architecture.Evaluators.Infrastructure;
 
 /// <summary>
-/// Evaluates repository hygiene, documentation, and structural conformance
-/// according to <see cref="RepositoryPolicy"/> and quantifies overall repository governance quality.
-/// Produces RepositoryHealthIndex and supporting metrics.
+/// Evaluates repository governance, documentation, CI/CD readiness,
+/// structural organization, dependency hygiene, and maintainability.
+/// Produces RepositoryHealthIndex (0-100).
 /// </summary>
 public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
 {
     private readonly RepositoryPolicy _policy;
 
     public override string Name => "RepositoryEvaluator";
-    public override string[] SupportedLanguages => ["CSharp", "JavaScript", "TypeScript", "Python"];
-    public override string[] SupportedFrameworks => ["DotNet", "Node", "Python", "Platform"];
 
-    public RepositoryEvaluator(ILogger<RepositoryEvaluator> logger, IOptions<AegisArchitecturePolicy> options)
+    public override string[] SupportedLanguages =>
+    [
+        "C#",
+        "JavaScript",
+        "TypeScript",
+        "Python",
+        "Java"
+    ];
+
+    public override string[] SupportedFrameworks =>
+    [
+        ".NET",
+        "Node",
+        "Python",
+        "Java",
+        "Platform"
+    ];
+
+
+    private static readonly Regex TodoRx =
+        new(@"\b(TODO|FIXME|HACK|XXX)\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+
+    private static readonly string[] DependencyLockFiles =
+    [
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "poetry.lock",
+        "Pipfile.lock",
+        "packages.lock.json",
+        "pom.xml"
+    ];
+
+
+    public RepositoryEvaluator(
+        ILogger<RepositoryEvaluator> logger,
+        IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
         _policy = options.Value.Repository ?? new RepositoryPolicy();
     }
 
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(string projectPath, CancellationToken token)
+
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
+        string projectPath,
+        CancellationToken token)
     {
         var results = new List<ArchitectureEvaluatorResult>();
-        _logger.LogInformation("🏗️ Evaluating repository hygiene at {Path}", projectPath);
 
-        // Initialize base quantitative metrics
-        double governanceScore = 1.0;
-        double ciScore = 1.0;
-        double structureScore = 1.0;
-        double dependencyScore = 1.0;
-        double maintainabilityScore = 1.0;
+        _logger.LogInformation(
+            "🏗️ Running {Evaluator} on {Path}",
+            Name,
+            projectPath);
 
-        // ============================================================
-        // (1) Governance Files
-        // ============================================================
+
+        var allFiles = Directory
+            .EnumerateFiles(
+                projectPath,
+                "*.*",
+                SearchOption.AllDirectories)
+            .Where(f => !IsExcludedDir(f))
+            .ToList();
+
+
+        double governanceScore = 1;
+        double cicdScore = 1;
+        double structureScore = 1;
+        double dependencyScore = 1;
+        double maintainabilityScore = 1;
+
+
+        int missingFiles = 0;
+        int todoCount = 0;
+        int projectCount = 0;
+        int largeFiles = 0;
+
+
+        // ==========================================================
+        // Governance
+        // ==========================================================
+
         if (_policy.EnforceGovernanceFiles)
         {
             foreach (var required in _policy.RequiredFiles)
             {
-                var path = Path.Combine(projectPath, required);
-                if (!File.Exists(path))
+                if (!File.Exists(Path.Combine(projectPath, required)))
+                {
+                    missingFiles++;
                     governanceScore -= 0.1;
+                }
             }
 
-            if (_policy.RequireContributingGuide && !File.Exists(Path.Combine(projectPath, "CONTRIBUTING.md")))
+
+            if (_policy.RequireContributingGuide &&
+                !File.Exists(Path.Combine(projectPath, "CONTRIBUTING.md")))
+            {
                 governanceScore -= 0.05;
+            }
+
 
             if (_policy.RequireVersionFile &&
                 !File.Exists(Path.Combine(projectPath, "CHANGELOG.md")) &&
                 !File.Exists(Path.Combine(projectPath, "version.json")))
+            {
                 governanceScore -= 0.05;
+            }
         }
 
-        // ============================================================
-        // (2) CI/CD Presence
-        // ============================================================
+
+
+        // ==========================================================
+        // CI/CD maturity
+        // ==========================================================
+
         if (_policy.EnforceCiPresence)
         {
-            bool hasCi = _policy.CiPaths.Any(p =>
-                Directory.Exists(Path.Combine(projectPath, p)) ||
-                File.Exists(Path.Combine(projectPath, p)));
+            bool hasPipeline = _policy.CiPaths.Any(path =>
+                Directory.Exists(Path.Combine(projectPath, path)) ||
+                File.Exists(Path.Combine(projectPath, path)));
 
-            if (!hasCi)
-                ciScore -= 0.4;
+
+            if (!hasPipeline)
+                cicdScore -= 0.4;
         }
 
-        // ============================================================
-        // (3) Large Files & Structural Hygiene
-        // ============================================================
+
+
+        // ==========================================================
+        // Repository structure
+        // ==========================================================
+
         if (_policy.CheckLargeFiles)
         {
-            var largeFiles = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-                .Where(f => new FileInfo(f).Length > _policy.MaxFileSizeBytes)
-                .Count();
-
-            if (largeFiles > 0)
-                structureScore -= Math.Min(0.2, largeFiles * 0.02);
-        }
-
-        // ============================================================
-        // (4) TODO/FIXME Density
-        // ============================================================
-        if (_policy.CheckTodoDensity)
-        {
-            int totalTodos = 0, totalFiles = 0;
-            foreach (var f in Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-                .Where(f => f.EndsWith(".cs") || f.EndsWith(".ts") || f.EndsWith(".js") || f.EndsWith(".py")))
+            largeFiles = allFiles.Count(file =>
             {
-                token.ThrowIfCancellationRequested();
                 try
                 {
-                    var content = await File.ReadAllTextAsync(f, token);
-                    totalTodos += Regex.Matches(content, @"\b(TODO|FIXME)\b", RegexOptions.IgnoreCase).Count;
-                    totalFiles++;
+                    return new FileInfo(file).Length >
+                           _policy.MaxFileSizeBytes;
                 }
-                catch { }
-            }
+                catch
+                {
+                    return false;
+                }
+            });
 
-            if (totalFiles > 0 && totalTodos / (double)totalFiles >= _policy.MaxTodoDensity)
-                maintainabilityScore -= 0.15;
+
+            if (largeFiles > 0)
+            {
+                structureScore -=
+                    Math.Min(
+                        0.3,
+                        largeFiles * 0.02);
+            }
         }
 
-        // ============================================================
-        // (5) Nested Depth & File Count
-        // ============================================================
-        var depth = Directory.GetDirectories(projectPath, "*", SearchOption.AllDirectories)
-            .Select(d => d.Replace(projectPath, "").Count(c => c == Path.DirectorySeparatorChar))
-            .DefaultIfEmpty(0)
-            .Max();
-        if (depth > _policy.MaxNestedDepth)
+
+
+        // ==========================================================
+        // Technical debt density
+        // ==========================================================
+
+        if (_policy.CheckTodoDensity)
+        {
+            var sourceFiles = allFiles
+                .Where(IsSourceFile)
+                .ToList();
+
+
+            foreach (var file in sourceFiles)
+            {
+                token.ThrowIfCancellationRequested();
+
+                try
+                {
+                    var content =
+                        await File.ReadAllTextAsync(file, token);
+
+                    todoCount +=
+                        TodoRx.Matches(content).Count;
+                }
+                catch
+                {
+                }
+            }
+
+
+            if (sourceFiles.Count > 0)
+            {
+                var density =
+                    todoCount /
+                    (double)sourceFiles.Count;
+
+
+                if (density >= _policy.MaxTodoDensity)
+                    maintainabilityScore -= 0.15;
+            }
+        }
+
+
+
+        // ==========================================================
+        // Repository depth
+        // ==========================================================
+
+        var maxDepth =
+            Directory
+                .EnumerateDirectories(
+                    projectPath,
+                    "*",
+                    SearchOption.AllDirectories)
+                .Select(dir =>
+                    dir.Replace(projectPath, "")
+                       .Count(c =>
+                           c == Path.DirectorySeparatorChar))
+                .DefaultIfEmpty(0)
+                .Max();
+
+
+        if (maxDepth > _policy.MaxNestedDepth)
             structureScore -= 0.1;
 
-        var totalFileCount = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories).Count();
-        if (totalFileCount > _policy.MaxFileCount)
+
+
+        if (allFiles.Count > _policy.MaxFileCount)
             structureScore -= 0.1;
 
-        // ============================================================
-        // (6) Dependency Lock & License Consistency
-        // ============================================================
+
+
+        // ==========================================================
+        // Dependency governance
+        // ==========================================================
+
         if (_policy.RequireDependencyLock)
         {
-            bool hasLock = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-                .Any(f => f.EndsWith("package-lock.json") ||
-                          f.EndsWith("poetry.lock") ||
-                          f.EndsWith("Pipfile.lock") ||
-                          f.EndsWith("yarn.lock") ||
-                          f.EndsWith("packages.lock.json"));
+            bool hasLock =
+                allFiles.Any(file =>
+                    DependencyLockFiles.Any(lockFile =>
+                        file.EndsWith(
+                            lockFile,
+                            StringComparison.OrdinalIgnoreCase)));
+
+
             if (!hasLock)
                 dependencyScore -= 0.2;
         }
 
-        if (_policy.RequireLicenseConsistency)
-        {
-            var licenses = Directory.EnumerateFiles(projectPath, "LICENSE*", SearchOption.TopDirectoryOnly);
-            if (licenses.Count() > 1)
-                governanceScore -= 0.05;
-        }
 
-        // ============================================================
-        // (7) Project Density
-        // ============================================================
-        var projects = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-            .Where(f => f.EndsWith(".csproj") || f.EndsWith("package.json") || f.EndsWith("pom.xml"))
-            .Count();
 
-        if (projects > _policy.MaxProjectsPerRepo)
+        // ==========================================================
+        // Multi project repository density
+        // ==========================================================
+
+        projectCount =
+            allFiles.Count(file =>
+                file.EndsWith(".csproj") ||
+                file.EndsWith("package.json") ||
+                file.EndsWith("pom.xml"));
+
+
+        if (projectCount > _policy.MaxProjectsPerRepo)
             structureScore -= 0.15;
 
-        // ============================================================
-        // 🧮 Compute Overall Repository Health Index
-        // ============================================================
-        double repoHealth = ComputeRepositoryHealth(governanceScore, ciScore, structureScore, dependencyScore, maintainabilityScore);
 
-        results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
-        {
-            Category = "Repository",
-            Metrics = new Dictionary<string, double>
-            {
-                ["GovernanceScore"] = Math.Max(0, governanceScore),
-                ["CICDScore"] = Math.Max(0, ciScore),
-                ["StructureScore"] = Math.Max(0, structureScore),
-                ["DependencyScore"] = Math.Max(0, dependencyScore),
-                ["MaintainabilityScore"] = Math.Max(0, maintainabilityScore),
-                ["RepositoryHealthIndex"] = repoHealth
-            },
-            Metadata = new Dictionary<string, string>
-            {
-                ["Evaluator"] = Name,
-                ["PolicyEnabled"] = _policy.EnforceGovernanceFiles.ToString(),
-                ["ProjectPath"] = projectPath
-            }
-        });
 
-        _logger.LogInformation("✅ {Evaluator} completed with RepositoryHealthIndex={Health:F2}", Name, repoHealth);
+        // ==========================================================
+        // Final computation
+        // ==========================================================
+
+        var health =
+            ComputeRepositoryHealth(
+                governanceScore,
+                cicdScore,
+                structureScore,
+                dependencyScore,
+                maintainabilityScore);
+
+
+
+        results.Add(
+            new ArchitectureEvaluatorResult(
+                Name,
+                projectPath)
+            {
+                Category = "Repository",
+
+                Metrics = new Dictionary<string, double>
+                {
+                    ["GovernanceScore"] =
+                        Clamp(governanceScore),
+
+                    ["CICDScore"] =
+                        Clamp(cicdScore),
+
+                    ["StructureScore"] =
+                        Clamp(structureScore),
+
+                    ["DependencyScore"] =
+                        Clamp(dependencyScore),
+
+                    ["MaintainabilityScore"] =
+                        Clamp(maintainabilityScore),
+
+                    ["MissingGovernanceFiles"] =
+                        missingFiles,
+
+                    ["LargeFileCount"] =
+                        largeFiles,
+
+                    ["TodoCount"] =
+                        todoCount,
+
+                    ["ProjectCount"] =
+                        projectCount,
+
+                    ["RepositoryHealthIndex"] =
+                        health
+                },
+
+
+                Metadata = new Dictionary<string, string>
+                {
+                    ["Evaluator"] = Name,
+                    ["PolicyEnabled"] =
+                        _policy.EnforceGovernanceFiles.ToString(),
+
+                    ["ProjectPath"] =
+                        projectPath
+                }
+            });
+
+
+
+        _logger.LogInformation(
+            "✅ {Evaluator} completed RepositoryHealthIndex={Health}",
+            Name,
+            health);
+
+
         return results;
     }
 
-    private static double ComputeRepositoryHealth(double gov, double ci, double structure, double dep, double maintain)
+
+
+    private static double ComputeRepositoryHealth(
+        double governance,
+        double cicd,
+        double structure,
+        double dependency,
+        double maintainability)
     {
-        double score = gov * 0.25 + ci * 0.2 + structure * 0.25 + dep * 0.15 + maintain * 0.15;
-        return Math.Round(score * 100, 2);
+        var score =
+            governance * 0.25 +
+            cicd * 0.20 +
+            structure * 0.25 +
+            dependency * 0.15 +
+            maintainability * 0.15;
+
+
+        return Math.Round(
+            Clamp(score) * 100,
+            2);
+    }
+
+
+
+    private static double Clamp(double value)
+        => Math.Max(0, Math.Min(1, value));
+
+
+
+    private static bool IsSourceFile(string file)
+    {
+        return
+            file.EndsWith(".cs") ||
+            file.EndsWith(".java") ||
+            file.EndsWith(".ts") ||
+            file.EndsWith(".js") ||
+            file.EndsWith(".py") ||
+            file.EndsWith(".cpp") ||
+            file.EndsWith(".h");
     }
 }

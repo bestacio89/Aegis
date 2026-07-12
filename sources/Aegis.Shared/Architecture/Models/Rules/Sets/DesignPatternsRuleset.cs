@@ -18,7 +18,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-DEC001",
             Name = "Decorator Delegation Compliance Low",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "DecoratorPatternComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
@@ -29,7 +29,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-DEC002",
             Name = "Decorator Self-Reference Detected",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "DecoratorSelfReferenceCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
@@ -40,7 +40,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-FAC001",
             Name = "Facade Exposure Too Broad",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "FacadePublicMethodCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 20,
@@ -51,7 +51,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-FAC002",
             Name = "Facade Missing Encapsulation",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "FacadePatternComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 80,
@@ -62,7 +62,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-REPO001",
             Name = "Repository Abstraction Missing",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "RepositoryInterfaceComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
@@ -73,7 +73,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-REPO002",
             Name = "Repository Performing External I/O",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "RepositoryIOOperationCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
@@ -84,7 +84,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-BLD001",
             Name = "Builder Pattern Incomplete Implementation",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "BuilderPatternComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
@@ -95,7 +95,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-BLD002",
             Name = "Builder Mutability Violation",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "BuilderMutabilityViolationCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
@@ -106,7 +106,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-FACR001",
             Name = "Factory Pattern Compliance Low",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "FactoryPatternComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
@@ -117,7 +117,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-FACR002",
             Name = "Factory Direct Instantiation Detected",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "FactoryDirectInstantiationCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
@@ -132,7 +132,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-CMD001",
             Name = "Command Missing Corresponding Handler",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "CommandHandlerPairingIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
@@ -143,7 +143,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-CMD002",
             Name = "Command Handler Overload Detected",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "CommandHandlerOverloadCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 1,
@@ -154,7 +154,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-MEDI001",
             Name = "Mediator Centralization Too High",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "MediatorCouplingIndex",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.6,
@@ -165,7 +165,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-MEDI002",
             Name = "Mediator Direct Handler Calls Detected",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "MediatorDirectCallCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
@@ -176,7 +176,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-STRAT001",
             Name = "Strategy Pattern Conditional Selection",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "StrategyConditionalCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
@@ -187,7 +187,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-STRAT002",
             Name = "Strategy Compliance Low",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "StrategyPatternComplianceIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
@@ -198,7 +198,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-OBS001",
             Name = "Observer Missing Unsubscribe Mechanism",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "ObserverUnsubscribeMissingCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
@@ -209,7 +209,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-OBS002",
             Name = "Observer Tight Coupling Detected",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "ObserverCouplingIndex",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.6,
@@ -224,7 +224,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-SING001",
             Name = "Singleton Thread Safety Missing",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "SingletonThreadSafetyIndex",
             Operator = ComparisonOperator.LessThan,
             Threshold = 80,
@@ -235,7 +235,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-SING002",
             Name = "Singleton Global State Detected",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "SingletonGlobalStateUsage",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
@@ -250,7 +250,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-GOD001",
             Name = "God Class Detected",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "GodClassDensity",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.25,
@@ -261,7 +261,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-ADM001",
             Name = "Anemic Domain Model Detected",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "AnemicDomainModelIndex",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.3,
@@ -272,7 +272,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-CIRC001",
             Name = "Circular Pattern Reference Detected",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "PatternCircularReferenceCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
@@ -283,7 +283,7 @@ public static class DesignPatternRuleset
         {
             Id = "AEG-DES-OVER001",
             Name = "Pattern Overuse Detected",
-            Category = nameof(ArchitectureRuleCategory.Design),
+            Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "PatternOveruseIndex",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0.5,

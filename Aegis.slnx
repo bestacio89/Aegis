@@ -1,0 +1,25 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/build/">
+    <File Path="Aegis.ruleset" />
+    <File Path="Directory.Build.props" />
+  </Folder>
+  <Folder Name="/sources/">
+    <Project Path="sources/Aegis.App.WPF/Aegis.Wpf.csproj" />
+    <Project Path="sources/Aegis.Cli/Aegis.Cli.csproj" />
+    <Project Path="sources/Aegis.Core/Aegis.Architecture.csproj" />
+    <Project Path="sources/Aegis.Infrastructure/Aegis.Infrastructure.csproj" />
+    <Project Path="sources/Aegis.Sdk/Aegis.Sdk.csproj" />
+    <Project Path="sources/Aegis.Security/Aegis.Security.csproj" />
+    <Project Path="sources/Aegis.Shared/Aegis.Shared.csproj" />
+  </Folder>
+  <Project Path="sources/Aegis.Installer/Aegis.Installer.csproj" Id="2458c1c1-c1f2-4ad1-9c02-512b4ab1e00f" />
+  <Project Path="sources/Package1/Package1.wixproj" Type="b7dd6f7e-def8-4e67-b5b7-07ef123db6f0" Id="48df3b60-dcc7-4fa2-ab14-e0c183cb3e51">
+    <Platform Solution="*|Any CPU" Project="x64" />
+  </Project>
+</Solution>

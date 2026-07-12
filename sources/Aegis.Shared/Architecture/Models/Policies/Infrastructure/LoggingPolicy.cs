@@ -22,7 +22,7 @@
         // Language-specific expectations
         public Dictionary<string, string[]> FrameworkHints { get; set; } = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["CSharp"] = new[] { "Serilog", "Microsoft.Extensions.Logging", "NLog" },
+            ["C#"] = new[] { "Serilog", "Microsoft.Extensions.Logging", "NLog" },
             ["Java"] = new[] { "SLF4J", "Logback", "Log4J" },
             ["Python"] = new[] { "logging", "loguru" },
             ["Node"] = new[] { "winston", "pino", "bunyan" }

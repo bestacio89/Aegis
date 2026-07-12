@@ -15,9 +15,9 @@
   
 
   <ItemGroup>
-    <PackageReference Include="Franz.Common.DependencyInjection" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.Logging" Version="1.6.21" />
-    <PackageReference Include="Scrutor" Version="6.1.0" />
+    <PackageReference Include="Franz.Common.DependencyInjection" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.Logging" Version="2.2.16" />
+    <PackageReference Include="Scrutor" Version="7.0.0" />
     
       <PackageReference Include="System.ServiceModel.Primitives" Version="10.0.652802" />
       <PackageReference Include="System.ServiceModel.Http" Version="10.0.652802" />

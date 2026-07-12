@@ -1,5 +1,6 @@
 ﻿using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
+using Franz.Common.DependencyInjection;
 
 namespace Aegis.Shared.Contracts;
 
@@ -8,7 +9,7 @@ namespace Aegis.Shared.Contracts;
 /// Evaluators analyze source code and produce structured metrics (EvaluatorResults)
 /// that are later interpreted by the RuleEngine.
 /// </summary>
-public interface IEvaluator
+public interface IEvaluator : IScopedDependency
 {
     /// <summary>
     /// Unique evaluator name (e.g., "ComplexityEvaluator", "ApiConsistencyEvaluator").
@@ -16,7 +17,7 @@ public interface IEvaluator
     string Name { get; }
 
     /// <summary>
-    /// Programming languages supported by this evaluator (e.g., ["CSharp", "TypeScript"]).
+    /// Programming languages supported by this evaluator (e.g., ["C#", "TypeScript"]).
     /// </summary>
     string[] SupportedLanguages { get; }
 

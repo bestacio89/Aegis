@@ -50,7 +50,7 @@ public sealed class ISO27001RuleSet : SecurityRuleSet
             risk: RiskLevel.Moderate,
             owasp: null,
             cwe: "CWE-311",
-            vuln: VulnerabilityType.Stt,
+            vuln: VulnerabilityType.UnencryptedVolume,
             tags: new[] { "filesystem", "encryption", "key", "secret" },
             pattern: @"(?i)(BEGIN PRIVATE KEY|password=|jwt|token|apikey)",
             surface: "File System",

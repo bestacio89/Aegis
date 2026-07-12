@@ -20,7 +20,8 @@ public sealed class SecurityScanSummary
     /// <summary>
     /// Collection of domain-level summaries (Application, IaC, Network, etc.).
     /// </summary>
-    public IReadOnlyCollection<SecurityDomainSummary> DomainSummaries { get; init; } = Array.Empty<SecurityDomainSummary>();
+    public IReadOnlyCollection<SecurityDomainSummary> DomainSummaries { get; init; }
+        = Array.Empty<SecurityDomainSummary>();
 
     /// <summary>
     /// Total number of findings across all domains.
@@ -107,5 +108,33 @@ public sealed class SecurityScanSummary
     /// Compact summary string for console, logs, or dashboards.
     /// </summary>
     public override string ToString() =>
-        $"[{ProjectName}] {DomainCount} domains scanned — {TotalFailed}/{TotalFindings} failed | Max={MaxSeverity}, Avg={GlobalAverageScore:F2}, Compliance={GlobalComplianceRate:F2}%";
+        $"[{ProjectName}] {DomainCount} domains scanned — {TotalFailed}/{TotalFindings} failed | " +
+        $"Max={MaxSeverity}, Avg={GlobalAverageScore:F2}, Compliance={GlobalComplianceRate:F2}%";
+
+    // ------------------------------------------------------------------
+    // Factory: build from raw evaluation results
+    // ------------------------------------------------------------------
+
+    public static SecurityScanSummary FromEvaluations(
+        string projectName,
+        IEnumerable<SecurityEvaluationResult> evaluations,
+        string policyVersion = "v1.0",
+        string executedBy = "system")
+    {
+        var evals = evaluations.ToArray();
+
+        var domainSummaries = evals
+            .GroupBy(e => e.Category)
+            .Select(g => SecurityDomainSummary.FromEvaluations(g.Key, g))
+            .ToArray();
+
+        return new SecurityScanSummary
+        {
+            ProjectName = projectName,
+            DomainSummaries = domainSummaries,
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+            PolicyVersion = policyVersion,
+            ExecutedBy = executedBy
+        };
+    }
 }

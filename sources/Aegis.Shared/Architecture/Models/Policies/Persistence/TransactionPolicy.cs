@@ -10,7 +10,7 @@
         // Expected frameworks per language
         public Dictionary<string, string[]> FrameworkHints { get; set; } = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["CSharp"] = new[] { "TransactionScope", "BeginTransaction", "DbContextTransaction" },
+            ["C#"] = new[] { "TransactionScope", "BeginTransaction", "DbContextTransaction" },
             ["Java"] = new[] { "@Transactional", "EntityManager.getTransaction()", "Connection.setAutoCommit(false)" },
             ["Python"] = new[] { "session.begin()", "with session:", "with transaction.atomic()" },
             ["Node"] = new[] { "sequelize.transaction", "mongoose.startSession" }

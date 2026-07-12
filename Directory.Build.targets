@@ -8,13 +8,7 @@
     <Message Text="🔨 Building $(MSBuildProjectName) ($(Configuration)) under Aegis governance..." Importance="High" />
   </Target>
 
-  <!-- 2️⃣  Copy XML docs to artifacts folder -->
-  <Target Name="CopyDocsToArtifacts" AfterTargets="Build">
-    <ItemGroup>
-      <DocFiles Include="$(TargetDir)*.xml" />
-    </ItemGroup>
-    <Copy SourceFiles="@(DocFiles)" DestinationFolder="$(SolutionDir)artifacts\docs\" SkipUnchangedFiles="true" />
-  </Target>
+ 
 
   <!-- 3️⃣  Generate Source Link PDBs (if public builds) -->
   <Target Name="GenerateSourceLink" AfterTargets="Pack">

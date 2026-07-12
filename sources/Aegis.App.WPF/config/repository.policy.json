@@ -1,0 +1,14 @@
+{
+  "Ropistory": {
+    "RequiredFiles": [ "README.md", "LICENSE", ".editorconfig" ],
+    "CiPaths": [ ".github/workflows", "azure-pipelines.yml" ],
+    "MaxFileSizeBytes": 10485760,
+    "MaxTodoDensity": 3,
+    "MaxProjectsPerRepo": 8,
+    "RequireSingleRootSolution": true,
+    "EnforceGovernanceFiles": true,
+    "EnforceCiPresence": true,
+    "CheckLargeFiles": true,
+    "CheckTodoDensity": true
+  }
+}

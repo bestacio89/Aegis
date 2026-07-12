@@ -26,7 +26,7 @@
         /// </summary>
         public Dictionary<string, EnforcementMode> EnforcementByLanguage { get; set; } = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["CSharp"] = EnforcementMode.Strict,
+            ["C#"] = EnforcementMode.Strict,
             ["Java"] = EnforcementMode.Advisory,
             ["Python"] = EnforcementMode.Advisory,
             ["TypeScript"] = EnforcementMode.Strict,

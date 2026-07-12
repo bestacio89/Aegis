@@ -1,176 +1,340 @@
-﻿using Aegis.Infrastructure.Data;
-using Aegis.Infrastructure.Persistence;
-using Aegis.Shared.Architecture.Models;
-using Microsoft.Extensions.Logging;
-using OxyPlot;
-using OxyPlot.Axes;
-using OxyPlot.Series;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using Aegis.Wpf.models;
+using Aegis.Wpf.Models;
 using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models;
 
-namespace Aegis.App.Wpf.ViewModels;
+using CommunityToolkit.Mvvm.ComponentModel;
 
-public sealed class RuleDashboardViewModel
+using LiveChartsCore;
+using LiveChartsCore.SkiaSharpView;
+using LiveChartsCore.SkiaSharpView.Painting;
+
+using Microsoft.Extensions.Logging;
+
+using SkiaSharp;
+
+using System.Collections.ObjectModel;
+using System.IO;
+
+namespace Aegis.Wpf.ViewModels;
+
+public sealed partial class RuleDashboardViewModel : ObservableObject
 {
-    private readonly IRuleResultRepository _ruleRepo;
-    private readonly IReportRepository _reportRepo;
     private readonly ILogger<RuleDashboardViewModel> _logger;
 
-    public ObservableCollection<RuleResultEntity> RuleResults { get; } = new();
-
-    // --- Chart bindings ---
-    public PlotModel SeverityPlotModel { get; private set; } = new();
-    public PlotModel CategoryPlotModel { get; private set; } = new();
-
-    // --- KPI bindings ---
-    public int TotalViolations { get; private set; }
-    public int CriticalCount { get; private set; }
-    public int BlockerCount { get; private set; }
 
     public RuleDashboardViewModel(
-        IRuleResultRepository ruleRepo,
-        IReportRepository reportRepo,
         ILogger<RuleDashboardViewModel> logger)
     {
-        _ruleRepo = ruleRepo;
-        _reportRepo = reportRepo;
         _logger = logger;
 
-        _ = LoadAsync(); // fire & forget
+        RuleResults =
+            new ObservableCollection<RuleDashboardItem>();
     }
 
-    private async Task LoadAsync()
+
+
+    // ==========================================================
+    // GRID
+    // ==========================================================
+
+    public ObservableCollection<RuleDashboardItem> RuleResults { get; }
+
+
+
+    // ==========================================================
+    // KPI
+    // ==========================================================
+
+    [ObservableProperty]
+    private int totalViolations;
+
+
+    [ObservableProperty]
+    private int blockerCount;
+
+
+    [ObservableProperty]
+    private int criticalCount;
+
+
+    [ObservableProperty]
+    private int highCount;
+
+
+    [ObservableProperty]
+    private string mostAffectedCategory = "-";
+
+
+    [ObservableProperty]
+    private double projectHealth;
+
+
+
+    [ObservableProperty]
+    private double weightedCompliance;
+
+
+
+    // ==========================================================
+    // CHARTS
+    // ==========================================================
+
+    [ObservableProperty]
+    private ISeries[] severitySeries = [];
+
+
+    [ObservableProperty]
+    private ISeries[] categorySeries = [];
+
+
+    [ObservableProperty]
+    private Axis[] categoryAxes = [];
+
+
+    [ObservableProperty]
+    private Axis[] valueAxes = [];
+
+
+
+    // ==========================================================
+    // UPDATE FROM REPORT
+    // ==========================================================
+
+    public void Update(
+        AegisArchitectureReport report)
     {
         try
         {
-            _logger.LogInformation("📊 Loading latest report results...");
-            var reports = await _reportRepo.GetAllReportsAsync(default);
-            var lastReport = reports.OrderByDescending(r => r.ScanDate).FirstOrDefault();
+            RuleResults.Clear();
 
-            if (lastReport == null)
+
+            foreach (var result in report.Results)
             {
-                _logger.LogWarning("⚠️ No reports found.");
-                return;
+                RuleResults.Add(
+                    new RuleDashboardItem(
+                        result.RuleName,
+                        result.Category,
+                        result.Severity,
+                        Path.GetFileName(result.Target),
+                        result.Message,
+                        result.WeightedImpact));
             }
 
-            var violations = await _ruleRepo.GetViolationsByReportIdAsync(lastReport.Id, default);
 
-            RuleResults.Clear();
-            foreach (var v in violations)
-                RuleResults.Add(v);
 
-            TotalViolations = RuleResults.Count;
-            CriticalCount = RuleResults.Count(v => v.Severity == ArchitectureRuleSeverity.Critical);
-            BlockerCount = RuleResults.Count(v => v.Severity == ArchitectureRuleSeverity.Blocker);
+            TotalViolations =
+                report.TotalViolations;
+
+
+
+            BlockerCount =
+                report.Results.Count(x =>
+                    x.Severity ==
+                    ArchitectureRuleSeverity.Blocker);
+
+
+
+            CriticalCount =
+                report.Results.Count(x =>
+                    x.Severity ==
+                    ArchitectureRuleSeverity.Critical);
+
+
+
+            HighCount =
+                report.Results.Count(x =>
+                    x.Severity ==
+                    ArchitectureRuleSeverity.High);
+
+
+
+            MostAffectedCategory =
+                report.Results
+                    .GroupBy(x => x.Category.ToString())
+                    .OrderByDescending(x => x.Count())
+                    .FirstOrDefault()
+                    ?.Key
+                    ?? "-";
+
+
+
+            ProjectHealth =
+                report.Metrics.ProjectHealthIndex;
+
+
+
+            WeightedCompliance =
+                report.Metrics.ProjectHealthIndex;
+
+
 
             BuildSeverityChart();
-            BuildCategoryChart();
 
-            _logger.LogInformation("✅ Loaded {Count} rule violations.", RuleResults.Count);
+            BuildCategoryChart(report);
+
+
+
+            _logger.LogInformation(
+                "Rule dashboard updated from report. {Rules} findings.",
+                RuleResults.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Failed to load rule dashboard data.");
+            _logger.LogError(
+                ex,
+                "Failed updating rule dashboard.");
         }
     }
 
-    // -------------------- OxyPlot builders --------------------
+
+
+    // ==========================================================
+    // CHART BUILDERS
+    // ==========================================================
 
     private void BuildSeverityChart()
     {
-        var grouped = RuleResults
-            .GroupBy(v => v.Severity)
-            .Select(g => new { Severity = g.Key, Count = g.Count() })
-            .ToList();
+        var grouped =
+            Enum.GetValues<ArchitectureRuleSeverity>()
+                .Select(severity =>
+                    new
+                    {
+                        Severity = severity,
 
-        var model = new PlotModel
-        {
-            Title = "Violations by Severity",
-            TextColor = OxyColors.White,
-            Background = OxyColor.FromRgb(30, 30, 30)
-        };
+                        Count =
+                            RuleResults.Count(x =>
+                                x.Severity == severity)
+                    })
+                .ToList();
 
-        var pie = new PieSeries
-        {
-            StrokeThickness = 1,
-            InsideLabelPosition = 0.8,
-            AngleSpan = 360,
-            StartAngle = 0,
-            FontSize = 14
-        };
 
-        foreach (var g in grouped)
-        {
-            var color = g.Severity switch
+
+        SeveritySeries =
+            grouped.Select(x =>
             {
-                ArchitectureRuleSeverity.Blocker => OxyColors.DarkRed,
-                ArchitectureRuleSeverity.Critical => OxyColors.IndianRed,
-                ArchitectureRuleSeverity.High => OxyColors.Orange,
-                ArchitectureRuleSeverity.Medium => OxyColors.Gold,
-                ArchitectureRuleSeverity.Info => OxyColors.SkyBlue,
-                _ => OxyColors.Gray
-            };
+                return new PieSeries<int>
+                {
+                    Values =
+                    [
+                        x.Count
+                    ],
 
-            pie.Slices.Add(new PieSlice(g.Severity.ToString(), g.Count) { Fill = color });
-        }
+                    Name =
+                        x.Severity.ToString(),
 
-        model.Series.Add(pie);
-        SeverityPlotModel = model;
+                    Fill =
+                        new SolidColorPaint(
+                            GetSeverityColor(x.Severity))
+                };
+
+            })
+            .ToArray();
     }
 
-    private void BuildCategoryChart()
+
+
+    private void BuildCategoryChart(
+        AegisArchitectureReport report)
     {
-        var grouped = RuleResults
-            .GroupBy(v => v.Category)
-            .Select(g => new { Category = g.Key ?? "Unknown", Count = g.Count() })
-            .ToList();
+        /*
+         * Use ComplianceScores as the source of truth.
+         *
+         * This guarantees that clean categories appear:
+         *
+         * Security       100%
+         * Architecture   95%
+         * Dependency     80%
+         *
+         * instead of only showing categories
+         * where violations happened.
+         */
 
-        var model = new PlotModel
-        {
-            Title = "Violations by Category",
-            TextColor = OxyColors.White,
-            Background = OxyColor.FromRgb(30, 30, 30)
-        };
 
-        // 🧭 Axes
-        var catAxis = new CategoryAxis
-        {
-            Position = AxisPosition.Bottom,
-            TextColor = OxyColors.White,
-            Title = "Category"
-        };
+        var categories =
+            report.ComplianceScores
+                .OrderBy(x => x.Value)
+                .ToList();
 
-        var valAxis = new LinearAxis
-        {
-            Position = AxisPosition.Left,
-            Title = "Count",
-            TextColor = OxyColors.White,
-            MajorGridlineStyle = LineStyle.Solid,
-            MinorGridlineStyle = LineStyle.Dot
-        };
 
-        foreach (var g in grouped)
-            catAxis.Labels.Add(g.Category);
 
-        // 🧱 BarSeries (acts as column series when you flip axes)
-        var barSeries = new BarSeries
-        {
-            FillColor = OxyColor.FromRgb(0, 191, 255),
-            StrokeColor = OxyColors.White,
-            StrokeThickness = 1,
-            ItemsSource = grouped.Select(g => new BarItem { Value = g.Count }).ToList(),
-            LabelPlacement = LabelPlacement.Inside,
-            LabelFormatString = "{0}"
-        };
+        CategorySeries =
+        [
+            new ColumnSeries<double>
+            {
+                Values =
+                    categories
+                        .Select(x => x.Value)
+                        .ToArray(),
 
-        // For vertical “column” look, we flip the axes
-        model.Axes.Add(valAxis);
-        model.Axes.Add(catAxis);
-        model.Series.Add(barSeries);
+                Name =
+                    "Compliance %",
 
-        CategoryPlotModel = model;
+                Fill =
+                    new SolidColorPaint(
+                        SKColors.DeepSkyBlue)
+            }
+        ];
+
+
+
+        CategoryAxes =
+        [
+            new Axis
+            {
+                Labels =
+                    categories
+                        .Select(x =>
+                            x.Key.ToString())
+                        .ToArray(),
+
+                LabelsRotation = 25
+            }
+        ];
+
+
+
+        ValueAxes =
+        [
+            new Axis
+            {
+                Name =
+                    "Compliance %",
+
+                MinLimit = 0,
+
+                MaxLimit = 100
+            }
+        ];
     }
 
+
+
+    private static SKColor GetSeverityColor(
+        ArchitectureRuleSeverity severity)
+    {
+        return severity switch
+        {
+            ArchitectureRuleSeverity.Blocker =>
+                SKColors.DarkRed,
+
+            ArchitectureRuleSeverity.Critical =>
+                SKColors.IndianRed,
+
+            ArchitectureRuleSeverity.High =>
+                SKColors.Orange,
+
+            ArchitectureRuleSeverity.Medium =>
+                SKColors.Gold,
+
+            ArchitectureRuleSeverity.Low =>
+                SKColors.LightGreen,
+
+            ArchitectureRuleSeverity.Info =>
+                SKColors.SkyBlue,
+
+            _ =>
+                SKColors.Gray
+        };
+    }
 }

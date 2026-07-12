@@ -1,139 +1,385 @@
-﻿using Aegis.Infrastructure.Aggregation;
-using Aegis.Shared.Architecture.Enums;
-using Aegis.Shared.Architecture.Models;
-using Aegis.Shared.Contracts;
-using Microsoft.Extensions.Logging;
-using QuestPDF.Fluent;
-using QuestPDF.Helpers;
-using QuestPDF.Infrastructure;
+﻿//using Aegis.Infrastructure.Aggregation;
+//using Aegis.Shared.Architecture.Enums;
+//using Aegis.Shared.Architecture.Models;
+//using Aegis.Shared.Contracts;
+//using Microsoft.Extensions.Logging;
+//using MigraDoc.DocumentObjectModel;
+//using MigraDoc.Rendering;
 
-namespace Aegis.Infrastructure.Exporters;
+//namespace Aegis.Infrastructure.Exporters;
 
-public sealed class ForensicPdfExporter : IReportExporter
-{
-    public string Format => "pdf.forensic";
-    private readonly ILogger<ForensicPdfExporter> _logger;
-    private readonly LayerAggregator _aggregator;
+///// <summary>
+///// 📑 Forensic PDF Report Exporter.
+///// Generates detailed architectural audit reports using MigraDoc/PDFsharp.
+///// </summary>
+//public sealed class ForensicPdfExporter : IReportExporter
+//{
+//    public string Format => "pdf";
 
-    public ForensicPdfExporter(ILogger<ForensicPdfExporter> logger, LayerAggregator aggregator)
-    {
-        _logger = logger;
-        _aggregator = aggregator;
-    }
+//    private readonly ILogger<ForensicPdfExporter> _logger;
+//    private readonly LayerAggregator _aggregator;
 
-    public async Task ExportAsync(
-        AegisArchitectureReport report,
-        ProjectArchitectureContext context,
-        string outputPath,
-        ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
-        CancellationToken token = default)
-    {
-        var categories = _aggregator.BuildCategorySummaries(report.Results);
 
-        var doc = Document.Create(container =>
-        {
-            // ─── COVER PAGE ─────────────────────────────────────────────
-            container.Page(page =>
-            {
-                page.Margin(40);
-                page.Header().AlignCenter()
-                    .Text("🧠 Aegis Forensic Architecture Audit Report\nRapport d’Audit Architectural Forensique")
-                    .FontSize(22).Bold().FontColor(Colors.Blue.Medium);
+//    public ForensicPdfExporter(
+//        ILogger<ForensicPdfExporter> logger,
+//        LayerAggregator aggregator)
+//    {
+//        _logger = logger;
+//        _aggregator = aggregator;
+//    }
 
-                page.Content().Column(col =>
-                {
-                    col.Item().Text($"Project / Projet : {report.ProjectName}").Bold();
-                    col.Item().Text($"Language / Langage : {context.Language} / {context.Framework}");
-                    col.Item().Text($"Architecture / Architecture : {context.ArchitectureStyle}");
-                    col.Item().Text($"Health Index / Indice de Santé : {report.Metrics.ProjectHealthIndex:0.00}%");
-                    col.Item().Text($"Violations / Violations : {report.TotalViolations}");
-                    col.Item().PaddingTop(10)
-                        .Text("Generated automatically by Aegis — deterministic architecture analysis tool.\nGénéré automatiquement par Aegis — outil d’analyse architecturale déterministe.")
-                        .FontSize(10).FontColor(Colors.Grey.Darken2);
-                });
 
-                page.Footer().AlignCenter()
-                    .Text($"Generated / Généré : {DateTime.UtcNow:u} — Aegis v1.0 | Franz Technologies © 2025")
-                    .FontSize(9);
-            });
+//    public async Task ExportAsync(
+//        AegisArchitectureReport report,
+//        ProjectArchitectureContext context,
+//        string outputPath,
+//        ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
+//        CancellationToken token = default)
+//    {
+//        try
+//        {
+//            await Task.Run(() =>
+//            {
+//                token.ThrowIfCancellationRequested();
 
-            // ─── SUMMARY-ONLY MODE ─────────────────────────────────────
-            if (detailLevel == ArchitectureReportDetailLevel.SummaryOnly)
-            {
-                container.Page(page =>
-                {
-                    page.Margin(40);
-                    page.Header().Text("📊 Executive Summary / Résumé Exécutif")
-                        .FontSize(18).Bold().FontColor(Colors.Blue.Darken2);
+//                var categories =
+//                    _aggregator.BuildCategorySummaries(report.Results);
 
-                    page.Content().Column(col =>
-                    {
-                        foreach (var category in categories.Values)
-                        {
-                            col.Item().Text($"• {category.CategoryName} — {category.HealthIndex:0.0}% health, {category.TotalViolations} violations")
-                                .FontSize(11)
-                                .FontColor(category.HealthIndex switch
-                                {
-                                    > 80 => Colors.Green.Darken2,
-                                    > 60 => Colors.Orange.Darken2,
-                                    _ => Colors.Red.Medium
-                                });
-                        }
-                    });
 
-                    page.Footer().AlignRight().Text("Summary Mode — Aegis").FontSize(9);
-                });
-                return;
-            }
+//                var document =
+//                    CreateDocument(
+//                        report,
+//                        context,
+//                        categories,
+//                        detailLevel);
 
-            // ─── LAYERED OR FULL MODE ─────────────────────────────────
-            foreach (var category in categories.Values)
-            {
-                container.Page(page =>
-                {
-                    page.Margin(40);
-                    page.Header().Text($"📚 Category / Catégorie : {category.CategoryName}")
-                        .FontSize(18).Bold().FontColor(Colors.Blue.Darken2);
 
-                    page.Content().Column(col =>
-                    {
-                        col.Item().Text($"Health Index / Indice de Santé : {category.HealthIndex:0.0}%");
-                        col.Item().Text($"Violations / Violations : {category.TotalViolations}");
+//                var renderer =
+//                    new PdfDocumentRenderer
+//                    {
+//                        Document = document
+//                    };
 
-                        foreach (var (layerName, layer) in category.Layers)
-                        {
-                            col.Item().PaddingVertical(10)
-                                .Text($"🧩 Layer / Couche : {layerName}")
-                                .Bold().FontColor(Colors.Grey.Darken3);
 
-                            col.Item().Text($"Violations : {layer.Violations} — Health : {layer.HealthIndex:0.0}%");
+//                renderer.RenderDocument();
 
-                            if (detailLevel >= ArchitectureReportDetailLevel.Layered)
-                            {
-                                col.Item().PaddingVertical(5)
-                                    .Text("Top Violations / Principales Violations").Bold();
-                                foreach (var v in layer.TopViolations.Take(5))
-                                    col.Item().Text($"• {v.RuleName} [{v.Severity}] — {v.Message}")
-                                        .FontSize(10).FontColor(Colors.Grey.Darken2);
-                            }
+//                renderer.PdfDocument.Save(outputPath);
 
-                            if (detailLevel == ArchitectureReportDetailLevel.FullForensic && layer.Recommendations.Any())
-                            {
-                                col.Item().Text("Recommendations / Recommandations").Bold();
-                                foreach (var rec in layer.Recommendations)
-                                    col.Item().Text($"- {rec}");
-                            }
-                        }
-                    });
+//            }, token);
 
-                    page.Footer().AlignRight()
-                        .Text($"Category {category.CategoryName} — {DateTime.UtcNow:u}")
-                        .FontSize(9);
-                });
-            }
-        });
 
-        await Task.Run(() => doc.GeneratePdf(outputPath), token);
-        _logger.LogInformation("📑 Forensic PDF ({Mode}) generated → {Path}", detailLevel, outputPath);
-    }
-}
+//            _logger.LogInformation(
+//                "📑 Forensic PDF ({Mode}) generated → {Path}",
+//                detailLevel,
+//                outputPath);
+//        }
+//        catch (Exception ex)
+//        {
+//            _logger.LogError(
+//                ex,
+//                "❌ Failed generating forensic PDF → {Path}",
+//                outputPath);
+
+//            throw;
+//        }
+//    }
+
+
+
+//    private static Document CreateDocument(
+//        AegisArchitectureReport report,
+//        ProjectArchitectureContext context,
+//        IReadOnlyDictionary<string, CategorySummary> categories,
+//        ArchitectureReportDetailLevel detailLevel)
+//    {
+//        var document = new Document();
+
+//        ConfigureStyles(document);
+
+
+//        AddCoverPage(
+//            document,
+//            report,
+//            context);
+
+
+//        if (detailLevel == ArchitectureReportDetailLevel.SummaryOnly)
+//        {
+//            AddSummaryReport(
+//                document,
+//                categories);
+
+//            return document;
+//        }
+
+
+//        AddForensicSections(
+//            document,
+//            categories,
+//            detailLevel);
+
+
+//        return document;
+//    }
+
+
+
+//    private static void ConfigureStyles(Document document)
+//    {
+//        document.Info.Title =
+//            "Aegis Forensic Architecture Audit";
+
+//        document.Info.Author =
+//            "Aegis";
+
+
+//        var normal = GetStyle(
+//            document,
+//            StyleNames.Normal);
+
+//        normal.Font.Name = "DejaVu Sans";
+//        normal.Font.Size = 10;
+
+
+//        var heading = GetStyle(
+//            document,
+//            StyleNames.Heading1);
+
+//        heading.Font.Name = "DejaVu Sans";
+//        heading.Font.Size = 18;
+//        heading.Font.Bold = true;
+
+
+//        var subHeading = GetStyle(
+//            document,
+//            StyleNames.Heading2);
+
+//        subHeading.Font.Name = "DejaVu Sans";
+//        subHeading.Font.Size = 13;
+//        subHeading.Font.Bold = true;
+//    }
+
+
+//    private static Style GetStyle(
+//        Document document,
+//        string styleName)
+//    {
+//        return document.Styles[styleName]
+//            ?? throw new InvalidOperationException(
+//                $"Required MigraDoc style '{styleName}' was not found.");
+//    }
+
+
+
+//    private static void AddCoverPage(
+//        Document document,
+//        AegisArchitectureReport report,
+//        ProjectArchitectureContext context)
+//    {
+//        var section =
+//            document.AddSection();
+
+
+//        section.PageSetup.PageFormat =
+//            PageFormat.A4;
+
+
+//        var title =
+//            section.AddParagraph();
+
+//        title.Style =
+//            "Heading1";
+
+//        title.AddText(
+//            "🧠 Aegis Forensic Architecture Audit Report");
+
+
+//        section.AddParagraph(
+//            "Rapport d’Audit Architectural Forensique");
+
+
+//        var info =
+//            section.AddParagraph();
+
+
+//        info.AddFormattedText(
+//            $"Project / Projet: {report.ProjectName}\n",
+//            TextFormat.Bold);
+
+
+//        info.AddText(
+//            $"Language / Langage: {context.Language}\n");
+
+
+//        info.AddText(
+//            $"Framework: {context.Framework}\n");
+
+
+//        info.AddText(
+//            $"Architecture: {context.ArchitectureStyle ?? "Unknown"}\n");
+
+
+//        info.AddText(
+//            $"Health Index: {report.Metrics.ProjectHealthIndex:0.00}%\n");
+
+
+//        info.AddText(
+//            $"Violations: {report.TotalViolations}");
+
+
+//        section.AddParagraph(
+//            "Generated automatically by Aegis — deterministic architecture analysis tool.");
+
+
+//        AddFooter(section);
+//    }
+
+
+
+//    private static void AddSummaryReport(
+//        Document document,
+//        IReadOnlyDictionary<string, CategorySummary> categories)
+//    {
+//        var section =
+//            document.AddSection();
+
+
+//        section.AddParagraph(
+//            "📊 Executive Summary / Résumé Exécutif")
+//            .Style =
+//            "Heading1";
+
+
+//        foreach (var category in categories.Values)
+//        {
+//            var paragraph =
+//                section.AddParagraph();
+
+
+//            paragraph.AddText(
+//                $"• {category.CategoryName}");
+
+
+//            paragraph.AddText(
+//                $" — Health {category.HealthIndex:0.0}%");
+
+
+//            paragraph.AddText(
+//                $" — Violations {category.TotalViolations}");
+//        }
+
+
+//        AddFooter(section);
+//    }
+
+
+
+//    private static void AddForensicSections(
+//        Document document,
+//        IReadOnlyDictionary<string, CategorySummary> categories,
+//        ArchitectureReportDetailLevel detailLevel)
+//    {
+//        foreach (var category in categories.Values)
+//        {
+//            var section =
+//                document.AddSection();
+
+
+//            section.AddParagraph(
+//                $"📚 Category: {category.CategoryName}")
+//                .Style =
+//                "Heading1";
+
+
+//            section.AddParagraph(
+//                $"Health Index: {category.HealthIndex:0.0}%");
+
+
+//            section.AddParagraph(
+//                $"Violations: {category.TotalViolations}");
+
+
+
+//            foreach (var layer in category.Layers)
+//            {
+//                AddLayerSection(
+//                    section,
+//                    layer.Key,
+//                    layer.Value,
+//                    detailLevel);
+//            }
+
+
+//            AddFooter(section);
+//        }
+//    }
+
+
+
+//    private static void AddLayerSection(
+//        Section section,
+//        string layerName,
+//        dynamic layer,
+//        ArchitectureReportDetailLevel detailLevel)
+//    {
+//        section.AddParagraph(
+//            $"🧩 Layer: {layerName}")
+//            .Style =
+//            "Heading2";
+
+
+//        section.AddParagraph(
+//            $"Violations: {layer.Violations}");
+
+
+//        section.AddParagraph(
+//            $"Health: {layer.HealthIndex:0.0}%");
+
+
+
+//        if (detailLevel >= ArchitectureReportDetailLevel.Layered)
+//        {
+//            section.AddParagraph(
+//                "Top Violations")
+//                .Style =
+//                "Heading2";
+
+
+//            foreach (var violation in layer)
+//            {
+//                section.AddParagraph(
+//                    $"• {violation.RuleName} [{violation.Severity}] - {violation.Message}");
+//            }
+//        }
+
+
+
+//        if (detailLevel == ArchitectureReportDetailLevel.FullForensic &&
+//           layer.Recommendations.Any())
+//        {
+//            section.AddParagraph(
+//                "Recommendations")
+//                .Style =
+//                "Heading2";
+
+
+//            foreach (var recommendation in layer.Recommendations)
+//            {
+//                section.AddParagraph(
+//                    $"- {recommendation}");
+//            }
+//        }
+//    }
+
+
+
+//    private static void AddFooter(
+//        Section section)
+//    {
+//        section.Footers.Primary
+//            .AddParagraph(
+//                $"Generated {DateTime.UtcNow:u} — Aegis v1.0")
+//            .Format.Alignment =
+//            ParagraphAlignment.Center;
+//    }
+//}

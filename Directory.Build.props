@@ -37,23 +37,19 @@
     <WarningsAsErrors>CS8600;CS8602;CS8618;CS8629;CS8632</WarningsAsErrors>
 
     <!-- Documentation -->
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
 
     <!-- Metadata -->
     <Authors>Bernardo Estacio Abreu</Authors>
-    <Company>AjnaTellus</Company>
+    <Company>Enthelekheia</Company>
     <Product>Aegis</Product>
     <RepositoryUrl>https://dev.azure.com/AjnaTellus/_git/Aegis</RepositoryUrl>
     <Version>1.0.0-alpha</Version>
-    <Copyright>© 2025 AjnaTellus Systems</Copyright>
+    <Copyright>© 2025 Enthelekheia Systems</Copyright>
 
-    <!-- Output Path -->
-    <OutputPath>$(SolutionDir)artifacts\$(MSBuildProjectName)\</OutputPath>
-    <DocumentationFile>$(OutputPath)$(AssemblyName).xml</DocumentationFile>
+
 
     <!-- Analyzer rules -->
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <CodeAnalysisRuleSet>$(SolutionDir)Aegis.ruleset</CodeAnalysisRuleSet>
 
     <!-- SourceLink -->
     <PublishRepositoryUrl>true</PublishRepositoryUrl>

@@ -1,119 +1,291 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
-using OxyPlot;
-using OxyPlot.Axes;
-using OxyPlot.Series;
-using System.IO;
-using System.Text.Json;
+﻿using System.Collections.ObjectModel;
 
-namespace Aegis.App.Wpf.ViewModels;
+using Aegis.Wpf.Models;
+using Aegis.Shared.Architecture.Models;
+
+using CommunityToolkit.Mvvm.ComponentModel;
+
+using LiveChartsCore;
+using LiveChartsCore.SkiaSharpView;
+using LiveChartsCore.SkiaSharpView.Painting;
+
+using SkiaSharp;
+
+
+namespace Aegis.Wpf.ViewModels;
 
 public sealed partial class SectionDashboardViewModel : ObservableObject
 {
-    // 🧩 This is YOUR property (not an OxyPlot type)
-    [ObservableProperty]
-    private PlotModel _sectionPlot = new();
-
-    [ObservableProperty]
-    private string _title = "🧩 Aegis Policy Sections";
-
     public SectionDashboardViewModel()
     {
-        LoadPolicySections();
+        SectionResults =
+            new ObservableCollection<SectionDashboardItem>();
     }
 
-    private void LoadPolicySections()
+
+
+    // ==========================================================
+    // PROPERTIES
+    // ==========================================================
+
+    [ObservableProperty]
+    private string title =
+        "🧩 Architecture Sections";
+
+
+
+    public ObservableCollection<SectionDashboardItem> SectionResults
     {
-        try
+        get;
+    }
+
+
+
+    [ObservableProperty]
+    private int totalSections;
+
+
+
+    [ObservableProperty]
+    private int compliantCount;
+
+
+
+    [ObservableProperty]
+    private int nonCompliantCount;
+
+
+
+    [ObservableProperty]
+    private double averageScore;
+
+
+
+    [ObservableProperty]
+    private double projectHealth;
+
+
+
+    [ObservableProperty]
+    private ISeries[] compliancePieSeries = [];
+
+
+
+    [ObservableProperty]
+    private ISeries[] sectionCategorySeries = [];
+
+
+
+    [ObservableProperty]
+    private Axis[] categoryAxes = [];
+
+
+
+    [ObservableProperty]
+    private Axis[] valueAxes = [];
+
+
+
+    // ==========================================================
+    // UPDATE FROM REPORT
+    // ==========================================================
+
+    public void Update(
+        AegisArchitectureReport report)
+    {
+        SectionResults.Clear();
+
+
+
+        /*
+         * ComplianceScores already contains every registered category.
+         *
+         * Example:
+         *
+         * Architecture   100
+         * Dependency      95
+         * Security        100
+         * Performance     82
+         *
+         * This prevents clean categories from disappearing.
+         */
+
+
+        foreach (var section in report.ComplianceScores)
         {
-            var policyPath = Path.Combine(AppContext.BaseDirectory, "config", "aegis.policy.json");
-            if (!File.Exists(policyPath))
-            {
-                CreateEmptyPlot("⚠️ Policy file not found");
-                return;
-            }
+            var findings =
+                report.Results.Count(x =>
+                    x.Category == section.Key);
 
-            var json = File.ReadAllText(policyPath);
-            using var doc = JsonDocument.Parse(json);
 
-            if (!doc.RootElement.TryGetProperty("AegisPolicy", out var root))
-            {
-                CreateEmptyPlot("⚠️ Invalid policy structure");
-                return;
-            }
 
-            var names = new List<string>();
-            var counts = new List<int>();
-
-            foreach (var prop in root.EnumerateObject())
-            {
-                names.Add(prop.Name);
-                counts.Add(prop.Value.EnumerateObject().Count());
-            }
-
-           BuildSectionPlot(names, counts);
+            SectionResults.Add(
+                new SectionDashboardItem(
+                    section.Key.ToString(),
+                    section.Key,
+                    section.Value / 100.0,
+                    findings,
+                    section.Value >= 80
+                        ? "Compliant"
+                        : "Non-Compliant",
+                    findings == 0
+                        ? "No findings"
+                        : $"{findings} findings"));
         }
-        catch (Exception ex)
-        {
-            CreateEmptyPlot("❌ Failed to load policy data");
-            Console.WriteLine(ex);
-        }
+
+
+
+        TotalSections =
+            SectionResults.Count;
+
+
+
+        CompliantCount =
+            SectionResults.Count(x =>
+                x.Status == "Compliant");
+
+
+
+        NonCompliantCount =
+            SectionResults.Count(x =>
+                x.Status != "Compliant");
+
+
+
+        AverageScore =
+            SectionResults.Count == 0
+                ? 100
+                : SectionResults.Average(x =>
+                    x.Score * 100);
+
+
+
+        ProjectHealth =
+            report.Metrics.ProjectHealthIndex;
+
+
+
+        BuildComplianceChart();
+
+        BuildCategoryChart();
+
+
+
     }
 
-    // ---------------------------------------------------------------------
-    // 🧱 Build OxyPlot model
-    // ---------------------------------------------------------------------
-    private PlotModel BuildSectionPlot(List<string> names, List<int> counts)
+
+
+    // ==========================================================
+    // CHARTS
+    // ==========================================================
+
+    private void BuildComplianceChart()
     {
-        var model = new PlotModel
-        {
-            Title = "Policy Sections and Rule Counts",
-            TextColor = OxyColors.White,
-            Background = OxyColor.FromRgb(30, 30, 30),
-            PlotAreaBorderColor = OxyColors.Gray
-        };
+        CompliancePieSeries =
+        [
+            new PieSeries<int>
+            {
+                Values =
+                [
+                    CompliantCount
+                ],
 
-        var catAxis = new CategoryAxis
-        {
-            Position = AxisPosition.Bottom,
-            TextColor = OxyColors.White,
-            Title = "Sections"
-        };
-        catAxis.Labels.AddRange(names);
+                Name =
+                    "Compliant",
 
-        var valAxis = new LinearAxis
-        {
-            Position = AxisPosition.Left,
-            Title = "Rule Count",
-            TextColor = OxyColors.White,
-            MajorGridlineStyle = LineStyle.Solid
-        };
+                Fill =
+                    new SolidColorPaint(
+                        SKColors.LightGreen)
+            },
 
-        // BarSeries is always horizontal, so we’ll just flip axis order for vertical layout
-        var barSeries = new BarSeries
-        {
-            Title = "Rules per Section",
-            FillColor = OxyColor.FromRgb(0, 191, 255),
-            StrokeColor = OxyColors.White,
-            StrokeThickness = 1,
-            LabelPlacement = LabelPlacement.Inside,
-            LabelFormatString = "{0}",
-            ItemsSource = counts.Select(c => new BarItem { Value = c }).ToList()
-        };
+            new PieSeries<int>
+            {
+                Values =
+                [
+                    NonCompliantCount
+                ],
 
-        model.Axes.Add(catAxis);
-        model.Axes.Add(valAxis);
-        model.Series.Add(barSeries);
+                Name =
+                    "Non-Compliant",
 
-        return model;
+                Fill =
+                    new SolidColorPaint(
+                        SKColors.IndianRed)
+            }
+        ];
     }
 
-    // ---------------------------------------------------------------------
-    // 🧩 Placeholder chart
-    // ---------------------------------------------------------------------
-    private PlotModel CreateEmptyPlot(string message) => new()
+
+
+    private void BuildCategoryChart()
     {
-        Title = message,
-        TextColor = OxyColors.White,
-        Background = OxyColor.FromRgb(30, 30, 30)
-    };
+        var data =
+            SectionResults
+                .OrderBy(x => x.Category.ToString())
+                .Select(x => new
+                {
+                    Category =
+                        x.Category.ToString(),
+
+                    Score =
+                        x.Score * 100
+                })
+                .ToList();
+
+
+
+        SectionCategorySeries =
+        [
+            new ColumnSeries<double>
+            {
+                Values =
+                    data
+                        .Select(x =>
+                            x.Score)
+                        .ToArray(),
+
+                Name =
+                    "Compliance (%)",
+
+                Fill =
+                    new SolidColorPaint(
+                        SKColors.DeepSkyBlue),
+
+                Padding = 10
+            }
+        ];
+
+
+
+        CategoryAxes =
+        [
+            new Axis
+            {
+                Labels =
+                    data
+                        .Select(x =>
+                            x.Category)
+                        .ToArray(),
+
+                LabelsRotation = 15
+            }
+        ];
+
+
+
+        ValueAxes =
+        [
+            new Axis
+            {
+                Name =
+                    "Compliance (%)",
+
+                MinLimit = 0,
+
+                MaxLimit = 100,
+
+                MinStep = 1
+            }
+        ];
+    }
 }

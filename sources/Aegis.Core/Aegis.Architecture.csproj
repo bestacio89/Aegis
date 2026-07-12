@@ -14,7 +14,6 @@
       Core rule engine and evaluation logic for Aegis.
       Handles scanning orchestration, rule evaluation, and scoring.
     </Description>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <!-- =============================================
@@ -33,16 +32,16 @@
        ============================================= -->
   <ItemGroup>
     <!-- Franz Framework Core -->
-    <PackageReference Include="Franz.Common.Mediator" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.Logging" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.DependencyInjection" Version="1.6.21" />
+    <PackageReference Include="Franz.Common.Mediator" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.Logging" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.DependencyInjection" Version="2.2.16" />
 
     <!-- Utilities -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 
     <!-- Optional: future extensibility -->
-    <PackageReference Include="FluentValidation" Version="12.1.0" />
-    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+    <PackageReference Include="FluentValidation" Version="12.1.1" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
 </Project>

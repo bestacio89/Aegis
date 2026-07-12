@@ -14,7 +14,7 @@
       Extensibility SDK for Aegis.
       Defines contracts for rules, analyzers, and plugin modules.
     </Description>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+ 
 
     <!-- NuGet Metadata -->
     <PackageId>Aegis.SDK</PackageId>
@@ -47,10 +47,10 @@
        ============================================= -->
   <ItemGroup>
     <!-- Franz DI enables plugin/service registration -->
-    <PackageReference Include="Franz.Common.Business" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.DependencyInjection" Version="1.6.21" />
-    <PackageReference Include="Franz.Common.Logging" Version="1.6.21" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="10.0.0" />
+    <PackageReference Include="Franz.Common.Business" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.DependencyInjection" Version="2.2.16" />
+    <PackageReference Include="Franz.Common.Logging" Version="2.2.16" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="10.0.9" />
   </ItemGroup>
 
 </Project>

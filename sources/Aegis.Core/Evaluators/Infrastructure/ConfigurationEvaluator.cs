@@ -238,6 +238,8 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 
             Metadata =
             {
+                ["FilePath"] =
+                    file,
                 ["FileName"] =
                     Path.GetFileName(file),
 

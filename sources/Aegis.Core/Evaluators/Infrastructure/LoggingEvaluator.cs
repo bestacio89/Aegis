@@ -245,6 +245,8 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
             Metadata =
             {
+                ["FilePath"] =
+                    file,
                 ["FileName"] =
                     Path.GetFileName(file),
 

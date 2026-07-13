@@ -221,6 +221,8 @@ public sealed class PackageVersionEvaluator
 
             Metadata =
             {
+                ["FilePath"] = file,
+
                 ["DependencyFile"] =
                     Path.GetFileName(file),
 

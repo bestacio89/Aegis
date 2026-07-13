@@ -258,6 +258,8 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
 
                     Metadata =
                     {
+                        ["FilePath"] =
+                    file,
                         ["FileName"] =
                             fileName,
 

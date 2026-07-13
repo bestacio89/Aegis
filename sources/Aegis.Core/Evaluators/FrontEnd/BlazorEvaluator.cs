@@ -214,6 +214,9 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 
                     Metadata =
                     {
+                        ["FilePath"] =
+                    file,
+
                         ["FileName"] =
                             Path.GetFileName(file),
 

@@ -291,6 +291,7 @@ public sealed class BuilderPatternEvaluator
 
             Metadata =
             {
+                ["FilePath"] = file,
                 ["BuilderClassName"] =
                     builderName,
 

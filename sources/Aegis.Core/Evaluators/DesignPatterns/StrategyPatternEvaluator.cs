@@ -259,6 +259,8 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
 
                     Metadata =
                     {
+                        ["FilePath"] =
+                    file,
                         ["FileName"] =
                             fileName,
 

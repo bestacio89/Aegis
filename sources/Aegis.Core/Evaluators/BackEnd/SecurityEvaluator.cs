@@ -536,6 +536,8 @@ public sealed class SecurityEvaluator
             Name,
             file)
         {
+            
+
             ProjectName =
                 Context?.ProjectName,
 
@@ -565,6 +567,7 @@ public sealed class SecurityEvaluator
 
             Metadata =
             {
+                ["FilePath"] = file,
                 ["Language"] =
                     Context?.Language ?? "Unknown",
 
@@ -574,6 +577,8 @@ public sealed class SecurityEvaluator
                 ["Layer"] =
                     ResolveLayer(file)
                     ?? "Unknown"
+
+
             }
         };
     }

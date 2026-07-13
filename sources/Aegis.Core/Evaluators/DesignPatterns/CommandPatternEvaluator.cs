@@ -394,6 +394,8 @@ public sealed class CommandPatternEvaluator
 
             Metadata =
             {
+                ["FilePath"] = file,
+
                 ["CommandName"] =
                     commandName,
 

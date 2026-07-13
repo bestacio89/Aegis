@@ -299,6 +299,7 @@ public sealed class MediatorPatternEvaluator
 
                     Metadata =
                     {
+
                         ["Framework"] =
                             mediatorFramework,
 
@@ -314,7 +315,10 @@ public sealed class MediatorPatternEvaluator
                             ?? "Unknown",
 
                         ["FileName"] =
-                            Path.GetFileName(entry.Key)
+                            Path.GetFileName(entry.Key),
+
+                        ["FilePath"] = entry.Key
+                    ,
                     }
                 });
         }

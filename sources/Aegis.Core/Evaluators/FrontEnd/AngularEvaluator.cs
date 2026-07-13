@@ -239,6 +239,8 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
                     Metadata =
                     {
+                        ["FilePath"] =
+                    file,
                         ["FileName"] =
                             fileName,
 

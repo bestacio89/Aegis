@@ -273,6 +273,8 @@ public sealed class SingletonPatternEvaluator :
 
                     Metadata =
                     {
+                        ["FilePath"] =
+                    file,
                         ["ClassName"] =
                             className,
 

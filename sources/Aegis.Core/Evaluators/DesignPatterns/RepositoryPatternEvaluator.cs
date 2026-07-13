@@ -264,6 +264,9 @@ public sealed class RepositoryPatternEvaluator :
 
                         Metadata =
                         {
+                            ["FilePath"] =
+                    file,
+
                             ["RepositoryName"] =
                                 repositoryName,
 

@@ -219,6 +219,8 @@ public sealed class RazorEvaluator : BaseArchitectureEvaluator
 
                     Metadata =
                     {
+                        ["FilePath"] =
+                    file,
                         ["FileName"] =
                             Path.GetFileName(file),
 

@@ -241,6 +241,8 @@ public sealed class TransactionEvaluator
             Metadata =
             new Dictionary<string, string>
             {
+                ["FilePath"] =
+                    file,
                 ["FileName"] =
                     Path.GetFileName(file),
 

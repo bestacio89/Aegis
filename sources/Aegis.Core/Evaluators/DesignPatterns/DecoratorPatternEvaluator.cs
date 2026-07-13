@@ -329,6 +329,19 @@ public sealed class DecoratorPatternEvaluator
                     ArchitectureRuleCategory.DesignPatterns),
 
 
+            // The one fix: RuleEngineCore.CreateRuleResult reads Metadata["FilePath"] first
+            // (falling back to Target only if that's missing) to resolve the violation's real
+            // layer against context.Modules. This local CreateResult set everything else
+            // (ProjectName, Language, Framework, its own local Layer via ResolveLayer(file))
+            // but never populated the one field the shared pipeline actually reads — so every
+            // finding from this evaluator fell through to "Unclassified" regardless of the
+            // Layer value computed above.
+            Metadata =
+            {
+                ["FilePath"] = file
+            },
+
+
             Metrics =
             {
                 ["HasInterfaceImplementation"] =

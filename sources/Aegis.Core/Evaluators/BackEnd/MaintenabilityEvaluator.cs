@@ -212,6 +212,8 @@ public sealed class MaintainabilityEvaluator
 
             Metadata =
             {
+                ["FilePath"] = file,
+
                 ["Language"] =
                     Context?.Language
                     ?? "Unknown",

@@ -272,6 +272,8 @@ public sealed class FacadePatternEvaluator
 
             Metadata =
             {
+                ["FilePath"] = file,
+
                 ["Language"] =
                     Context?.Language ?? "Unknown",
 

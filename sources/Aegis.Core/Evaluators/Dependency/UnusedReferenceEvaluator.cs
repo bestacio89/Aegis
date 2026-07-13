@@ -186,6 +186,7 @@ public sealed class UnusedReferenceEvaluator
 
             Metadata =
             {
+                ["FilePath"] = file,
                 ["Manifest"] =
                     Path.GetFileName(file),
 
@@ -383,6 +384,8 @@ public sealed class UnusedReferenceEvaluator
 
             Metadata =
             {
+                
+
                 ["Language"] =
                     Context?.Language ?? "Unknown",
 

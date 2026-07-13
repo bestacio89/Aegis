@@ -334,6 +334,8 @@ public sealed class FactoryPatternEvaluator
 
             Metadata =
             {
+                ["FilePath"] = file,
+
                 ["FactoryName"] =
                     factoryName,
 

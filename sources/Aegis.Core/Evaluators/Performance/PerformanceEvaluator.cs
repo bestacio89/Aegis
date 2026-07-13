@@ -239,6 +239,9 @@ public sealed class PerformanceEvaluator
                 ["FileName"] =
                     Path.GetFileName(file),
 
+                ["FilePath"] =
+                    file,
+
                 ["Language"] =
                     DetectLanguage(file),
 

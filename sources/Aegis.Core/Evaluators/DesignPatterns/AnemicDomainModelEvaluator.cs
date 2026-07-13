@@ -302,6 +302,8 @@ public sealed class AnemicDomainModelEvaluator
 
             Metadata =
             {
+                ["FilePath"] = file,
+
                 ["ClassName"] =
                     className,
 

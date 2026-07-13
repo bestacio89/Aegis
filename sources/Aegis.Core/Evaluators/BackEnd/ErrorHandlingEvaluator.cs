@@ -195,6 +195,8 @@ public sealed class ErrorHandlingEvaluator
 
 
 
+        result.Metadata["FilePath"] = file;
+
         result.Metadata["Language"] =
             Context?.Language ?? "Unknown";
 

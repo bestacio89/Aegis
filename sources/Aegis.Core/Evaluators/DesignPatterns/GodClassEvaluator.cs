@@ -363,6 +363,8 @@ public sealed class GodClassEvaluator
 
             Metadata =
             {
+                ["FilePath"] = file,
+
                 ["ClassName"] =
                     className,
 

@@ -349,6 +349,8 @@ public sealed class ObserverPatternEvaluator
 
                     Metadata =
                     {
+                        ["FilePath"] = entry.Key,
+
                         ["FileName"] =
                             Path.GetFileName(entry.Key),
 

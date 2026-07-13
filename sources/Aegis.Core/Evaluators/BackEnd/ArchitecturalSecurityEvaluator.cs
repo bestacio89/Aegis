@@ -12,7 +12,7 @@ using System.Text.RegularExpressions;
 namespace Aegis.Architecture.Evaluators.BackEnd;
 
 
-public sealed class SecurityEvaluator
+public sealed class ArchitecturalSecurityEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly SecurityPolicy _policy;
@@ -94,8 +94,8 @@ public sealed class SecurityEvaluator
 
 
 
-    public SecurityEvaluator(
-        ILogger<SecurityEvaluator> logger,
+    public ArchitecturalSecurityEvaluator(
+        ILogger<ArchitecturalSecurityEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {

@@ -24,7 +24,7 @@ namespace Aegis.Architecture.Evaluators.Performance;
 /// - PerformanceHealthIndex
 /// - EfficiencyHealthIndex
 /// </summary>
-public sealed class PerformanceEvaluator
+public sealed class ArchitecturalPerformanceEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly PerformancePolicy _policy;
@@ -106,8 +106,8 @@ public sealed class PerformanceEvaluator
 
 
 
-    public PerformanceEvaluator(
-        ILogger<PerformanceEvaluator> logger,
+    public ArchitecturalPerformanceEvaluator(
+        ILogger<ArchitecturalPerformanceEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {

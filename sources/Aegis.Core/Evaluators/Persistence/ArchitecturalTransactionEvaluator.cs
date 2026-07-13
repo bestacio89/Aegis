@@ -25,14 +25,14 @@ namespace Aegis.Architecture.Evaluators.Persistence;
 ///
 /// Framework agnostic.
 /// </summary>
-public sealed class TransactionEvaluator
+public sealed class ArchitecturalTransactionEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly TransactionPolicy _policy;
 
 
     public override string Name =>
-        nameof(TransactionEvaluator);
+        nameof(ArchitecturalTransactionEvaluator);
 
 
     public override string[] SupportedLanguages =>
@@ -84,8 +84,8 @@ public sealed class TransactionEvaluator
 
 
 
-    public TransactionEvaluator(
-        ILogger<TransactionEvaluator> logger,
+    public ArchitecturalTransactionEvaluator(
+        ILogger<ArchitecturalTransactionEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
@@ -370,7 +370,7 @@ public sealed class TransactionEvaluator
 
         results.Add(
             new ArchitectureEvaluatorResult(
-                nameof(TransactionEvaluator),
+                nameof(ArchitecturalTransactionEvaluator),
                 projectPath)
             {
                 Category =
@@ -396,7 +396,7 @@ public sealed class TransactionEvaluator
                 new Dictionary<string, string>
                 {
                     ["Evaluator"] =
-                        nameof(TransactionEvaluator)
+                        nameof(ArchitecturalTransactionEvaluator)
                 }
             });
     }

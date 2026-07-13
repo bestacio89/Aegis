@@ -150,6 +150,8 @@
 
             <Border Grid.Column="3"
                     Style="{StaticResource Card.Kpi}"
+                    Width="Auto"
+                    MinWidth="190"
                     HorizontalAlignment="Stretch">
 
                 <Grid>

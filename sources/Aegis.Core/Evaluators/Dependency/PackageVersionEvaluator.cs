@@ -58,7 +58,7 @@ public sealed class PackageVersionEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "DotNet",
+        ".Net",
         "Node",
         "Python"
     ];

@@ -52,7 +52,7 @@ public sealed class UnusedReferenceEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "DotNet",
+        ".Net",
         "Node",
         "Python"
     ];

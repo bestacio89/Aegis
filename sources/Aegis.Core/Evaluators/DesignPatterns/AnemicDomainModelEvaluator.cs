@@ -49,12 +49,15 @@ public sealed class AnemicDomainModelEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "DDD",
-        "CleanArchitecture",
-        "Hexagonal",
-        "Microservices",
-        "EventDriven"
+        "ASP.NET",
+        "Spring Boot",
+        "FastAPI",
+        "Node",
+        "Angular",
+        "React",
+        "Vue"
     ];
+
 
 
 

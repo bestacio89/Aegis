@@ -212,9 +212,18 @@ public sealed class RuleEngineCore
     /// <summary>
     /// Resolves which real, detected architecture layer (from context.Modules/Layers —
     /// e.g. Api, Application, Domain, Infrastructure) a violated file belongs to, by matching
-    /// the file's path against each module's root path. Falls back to "Unclassified" — not
-    /// "General" — when no module claims the file, since "Unclassified" honestly signals
-    /// "we couldn't attribute this" rather than reading as an intentional category.
+    /// the file's path against each module's root path.
+    ///
+    /// Hardened against path-format mismatches: the original strict StartsWith comparison
+    /// silently failed whenever module.Path and filePath differed in ways that don't change
+    /// what location they actually point to — one relative and one absolute, different slash
+    /// direction, or a trailing separator. Both sides are now normalized through
+    /// Path.GetFullPath before comparing, and a more forgiving segment-based fallback catches
+    /// cases that still don't align after normalization.
+    ///
+    /// Falls back to "Unclassified" — not "General" — when no module claims the file, since
+    /// "Unclassified" honestly signals "we couldn't attribute this" rather than reading as an
+    /// intentional category.
     /// </summary>
     private static string ResolveLayer(
         string? filePath,
@@ -226,15 +235,45 @@ public sealed class RuleEngineCore
         }
 
 
+        var normalizedFilePath =
+            NormalizePath(filePath);
+
+
         var module =
             context.Modules
                 .Where(m => !string.IsNullOrWhiteSpace(m.Path))
+                .Select(m => new
+                {
+                    Module = m,
+                    NormalizedPath = NormalizePath(m.Path)
+                })
+                .Where(m =>
+                    normalizedFilePath.StartsWith(
+                        m.NormalizedPath,
+                        StringComparison.OrdinalIgnoreCase))
                 // Most specific (longest) path wins, in case modules are nested.
+                .OrderByDescending(m => m.NormalizedPath.Length)
+                .Select(m => m.Module)
+                .FirstOrDefault();
+
+
+        // Strict prefix match still failed — most likely the two paths were captured
+        // relative to genuinely different roots (e.g. a CI checkout path vs. a local dev
+        // path) rather than just differing in format. Fall back to checking whether the
+        // module's own folder name appears as a distinct, separator-bounded segment
+        // anywhere in the file path — still avoids false positives from substring
+        // collisions like "Aegis.Core" matching inside "Aegis.Core.Tests".
+        module ??=
+            context.Modules
+                .Where(m => !string.IsNullOrWhiteSpace(m.Path))
                 .OrderByDescending(m => m.Path.Length)
                 .FirstOrDefault(m =>
-                    filePath.StartsWith(
-                        m.Path,
-                        StringComparison.OrdinalIgnoreCase));
+                    ContainsPathSegment(
+                        normalizedFilePath,
+                        Path.GetFileName(
+                            m.Path.TrimEnd(
+                                Path.DirectorySeparatorChar,
+                                Path.AltDirectorySeparatorChar))));
 
 
         var layerName =
@@ -244,6 +283,69 @@ public sealed class RuleEngineCore
         return string.IsNullOrWhiteSpace(layerName)
             ? "Unclassified"
             : layerName;
+    }
+
+
+
+    /// <summary>
+    /// Normalizes a path for comparison: resolves it to a full, absolute path and trims a
+    /// trailing separator, so a relative path and an absolute path pointing at the same
+    /// location, or paths using different separator characters, compare equal.
+    ///
+    /// Caveat: Path.GetFullPath resolves relative paths against the current working
+    /// directory of the running process, not necessarily the project root. If module.Path
+    /// or filePath are ever stored as relative paths, verify the process's working
+    /// directory matches what they're relative to — otherwise this can normalize a
+    /// relative path to the wrong absolute location. If both inputs are already absolute
+    /// (the common case for paths captured from Directory.EnumerateFiles on an absolute
+    /// root), this is effectively just separator/casing normalization and this caveat
+    /// doesn't apply.
+    /// </summary>
+    private static string NormalizePath(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path)
+                .TrimEnd(
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar);
+        }
+        catch
+        {
+            // Path.GetFullPath throws on some malformed inputs (invalid characters, etc.) —
+            // fall back to a best-effort normalization rather than letting a single bad
+            // path value crash the whole scan.
+            return path
+                .Replace('/', Path.DirectorySeparatorChar)
+                .TrimEnd(Path.DirectorySeparatorChar);
+        }
+    }
+
+
+
+    private static bool ContainsPathSegment(string path, string segment)
+    {
+        if (string.IsNullOrWhiteSpace(segment))
+        {
+            return false;
+        }
+
+
+        var parts =
+            path.Split(
+                new[]
+                {
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar
+                },
+                StringSplitOptions.RemoveEmptyEntries);
+
+
+        return parts.Any(p =>
+            string.Equals(
+                p,
+                segment,
+                StringComparison.OrdinalIgnoreCase));
     }
 
 

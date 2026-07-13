@@ -29,13 +29,15 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
     ];
 
 
+    // Framework-agnostic: the specific logging library in use (Serilog, NLog, etc.) is
+    // detected by this evaluator's own scanning logic — it doesn't need the project's
+    // *primary* framework to already equal a logging library name. The previous list here
+    // meant SupportsFramework almost never matched a real detected framework (e.g.
+    // ".NET (EF Core)"), so this evaluator was silently skipped for nearly every project
+    // regardless of which logging library was actually in use.
     public override string[] SupportedFrameworks =>
     [
-        "Serilog",
-        "NLog",
-        "Log4j",
-        "Winston",
-        "Python.Logging"
+        "*"
     ];
 
 
@@ -245,8 +247,6 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
             Metadata =
             {
-                ["FilePath"] =
-                    file,
                 ["FileName"] =
                     Path.GetFileName(file),
 

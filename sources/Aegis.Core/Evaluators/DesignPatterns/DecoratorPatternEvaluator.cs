@@ -35,14 +35,16 @@ public sealed class DecoratorPatternEvaluator
 
 
     public override string[] SupportedFrameworks =>
-    [
-        "CleanArchitecture",
-        "DDD",
-        "Spring",
-        "NestJS",
-        "Hexagonal",
-        "Microservices"
-    ];
+  [
+      "ASP.NET",
+        "Spring Boot",
+        "FastAPI",
+        "Node",
+        "Angular",
+        "React",
+        "Vue"
+  ];
+
 
 
 
@@ -336,10 +338,7 @@ public sealed class DecoratorPatternEvaluator
             // but never populated the one field the shared pipeline actually reads — so every
             // finding from this evaluator fell through to "Unclassified" regardless of the
             // Layer value computed above.
-            Metadata =
-            {
-                ["FilePath"] = file
-            },
+            
 
 
             Metrics =
@@ -363,6 +362,8 @@ public sealed class DecoratorPatternEvaluator
 
             Metadata =
             {
+                 ["FilePath"] = file ,
+
                 ["Language"] =
                     Context?.Language
                     ?? "Unknown",

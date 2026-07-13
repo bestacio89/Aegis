@@ -31,13 +31,16 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
     ];
 
 
+    // Framework-agnostic: this evaluator detects Docker/CI-CD/config concerns by scanning
+    // for the relevant files itself (Dockerfile, CI pipeline configs, etc.) — it doesn't
+    // need the project's *primary* framework to already equal one of these tooling names.
+    // The previous list here ("Docker", "Kubernetes", ...) meant SupportsFramework almost
+    // never matched a real detected framework (e.g. ".NET (EF Core)"), so this evaluator
+    // was silently skipped for nearly every project regardless of whether Docker/CI-CD
+    // files were actually present.
     public override string[] SupportedFrameworks =>
     [
-        "Docker",
-        "Kubernetes",
-        "CI/CD",
-        "Environment",
-        "PackageManagement"
+        "*"
     ];
 
 
@@ -238,8 +241,6 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 
             Metadata =
             {
-                ["FilePath"] =
-                    file,
                 ["FileName"] =
                     Path.GetFileName(file),
 

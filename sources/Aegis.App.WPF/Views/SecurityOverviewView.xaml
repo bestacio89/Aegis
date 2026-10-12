@@ -1,0 +1,156 @@
+<UserControl x:Class="Aegis.Wpf.Views.Security.SecurityOverviewView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+             xmlns:conv="clr-namespace:Aegis.Wpf.Converters"
+             Background="{StaticResource Brush.Ink}"
+             Foreground="{StaticResource Brush.TextPrimary}"
+             FontFamily="{StaticResource Font.Body}">
+
+    <UserControl.Resources>
+        <conv:BoolToComplianceBrushConverter x:Key="ComplianceBrush"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="300"/>
+            </Grid.RowDefinitions>
+
+            <!-- HEADER -->
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="3"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
+                <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+                    <StackPanel>
+                        <TextBlock Text="SECURITY OVERVIEW"
+                                   Style="{StaticResource Text.Eyebrow}"
+                                   Foreground="{StaticResource Brush.AccentStructural}"/>
+                        <TextBlock Text="{Binding ProjectName}"
+                                   Foreground="{StaticResource Brush.TextMuted}"
+                                   FontSize="12" Margin="0,4,0,0"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- KPI -->
+            <WrapPanel Grid.Row="1" Margin="0,10,0,0">
+                <Border Style="{StaticResource Card.Kpi}">
+                    <StackPanel>
+                        <TextBlock Text="VERDICT" Style="{StaticResource Text.Eyebrow}"/>
+                        <TextBlock Text="{Binding Verdict}" Style="{StaticResource Text.KpiValue}"
+                                   Foreground="{Binding IsCompliant, Converter={StaticResource ComplianceBrush}}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Card.Kpi}">
+                    <StackPanel>
+                        <TextBlock Text="OVERALL RISK" Style="{StaticResource Text.Eyebrow}"/>
+                        <TextBlock Text="{Binding RiskLabel}" Style="{StaticResource Text.KpiValue}"
+                                   Foreground="{StaticResource Brush.StatusWarning}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Card.Kpi}">
+                    <StackPanel>
+                        <TextBlock Text="COMPLIANCE" Style="{StaticResource Text.Eyebrow}"/>
+                        <TextBlock Text="{Binding ComplianceRate, StringFormat={}{0:0.#}%}"
+                                   Style="{StaticResource Text.KpiValue}"
+                                   Foreground="{StaticResource Brush.AccentStructural}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Card.Kpi}">
+                    <StackPanel>
+                        <TextBlock Text="FAILED (MEDIUM+)" Style="{StaticResource Text.Eyebrow}"/>
+                        <TextBlock Text="{Binding FailedFindings}" Style="{StaticResource Text.KpiValue}"
+                                   Foreground="{StaticResource Brush.StatusCritical}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Card.Kpi}">
+                    <StackPanel>
+                        <TextBlock Text="DOMAINS" Style="{StaticResource Text.Eyebrow}"/>
+                        <TextBlock Text="{Binding DomainsAssessed}" Style="{StaticResource Text.KpiValue}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Card.Kpi}">
+                    <StackPanel>
+                        <TextBlock Text="DURATION" Style="{StaticResource Text.Eyebrow}"/>
+                        <TextBlock Text="{Binding Duration}" Style="{StaticResource Text.KpiValue}"/>
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+
+            <!-- EXECUTIVE MESSAGE -->
+            <Border Grid.Row="2" Style="{StaticResource Card.Structural}" Margin="0,6,0,0">
+                <TextBlock Text="{Binding ExecutiveMessage}" TextWrapping="Wrap" FontSize="13"/>
+            </Border>
+
+            <!-- CHARTS -->
+            <Grid Grid.Row="3" Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="360"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="3"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
+                    <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Style="{StaticResource StatusChip}" Background="{StaticResource Brush.AccentStructural}"/>
+                                <TextBlock Text="Findings by Severity" Style="{StaticResource Text.SectionTitle}"/>
+                            </StackPanel>
+                            <lvc:PieChart Grid.Row="1" Margin="0,8"
+                                          Series="{Binding SeveritySeries}"
+                                          LegendPosition="Right"/>
+                            <TextBlock Grid.Row="1" Text="No findings recorded"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{StaticResource Brush.TextMuted}"
+                                       Visibility="{Binding NoSeverityData, Converter={StaticResource BoolToVis}}"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <Grid Grid.Column="1" Margin="8,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="3"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
+                    <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Style="{StaticResource StatusChip}" Background="{StaticResource Brush.AccentStructural}"/>
+                                <TextBlock Text="Compliance by Domain" Style="{StaticResource Text.SectionTitle}"/>
+                            </StackPanel>
+                            <lvc:CartesianChart Grid.Row="1" Margin="0,8"
+                                                Series="{Binding DomainSeries}"
+                                                XAxes="{Binding DomainXAxes}"
+                                                YAxes="{Binding DomainYAxes}"
+                                                Background="Transparent"
+                                                DrawMarginFrame="{x:Null}"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,139 @@
+<UserControl x:Class="Aegis.Wpf.Views.Security.SecurityDomainsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Aegis.Wpf.Converters"
+             Background="{StaticResource Brush.Ink}"
+             Foreground="{StaticResource Brush.TextPrimary}"
+             FontFamily="{StaticResource Font.Body}">
+
+    <UserControl.Resources>
+        <conv:SecuritySeverityToBrushConverter x:Key="SeverityBrush"/>
+        <conv:BoolToComplianceBrushConverter x:Key="ComplianceBrush"/>
+    </UserControl.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- HEADER -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
+            <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+                <StackPanel>
+                    <TextBlock Text="SECURITY DOMAINS" Style="{StaticResource Text.Eyebrow}"
+                               Foreground="{StaticResource Brush.AccentStructural}"/>
+                    <TextBlock Text="Compliance verdict per assessed domain. Worst first. Use 'Findings' to drill in."
+                               Foreground="{StaticResource Brush.TextMuted}" FontSize="12" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- KPI -->
+        <WrapPanel Grid.Row="1" Margin="0,10,0,0">
+            <Border Style="{StaticResource Card.Kpi}">
+                <StackPanel>
+                    <TextBlock Text="DOMAINS" Style="{StaticResource Text.Eyebrow}"/>
+                    <TextBlock Text="{Binding TotalDomains}" Style="{StaticResource Text.KpiValue}"/>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card.Kpi}">
+                <StackPanel>
+                    <TextBlock Text="COMPLIANT" Style="{StaticResource Text.Eyebrow}"/>
+                    <TextBlock Text="{Binding CompliantDomains}" Style="{StaticResource Text.KpiValue}"
+                               Foreground="{StaticResource Brush.StatusCompliant}"/>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card.Kpi}">
+                <StackPanel>
+                    <TextBlock Text="AT RISK" Style="{StaticResource Text.Eyebrow}"/>
+                    <TextBlock Text="{Binding DomainsAtRisk}" Style="{StaticResource Text.KpiValue}"
+                               Foreground="{StaticResource Brush.StatusCritical}"/>
+                </StackPanel>
+            </Border>
+        </WrapPanel>
+
+        <!-- LEDGER -->
+        <Grid Grid.Row="2" Margin="0,10,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
+            <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+                <DataGrid ItemsSource="{Binding Domains}"
+                          SelectedItem="{Binding SelectedDomain, Mode=TwoWay}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          SelectionMode="Single"
+                          HeadersVisibility="Column"
+                          Style="{StaticResource Grid.Ledger}"
+                          ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Domain" Binding="{Binding Domain}" Width="180"/>
+                        <DataGridTextColumn Header="Findings" Binding="{Binding Findings}" Width="90"/>
+                        <DataGridTextColumn Header="Failed" Binding="{Binding Failed}" Width="90"/>
+                        <DataGridTextColumn Header="Compliance"
+                                            Binding="{Binding ComplianceRate, StringFormat={}{0:0.#}%}"
+                                            Width="120"/>
+
+                        <DataGridTemplateColumn Header="Max severity" Width="130">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border Background="{Binding MaxSeverity, Converter={StaticResource SeverityBrush}}"
+                                            CornerRadius="3" Padding="8,3" HorizontalAlignment="Left">
+                                        <TextBlock Text="{Binding MaxSeverity}"
+                                                   Foreground="{StaticResource Brush.Ink}"
+                                                   FontWeight="SemiBold" FontSize="11"/>
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <DataGridTemplateColumn Header="Status" Width="100">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border Background="{Binding IsCompliant, Converter={StaticResource ComplianceBrush}}"
+                                            CornerRadius="3" Padding="8,3" HorizontalAlignment="Left">
+                                        <TextBlock Foreground="{StaticResource Brush.Ink}"
+                                                   FontWeight="SemiBold" FontSize="11">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="FAIL"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCompliant}" Value="True">
+                                                            <Setter Property="Text" Value="PASS"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <DataGridTemplateColumn Width="*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Content="Findings"
+                                            Style="{StaticResource Button.Primary}"
+                                            HorizontalAlignment="Left"
+                                            Padding="10,3"
+                                            Command="{Binding DataContext.OpenDomainCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -12,16 +12,20 @@ namespace Aegis.Architecture.Evaluators.FrontEnd;
 
 
 /// <summary>
-/// Quantitatively evaluates Blazor (.razor) components for:
+/// Evaluates Blazor components for architectural discipline:
+///
 /// - Component boundaries
-/// - Code-behind discipline
-/// - Dependency injection usage
-/// - Lifecycle management
+/// - Code-behind separation
+/// - Dependency injection discipline
+/// - Lifecycle usage
 /// - Event handling practices
+/// - Component composition
 /// - Rendering architecture
 ///
-/// Produces BlazorComplianceScore (0-100)
-/// and project-wide BlazorHealthIndex.
+/// Produces:
+/// - BlazorComplianceScore (0-100)
+/// - BlazorHealthIndex
+/// - Component-level architecture metrics
 /// </summary>
 public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 {
@@ -29,7 +33,7 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 
 
     public override string Name =>
-        "BlazorEvaluator";
+        nameof(BlazorEvaluator);
 
 
     public override string[] SupportedLanguages =>
@@ -41,16 +45,16 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "Blazor",
-        "ASP.NET Core"
+        "Blazor"
     ];
 
 
 
     private static readonly Regex ComponentRx =
         new(
-            @"@\s*page\s+""[^""]+""|@\s*code\s*\{|@\s*inherits\s+\w+",
-            RegexOptions.Compiled);
+            @"@\s*(page|inherits|rendermode)\b",
+            RegexOptions.Compiled |
+            RegexOptions.IgnoreCase);
 
 
 
@@ -63,7 +67,7 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 
     private static readonly Regex InjectRx =
         new(
-            @"@\s*inject\s+\w+\s+\w+",
+            @"@\s*inject\s+\w+",
             RegexOptions.Compiled);
 
 
@@ -82,13 +86,6 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 
 
 
-    private static readonly Regex EventCallbackRx =
-        new(
-            @"EventCallback(?:<|>)?",
-            RegexOptions.Compiled);
-
-
-
     private static readonly Regex AsyncVoidRx =
         new(
             @"async\s+void\s+\w+\s*\(",
@@ -98,7 +95,21 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 
     private static readonly Regex RenderModeRx =
         new(
-            @"@rendermode\s+\w+",
+            @"@\s*rendermode\s+\w+",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex EventHandlerRx =
+        new(
+            @"@\w+\s*=\s*""",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex ChildComponentRx =
+        new(
+            @"<[A-Z][A-Za-z0-9]+",
             RegexOptions.Compiled);
 
 
@@ -130,18 +141,10 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
                 ".razor");
 
 
-
         if (files.Count == 0)
         {
             return results;
         }
-
-
-
-        _logger.LogInformation(
-            "🟣 Running {Evaluator} on {Count} files",
-            Name,
-            files.Count);
 
 
 
@@ -176,6 +179,7 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 
             var metrics =
                 AnalyzeComponent(
+                    file,
                     content);
 
 
@@ -188,6 +192,7 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
                     Category =
                         "Frontend",
 
+
                     Metrics =
                     {
                         ["ComplexityScore"] =
@@ -196,8 +201,11 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
                         ["CodeBehindScore"] =
                             metrics.CodeBehindScore,
 
-                        ["DependencyInjectionScore"] =
+                        ["DependencyScore"] =
                             metrics.DependencyScore,
+
+                        ["CompositionScore"] =
+                            metrics.CompositionScore,
 
                         ["LifecycleScore"] =
                             metrics.LifecycleScore,
@@ -205,43 +213,39 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
                         ["EventHandlingScore"] =
                             metrics.EventScore,
 
-                        ["RenderModeScore"] =
-                            metrics.RenderModeScore,
-
                         ["BlazorComplianceScore"] =
                             metrics.ComplianceScore
                     },
 
+
                     Metadata =
                     {
                         ["FilePath"] =
-                    file,
+                            file,
 
                         ["FileName"] =
                             Path.GetFileName(file),
 
                         ["Framework"] =
-                            Context?.Framework
-                            ?? "Blazor",
+                            "Blazor",
 
                         ["Language"] =
-                            Context?.Language
-                            ?? "Razor",
+                            "Razor",
 
                         ["LineCount"] =
                             metrics.LineCount.ToString(),
 
+                        ["InjectionCount"] =
+                            metrics.InjectionCount.ToString(),
+
+                        ["ChildComponents"] =
+                            metrics.ChildComponentCount.ToString(),
+
+                        ["HasCodeBehind"] =
+                            metrics.HasCodeBehind.ToString(),
+
                         ["HasInlineCode"] =
-                            metrics.HasInlineCode.ToString(),
-
-                        ["HasInjection"] =
-                            metrics.HasInjection.ToString(),
-
-                        ["HasLifecycle"] =
-                            metrics.HasLifecycle.ToString(),
-
-                        ["HasRenderMode"] =
-                            metrics.HasRenderMode.ToString()
+                            metrics.HasInlineCode.ToString()
                     }
                 });
         }
@@ -257,19 +261,14 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 
 
 
-        _logger.LogInformation(
-            "✅ {Evaluator} completed with {Count} results",
-            Name,
-            results.Count);
-
-
-
         return results;
     }
 
 
 
+
     private ComponentMetrics AnalyzeComponent(
+        string file,
         string content)
     {
         var lineCount =
@@ -282,71 +281,49 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
             InlineCodeRx.IsMatch(content);
 
 
-        var hasInjection =
-            InjectRx.IsMatch(content);
+
+        var hasCodeBehind =
+            File.Exists(
+                file + ".cs");
 
 
-        var hasManualInstantiation =
-            ManualInstantiationRx.IsMatch(content);
+
+        var injectionCount =
+            InjectRx.Matches(content)
+                .Count;
+
+
+
+        var childComponents =
+            ChildComponentRx.Matches(content)
+                .Count;
+
 
 
         var hasLifecycle =
             LifecycleRx.IsMatch(content);
 
 
-        var hasEventCallback =
-            EventCallbackRx.IsMatch(content);
-
 
         var hasAsyncVoid =
             AsyncVoidRx.IsMatch(content);
 
 
-        var hasRenderMode =
-            RenderModeRx.IsMatch(content);
+
+        var eventCount =
+            EventHandlerRx.Matches(content)
+                .Count;
 
 
 
-        var complexityScore =
+        var hasManualInstantiation =
+            ManualInstantiationRx.IsMatch(content);
+
+
+
+        var complexity =
             CalculateComplexity(
                 lineCount);
-
-
-
-        var codeBehindScore =
-            hasInlineCode
-                ? 0.5
-                : 1.0;
-
-
-
-        var dependencyScore =
-            hasManualInstantiation
-                ? 0
-                : 1;
-
-
-
-        var lifecycleScore =
-            hasLifecycle
-                ? 1
-                : 0.8;
-
-
-
-        var eventScore =
-            hasAsyncVoid
-                ? 0.3
-                : hasEventCallback
-                    ? 1
-                    : 0.8;
-
-
-
-        var renderModeScore =
-            hasRenderMode
-                ? 1
-                : 0.9;
 
 
 
@@ -356,57 +333,161 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 
             HasInlineCode = hasInlineCode,
 
-            HasInjection = hasInjection,
+            HasCodeBehind = hasCodeBehind,
 
-            HasLifecycle = hasLifecycle,
+            InjectionCount = injectionCount,
 
-            HasRenderMode = hasRenderMode,
+            ChildComponentCount = childComponents,
 
-            ComplexityScore = complexityScore,
 
-            CodeBehindScore = codeBehindScore,
+            ComplexityScore =
+                complexity,
 
-            DependencyScore = dependencyScore,
 
-            LifecycleScore = lifecycleScore,
+            CodeBehindScore =
+                hasCodeBehind
+                    ? 1
+                    : hasInlineCode
+                        ? 0.25
+                        : 0.8,
 
-            EventScore = eventScore,
 
-            RenderModeScore = renderModeScore,
+            DependencyScore =
+                hasManualInstantiation
+                    ? 0
+                    : CalculateDependencyScore(
+                        injectionCount),
+
+
+            CompositionScore =
+                CalculateCompositionScore(
+                    childComponents),
+
+
+            LifecycleScore =
+                hasLifecycle
+                    ? 1
+                    : 0.8,
+
+
+            EventScore =
+                hasAsyncVoid
+                    ? 0.2
+                    : CalculateEventScore(
+                        eventCount),
+
 
             ComplianceScore =
                 ComputeCompliance(
-                    complexityScore,
-                    codeBehindScore,
-                    dependencyScore,
-                    lifecycleScore,
-                    eventScore,
-                    renderModeScore)
+                    complexity,
+                    hasCodeBehind,
+                    injectionCount,
+                    childComponents,
+                    hasLifecycle,
+                    eventCount,
+                    hasAsyncVoid)
         };
     }
 
 
 
     private double CalculateComplexity(
-        int lineCount)
+        int lines)
     {
-        if (_policy.MaxComponentComplexity <= 0)
+        var limit =
+            _policy.MaxComponentComplexity;
+
+
+        if (limit <= 0 ||
+            lines <= limit)
         {
             return 1;
         }
 
 
-        if (lineCount <= _policy.MaxComponentComplexity)
+        if (lines <= limit * 1.5)
+            return 0.75;
+
+
+        if (lines <= limit * 2)
+            return 0.5;
+
+
+        return 0;
+    }
+
+
+
+    private static double CalculateDependencyScore(
+        int count)
+    {
+        return count switch
         {
-            return 1;
-        }
+            <= 3 => 1,
+            <= 5 => 0.7,
+            <= 8 => 0.4,
+            _ => 0.1
+        };
+    }
 
 
-        return Math.Max(
-            0,
-            1 -
-            (double)lineCount /
-            (_policy.MaxComponentComplexity * 2));
+
+    private static double CalculateCompositionScore(
+        int count)
+    {
+        return count switch
+        {
+            >= 5 => 1,
+            >= 2 => 0.8,
+            1 => 0.6,
+            _ => 0.4
+        };
+    }
+
+
+
+    private static double CalculateEventScore(
+        int count)
+    {
+        return count switch
+        {
+            <= 3 => 1,
+            <= 6 => 0.6,
+            _ => 0.3
+        };
+    }
+
+
+
+    private static double ComputeCompliance(
+        double complexity,
+        bool codeBehind,
+        int injections,
+        int children,
+        bool lifecycle,
+        int events,
+        bool asyncVoid)
+    {
+        var score =
+            complexity * 0.25 +
+
+            (codeBehind ? 1 : 0.3) * 0.25 +
+
+            CalculateDependencyScore(
+                injections) * 0.20 +
+
+            CalculateCompositionScore(
+                children) * 0.15 +
+
+            (asyncVoid ? 0.2 : 1) * 0.10 +
+
+            (events > 6 ? 0.5 : 1) * 0.05;
+
+
+
+        return Math.Round(
+            score * 100,
+            2);
     }
 
 
@@ -415,34 +496,11 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
         List<ArchitectureEvaluatorResult> results,
         string projectPath)
     {
-        var componentResults =
-            results.ToList();
-
-
-
-        var averageCompliance =
-            componentResults.Average(
-                r =>
-                    r.Metrics.GetValueOrDefault(
+        var average =
+            results.Average(
+                x =>
+                    x.Metrics.GetValueOrDefault(
                         "BlazorComplianceScore",
-                        0));
-
-
-
-        var averageComplexity =
-            componentResults.Average(
-                r =>
-                    r.Metrics.GetValueOrDefault(
-                        "ComplexityScore",
-                        0));
-
-
-
-        var averageDependency =
-            componentResults.Average(
-                r =>
-                    r.Metrics.GetValueOrDefault(
-                        "DependencyInjectionScore",
                         0));
 
 
@@ -458,62 +516,21 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
                 Metrics =
                 {
                     ["BlazorComponentCount"] =
-                        componentResults.Count,
+                        results.Count,
 
                     ["AverageComplianceScore"] =
-                        averageCompliance,
-
-                    ["AverageComplexityScore"] =
-                        averageComplexity,
-
-                    ["AverageDependencyScore"] =
-                        averageDependency,
+                        average,
 
                     ["BlazorHealthIndex"] =
-                        averageCompliance *
-                        0.6 +
-                        averageDependency *
-                        100 *
-                        0.4
+                        average
                 },
 
                 Metadata =
                 {
-                    ["Evaluator"] =
-                        Name,
-
                     ["Framework"] =
-                        Context?.Framework
-                        ?? "Blazor",
-
-                    ["PolicyEnabled"] =
-                        "True"
+                        "Blazor"
                 }
             });
-    }
-
-
-
-    private static double ComputeCompliance(
-        double complexity,
-        double codeBehind,
-        double dependency,
-        double lifecycle,
-        double events,
-        double renderMode)
-    {
-        var score =
-            complexity * 0.20 +
-            codeBehind * 0.20 +
-            dependency * 0.20 +
-            lifecycle * 0.15 +
-            events * 0.15 +
-            renderMode * 0.10;
-
-
-        return Math.Round(
-            score * 100,
-            2);
     }
 
 
@@ -524,11 +541,11 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 
         public bool HasInlineCode { get; init; }
 
-        public bool HasInjection { get; init; }
+        public bool HasCodeBehind { get; init; }
 
-        public bool HasLifecycle { get; init; }
+        public int InjectionCount { get; init; }
 
-        public bool HasRenderMode { get; init; }
+        public int ChildComponentCount { get; init; }
 
         public double ComplexityScore { get; init; }
 
@@ -536,11 +553,11 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
 
         public double DependencyScore { get; init; }
 
+        public double CompositionScore { get; init; }
+
         public double LifecycleScore { get; init; }
 
         public double EventScore { get; init; }
-
-        public double RenderModeScore { get; init; }
 
         public double ComplianceScore { get; init; }
     }

@@ -10,10 +10,16 @@ using Microsoft.Extensions.Options;
 
 namespace Aegis.Architecture.Evaluators.FrontEnd;
 
+
 /// <summary>
-/// Quantitatively evaluates Angular (.ts) sources for structure, naming,
-/// and modular discipline.
-/// Produces AngularComplianceScore (0–100) and component-level metrics.
+/// Evaluates Angular TypeScript sources for:
+/// - Component structure
+/// - Selector conventions
+/// - Component complexity
+/// - Naming discipline
+/// - Module organization
+///
+/// Produces AngularComplianceScore.
 /// </summary>
 public sealed class AngularEvaluator : BaseArchitectureEvaluator
 {
@@ -39,14 +45,21 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
     private static readonly Regex ComponentRx =
         new(
-            @"@Component\s*\(\s*\{",
+            @"@Component\s*\(",
             RegexOptions.Compiled);
 
 
 
     private static readonly Regex ModuleRx =
         new(
-            @"@NgModule\s*\(\s*\{",
+            @"@NgModule\s*\(",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex AngularImportRx =
+        new(
+            @"from\s+['""]@angular/",
             RegexOptions.Compiled);
 
 
@@ -61,20 +74,35 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
     private static readonly Regex TemplateInlineRx =
         new(
             @"template\s*:\s*`([^`]*)`",
+            RegexOptions.Singleline |
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex TemplateUrlRx =
+        new(
+            @"templateUrl\s*:",
             RegexOptions.Compiled);
 
 
 
     private static readonly Regex ClassDeclarationRx =
         new(
-            @"class\s+(\w+)",
+            @"export\s+class\s+(\w+)",
+            RegexOptions.Compiled);
+
+
+
+    private static readonly Regex StandaloneRx =
+        new(
+            @"standalone\s*:\s*true",
             RegexOptions.Compiled);
 
 
 
     private static readonly Regex DeclarationsRx =
         new(
-            @"declarations\s*:\s*\[([^\]]+)\]",
+            @"declarations\s*:\s*\[([^\]]*)\]",
             RegexOptions.Singleline |
             RegexOptions.Compiled);
 
@@ -101,19 +129,14 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
             new List<ArchitectureEvaluatorResult>();
 
 
-
         var files =
             ResolveSourceFiles(
                 projectPath,
                 ".ts");
 
 
-
         if (files.Count == 0)
         {
-            _logger.LogInformation(
-                "🅰️ No Angular TypeScript files found.");
-
             return results;
         }
 
@@ -145,8 +168,10 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
 
 
-            var fileName =
-                Path.GetFileName(file);
+            if (!IsAngularFile(content))
+            {
+                continue;
+            }
 
 
 
@@ -154,55 +179,39 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
                 ComponentRx.IsMatch(content);
 
 
-
             var isModule =
                 ModuleRx.IsMatch(content);
 
 
 
-            var selectorScore = 1d;
-            var complexityScore = 1d;
-            var namingScore = 1d;
-            var modularityScore = 1d;
+            var selectorScore =
+                isComponent
+                    ? EvaluateSelector(content)
+                    : 1d;
 
 
 
-            if (_policy.EnforceSelectorNaming &&
-                isComponent)
-            {
-                selectorScore =
-                    EvaluateSelector(content);
-            }
+            var complexityScore =
+                isComponent
+                    ? EvaluateComplexity(
+                        content)
+                    : 1d;
 
 
 
-            if (_policy.MaxComponentComplexity > 0 &&
-                isComponent)
-            {
-                complexityScore =
-                    EvaluateTemplateComplexity(content);
-            }
+            var namingScore =
+                EvaluateNaming(content);
 
 
 
-            if (_policy.EnforceComponentPascalCase &&
-                isComponent)
-            {
-                namingScore =
-                    EvaluateComponentNaming(content);
-            }
+            var modularityScore =
+                isModule
+                    ? EvaluateModuleStructure(content)
+                    : 1d;
 
 
 
-            if (isModule)
-            {
-                modularityScore =
-                    EvaluateModuleStructure(content);
-            }
-
-
-
-            var complianceScore =
+            var compliance =
                 ComputeCompliance(
                     selectorScore,
                     complexityScore,
@@ -219,6 +228,7 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
                     Category =
                         "Frontend",
 
+
                     Metrics =
                     {
                         ["SelectorScore"] =
@@ -234,29 +244,33 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
                             modularityScore,
 
                         ["AngularComplianceScore"] =
-                            complianceScore
+                            compliance
                     },
+
 
                     Metadata =
                     {
                         ["FilePath"] =
-                    file,
-                        ["FileName"] =
-                            fileName,
+                            file,
 
-                        ["Language"] =
-                            Context?.Language
-                            ?? "TypeScript",
+                        ["FileName"] =
+                            Path.GetFileName(file),
 
                         ["Framework"] =
-                            Context?.Framework
-                            ?? "Angular",
+                            "Angular",
+
+                        ["Language"] =
+                            "TypeScript",
 
                         ["IsComponent"] =
                             isComponent.ToString(),
 
                         ["IsModule"] =
-                            isModule.ToString()
+                            isModule.ToString(),
+
+                        ["StandaloneComponent"] =
+                            StandaloneRx.IsMatch(content)
+                                .ToString()
                     }
                 });
         }
@@ -265,111 +279,32 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
         if (results.Count > 0)
         {
-            var angularResults =
-                results
-                    .Where(
-                        r =>
-                            r.Category == "Frontend")
-                    .ToList();
-
-
-
-            var averageCompliance =
-                angularResults.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "AngularComplianceScore",
-                            0));
-
-
-
-            var averageComplexity =
-                angularResults.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "ComplexityScore",
-                            0));
-
-
-
-            var averageSelector =
-                angularResults.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "SelectorScore",
-                            0));
-
-
-
-            var averageModularity =
-                angularResults.Average(
-                    r =>
-                        r.Metrics.GetValueOrDefault(
-                            "ModularityScore",
-                            0));
-
-
-
-            results.Add(
-                new ArchitectureEvaluatorResult(
-                    Name,
-                    projectPath)
-                {
-                    Category =
-                        "FrontendSummary",
-
-                    Metrics =
-                    {
-                        ["AngularFileCount"] =
-                            angularResults.Count,
-
-                        ["AverageComplianceScore"] =
-                            averageCompliance,
-
-                        ["AverageComplexityScore"] =
-                            averageComplexity,
-
-                        ["AverageSelectorScore"] =
-                            averageSelector,
-
-                        ["AverageModularityScore"] =
-                            averageModularity,
-
-                        ["FrontEndHealthIndex"] =
-                            averageCompliance * 0.6 +
-                            averageModularity * 0.4
-                    },
-
-                    Metadata =
-                    {
-                        ["Evaluator"] =
-                            Name,
-
-                        ["PolicyEnabled"] =
-                            _policy.EnforceSelectorNaming ||
-                            _policy.EnforceComponentPascalCase ||
-                            _policy.MaxComponentComplexity > 0 ||
-                            _policy.MaxComponentsPerModule > 0
-                                ? "True"
-                                : "False",
-
-                        ["Framework"] =
-                            Context?.Framework
-                            ?? "Angular"
-                    }
-                });
+            AddSummary(
+                results,
+                projectPath);
         }
 
 
 
         _logger.LogInformation(
-            "🅰️ {Evaluator} completed with {Count} metric entries",
+            "🅰️ {Evaluator} completed with {Count} results",
             Name,
             results.Count);
 
 
-
         return results;
+    }
+
+
+
+    private static bool IsAngularFile(
+        string content)
+    {
+        return AngularImportRx.IsMatch(content)
+               ||
+               ComponentRx.IsMatch(content)
+               ||
+               ModuleRx.IsMatch(content);
     }
 
 
@@ -387,6 +322,12 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
         }
 
 
+        if (!_policy.AllowedSelectorPrefixes.Any())
+        {
+            return 1;
+        }
+
+
         return _policy.AllowedSelectorPrefixes.Any(
             prefix =>
                 match.Groups[1]
@@ -394,35 +335,29 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
                     .StartsWith(
                         prefix,
                         StringComparison.Ordinal))
-            ? 1d
-            : 0.5d;
+            ? 1
+            : 0.5;
     }
 
 
 
-    private double EvaluateTemplateComplexity(
+    private double EvaluateComplexity(
         string content)
     {
-        var match =
-            TemplateInlineRx.Match(content);
-
-
-        if (!match.Success)
-        {
-            return 1d;
-        }
-
-
         var lines =
-            match.Groups[1]
-                .Value
-                .Split('\n')
-                .Length;
+            content.Count(
+                c => c == '\n') + 1;
+
+
+        if (_policy.MaxComponentComplexity <= 0)
+        {
+            return 1;
+        }
 
 
         if (lines <= _policy.MaxComponentComplexity)
         {
-            return 1d;
+            return 1;
         }
 
 
@@ -435,7 +370,7 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
 
 
-    private static double EvaluateComponentNaming(
+    private static double EvaluateNaming(
         string content)
     {
         var match =
@@ -448,13 +383,14 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
         }
 
 
-        var className =
-            match.Groups[1].Value;
+        var name =
+            match.Groups[1]
+                .Value;
 
 
-        return char.IsUpper(className[0])
-            ? 1d
-            : 0.5d;
+        return char.IsUpper(name[0])
+            ? 1
+            : 0.5;
     }
 
 
@@ -462,24 +398,16 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
     private double EvaluateModuleStructure(
         string content)
     {
-        if (content.Contains(
-                "bootstrap:",
-                StringComparison.Ordinal))
-        {
-            return 0;
-        }
-
-
         if (_policy.MaxComponentsPerModule <= 0)
         {
-            return 1d;
+            return 1;
         }
 
 
-        foreach (Match declaration in DeclarationsRx.Matches(content))
+        foreach (Match match in DeclarationsRx.Matches(content))
         {
             var count =
-                declaration.Groups[1]
+                match.Groups[1]
                     .Value
                     .Split(
                         ',',
@@ -487,18 +415,57 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
                     .Length;
 
 
-            if (count > _policy.MaxComponentsPerModule)
+            if (count >
+                _policy.MaxComponentsPerModule)
             {
-                return Math.Max(
-                    0,
-                    1 -
-                    (double)count /
-                    (_policy.MaxComponentsPerModule * 2));
+                return 0.5;
             }
         }
 
 
-        return 1d;
+        return 1;
+    }
+
+
+
+    private void AddSummary(
+        List<ArchitectureEvaluatorResult> results,
+        string projectPath)
+    {
+        var average =
+            results.Average(
+                r =>
+                    r.Metrics.GetValueOrDefault(
+                        "AngularComplianceScore",
+                        0));
+
+
+        results.Add(
+            new ArchitectureEvaluatorResult(
+                Name,
+                projectPath)
+            {
+                Category =
+                    "FrontendSummary",
+
+                Metrics =
+                {
+                    ["AngularFileCount"] =
+                        results.Count,
+
+                    ["AverageComplianceScore"] =
+                        average,
+
+                    ["FrontEndHealthIndex"] =
+                        average
+                },
+
+                Metadata =
+                {
+                    ["Framework"] =
+                        "Angular"
+                }
+            });
     }
 
 
@@ -511,9 +478,9 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
     {
         var score =
             selector * 0.25 +
-            complexity * 0.25 +
+            complexity * 0.30 +
             naming * 0.20 +
-            modularity * 0.30;
+            modularity * 0.25;
 
 
         return Math.Round(

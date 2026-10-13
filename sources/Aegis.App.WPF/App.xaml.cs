@@ -1,6 +1,4 @@
-﻿
-using Aegis.Wpf.ViewModels;
-using Aegis.Wpf.Views;
+
 using Aegis.Architecture.Aggregation;
 using Aegis.Architecture.Bootstrap;
 using Aegis.Architecture.RuleEngines;
@@ -11,8 +9,16 @@ using Aegis.Infrastructure.Extensions;
 using Aegis.Infrastructure.Persistence;
 using Aegis.Sdk;
 using Aegis.SDK.Extensions;
+using Aegis.Security.Bootstrap;
+using Aegis.Security.Governance;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
+using Aegis.Wpf.Services.Security;
+using Aegis.Wpf.Services.Configuration;
+using Aegis.Wpf.ViewModels;
+using Aegis.Wpf.ViewModels.Architecture;
+using Aegis.Wpf.ViewModels.Configuration;
+using Aegis.Wpf.Views.Architecture;
 using Franz.Common.Logging.Extensions;
 using Franz.Common.Mediator.Bootstrap;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -80,7 +86,7 @@ public partial class App : Application
                     context.Configuration);
 
                 // Registers IOptions wrapper hierarchies 
-                services.AddAegisPolicies();
+                services.AddAegisPolicies(context.Configuration);
 
                 // ========================================================
                 // BRIDGE OPTIONS TO DIRECT INJECTION FOR RULE ENGINE
@@ -97,14 +103,18 @@ public partial class App : Application
                 services.AddAegisCore();
                 services.AddScoped<AegisArchitectureAnalysisRunner>();
                 services.AddSingleton<LayerAggregator>();
+                services.AddAegisSecurity(context.Configuration);   // using Aegis.Security.Bootstrap; skip if already called
+                services.AddScoped<SecurityComplianceEngine>();
+                services.AddAegisSecurityWorkspace();               // using Aegis.Wpf.Services.Security;
 
-               
                 services.AddFranzMediatorStandard(new[] { typeof(AegisDbContext).Assembly });
 
                 // =========================
                 // VIEW MODELS
                 // =========================
                 services.AddSingleton<MainViewModel>();
+                services.AddSingleton<ConfigurationDocumentService>();
+                services.AddSingleton<ConfigurationWorkspaceViewModel>();
 
                 services.AddTransient<LayerDashboardViewModel>();
                 services.AddTransient<SectionDashboardViewModel>();

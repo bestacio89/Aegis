@@ -1,0 +1,447 @@
+<UserControl
+    x:Class="Aegis.Wpf.Views.Configuration.ConfigurationWorkspaceView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:configurationVm="clr-namespace:Aegis.Wpf.ViewModels.Configuration"
+    Background="{StaticResource Brush.Ink}"
+    Foreground="{StaticResource Brush.TextPrimary}">
+
+    <UserControl.Resources>
+        <Style x:Key="ConfigActionButton" TargetType="Button">
+            <Setter Property="Padding" Value="13,8" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Background" Value="{StaticResource Brush.PanelElevated}" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Line}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <Style x:Key="ConfigEditorTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource Brush.Ink}" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Line}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="9,7" />
+            <Setter Property="FontFamily" Value="{StaticResource Font.Data}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsStructured}" Value="True">
+                    <Setter Property="Height" Value="132" />
+                    <Setter Property="AcceptsReturn" Value="True" />
+                    <Setter Property="TextWrapping" Value="NoWrap" />
+                    <Setter Property="VerticalContentAlignment" Value="Top" />
+                    <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+                    <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+                </DataTrigger>
+
+                <DataTrigger Binding="{Binding HasError}" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource Brush.StatusCritical}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Workspace heading -->
+        <Grid Grid.Row="0" Margin="0,0,0,18">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <TextBlock
+                    Text="Configuration"
+                    FontSize="28"
+                    FontWeight="SemiBold" />
+
+                <TextBlock
+                    Text="Edit the policy documents used by Aegis. Changes are validated before they are written to disk."
+                    Margin="0,6,0,0"
+                    Foreground="{StaticResource Brush.TextMuted}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                <Button
+                    Content="Open folder"
+                    Command="{Binding OpenConfigurationFolderCommand}"
+                    Style="{StaticResource ConfigActionButton}" />
+
+                <Button
+                    Content="Reload"
+                    Command="{Binding ReloadAllCommand}"
+                    Style="{StaticResource ConfigActionButton}" />
+
+                <Button
+                    Content="Save all changes"
+                    Command="{Binding SaveAllCommand}"
+                    IsEnabled="{Binding HasUnsavedChanges}"
+                    Background="{StaticResource Brush.AccentStructural}"
+                    Foreground="{StaticResource Brush.Ink}"
+                    FontWeight="SemiBold"
+                    Padding="14,8"
+                    BorderThickness="0"
+                    Cursor="Hand" />
+            </WrapPanel>
+        </Grid>
+
+        <!-- Summary -->
+        <UniformGrid Grid.Row="1" Columns="3" Margin="0,0,0,16">
+            <Border Style="{StaticResource Card.Structural}">
+                <StackPanel>
+                    <TextBlock
+                        Text="POLICY DOCUMENTS"
+                        Style="{StaticResource Text.Eyebrow}" />
+
+                    <TextBlock
+                        Text="{Binding LoadedDocumentCount}"
+                        Style="{StaticResource Text.KpiValue}" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card.Structural}">
+                <StackPanel>
+                    <TextBlock
+                        Text="EDITABLE SETTINGS"
+                        Style="{StaticResource Text.Eyebrow}" />
+
+                    <TextBlock
+                        Text="{Binding TotalSettingsCount}"
+                        Style="{StaticResource Text.KpiValue}" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card.Structural}">
+                <StackPanel>
+                    <TextBlock
+                        Text="UNSAVED DOCUMENTS"
+                        Style="{StaticResource Text.Eyebrow}" />
+
+                    <TextBlock
+                        Text="{Binding DirtyDocumentCount}"
+                        Style="{StaticResource Text.KpiValue}" />
+                </StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <!-- Configuration browser and editor -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260" />
+                <ColumnDefinition Width="14" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Policy catalog -->
+            <Border
+                Grid.Column="0"
+                Background="{StaticResource Brush.Panel}"
+                BorderBrush="{StaticResource Brush.Line}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="10">
+
+                <DockPanel>
+                    <TextBlock
+                        DockPanel.Dock="Top"
+                        Text="POLICY CATALOG"
+                        Style="{StaticResource Text.Eyebrow}"
+                        Margin="8,5,8,12" />
+
+                    <ListBox
+                        ItemsSource="{Binding Documents}"
+                        SelectedItem="{Binding SelectedDocument, Mode=TwoWay}"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="{StaticResource Brush.TextPrimary}"
+                        ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="8" />
+                                <Setter Property="Margin" Value="0,0,0,4" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border
+                                                x:Name="ItemBorder"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{StaticResource Brush.Line}"
+                                                BorderThickness="1"
+                                                CornerRadius="3"
+                                                Padding="{TemplateBinding Padding}">
+
+                                                <ContentPresenter />
+                                            </Border>
+
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter
+                                                        TargetName="ItemBorder"
+                                                        Property="Background"
+                                                        Value="{StaticResource Brush.PanelElevated}" />
+
+                                                    <Setter
+                                                        TargetName="ItemBorder"
+                                                        Property="BorderBrush"
+                                                        Value="{StaticResource Brush.AccentStructural}" />
+                                                </Trigger>
+
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter
+                                                        TargetName="ItemBorder"
+                                                        Property="Opacity"
+                                                        Value="0.9" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <DockPanel>
+                                        <TextBlock
+                                            Text="{Binding Title}"
+                                            FontSize="12"
+                                            FontWeight="SemiBold"
+                                            TextWrapping="Wrap" />
+
+                                        <TextBlock
+                                            Text="●"
+                                            Margin="6,0,0,0"
+                                            Foreground="{StaticResource Brush.StatusWarning}">
+
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsDirty}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DockPanel>
+
+                                    <TextBlock
+                                        Text="{Binding FileName}"
+                                        Margin="0,4,0,0"
+                                        FontSize="10"
+                                        Foreground="{StaticResource Brush.TextMuted}"
+                                        TextWrapping="Wrap" />
+
+                                    <TextBlock
+                                        Text="{Binding LoadError}"
+                                        Margin="0,5,0,0"
+                                        FontSize="10"
+                                        Foreground="{StaticResource Brush.StatusCritical}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Selected policy editor -->
+            <Border
+                Grid.Column="2"
+                Background="{StaticResource Brush.Panel}"
+                BorderBrush="{StaticResource Brush.Line}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="16">
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Selected document details -->
+                    <StackPanel Grid.Row="0" Margin="0,0,0,12">
+                        <TextBlock
+                            Text="{Binding SelectedDocument.Title, TargetNullValue='Select a policy document'}"
+                            FontSize="19"
+                            FontWeight="SemiBold" />
+
+                        <TextBlock
+                            Text="{Binding SelectedDocument.Description}"
+                            Margin="0,5,0,0"
+                            Foreground="{StaticResource Brush.TextMuted}"
+                            TextWrapping="Wrap" />
+
+                        <TextBlock
+                            Text="{Binding SelectedDocumentPath}"
+                            Margin="0,7,0,0"
+                            FontSize="10"
+                            FontFamily="{StaticResource Font.Data}"
+                            Foreground="{StaticResource Brush.TextMuted}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <!-- Editing guidance -->
+                    <Border
+                        Grid.Row="1"
+                        Background="{StaticResource Brush.PanelElevated}"
+                        BorderBrush="{StaticResource Brush.Line}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="10"
+                        Margin="0,0,0,10">
+
+                        <TextBlock
+                            Text="Boolean and numeric values are type-checked. Arrays and dictionaries are edited as JSON and must retain their original JSON shape."
+                            FontSize="11"
+                            Foreground="{StaticResource Brush.TextMuted}"
+                            TextWrapping="Wrap" />
+                    </Border>
+
+                    <!-- Settings -->
+                    <ScrollViewer
+                        Grid.Row="2"
+                        VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Disabled">
+
+                        <ItemsControl ItemsSource="{Binding SelectedDocument.Settings}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border
+                                        Background="{StaticResource Brush.PanelElevated}"
+                                        BorderBrush="{StaticResource Brush.Line}"
+                                        BorderThickness="1"
+                                        CornerRadius="3"
+                                        Padding="12"
+                                        Margin="0,0,0,8">
+
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="1.15*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Setting metadata -->
+                                            <StackPanel
+                                                Grid.Column="0"
+                                                Margin="0,0,14,0"
+                                                VerticalAlignment="Top">
+
+                                                <TextBlock
+                                                    Text="{Binding Name}"
+                                                    FontWeight="SemiBold"
+                                                    FontSize="12"
+                                                    TextWrapping="Wrap" />
+
+                                                <TextBlock
+                                                    Text="{Binding PathDisplay}"
+                                                    Margin="0,3,0,0"
+                                                    FontSize="10"
+                                                    Foreground="{StaticResource Brush.TextMuted}"
+                                                    TextWrapping="Wrap" />
+
+                                                <TextBlock
+                                                    Text="{Binding TypeLabel}"
+                                                    Margin="0,7,0,0"
+                                                    FontSize="9"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{StaticResource Brush.AccentStructural}" />
+
+                                                <TextBlock
+                                                    Text="{Binding Description}"
+                                                    Margin="0,6,0,0"
+                                                    FontSize="11"
+                                                    Foreground="{StaticResource Brush.TextMuted}"
+                                                    TextWrapping="Wrap" />
+
+                                                <!-- Default value: explicitly one-way -->
+                                                <TextBlock
+                                                    Margin="0,6,0,0"
+                                                    FontSize="10"
+                                                    Foreground="{StaticResource Brush.TextMuted}"
+                                                    TextWrapping="Wrap">
+
+                                                    <Run Text="Default: " />
+
+                                                    <Run
+                                                        Text="{Binding DefaultValueText, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </StackPanel>
+
+                                            <!-- Editable value and validation -->
+                                            <StackPanel Grid.Column="1">
+                                                <TextBox
+                                                    Text="{Binding ValueText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                    Style="{StaticResource ConfigEditorTextBox}"
+                                                    ToolTip="Edit this value. Structured values must remain valid JSON." />
+
+                                                <TextBlock
+                                                    Text="{Binding Error}"
+                                                    Margin="0,5,0,0"
+                                                    FontSize="10"
+                                                    Foreground="{StaticResource Brush.StatusCritical}"
+                                                    TextWrapping="Wrap">
+
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasError}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Status / operational explanation -->
+        <Border
+            Grid.Row="3"
+            Margin="0,12,0,0"
+            Padding="12,9"
+            Background="{StaticResource Brush.PanelElevated}"
+            BorderBrush="{StaticResource Brush.Line}"
+            BorderThickness="1"
+            CornerRadius="3">
+
+            <TextBlock
+                Text="{Binding StatusMessage}"
+                Foreground="{StaticResource Brush.TextMuted}"
+                FontSize="11"
+                TextWrapping="Wrap" />
+        </Border>
+    </Grid>
+</UserControl>

@@ -13,7 +13,7 @@ using SkiaSharp;
 using System.Collections.ObjectModel;
 
 
-namespace Aegis.Wpf.ViewModels;
+namespace Aegis.Wpf.ViewModels.Architecture;
 
 public sealed partial class LayerDashboardViewModel : ObservableObject
 {

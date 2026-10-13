@@ -16,7 +16,7 @@ using SkiaSharp;
 using System.Collections.ObjectModel;
 using System.IO;
 
-namespace Aegis.Wpf.ViewModels;
+namespace Aegis.Wpf.ViewModels.Architecture;
 
 public sealed partial class RuleDashboardViewModel : ObservableObject
 {

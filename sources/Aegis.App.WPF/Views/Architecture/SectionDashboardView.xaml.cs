@@ -3,7 +3,7 @@ using System.Windows.Controls;
 using Aegis.Wpf.ViewModels;
 using Elastic.Apm.Api;
 
-namespace Aegis.Wpf.Views;
+namespace Aegis.Wpf.Views.Architecture;
 
 public partial class SectionDashboardView: UserControl
 {

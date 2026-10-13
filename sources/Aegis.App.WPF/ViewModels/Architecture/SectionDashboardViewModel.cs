@@ -12,7 +12,7 @@ using LiveChartsCore.SkiaSharpView.Painting;
 using SkiaSharp;
 
 
-namespace Aegis.Wpf.ViewModels;
+namespace Aegis.Wpf.ViewModels.Architecture;
 
 public sealed partial class SectionDashboardViewModel : ObservableObject
 {

@@ -1,0 +1,111 @@
+<UserControl
+    x:Class="Aegis.Wpf.Views.Architecture.ArchitectureWorkspaceView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:archivm="clr-namespace:Aegis.Wpf.ViewModels.Architecture"
+    xmlns:artchiviews="clr-namespace:Aegis.Wpf.Views.Architecture"
+    Background="{StaticResource Brush.Ink}"
+    Foreground="{StaticResource Brush.TextPrimary}">
+
+  <UserControl.Resources>
+
+    <DataTemplate DataType="{x:Type archivm:SectionDashboardViewModel}">
+      <artchiviews:SectionDashboardView />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type archivm:LayerDashboardViewModel}">
+      <artchiviews:LayerDashboardView />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type archivm:RuleDashboardViewModel}">
+      <artchiviews:RuleDashboardView />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type archivm:ReportVisualizationViewModel}">
+      <artchiviews:ReportVisualizationView />
+    </DataTemplate>
+
+  </UserControl.Resources>
+
+  <Grid Margin="24">
+
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <!-- Workspace heading -->
+
+    <StackPanel
+        Grid.Row="0"
+        Margin="0,0,0,20">
+
+      <TextBlock
+          Text="Architecture"
+          FontSize="28"
+          FontWeight="SemiBold" />
+
+      <TextBlock
+          Text="Explore system structure, architectural rules, and assessment reports."
+          Margin="0,6,0,0"
+          Opacity="0.7"
+          TextWrapping="Wrap" />
+
+    </StackPanel>
+
+    <!-- Tab selector -->
+
+    <TabControl
+        Grid.Row="1"
+        ItemsSource="{Binding Tabs}"
+        SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
+        Background="Transparent"
+        BorderThickness="0"
+        Foreground="{StaticResource Brush.TextPrimary}">
+
+      <TabControl.ItemTemplate>
+        <DataTemplate>
+          <StackPanel
+              Orientation="Horizontal"
+              Margin="4,2"
+              VerticalAlignment="Center">
+
+            <TextBlock
+                Text="{Binding Glyph}"
+                Margin="0,0,8,0"
+                VerticalAlignment="Center" />
+
+            <TextBlock
+                Text="{Binding Name}"
+                VerticalAlignment="Center" />
+
+          </StackPanel>
+        </DataTemplate>
+      </TabControl.ItemTemplate>
+
+      <!-- Content is rendered once by the ContentControl below. -->
+      <TabControl.ContentTemplate>
+        <DataTemplate>
+          <Grid />
+        </DataTemplate>
+      </TabControl.ContentTemplate>
+
+    </TabControl>
+
+    <!-- Selected dashboard -->
+
+    <Border
+        Grid.Row="2"
+        Margin="0,12,0,0"
+        Background="Transparent">
+
+      <ContentControl
+          Content="{Binding ActiveContent}"
+          HorizontalContentAlignment="Stretch"
+          VerticalContentAlignment="Stretch" />
+
+    </Border>
+
+  </Grid>
+</UserControl>

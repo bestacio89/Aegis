@@ -10,7 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 
-namespace Aegis.Wpf.Views
+namespace Aegis.Wpf.Views.Architecture
 {
     /// <summary>
     /// Interaction logic for ReportVisualizationView.xaml

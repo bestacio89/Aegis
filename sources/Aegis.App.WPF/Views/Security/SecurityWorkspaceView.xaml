@@ -1,0 +1,182 @@
+<UserControl x:Class="Aegis.Wpf.Views.Security.SecurityWorkspaceView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Aegis.Wpf.ViewModels.Security"
+             xmlns:views="clr-namespace:Aegis.Wpf.Views.Security"
+             Background="{StaticResource Brush.Ink}"
+             Foreground="{StaticResource Brush.TextPrimary}"
+             FontFamily="{StaticResource Font.Body}">
+
+    <UserControl.Resources>
+
+        <!-- Explicitly resolve each tab's ViewModel to its corresponding View. -->
+        <DataTemplate DataType="{x:Type vm:SecurityOverviewViewModel}">
+            <views:SecurityOverviewView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:SecurityDomainsViewModel}">
+            <views:SecurityDomainsView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:SecurityFindingsViewModel}">
+            <views:SecurityFindingsView />
+        </DataTemplate>
+
+        <!-- Tab header presentation. -->
+        <Style x:Key="Security.TabItem" TargetType="{x:Type TabItem}">
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="18,12"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabItem}">
+                        <Grid>
+                            <Border x:Name="TabBackground"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="5,5,0,0"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter
+                                    ContentSource="Header"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            </Border>
+
+                            <Border x:Name="SelectionIndicator"
+                                    Height="2"
+                                    VerticalAlignment="Bottom"
+                                    Background="{StaticResource Brush.AccentStructural}"
+                                    Visibility="Collapsed"/>
+                        </Grid>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabBackground"
+                                        Property="Background"
+                                        Value="{StaticResource Brush.Panel}"/>
+                                <Setter Property="Foreground"
+                                        Value="{StaticResource Brush.TextPrimary}"/>
+                                <Setter TargetName="SelectionIndicator"
+                                        Property="Visibility"
+                                        Value="Visible"/>
+                            </Trigger>
+
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBackground"
+                                        Property="Background"
+                                        Value="{StaticResource Brush.Panel}"/>
+                            </Trigger>
+
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </UserControl.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- WORKSPACE HEADER -->
+        <Border Grid.Row="0"
+                Style="{StaticResource Card.Structural}"
+                Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="AEGIS / SECURITY"
+                               Style="{StaticResource Text.Eyebrow}"
+                               Foreground="{StaticResource Brush.AccentStructural}"/>
+
+                    <TextBlock Text="Security Assessment"
+                               FontSize="22"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Brush.TextPrimary}"
+                               Margin="0,4,0,0"/>
+
+                    <TextBlock Text="{Binding StatusMessage}"
+                               Foreground="{StaticResource Brush.TextMuted}"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Margin="0,5,0,0"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="16,0,0,0">
+
+                    <Button Content="Run Scan"
+                            Command="{Binding RunScanCommand}"
+                            Style="{StaticResource Button.Primary}"
+                            Padding="14,7"
+                            Margin="0,0,8,0"/>
+
+                    <Button Content="Cancel"
+                            Command="{Binding CancelCommand}"
+                            Padding="14,7"
+                            Margin="0,0,8,0"/>
+
+                    <Button Content="Export"
+                            Command="{Binding ExportReportCommand}"
+                            Padding="14,7"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- TAB NAVIGATION AND CONTENT -->
+        <Border Grid.Row="1"
+                Style="{StaticResource Card.Structural}"
+                Padding="0">
+
+            <TabControl ItemsSource="{Binding Tabs}"
+                        SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
+                        ItemContainerStyle="{StaticResource Security.TabItem}"
+                        Background="{StaticResource Brush.Ink}"
+                        Foreground="{StaticResource Brush.TextPrimary}"
+                        BorderThickness="0"
+                        Padding="0">
+
+                <TabControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:SecurityTab}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Glyph}"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"/>
+
+                            <TextBlock Text="{Binding Name}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </TabControl.ItemTemplate>
+
+                <TabControl.ContentTemplate>
+                    <DataTemplate DataType="{x:Type vm:SecurityTab}">
+                        <ContentControl Content="{Binding ViewModel}"
+                                        HorizontalContentAlignment="Stretch"
+                                        VerticalContentAlignment="Stretch"/>
+                    </DataTemplate>
+                </TabControl.ContentTemplate>
+
+            </TabControl>
+        </Border>
+    </Grid>
+</UserControl>

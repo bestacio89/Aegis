@@ -1,4 +1,6 @@
-﻿using Aegis.Wpf.ViewModels.Orchestrators;
+﻿using Aegis.Security.Bootstrap;
+using Aegis.Security.Pipeline;
+using Aegis.Wpf.ViewModels.Orchestrators;
 using Aegis.Wpf.ViewModels.Security;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,7 +21,8 @@ public static class SecurityWorkspaceRegistration
         services.AddSingleton<SecurityFindingsViewModel>();
         services.AddSingleton<SecurityWorkspaceViewModel>();
         services.AddSingleton<SecurityWorkspaceOrchestrator>();
-
+        services.AddSingleton<IAegisSecurityPipeline, AegisSecurityPipeline>();
+ 
         return services;
     }
 }

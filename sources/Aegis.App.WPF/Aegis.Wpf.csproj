@@ -103,6 +103,7 @@
     <ProjectReference Include="..\Aegis.Infrastructure\Aegis.Infrastructure.csproj" />
     <ProjectReference Include="..\Aegis.Sdk\Aegis.Sdk.csproj" />
     <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />
+    <ProjectReference Include="..\Aegis.Security\Aegis.Security.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,7 +2,8 @@
 using Aegis.Shared.Security.Contracts;
 using Aegis.Shared.Security.Enums;
 using Aegis.Shared.Security.Models;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Aegis.Security.Evaluators.OS;
 
 public sealed class OsSecurityEvaluator : ISecurityEvaluator
 {
@@ -68,7 +69,7 @@ public sealed class OsSecurityEvaluator : ISecurityEvaluator
 
         return Task.FromResult(new SecurityEvaluationResult
         {
-            Category = SecurityCategory.Infrastructure,
+            Category = SecurityCategory.OS,
             Findings = findings
         });
     }

@@ -13,6 +13,8 @@ public sealed class SecurityComplianceEngine
 {
     /// <summary>
     /// Evaluates all security results and produces a governance-level compliance summary.
+    /// Global risk, compliance rate and compliant flag are derived by
+    /// <see cref="SecurityComplianceResult"/> from the per-domain results.
     /// </summary>
     public SecurityComplianceResult Evaluate(
         AegisSecurityReport report,
@@ -20,32 +22,9 @@ public sealed class SecurityComplianceEngine
         string policyVersion = "v1.0",
         string evaluatedBy = "system")
     {
-        var evals = domainEvaluations.ToList();
-        var domainResults = new List<DomainComplianceResult>();
-
-        foreach (var eval in evals)
-        {
-            domainResults.Add(EvaluateDomain(eval));
-        }
-
-        // ------- Aggregate GLOBAL compliance -------
-
-        var overallMaxSeverity = domainResults.Any()
-            ? domainResults.Max(r => r.MaxSeverity)
-            : SecuritySeverity.Info;
-
-        var globalRisk = overallMaxSeverity switch
-        {
-            SecuritySeverity.Critical => RiskLevel.Severe,
-            SecuritySeverity.High => RiskLevel.High,
-            SecuritySeverity.Medium => RiskLevel.Moderate,
-            SecuritySeverity.Low => RiskLevel.Low,
-            _ => RiskLevel.Information
-        };
-
-        var complianceRate = domainResults.Any()
-            ? Math.Round(domainResults.Average(r => r.ComplianceRate), 2)
-            : 100.0;
+        var domainResults = domainEvaluations
+            .Select(EvaluateDomain)
+            .ToList();
 
         return new SecurityComplianceResult
         {
@@ -61,29 +40,37 @@ public sealed class SecurityComplianceEngine
     // -----------------------------------------------------------
     // PER-DOMAIN COMPLIANCE EVALUATION
     // -----------------------------------------------------------
-    private DomainComplianceResult EvaluateDomain(SecurityEvaluationResult eval)
+    private static DomainComplianceResult EvaluateDomain(SecurityEvaluationResult eval)
     {
-        var rules = eval.RuleResults.ToList();
+        // Rule-driven evaluators populate RuleResults; heuristic evaluators (Cloud, Crypto, OS,
+        // TLS, WCF) populate Findings. Both feed compliance, otherwise the heuristic domains come
+        // back as a hollow 100% / Info regardless of what they found.
+        int total;
+        int failed;
+        SecuritySeverity maxSeverity;
 
-        int total = rules.Count;
-        int failed = rules.Count(r => r.Severity != SecuritySeverity.Info && r.Severity != SecuritySeverity.Low);
+        if (eval.IsRuleBased)
+        {
+            var rules = eval.RuleResults;
+            total = rules.Count;
+            failed = rules.Count(r => r.Severity >= SecuritySeverity.Medium);
+            maxSeverity = rules.Max(r => r.Severity);
+        }
+        else
+        {
+            var findings = eval.Findings;
+            total = findings.Count;
+            failed = findings.Count(f => f.SeverityLevel >= SecuritySeverity.Medium);
+            maxSeverity = findings.Any() ? findings.Max(f => f.SeverityLevel) : SecuritySeverity.Info;
+        }
 
-        // domain compliance rate = percentage of non-broken rules
+        // domain compliance rate = percentage of non-broken rules/findings
         double compliance = total == 0
             ? 100.0
             : Math.Round(((double)(total - failed) / total) * 100.0, 2);
 
-        var maxSeverity = rules.Any()
-            ? rules.Max(r => r.Severity)
-            : SecuritySeverity.Info;
-
         // domain is compliant only if no High/Critical issues exist
-        bool isCompliant = maxSeverity switch
-        {
-            SecuritySeverity.Critical => false,
-            SecuritySeverity.High => false,
-            _ => true
-        };
+        bool isCompliant = maxSeverity < SecuritySeverity.High;
 
         return new DomainComplianceResult
         {

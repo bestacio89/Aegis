@@ -1,12 +1,22 @@
 ﻿using Aegis.Security.Governance;
+using Aegis.Security.RuleEngine;
 using Aegis.Shared.Security.Contracts;
+using Aegis.Shared.Security.Enums;
 using Aegis.Shared.Security.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Aegis.Security.Pipeline;
 
+/// <summary>
+/// Static security pipeline: runs only Static probes/evaluators (see <see cref="SecurityModeCatalog"/>).
+/// Live probing (handshakes, ports, host state, cloud APIs) is a separate concern with its own
+/// authorization gate and is never executed from here.
+/// </summary>
 public sealed class AegisSecurityPipeline : IAegisSecurityPipeline
 {
+    private const string EngineVersion = "1.0.0-alpha";
+    private const string PolicyVersion = "v1.0";
+
     private readonly IEnumerable<ISecurityProbe> _probes;
     private readonly ISecurityEvaluatorEngine _evaluatorEngine;
     private readonly SecurityComplianceEngine _complianceEngine;
@@ -28,21 +38,33 @@ public sealed class AegisSecurityPipeline : IAegisSecurityPipeline
         ProjectSecurityContext context,
         CancellationToken ct = default)
     {
-        _logger.LogInformation("Aegis security pipeline starting for {Project}", context.ProjectPath);
+        _logger.LogInformation("Aegis static security pipeline starting for {Project}", context.ProjectPath);
+
+        var allProbes = _probes.ToList();
+        var staticProbes = allProbes
+            .Where(p => SecurityModeCatalog.ModeOfProbe(p.Id) == ProbeMode.Static)
+            .ToList();
+
+        var skipped = allProbes.Count - staticProbes.Count;
+        if (skipped > 0)
+        {
+            _logger.LogInformation(
+                "Skipped {Count} live probe(s); live probing runs only through the live pipeline with an authorized scope.",
+                skipped);
+        }
 
         var allSignals = new List<SecuritySignal>();
 
-        foreach (var probe in _probes)
+        foreach (var probe in staticProbes)
         {
             try
             {
                 _logger.LogInformation("Running probe {ProbeId}", probe.Id);
 
-                var signals = await probe.ExecuteAsync(context, ct);
+                var signals = (await probe.ExecuteAsync(context, ct)).ToList();
                 allSignals.AddRange(signals);
 
-                _logger.LogInformation("Probe {ProbeId} produced {Count} signals",
-                    probe.Id, signals.Count());
+                _logger.LogInformation("Probe {ProbeId} produced {Count} signals", probe.Id, signals.Count);
             }
             catch (Exception ex)
             {
@@ -50,47 +72,64 @@ public sealed class AegisSecurityPipeline : IAegisSecurityPipeline
             }
         }
 
+        if (allSignals.Count == 0)
+        {
+            // An empty scan is indistinguishable from a clean one in the compliance numbers,
+            // so say it loudly instead of letting it pass as 100%.
+            _logger.LogWarning(
+                "No static evidence was collected for {Project} ({Probes} static probe(s) ran). " +
+                "Compliance figures for this run reflect missing evidence, not a clean result.",
+                context.ProjectPath, staticProbes.Count);
+        }
+
         var evaluations = (await _evaluatorEngine
-            .EvaluateAllAsync(context, allSignals, ct))
+            .EvaluateAllAsync(context, allSignals, ProbeMode.Static, ct))
             .ToArray();
 
-        // FIX 1: correct factory usage
         var summary = SecurityScanSummary.FromEvaluations(
             context.ProjectPath,
             evaluations,
-            policyVersion: "v1.0",
-            executedBy: context.Environment
-        );
+            policyVersion: PolicyVersion,
+            executedBy: context.Environment);
 
         var report = new AegisSecurityReport
         {
             ProjectName = context.ProjectPath,
-            EngineVersion = "1.0.0-alpha",
-            PolicyVersion = "v1.0",
+            EngineVersion = EngineVersion,
+            PolicyVersion = PolicyVersion,
             StartedAtUtc = context.ExecutedAtUtc,
             CompletedAtUtc = DateTimeOffset.UtcNow,
             Summary = summary,
             Metadata = new ProjectSecurityMetadata
             {
                 Environment = context.Environment,
-                Tags = context.Tags.Values.ToList()
+                Tags = BuildTags(context)
             }
         };
 
-        // FIX 2: correct compliance engine signature
+        // Named arguments: the signature is (report, evaluations, policyVersion, evaluatedBy).
         var compliance = _complianceEngine.Evaluate(
             report,
             evaluations,
-            context.Environment,
-            "v1.0"
-        );
+            policyVersion: PolicyVersion,
+            evaluatedBy: context.Environment);
 
         _logger.LogInformation(
-            "Aegis pipeline completed. Risk={Risk}, Compliance={Compliance:F2}%",
+            "Aegis static security pipeline completed. Risk={Risk}, Compliance={Compliance:F2}%",
             compliance.GlobalRisk,
-            compliance.ComplianceRate
-        );
+            compliance.ComplianceRate);
 
         return (report, compliance);
+    }
+
+    // The metadata keeps tags as a flat string collection; keep the keys, not only the values.
+    private static IReadOnlyCollection<string> BuildTags(ProjectSecurityContext context)
+    {
+        var tags = context.Tags.Select(t => $"{t.Key}={t.Value}").ToList();
+
+        if (!string.IsNullOrWhiteSpace(context.PipelineRunId))
+            tags.Add($"PipelineRunId={context.PipelineRunId}");
+
+        return tags;
     }
 }

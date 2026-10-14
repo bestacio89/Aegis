@@ -1,10 +1,9 @@
 ﻿using Aegis.Shared.Security.Contracts;
+using Aegis.Shared.Security.Enums;
 using Aegis.Shared.Security.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Aegis.Security.RuleEngine;
-
-
 
 public sealed class SecurityEvaluatorEngine : ISecurityEvaluatorEngine
 {
@@ -20,17 +19,29 @@ public sealed class SecurityEvaluatorEngine : ISecurityEvaluatorEngine
     public async Task<IEnumerable<SecurityEvaluationResult>> EvaluateAllAsync(
         ProjectSecurityContext ctx,
         IEnumerable<SecuritySignal> signals,
+        ProbeMode mode,
         CancellationToken ct = default)
     {
         var results = new List<SecurityEvaluationResult>();
+        var signalList = signals.ToList();
 
-        foreach (var evaluator in _evaluators)
+        var selected = _evaluators
+            .Where(e => SecurityModeCatalog.ModeOfDomain(e.Domain) == mode)
+            .ToList();
+
+        if (selected.Count == 0)
+        {
+            _logger.LogWarning("No {Mode} evaluators are registered; nothing will be assessed.", mode);
+            return results;
+        }
+
+        foreach (var evaluator in selected)
         {
             try
             {
-                _logger.LogDebug("Executing evaluator {Domain}", evaluator.Domain);
+                _logger.LogDebug("Executing {Mode} evaluator {Domain}", mode, evaluator.Domain);
 
-                var result = await evaluator.EvaluateAsync(ctx, signals, ct);
+                var result = await evaluator.EvaluateAsync(ctx, signalList, ct);
                 results.Add(result);
 
                 _logger.LogInformation(
@@ -48,4 +59,3 @@ public sealed class SecurityEvaluatorEngine : ISecurityEvaluatorEngine
         return results;
     }
 }
-

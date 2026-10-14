@@ -10,30 +10,27 @@ public sealed class SecurityDomainSummary
 {
     /// <summary>The logical security domain/category.</summary>
     public SecurityCategory Category { get; init; }
-    public DateTimeOffset AggregatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
-    /// <summary>All evaluation results contributing to this domain.</summary>
- 
-    /// <summary>
-    /// UTC timestamp when this domain summary was aggregated.
-    /// </summary>
 
+    /// <summary>UTC timestamp when this domain summary was aggregated.</summary>
+    public DateTimeOffset AggregatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+
+    /// <summary>All evaluation results contributing to this domain.</summary>
     public IReadOnlyCollection<SecurityEvaluationResult> Evaluations { get; init; }
         = Array.Empty<SecurityEvaluationResult>();
 
-    /// <summary>Total number of rule results across all evaluations.</summary>
-    public int TotalFindings => Evaluations.Sum(e => e.RuleResults.Count);
+    /// <summary>Total number of rule results / findings across all evaluations.</summary>
+    public int TotalFindings => Evaluations.Sum(EffectiveTotal);
 
     /// <summary>
     /// Total number of failed findings (Medium severity or higher).
     /// </summary>
-    public int FailedFindings => Evaluations.Sum(e =>
-        e.RuleResults.Count(r => r.Severity >= SecuritySeverity.Medium));
+    public int FailedFindings => Evaluations.Sum(EffectiveFailed);
 
-    /// <summary>Total number of rules executed across all evaluations.</summary>
-    public int TotalRules => Evaluations.Sum(e => e.TotalRules);
+    /// <summary>Total number of rules/findings executed across all evaluations.</summary>
+    public int TotalRules => TotalFindings;
 
-    /// <summary>Total number of rules that passed.</summary>
-    public int PassedRules => Evaluations.Sum(e => e.PassedRules);
+    /// <summary>Total number of rules/findings that passed.</summary>
+    public int PassedRules => TotalRules - FailedFindings;
 
     /// <summary>Average score (0–10) across all evaluations in this domain.</summary>
     public double AverageScore => Evaluations.Any()
@@ -64,8 +61,10 @@ public sealed class SecurityDomainSummary
     /// <summary>Aggregated severity distribution for this domain.</summary>
     public IReadOnlyDictionary<SecuritySeverity, int> SeverityDistribution =>
         Evaluations
-            .SelectMany(e => e.RuleResults)
-            .GroupBy(r => r.Severity)
+            .SelectMany(e => e.IsRuleBased
+                ? e.RuleResults.Select(r => r.Severity)
+                : e.Findings.Select(f => f.SeverityLevel))
+            .GroupBy(s => s)
             .ToDictionary(g => g.Key, g => g.Count());
 
     /// <summary>Whether any critical findings exist in this domain.</summary>
@@ -88,4 +87,15 @@ public sealed class SecurityDomainSummary
             Evaluations = evals
         };
     }
+
+    // An evaluation is either rule-driven (RuleResults populated) or heuristic (Findings populated).
+    // Both must count, otherwise heuristic domains (Cloud, Crypto, OS, TLS, WCF) look 100% compliant
+    // no matter what they found.
+    private static int EffectiveTotal(SecurityEvaluationResult e) =>
+        e.IsRuleBased ? e.RuleResults.Count : e.Findings.Count;
+
+    private static int EffectiveFailed(SecurityEvaluationResult e) =>
+        e.IsRuleBased
+            ? e.RuleResults.Count(r => r.Severity >= SecuritySeverity.Medium)
+            : e.Findings.Count(f => f.SeverityLevel >= SecuritySeverity.Medium);
 }

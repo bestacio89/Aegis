@@ -1,6 +1,4 @@
-﻿using Aegis.Security.Bootstrap;
-using Aegis.Security.Pipeline;
-using Aegis.Wpf.ViewModels.Orchestrators;
+﻿using Aegis.Wpf.ViewModels.Orchestrators;
 using Aegis.Wpf.ViewModels.Security;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,7 +8,8 @@ public static class SecurityWorkspaceRegistration
 {
     /// <summary>
     /// Registers the Security workspace UI. Prerequisite: AddAegisSecurity(configuration)
-    /// (Aegis.Security.Bootstrap) must already be called so the pipeline and report builders exist.
+    /// (Aegis.Security.Bootstrap) must already be called: it registers the pipeline, the
+    /// compliance engine and the report builders this workspace resolves per scan.
     /// </summary>
     public static IServiceCollection AddAegisSecurityWorkspace(this IServiceCollection services)
     {
@@ -21,8 +20,7 @@ public static class SecurityWorkspaceRegistration
         services.AddSingleton<SecurityFindingsViewModel>();
         services.AddSingleton<SecurityWorkspaceViewModel>();
         services.AddSingleton<SecurityWorkspaceOrchestrator>();
-        services.AddSingleton<IAegisSecurityPipeline, AegisSecurityPipeline>();
- 
+
         return services;
     }
 }

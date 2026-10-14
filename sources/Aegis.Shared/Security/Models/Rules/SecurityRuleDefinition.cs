@@ -1,5 +1,7 @@
 ﻿using Aegis.Shared.Security.Enums;
 
+namespace Aegis.Shared.Security.Models.Rules;
+
 public sealed class SecurityRuleDefinition
 {
     // ----- EXISTING FIELDS -----

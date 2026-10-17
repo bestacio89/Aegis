@@ -1,169 +1,208 @@
 # ========================================
-# 🧠 PRODUCTION-GRADE .GITIGNORE for Visual Studio
-# Compatible with .NET 6–10, SDK-style projects, MAUI, WPF, WinUI, ASP.NET, etc.
+# Aegis — Production .gitignore
+# .NET / WPF / Visual Studio / Node.js / TypeScript
 # ========================================
 
-## Ignore build results
+# ----------------------------------------
+# .NET build outputs
+# ----------------------------------------
 [Bb]in/
 [Oo]bj/
-[Ll]og/
-[Ll]ogs/
+[Aa]rtifacts/
+[Bb]uild/
+[Bb]uildDebug/
+[Bb]uildRelease/
+[Dd]ebug/
+[Rr]elease/
+publish/
+.publish/
+TestResults/
 [Tt]est[Rr]esults/
 x64/
 x86/
 [Aa][Rr][Mm]/
 [Aa][Rr][Mm]64/
-[Bb]uild/
-[Bb]uild[Rr]elease/
-[Bb]uild[Dd]ebug/
-artifacts/
-.publish/
-.publishprofiles/
 _ReSharper.Caches/
+Generated_Code/
+_ServiceReferences/
 
-## Rider / ReSharper / VS settings
-.idea/
+# Preserve explicitly maintained build configuration and source.
+!Directory.Build.props
+!Directory.Build.targets
+!Directory.Packages.props
+!global.json
+
+# ----------------------------------------
+# Visual Studio / IDE user state
+# ----------------------------------------
 .vs/
-.vscode/
+.idea/
+_ReSharper*/
 *.suo
 *.user
 *.userosscache
 *.sln.docstates
+*.rsuser
+*.DotSettings.user
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.VC.opendb
+*.opendb
+*.sln.ide
+.localhistory/
 
-## Build tools and coverage
+# Keep .vscode project configuration if intentionally maintained.
+# Do not ignore the entire .vscode directory.
+
+# ----------------------------------------
+# Compilers, temporary files and logs
+# ----------------------------------------
 *.ncb
 *.obj
 *.pdb
 *.idb
 *.tlog
-*.log
-*.vspscc
-*.vssscc
-*.tmp
-*.tmp_proj
-*.cache
 *.ilk
 *.aps
 *.pch
 *.ipch
 *.vsp
-*.vsix
-*.tlog
+*.vspx
+*.psess
+*.etl
+*.trace
+*.svclog
+*.tmp
+*.tmp_proj
+*.cache
+*.log
+*.old
+*.bak
 *.lastcodeanalysissucceeded
-*.codeanalysis*
+*.codeanalysis
+*.codeanalysislog
 *.coverage
 *.coveragexml
 *.VisualState.xml
 TestResult.xml
-*.TestResults/
 *.trx
 
-## NuGet
+# ----------------------------------------
+# NuGet — exclude packages, retain manifests
+# ----------------------------------------
+packages/
+.nuget/packages/
 *.nupkg
 *.snupkg
-*.nuspec
-*.nuget.props
-*.nuget.targets
-packages/
-.nuget/
-# Keep package reference lock for reproducible builds
-!packages.config
-!*.deps.json
-!*.runtimeconfig.json
-*.lock.json
 
-## Azure / CI/CD
-[Aa]zure[Pp]ipelines/
-[Aa]zureDevOps/
-*.publishsettings
-*.azurePubxml
+# Keep packages.config, NuGet.Config, and project dependency
+# declarations. Commit NuGet.Config only when it contains no secrets.
+# Do not globally ignore *.nuspec, *.props, or *.targets.
+
+# ----------------------------------------
+# Node.js / npm / JavaScript / TypeScript
+# ----------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.npm/
+.yarn/cache/
+.pnpm-store/
+
+# Build and test output
+coverage/
+.nyc_output/
+dist/
+# Do not globally ignore build/ here: .NET projects may use it.
+
+# TypeScript incremental compilation
+*.tsbuildinfo
+
+# Keep package.json, package-lock.json, npm-shrinkwrap.json,
+# yarn.lock, pnpm-lock.yaml, tsconfig*.json and source files.
+
+# ----------------------------------------
+# Environment variables and secrets
+# ----------------------------------------
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.template
 
-## User secrets and keys
 **/secrets.json
+**/secrets.*.json
+*.publishsettings
 *.pfx
+*.p12
 *.key
-*.cer
+*.pem
 *.snk
 
-## Generated files
-Generated_Code/
-_ServiceReferences/
-*_i.c
-*_p.c
-*_h.h
-*.g.*
-*.designer.cs
-*.AssemblyInfo.cs
-*_i.h
-*.g.cs
-*.AssemblyAttributes.cs
+# Certificates and local configuration should be committed only
+# when they are explicitly intended to be public test fixtures.
+# Never commit credentials, tokens, connection strings or private keys.
 
-## Entity Framework / Migrations cache
-Migrations/
-efpt.*
+# ----------------------------------------
+# Azure / deployment / publishing
+# ----------------------------------------
+*.azurePubxml
+*.pubxml.user
+*.publishproj.user
+
+# Preserve deployment definitions and pipeline YAML.
+# Do not ignore AzurePipelines/, .github/, or deployment scripts globally.
+
+# ----------------------------------------
+# Generated source — use narrow exclusions
+# ----------------------------------------
+# Keep generated source that is required by the build or intentionally
+# checked in. Do not globally ignore *.g.cs, *.g.*, or *.designer.cs.
+# Ignore only project-specific generated directories when appropriate.
+
+# ----------------------------------------
+# Entity Framework / database
+# ----------------------------------------
+# Do not ignore Migrations/ globally: EF migrations are source code.
+# Do not ignore *.sql globally: reviewed SQL scripts can be source code.
 *.dbmdl
-*.bak
 *.sqlproj.user
 
-## OS generated
+# Local database files
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+
+# Ignore *.db only if the repository does not contain intentional
+# versioned database fixtures:
+# *.db
+
+# ----------------------------------------
+# OS-generated files
+# ----------------------------------------
 .DS_Store
 Thumbs.db
 ehthumbs.db
 desktop.ini
 $RECYCLE.BIN/
 
-## Tooling
-*.psess
-*.vspx
-*.sap
+# ----------------------------------------
+# Profiling and diagnostics
+# ----------------------------------------
 *.tss
-*.opendb
-*.sdf
-*.sqlite
-*.sqlite3
-*.db
-*.mdf
-*.ldf
+*.sap
 
-## DotNet Tools
-dotnet-tools.json
-.localhistory/
-*.rsuser
-
-## JetBrains Rider
-.idea/
-*.DotSettings.user
-
-## Logs / Profiling
-*.etl
-*.log
-*.trace
-*.svclog
-*.bak
-*.old
-
-## Build metadata
-Directory.Build.props.user
-Directory.Build.targets.user
-global.json.user
-
-## Temporary publish folders
-publish/
-obj/**/project.assets.json
-project.lock.json
-
-# ========================================
-# ✅ Keep essential metadata
-# ========================================
+# ----------------------------------------
+# Preserve important repository metadata
+# ----------------------------------------
 !.editorconfig
 !.gitattributes
 !.gitignore
 !.github/
 !.azure-pipelines.yml
 !Directory.Build.props
+!Directory.Build.targets
 !Directory.Packages.props
 !global.json
-

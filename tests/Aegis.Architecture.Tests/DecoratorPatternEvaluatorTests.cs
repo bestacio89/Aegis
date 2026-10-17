@@ -1,0 +1,67 @@
+using Aegis.Architecture.Evaluators.DesignPatterns;
+using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Policies;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Xunit;
+
+namespace Aegis.Architecture.Tests;
+
+public sealed class DecoratorPatternEvaluatorTests
+{
+    [Fact]
+    public async Task Structural_wrapper_without_decorator_intent_is_not_a_naming_violation()
+    {
+        using var directory = Directory.CreateTempSubdirectory();
+        var file = Path.Combine(directory.FullName, "ServiceWrapper.cs");
+        await File.WriteAllTextAsync(
+            file,
+            """
+            public interface IService
+            {
+                void Execute();
+            }
+
+            public sealed class ServiceWrapper : IService
+            {
+                private readonly IService _service;
+
+                public ServiceWrapper(IService service)
+                {
+                    _service = service;
+                }
+
+                public void Execute()
+                {
+                    _service.Execute();
+                }
+            }
+            """);
+
+        var evaluator = new DecoratorPatternEvaluator(
+            NullLogger<DecoratorPatternEvaluator>.Instance,
+            Options.Create(new AegisArchitecturePolicy()));
+
+        var results = (await evaluator.EvaluateAsync(
+            directory.FullName,
+            new ProjectArchitectureContext())).ToArray();
+
+        var classResult = Assert.Single(results.Where(result =>
+            result.Metadata.GetValueOrDefault("ClassName") == "ServiceWrapper"));
+
+        Assert.Equal("true", classResult.Metadata["DecoratorCandidate"]);
+        Assert.Equal(
+            "NotApplicable",
+            classResult.Metadata["NamingConventionCompliant"]);
+        Assert.False(classResult.Metrics.ContainsKey("DecoratorNamingCompliance"));
+
+        var summary = Assert.Single(results.Where(result =>
+            result.Metadata.GetValueOrDefault("EvaluationScope") == "Project"));
+
+        Assert.Equal(1d, summary.Metrics["DecoratorCandidateCount"]);
+        Assert.Equal(1d, summary.Metrics["StructurallySupportedCandidateCount"]);
+        Assert.Equal(0d, summary.Metrics["DecoratorNamingApplicableCount"]);
+        Assert.Equal(0d, summary.Metrics["DecoratorNamingViolationCount"]);
+        Assert.False(summary.Metrics.ContainsKey("DecoratorNamingCompliance"));
+    }
+}

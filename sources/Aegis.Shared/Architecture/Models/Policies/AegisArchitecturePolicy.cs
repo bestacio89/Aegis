@@ -18,6 +18,15 @@ namespace Aegis.Shared.Architecture.Models.Policies
         public ArchitectureReportDetailLevel ReportDetailLevel { get; set; } = ArchitectureReportDetailLevel.SummaryOnly;
         public bool EnableGlobalWeighting { get; set; } = true;
 
+        /// <summary>
+        /// Explicit rule threshold overrides. Keys may be rule IDs (preferred) or metric keys.
+        /// A rule-specific override always takes precedence over a metric-key override;
+        /// otherwise the threshold declared by the rule definition is used.
+        /// Category-level policy values must not be reused as thresholds for unrelated metrics.
+        /// </summary>
+        public Dictionary<string, double> RuleThresholds { get; set; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
         // 🔧 Domain-specific policy groups
         public CohesionPolicy Cohesion { get; set; } = new();
         public ErrorHandlingPolicy ErrorHandling { get; set; } = new();

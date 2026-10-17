@@ -64,7 +64,7 @@ public sealed class RuleEngineCore
         ArgumentNullException.ThrowIfNull(facts);
 
         var factList = facts.ToList();
-
+        var evaluations = new List<RuleEvaluationResult>();
         var results = new List<ArchitectureRuleresult>();
 
         var evaluatedRuleIds =
@@ -279,7 +279,7 @@ public sealed class RuleEngineCore
             skippedSummaryFacts,
             skippedNonFiniteMetrics);
 
-        return new RuleEvaluationOutcome(results, stats);
+        return new RuleEvaluationOutcome(results, stats, evaluations); 
     }
 
     private static bool IsProjectSummary(ArchitectureEvaluatorResult fact)

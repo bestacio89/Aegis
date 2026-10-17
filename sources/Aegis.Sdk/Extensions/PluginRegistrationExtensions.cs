@@ -44,7 +44,8 @@ public static class PluginRegistrationExtensions
         "configuration.policy.json",
         "logging.policy.json",
         "transaction.policy.json",
-        "performance.policy.json"
+        "performance.policy.json",
+        
     ];
 
     public static IServiceCollection AddAegisPlugin<TPlugin>(this IServiceCollection services)

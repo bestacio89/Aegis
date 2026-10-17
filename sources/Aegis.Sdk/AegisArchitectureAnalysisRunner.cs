@@ -1,4 +1,7 @@
-﻿using Aegis.Architecture.Analysis;
+﻿
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Aegis.Architecture.Analysis;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Infrastructure.Data;
 using Aegis.Infrastructure.Persistence;
@@ -9,7 +12,6 @@ using Aegis.Shared.Contracts;
 using Franz.Common.Business.Repositories;
 using Franz.Common.EntityFramework.Repositories;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace Aegis.Sdk;
 
@@ -20,16 +22,14 @@ namespace Aegis.Sdk;
 /// </summary>
 public sealed class AegisArchitectureAnalysisRunner
 {
-    private readonly RuleEngine _engine;
+    private static readonly JsonSerializerOptions PolicyJsonOptions = CreatePolicyJsonOptions();
 
+    private readonly RuleEngine _engine;
     private readonly IEntityRepository<RuleResultEntity, int> _ruleResultRepo;
     private readonly IEntityRepository<ReportEntity, int> _reportRepo;
-
     private readonly IRuleResultRepository _customRuleResultRepo;
     private readonly IReportRepository _customReportRepo;
-
     private readonly IReadOnlyDictionary<string, IReportExporter> _exporters;
-
     private readonly ILogger<AegisArchitectureAnalysisRunner> _logger;
 
     public AegisArchitectureAnalysisRunner(
@@ -41,19 +41,52 @@ public sealed class AegisArchitectureAnalysisRunner
         IEnumerable<IReportExporter> exporters,
         ILogger<AegisArchitectureAnalysisRunner> logger)
     {
-        _engine = engine;
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(ruleResultRepo);
+        ArgumentNullException.ThrowIfNull(reportRepo);
+        ArgumentNullException.ThrowIfNull(customRuleResultRepo);
+        ArgumentNullException.ThrowIfNull(customReportRepo);
+        ArgumentNullException.ThrowIfNull(exporters);
+        ArgumentNullException.ThrowIfNull(logger);
 
+        _engine = engine;
         _ruleResultRepo = ruleResultRepo;
         _reportRepo = reportRepo;
-
         _customRuleResultRepo = customRuleResultRepo;
         _customReportRepo = customReportRepo;
-
-        _exporters = exporters.ToDictionary(
-            x => x.Format,
-            StringComparer.OrdinalIgnoreCase);
-
         _logger = logger;
+
+        var exporterList = exporters.ToList();
+
+        var duplicateFormats = exporterList
+            .GroupBy(exporter => exporter.Format, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+
+        if (duplicateFormats.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Duplicate report exporter formats registered: {string.Join(", ", duplicateFormats)}.");
+        }
+
+        _exporters = exporterList.ToDictionary(
+            exporter => exporter.Format,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static JsonSerializerOptions CreatePolicyJsonOptions()
+    {
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        };
+
+        options.Converters.Add(new JsonStringEnumConverter());
+
+        return options;
     }
 
     public async Task<AegisAnalysisSessionResult> RunSessionAsync(
@@ -62,58 +95,90 @@ public sealed class AegisArchitectureAnalysisRunner
         CancellationToken token = default,
         IProgress<AnalysisProgressInfo>? progress = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
+
         try
         {
+            token.ThrowIfCancellationRequested();
+
             Report(progress, 1, "Preparing", "Loading policy");
 
-            var policy = await LoadPolicyAsync(policyPath, token);
+            var policy = await LoadPolicyAsync(policyPath, token)
+                .ConfigureAwait(false);
+
+            token.ThrowIfCancellationRequested();
 
             _engine.ApplyPolicy(policy);
 
             Report(progress, 4, "Preparing", "Policy applied");
 
-            _logger.LogInformation("🔍 Detecting project context for {Path}", projectPath);
+            _logger.LogInformation(
+                "Detecting project context for {Path}",
+                projectPath);
 
             Report(progress, 5, "Detecting project", projectPath);
 
             var context = ProjectArchitectureContextDetector.Detect(projectPath);
 
             _logger.LogInformation(
-                "🧭 Context detected: {Language}/{Framework} → {Domain}/{Layer}",
+                "Context detected: {Language}/{Framework} -> {Domain}/{Layer}",
                 context.Language,
                 context.Framework,
                 context.DomainType,
                 context.Layer);
 
+            token.ThrowIfCancellationRequested();
+
             Report(progress, 9, "Opening audit session", null);
 
-            var reportEntity = await _customReportRepo.CreateSessionAsync(projectPath, context, token);
+            var reportEntity = await _customReportRepo.CreateSessionAsync(
+                projectPath,
+                context,
+                token).ConfigureAwait(false);
 
-            // Analysis run with path exclusion filter for 'client' directories
             var report = await _engine.RunAsync(
                 projectPath,
                 context,
                 token,
-                path => !path.Contains(@"\client", StringComparison.OrdinalIgnoreCase)
-                     && !path.Contains("/client", StringComparison.OrdinalIgnoreCase),
-                progress);
+                path =>
+                    !path.Contains(
+                        @"\client",
+                        StringComparison.OrdinalIgnoreCase)
+                    && !path.Contains(
+                        "/client",
+                        StringComparison.OrdinalIgnoreCase),
+                progress).ConfigureAwait(false);
 
-            Report(progress, 92, "Saving results", $"{report.Results.Count:N0} rule results");
+            token.ThrowIfCancellationRequested();
 
-            await PersistRuleResultsAsync(reportEntity.Id, report, token);
+            Report(
+                progress,
+                92,
+                "Saving results",
+                $"{report.Results.Count:N0} rule results");
+
+            await PersistRuleResultsAsync(
+                reportEntity.Id,
+                report,
+                token).ConfigureAwait(false);
 
             Report(progress, 96, "Saving snapshot", "Serializing the full report");
 
-            await _customReportRepo.FinalizeReportAsync(reportEntity.Id, report, token);
+            await _customReportRepo.FinalizeReportAsync(
+                reportEntity.Id,
+                report,
+                token).ConfigureAwait(false);
 
             Report(progress, 99, "Comparing", "Previous report");
 
-            await CompareWithPreviousAsync(reportEntity, token);
+            await CompareWithPreviousAsync(
+                reportEntity,
+                token).ConfigureAwait(false);
 
             Report(progress, 100, "Complete", null);
 
             _logger.LogInformation(
-                "✅ Audit session {Id} complete for {Project}",
+                "Audit session {Id} complete for {Project}",
                 reportEntity.Id,
                 report.ProjectName);
 
@@ -126,10 +191,31 @@ public sealed class AegisArchitectureAnalysisRunner
                 Success = true
             };
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
+            when (token.IsCancellationRequested)
         {
-            _logger.LogError(ex, "❌ Aegis session failed for {Path}", projectPath);
-            return new AegisAnalysisSessionResult { Success = false, ErrorMessage = ex.Message };
+            _logger.LogInformation(
+                "Analysis session cancelled for {Path}",
+                projectPath);
+
+            return new AegisAnalysisSessionResult
+            {
+                Success = false,
+                ErrorMessage = "Analysis was cancelled."
+            };
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Aegis session failed for {Path}",
+                projectPath);
+
+            return new AegisAnalysisSessionResult
+            {
+                Success = false,
+                ErrorMessage = exception.Message
+            };
         }
     }
 
@@ -137,34 +223,119 @@ public sealed class AegisArchitectureAnalysisRunner
         IProgress<AnalysisProgressInfo>? progress,
         double percent,
         string stage,
-        string? detail) =>
-        progress?.Report(new AnalysisProgressInfo(percent, stage, detail));
-
-    private async Task<AegisArchitecturePolicy> LoadPolicyAsync(string? policyPath, CancellationToken token)
+        string? detail)
     {
-        if (string.IsNullOrWhiteSpace(policyPath) || !File.Exists(policyPath))
+        progress?.Report(new AnalysisProgressInfo(percent, stage, detail));
+    }
+
+    private async Task<AegisArchitecturePolicy> LoadPolicyAsync(
+        string? policyPath,
+        CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(policyPath))
         {
-            policyPath = Path.Combine(AppContext.BaseDirectory, "config", "aegis.policy.json");
+            policyPath = Path.Combine(
+                AppContext.BaseDirectory,
+                "config",
+                "aegis.policy.json");
         }
 
-        _logger.LogInformation("📜 Loading Aegis policy from {Path}", policyPath);
+        _logger.LogInformation(
+            "Loading Aegis policy from {Path}",
+            policyPath);
 
         if (!File.Exists(policyPath))
         {
-            _logger.LogWarning("⚠️ Policy file missing. Using defaults.");
-            return new AegisArchitecturePolicy();
+            throw new FileNotFoundException(
+                "The Aegis policy file was not found.",
+                policyPath);
         }
 
-        var json = await File.ReadAllTextAsync(policyPath, token);
+        var json = await File.ReadAllTextAsync(policyPath, token)
+            .ConfigureAwait(false);
 
-        return JsonSerializer.Deserialize<AegisArchitecturePolicy>(
-            json,
-            new JsonSerializerOptions
+        try
+        {
+            using var document = JsonDocument.Parse(
+                json,
+                new JsonDocumentOptions
+                {
+                    CommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true
+                });
+
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
-                PropertyNameCaseInsensitive = true,
-                ReadCommentHandling = JsonCommentHandling.Skip,
-                AllowTrailingCommas = true
-            }) ?? new AegisArchitecturePolicy();
+                throw new JsonException(
+                    "The policy document root must be a JSON object.");
+            }
+
+            var root = document.RootElement;
+
+            if (TryGetPropertyIgnoreCase(
+                    root,
+                    "AegisArchitecturePolicy",
+                    out var wrappedPolicy))
+            {
+                if (wrappedPolicy.ValueKind != JsonValueKind.Object)
+                {
+                    throw new JsonException(
+                        "'AegisArchitecturePolicy' must contain a JSON object.");
+                }
+
+                root = wrappedPolicy;
+            }
+
+            var policy = root.Deserialize<AegisArchitecturePolicy>(
+                PolicyJsonOptions);
+
+            if (policy is null)
+            {
+                throw new JsonException(
+                    "The policy document deserialized to null.");
+            }
+
+            _logger.LogInformation(
+                "Aegis policy loaded: {Name}, version {Version}, detail level {DetailLevel}",
+                policy.Name,
+                policy.Version,
+                policy.ReportDetailLevel);
+
+            return policy;
+        }
+        catch (JsonException exception)
+        {
+            _logger.LogError(
+                exception,
+                "Invalid Aegis policy document at {Path}.",
+                policyPath);
+
+            throw new InvalidDataException(
+                $"The Aegis policy document '{policyPath}' is invalid. " +
+                "Analysis cannot safely continue with an assumed default policy.",
+                exception);
+        }
+    }
+
+    private static bool TryGetPropertyIgnoreCase(
+        JsonElement element,
+        string propertyName,
+        out JsonElement value)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(
+                    property.Name,
+                    propertyName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 
     public async Task ExportReportAsync(
@@ -172,24 +343,47 @@ public sealed class AegisArchitectureAnalysisRunner
         ProjectArchitectureContext context,
         string format,
         string outputPath,
-        ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
+        ArchitectureReportDetailLevel detailLevel =
+            ArchitectureReportDetailLevel.FullForensic,
         ReportLanguage language = ReportLanguage.English,
         CancellationToken token = default)
     {
+        ArgumentNullException.ThrowIfNull(report);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentException.ThrowIfNullOrWhiteSpace(format);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+
         if (!_exporters.TryGetValue(format, out var exporter))
         {
-            _logger.LogWarning("⚠️ Exporter {Format} not registered.", format);
-            throw new InvalidOperationException($"No report exporter registered for format '{format}'.");
+            _logger.LogWarning(
+                "Exporter {Format} not registered.",
+                format);
+
+            throw new InvalidOperationException(
+                $"No report exporter registered for format '{format}'.");
         }
 
-        await exporter.ExportAsync(report, context, outputPath, detailLevel, language, token);
+        await exporter.ExportAsync(
+            report,
+            context,
+            outputPath,
+            detailLevel,
+            language,
+            token).ConfigureAwait(false);
 
-        _logger.LogInformation("📄 {Format} report exported → {Path}", format, outputPath);
+        _logger.LogInformation(
+            "{Format} report exported to {Path}",
+            format,
+            outputPath);
     }
 
-    public IReadOnlyCollection<string> AvailableExportFormats => _exporters.Keys.ToArray();
+    public IReadOnlyCollection<string> AvailableExportFormats =>
+        _exporters.Keys.ToArray();
 
-    private async Task PersistRuleResultsAsync(int reportId, AegisArchitectureReport report, CancellationToken token)
+    private async Task PersistRuleResultsAsync(
+        int reportId,
+        AegisArchitectureReport report,
+        CancellationToken token)
     {
         var entities = report.Results
             .Select(result => new RuleResultEntity
@@ -210,49 +404,81 @@ public sealed class AegisArchitectureAnalysisRunner
             })
             .ToList();
 
-        await _customRuleResultRepo.AddBatchAsync(entities, token);
+        if (entities.Count == 0)
+        {
+            _logger.LogInformation(
+                "No rule results to persist for report {ReportId}.",
+                reportId);
+
+            return;
+        }
+
+        await _customRuleResultRepo.AddBatchAsync(
+            entities,
+            token).ConfigureAwait(false);
     }
 
-    private async Task CompareWithPreviousAsync(ReportEntity currentReport, CancellationToken token)
+    private async Task CompareWithPreviousAsync(
+        ReportEntity currentReport,
+        CancellationToken token)
     {
         try
         {
-            var previous = await _customReportRepo.GetLatestAsync(token);
+            var previous = await _customReportRepo.GetLatestAsync(token)
+                .ConfigureAwait(false);
 
-            if (previous == null || previous.Id == currentReport.Id)
+            if (previous is null || previous.Id == currentReport.Id)
             {
-                _logger.LogInformation("📂 No previous report to compare with.");
+                _logger.LogInformation(
+                    "No previous report to compare with.");
+
                 return;
             }
 
-            var previousResults = await _customRuleResultRepo.GetPreviousReportAsync(
-                currentReport.ProjectName, currentReport.DateCreated, token);
+            var previousResults =
+                await _customRuleResultRepo.GetPreviousReportAsync(
+                    currentReport.ProjectName,
+                    currentReport.DateCreated,
+                    token).ConfigureAwait(false);
 
-            var currentResults = await _customRuleResultRepo.GetViolationsByReportIdAsync(
-                currentReport.Id, token);
+            var currentResults =
+                await _customRuleResultRepo.GetViolationsByReportIdAsync(
+                    currentReport.Id,
+                    token).ConfigureAwait(false);
 
-            // Update tuple definition to match the string type of RuleId
-            var previousViolationKeys = new HashSet<(string RuleId, string Project)>(
-                previousResults.Select(r => (r.RuleId, r.Project))
-            );
+            var previousViolationKeys =
+                new HashSet<(string RuleId, string Project)>(
+                    previousResults.Select(
+                        result => (result.RuleId, result.Project)));
 
-            // Update lookup to use the correct tuple types
             var newViolations = currentResults
-                .Where(current => !previousViolationKeys.Contains((current.RuleId, current.Project)))
+                .Where(current =>
+                    !previousViolationKeys.Contains(
+                        (current.RuleId, current.Project)))
                 .ToList();
 
             if (newViolations.Count > 0)
             {
-                _logger.LogWarning("⚠️ {Count} new violations detected.", newViolations.Count);
+                _logger.LogWarning(
+                    "{Count} new violations detected.",
+                    newViolations.Count);
             }
             else
             {
-                _logger.LogInformation("✅ No new violations introduced.");
+                _logger.LogInformation(
+                    "No new violations introduced.");
             }
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
+            when (token.IsCancellationRequested)
         {
-            _logger.LogError(ex, "❌ Failed report comparison.");
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Failed report comparison.");
         }
     }
 }

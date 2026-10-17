@@ -1,5 +1,4 @@
-﻿
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import ts from "typescript";
@@ -8,7 +7,7 @@ import { parseTemplate } from "@angular/compiler";
 const framework = process.argv[2]?.toLowerCase();
 const projectPath = process.argv[3];
 
-const ANALYZER_VERSION = "1.2.0";
+const ANALYZER_VERSION = "1.2.1";
 
 const EXCLUDED_DIRECTORIES = new Set([
     "node_modules",
@@ -83,7 +82,6 @@ function walk(directory, extensions, files = [])
             {
                 walk(fullPath, extensions, files);
             }
-
             continue;
         }
 
@@ -141,12 +139,11 @@ function getPackageVersion(packageJson, packageName)
         return null;
     }
 
-    // Handles common declarations:
-    // 21.0.0, ^21.0.0, ~21.0.0, >=21.0.0
-    //
-    // Returns null for declarations such as "latest", "workspace:*",
-    // Git references, and other expressions without a numeric version.
-    const match = declaration.match(/ (?: ^| [^\d])(\d +)\.\d +\.\d +/);
+    // Extract the major version from ordinary semver declarations such as:
+    // 21.0.0, ^21.0.0, ~21.0.0, >=21.0.0.
+    const match = declaration.match(
+        / (?: ^| [^\d])(\d +)\.\d +\.\d + ($| [^\d]) /
+    );
 
     return match ? Number(match[1]) : null;
 }
@@ -320,8 +317,7 @@ function literalValue(property)
 
     if (ts.isArrayLiteralExpression(expression))
     {
-        // Dynamic spreads prevent us from claiming a complete count.
-        if (expression.elements.some(ts.isSpreadElement))
+        if (expression.elements.some(element => ts.isSpreadElement(element)))
         {
             return undefined;
         }
@@ -358,7 +354,6 @@ function getAngularStandaloneDefault(angularVersion)
         ;
     }
 
-    // Angular 19+ defaults components to standalone.
     return angularVersion >= 19
         ? {
     value: true,
@@ -477,7 +472,6 @@ name === "Component" ? "not-run" : "not-applicable"
 
 if (name === "Component")
 {
-    // Internal fields are removed before JSON serialization.
     record._inlineTemplate =
         typeof template === "string"
             ? template
@@ -637,7 +631,6 @@ function analyzeAngularProject(angularVersion)
             component.templateDiagnostics = analysis.diagnostics;
         }
 
-        // Retain files containing classes, declarations, or parse diagnostics.
         if (
             result.components.length === 0 &&
             result.modules.length === 0 &&
@@ -677,7 +670,6 @@ function analyzeAngularProject(angularVersion)
 
 function analyzeReactSource(file, source)
 {
-    // JavaScript files may contain JSX even when named .js.
     const sourceFile = parseTypeScript(file, source, true);
 
     const components = [];

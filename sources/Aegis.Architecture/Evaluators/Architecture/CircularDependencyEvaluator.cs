@@ -98,6 +98,7 @@ public sealed class CircularDependencyEvaluator
             },
             Metadata = new Dictionary<string, string>
             {
+                [EvaluationScopeMetadataKey] = ProjectScope,
                 ["AnalysisCompleted"] = "true",
                 ["Language"] = Context.Language,
                 ["Framework"] = Context.Framework ?? "Unknown"

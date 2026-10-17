@@ -1,4 +1,5 @@
 ﻿using Aegis.Architecture.Aggregation;
+using Aegis.Architecture.Evaluators.Naming.Analysis;
 using Aegis.Architecture.Evaluators.Naming.Policies;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Architecture.Scoring;
@@ -26,6 +27,7 @@ public static class DependencyInjection
         // ===============================================================
 
         services.AddSingleton<NamingConventionResolver>();
+        services.AddSingleton<CSharpNamingDeclarationAnalyzer>();
 
         services.AddSingleton<INamingConventionPolicy, CSharpNamingConventionPolicy>();
         services.AddSingleton<INamingConventionPolicy, JavaNamingConventionPolicy>();

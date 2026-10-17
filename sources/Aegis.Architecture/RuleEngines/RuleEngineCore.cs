@@ -429,14 +429,27 @@ public sealed class RuleEngineCore
     {
         var scope = fact.Metadata?.GetValueOrDefault(EvaluationScopeKey);
 
+        if (string.Equals(
+                scope,
+                ProjectScope,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Explicit metadata takes precedence over legacy category inference.
+        if (string.Equals(
+                scope,
+                "File",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         return string.Equals(
-                   scope,
-                   ProjectScope,
-                   StringComparison.OrdinalIgnoreCase)
-               || string.Equals(
-                   fact.Category,
-                   ArchitectureSummaryCategory,
-                   StringComparison.OrdinalIgnoreCase);
+            fact.Category,
+            ArchitectureSummaryCategory,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ResolveLayerCached(

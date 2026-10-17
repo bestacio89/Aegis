@@ -1,6 +1,6 @@
-﻿
-using Aegis.Infrastructure.Exporters;
-using Aegis.Sdk.Contracts;
+using System;
+using System.IO;
+using System.Linq;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
@@ -8,57 +8,65 @@ using Aegis.Shared.Architecture.Models.Policies.Dependency;
 using Aegis.Shared.Architecture.Models.Policies.FrontEnd;
 using Aegis.Shared.Architecture.Models.Policies.Infrastructure;
 using Aegis.Shared.Architecture.Models.Policies.Naming;
+using Aegis.Shared.Architecture.Models.Policies.Performance;
+using Aegis.Shared.Architecture.Models.Policies.Persistence;
 using Aegis.Shared.Contracts;
+using Aegis.Sdk.Contracts;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.IO;
-using System.Reflection;
 
 namespace Aegis.SDK.Extensions;
 
 /// <summary>
-/// Provides convenience methods for registering Aegis plugins,
-/// report exporters, and architecture policy configuration.
+/// Registers Aegis plugins, report exporters, and typed policy configuration.
+/// Policy files are loaded as independent documents and combined by their root sections.
 /// </summary>
 public static class PluginRegistrationExtensions
 {
-    private const string ConfigurationDirectory = "config";
+    private static readonly string[] PolicyFileNames =
+    [
+        "aegis.metadata.policy.json",
+        "architecture.policy.json",
+        "repository.policy.json",
+        "security.policy.json",
+        "maintainability.policy.json",
+        "dependency.policy.json",
+        "naming.policy.json",
+        "complexity.policy.json",
+        "cohesion.policy.json",
+        "coupling.policy.json",
+        "apiconsistency.policy.json",
+        "errorhandling.policy.json",
+        "frontend.policy.json",
+        "dependencygraph.policy.json",
+        "node.policy.json",
+        "circulardependency.policy.json",
+        "configuration.policy.json",
+        "logging.policy.json",
+        "transaction.policy.json",
+        "performance.policy.json"
+    ];
 
-    /// <summary>
-    /// Registers a plugin as a singleton.
-    /// </summary>
-    public static IServiceCollection AddAegisPlugin<TPlugin>(
-        this IServiceCollection services)
+    public static IServiceCollection AddAegisPlugin<TPlugin>(this IServiceCollection services)
         where TPlugin : class, IPlugin
     {
         ArgumentNullException.ThrowIfNull(services);
-
         services.AddSingleton<IPlugin, TPlugin>();
-
         return services;
     }
 
-    /// <summary>
-    /// Registers a report exporter as a singleton.
-    /// </summary>
-    public static IServiceCollection AddAegisReportExporter<TExporter>(
-        this IServiceCollection services)
+    public static IServiceCollection AddAegisReportExporter<TExporter>(this IServiceCollection services)
         where TExporter : class, IReportExporter
     {
         ArgumentNullException.ThrowIfNull(services);
-
         services.AddSingleton<IReportExporter, TExporter>();
-
         return services;
     }
 
     /// <summary>
-    /// Registers all supported architecture policy options.
-    ///
-    /// When a configuration instance is supplied, its values are used
-    /// directly. Otherwise, the policy files are loaded from the
-    /// application's configuration directory.
+    /// Loads the split policy documents and optionally applies an additional
+    /// configuration provider afterward, allowing environment/application values
+    /// to override file-based policy values.
     /// </summary>
     public static IServiceCollection AddAegisPolicies(
         this IServiceCollection services,
@@ -66,129 +74,104 @@ public static class PluginRegistrationExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var config = configuration ?? BuildPolicyConfiguration();
-
-        RegisterPolicyOptions(services, config);
+        var policyConfiguration = BuildPolicyConfiguration(configuration);
+        RegisterPolicyOptions(services, policyConfiguration);
 
         return services;
     }
 
-    /// <summary>
-    /// Binds each typed policy to its corresponding configuration section.
-    /// </summary>
     private static void RegisterPolicyOptions(
         IServiceCollection services,
         IConfiguration configuration)
     {
-        services.Configure<ArchitecturePolicy>(
-            configuration.GetSection("Architecture"));
+        // Aggregate policy consumed by the architecture evaluators.
+        services.Configure<AegisArchitecturePolicy>(configuration);
+        services.Configure<AegisArchitecturePolicy>(
+            configuration.GetSection("AegisPolicyMetadata"));
 
-        services.Configure<RepositoryPolicy>(
-            configuration.GetSection("Repository"));
-
-        services.Configure<SecurityPolicy>(
-            configuration.GetSection("Security"));
-
-        services.Configure<MaintainabilityPolicy>(
-            configuration.GetSection("Maintainability"));
-
-        services.Configure<DependencyPolicy>(
-            configuration.GetSection("Dependency"));
-
-        services.Configure<NamingPolicy>(
-            configuration.GetSection("Naming"));
-
-        services.Configure<ComplexityPolicy>(
-            configuration.GetSection("Complexity"));
-
-        services.Configure<CohesionPolicy>(
-            configuration.GetSection("Cohesion"));
-
-        services.Configure<CouplingPolicy>(
-            configuration.GetSection("Coupling"));
-
-        services.Configure<ApiConsistencyPolicy>(
-            configuration.GetSection("ApiConsistency"));
-
-        services.Configure<ErrorHandlingPolicy>(
-            configuration.GetSection("ErrorHandling"));
-
-        services.Configure<FrontendPolicy>(
-            configuration.GetSection("Frontend"));
+        // Independently injectable policy models.
+        services.Configure<ArchitecturePolicy>(configuration.GetSection("Architecture"));
+        services.Configure<RepositoryPolicy>(configuration.GetSection("Repository"));
+        services.Configure<SecurityPolicy>(configuration.GetSection("Security"));
+        services.Configure<MaintainabilityPolicy>(configuration.GetSection("Maintainability"));
+        services.Configure<DependencyPolicy>(configuration.GetSection("Dependency"));
+        services.Configure<NamingPolicy>(configuration.GetSection("Naming"));
+        services.Configure<ComplexityPolicy>(configuration.GetSection("Complexity"));
+        services.Configure<CohesionPolicy>(configuration.GetSection("Cohesion"));
+        services.Configure<CouplingPolicy>(configuration.GetSection("Coupling"));
+        services.Configure<ApiConsistencyPolicy>(configuration.GetSection("ApiConsistency"));
+        services.Configure<ErrorHandlingPolicy>(configuration.GetSection("ErrorHandling"));
+        services.Configure<FrontendPolicy>(configuration.GetSection("Frontend"));
+        services.Configure<DependencyGraphPolicy>(configuration.GetSection("DependencyGraph"));
+        services.Configure<NodePolicy>(configuration.GetSection("Node"));
+        services.Configure<CircularDependencyPolicy>(configuration.GetSection("CircularDependency"));
+        services.Configure<ConfigurationPolicy>(configuration.GetSection("Configuration"));
+        services.Configure<LoggingPolicy>(configuration.GetSection("Logging"));
+        services.Configure<TransactionPolicy>(configuration.GetSection("Transaction"));
+        services.Configure<PerformancePolicy>(configuration.GetSection("Performance"));
+        services.Configure<DesignPatternPolicy>(configuration.GetSection("Architecture:DesignPatterns"));
     }
 
-    /// <summary>
-    /// Builds configuration from the policy files distributed with
-    /// the running application.
-    /// </summary>
-    private static IConfiguration BuildPolicyConfiguration()
+    private static IConfiguration BuildPolicyConfiguration(IConfiguration? overrides)
     {
-        var rootDirectory = ResolveApplicationDirectory();
+        var configurationDirectory = ResolveConfigurationDirectory();
+        var builder = new ConfigurationBuilder();
 
-        var builder = new ConfigurationBuilder()
-            .SetBasePath(rootDirectory);
-
-        foreach (var fileName in GetPolicyFileNames())
+        if (configurationDirectory is not null)
         {
-            var relativePath = Path.Combine(
-                ConfigurationDirectory,
-                fileName);
+            builder.SetBasePath(configurationDirectory);
 
-            builder.AddJsonFile(
-                relativePath,
-                optional: false,
-                reloadOnChange: true);
+            foreach (var fileName in PolicyFileNames)
+            {
+                builder.AddJsonFile(fileName, optional: false, reloadOnChange: true);
+            }
+        }
+        else if (overrides is null)
+        {
+            throw new DirectoryNotFoundException(
+                "Aegis policy files were not found and no external configuration was supplied.");
+        }
+
+        if (overrides is not null)
+        {
+            builder.AddConfiguration(overrides);
         }
 
         return builder.Build();
     }
 
     /// <summary>
-    /// Resolves the directory used as the base for distributed
-    /// configuration files.
+    /// In a source checkout, prefer the project's config directory so edits made
+    /// by the WPF editor are the same files the policy providers monitor. In a
+    /// published installation, use the copied config directory beside the app.
     /// </summary>
-    private static string ResolveApplicationDirectory()
+    private static string? ResolveConfigurationDirectory()
     {
-        var applicationDirectory = AppContext.BaseDirectory;
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
 
-        if (!string.IsNullOrWhiteSpace(applicationDirectory) &&
-            Directory.Exists(applicationDirectory))
+        while (current is not null)
         {
-            return applicationDirectory;
+            var configDirectory = Path.Combine(current.FullName, "config");
+            var hasProjectFile = Directory.Exists(configDirectory) &&
+                (File.Exists(Path.Combine(current.FullName, "Aegis.Wpf.csproj")) ||
+                 File.Exists(Path.Combine(current.FullName, "Aegis.Cli.csproj")));
+
+            if (hasProjectFile && PolicyFileNames.All(
+                    fileName => File.Exists(Path.Combine(configDirectory, fileName))))
+            {
+                return configDirectory;
+            }
+
+            current = current.Parent;
         }
 
-        var assemblyLocation = Assembly.GetExecutingAssembly().Location;
-
-        var assemblyDirectory = Path.GetDirectoryName(assemblyLocation);
-
-        if (!string.IsNullOrWhiteSpace(assemblyDirectory) &&
-            Directory.Exists(assemblyDirectory))
+        var outputConfigDirectory = Path.Combine(AppContext.BaseDirectory, "config");
+        if (PolicyFileNames.All(fileName =>
+                File.Exists(Path.Combine(outputConfigDirectory, fileName))))
         {
-            return assemblyDirectory;
+            return outputConfigDirectory;
         }
 
-        return Directory.GetCurrentDirectory();
-    }
-
-    /// <summary>
-    /// Lists the policy files required by the current registration model.
-    /// </summary>
-    private static string[] GetPolicyFileNames()
-    {
-        return
-        [
-            "architecture.policy.json",
-            "repository.policy.json",
-            "security.policy.json",
-            "maintainability.policy.json",
-            "dependency.policy.json",
-            "naming.policy.json",
-            "complexity.policy.json",
-            "cohesion.policy.json",
-            "coupling.policy.json",
-            "apiconsistency.policy.json",
-            "errorhandling.policy.json",
-            "frontend.policy.json"
-        ];
+        return null;
     }
 }

@@ -36,6 +36,7 @@ public sealed class RuleEngineScopeTests
             "NamingEvaluator",
             "Widget.cs")
         {
+            Category = "ArchitectureSummary",
             Metrics = new Dictionary<string, double>
             {
                 // A project metric on a file fact must not trigger a project rule.

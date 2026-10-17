@@ -34,7 +34,7 @@ public static class PerformanceRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-PERF-R2",
-            Scope = RuleEvaluationScope.Project,
+            Scope = RuleEvaluationScope.File,
             Name = "Threading or Async Misuse",
             Category = nameof(ArchitectureRuleCategory.Performance),
             MetricKey = "AsyncUsageCompliance",
@@ -63,7 +63,7 @@ public static class PerformanceRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-PERF-R4",
-            Scope = RuleEvaluationScope.Project,
+            Scope = RuleEvaluationScope.File,
             Name = "Blocking I/O Detected",
             Category = nameof(ArchitectureRuleCategory.Performance),
             MetricKey = "BlockingIOCount",

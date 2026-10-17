@@ -39,26 +39,47 @@ public sealed class RuleWeightingEngine
     {
         foreach (var result in results)
         {
-            // Base weight from severity
-            var baseWeight = _baseWeights.GetValueOrDefault(result.Severity, 1.0);
-
-            // Apply category-specific scaling
-            double adjustedWeight = baseWeight;
-
-            if (string.Equals(result.Category.ToString(), "Performance", StringComparison.OrdinalIgnoreCase))
-                adjustedWeight *= _performanceScale;
-
-            if (string.Equals(result.Category.ToString(), "Maintainability", StringComparison.OrdinalIgnoreCase))
-                adjustedWeight *= _maintainabilityFactor;
-
-            // Enforce threshold (ignore micro-violations)
-            if (adjustedWeight < _minimumImpactThreshold)
-                adjustedWeight = 0;
+            var adjustedWeight = WeightOf(result.Severity, result.Category.ToString());
 
             result.WeightedImpact = result.IsCompliant ? 0 : adjustedWeight;
 
             yield return result;
         }
+    }
+
+    /// <summary>
+    /// The weight one rule check carries, from its severity and category. The same weight is used for a
+    /// violation (numerator) and for every check performed (denominator), so a score is comparable.
+    /// </summary>
+    public double WeightOf(ArchitectureRuleSeverity severity, string category)
+    {
+        // Base weight from severity
+        var adjustedWeight = _baseWeights.GetValueOrDefault(severity, 1.0);
+
+        // Apply category-specific scaling
+        if (string.Equals(category, "Performance", StringComparison.OrdinalIgnoreCase))
+            adjustedWeight *= _performanceScale;
+
+        if (string.Equals(category, "Maintainability", StringComparison.OrdinalIgnoreCase))
+            adjustedWeight *= _maintainabilityFactor;
+
+        // Enforce threshold (ignore micro-violations)
+        if (adjustedWeight < _minimumImpactThreshold)
+            adjustedWeight = 0;
+
+        return adjustedWeight;
+    }
+
+    /// <summary>
+    /// Compliance as the share of weighted checks that passed: 1 - (weighted violations / weighted checks).
+    /// No weighted checks means nothing was assessed, which callers report separately.
+    /// </summary>
+    public double ComputeScore(double violationWeight, double checkWeight)
+    {
+        if (checkWeight <= 0)
+            return 1.0;
+
+        return Math.Clamp(1.0 - violationWeight / checkWeight, 0, 1);
     }
 
     /// <summary>

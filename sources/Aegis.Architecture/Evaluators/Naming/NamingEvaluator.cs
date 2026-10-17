@@ -477,21 +477,29 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             ? 0
             : Math.Round(weightedScore / activeWeight, 2);
 
-        result.Metrics["TypeNamingCompliance"] = typeScore;
-        result.Metrics["InterfaceNamingCompliance"] = interfaceScore;
-        result.Metrics["MethodNamingCompliance"] = methodScore;
-        result.Metrics["VariableNamingCompliance"] = variableScore;
-        result.Metrics["ConstantNamingCompliance"] = constantScore;
-        result.Metrics["FileNamingCompliance"] = fileScore;
+        // Emit declaration metrics only when that dimension has evidence.
+        // Zero declarations is not a zero-compliance observation.
+        if (typeNames.Count > 0)
+            result.Metrics["TypeNamingCompliance"] = typeScore;
 
-        result.Metrics["TypeViolationCount"] = typeViolations;
-        result.Metrics["InterfaceViolationCount"] = interfaceViolations;
-        result.Metrics["MethodViolationCount"] = methodViolations;
-        result.Metrics["VariableViolationCount"] = variableViolations;
-        result.Metrics["ConstantViolationCount"] = constantViolations;
+        if (interfaceNames.Length > 0)
+            result.Metrics["InterfaceNamingCompliance"] = interfaceScore;
+
+        if (methodNames.Count > 0)
+            result.Metrics["MethodNamingCompliance"] = methodScore;
+
+        if (variableNames.Count > 0)
+            result.Metrics["VariableNamingCompliance"] = variableScore;
+
+        if (constantNames.Count > 0)
+            result.Metrics["ConstantNamingCompliance"] = constantScore;
+
+        result.Metrics["FileNamingCompliance"] = fileScore;
         result.Metrics["DeclarationsAnalyzed"] = declarationCount;
         result.Metrics["NamingEvidenceAvailable"] = declarationCount > 0 ? 1 : 0;
-        result.Metrics["NamingComplianceScore"] = Math.Round(compliance, 2);
+
+        if (declarationCount > 0)
+            result.Metrics["NamingComplianceScore"] = Math.Round(compliance, 2);
 
         result.Metadata["TypesAnalyzed"] = typeNames.Count.ToString();
         result.Metadata["InterfacesAnalyzed"] = interfaceNames.Length.ToString();
@@ -593,26 +601,33 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             ? 0
             : Math.Round(weightedScore / activeWeight, 2);
 
-        result.Metrics["TypeNamingCompliance"] = typeScore;
-        result.Metrics["InterfaceNamingCompliance"] = interfaceScore;
-        result.Metrics["MethodNamingCompliance"] = methodScore;
-        result.Metrics["VariableNamingCompliance"] = variableScore;
-        result.Metrics["ConstantNamingCompliance"] = constantScore;
-        result.Metrics["FileNamingCompliance"] = fileScore;
+        // Emit declaration metrics only when that dimension has evidence.
+        // Zero declarations is not a zero-compliance observation.
+        if (typeNames.Count > 0)
+            result.Metrics["TypeNamingCompliance"] = typeScore;
 
-        result.Metrics["TypeViolationCount"] = typeViolations;
-        result.Metrics["InterfaceViolationCount"] = interfaceViolations;
-        result.Metrics["MethodViolationCount"] = methodViolations;
-        result.Metrics["VariableViolationCount"] = variableViolations;
-        result.Metrics["ConstantViolationCount"] = constantViolations;
+        if (interfaceNames.Length > 0)
+            result.Metrics["InterfaceNamingCompliance"] = interfaceScore;
+
+        if (methodNames.Count > 0)
+            result.Metrics["MethodNamingCompliance"] = methodScore;
+
+        if (variableNames.Count > 0)
+            result.Metrics["VariableNamingCompliance"] = variableScore;
+
+        if (constantNames.Count > 0)
+            result.Metrics["ConstantNamingCompliance"] = constantScore;
+
+        result.Metrics["FileNamingCompliance"] = fileScore;
         result.Metrics["DeclarationsAnalyzed"] = declarationCount;
         result.Metrics["NamingEvidenceAvailable"] = declarationCount > 0 ? 1 : 0;
+
         result.Metadata["EvaluationStatus"] = declarationCount == 0
             ? "NoDeclarations"
             : "Evaluated";
 
-        result.Metrics["NamingComplianceScore"] =
-            Math.Round(compliance, 2);
+        if (declarationCount > 0)
+            result.Metrics["NamingComplianceScore"] = Math.Round(compliance, 2);
 
         result.Metadata["TypesAnalyzed"] = typeNames.Count.ToString();
         result.Metadata["InterfacesAnalyzed"] = interfaceNames.Length.ToString();

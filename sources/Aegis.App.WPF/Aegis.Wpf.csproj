@@ -39,7 +39,7 @@
  </ItemGroup>
   
  <ItemGroup>
-   <Content Remove="config\api.policy.json" />
+   <Content Remove="config\apiconsistency.policy.json" />
  </ItemGroup>
   
  <ItemGroup>

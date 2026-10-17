@@ -452,12 +452,12 @@
                                     <DataTemplate>
 
 
-                                        <Border Background="{Binding ComplianceStatus, Converter={StaticResource ComplianceStatusToBrushConverter}}"
+                                        <Border Background="{Binding Status, Converter={StaticResource ComplianceStatusToBrushConverter}}"
                                                 CornerRadius="3"
                                                 Padding="8,3">
 
 
-                                            <TextBlock Text="{Binding ComplianceStatus}"
+                                            <TextBlock Text="{Binding Status}"
                                                        Foreground="{StaticResource Brush.Ink}"
                                                        FontWeight="SemiBold"
                                                        FontSize="11"/>

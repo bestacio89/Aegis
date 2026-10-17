@@ -53,12 +53,6 @@
                     </StackPanel>
 
 
-                    <Button Content="Reload"
-                            DockPanel.Dock="Right"
-                            VerticalAlignment="Center"
-                            Command="{Binding LoadDataCommand}"
-                            Style="{StaticResource Button.Primary}"
-                            Width="90"/>
 
                 </DockPanel>
 

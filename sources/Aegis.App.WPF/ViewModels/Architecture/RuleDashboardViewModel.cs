@@ -63,6 +63,10 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
 
 
     [ObservableProperty]
+    private int mediumCount;
+
+
+    [ObservableProperty]
     private string mostAffectedCategory = "-";
 
 
@@ -147,6 +151,11 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
                     x.Severity ==
                     ArchitectureRuleSeverity.High);
 
+
+            MediumCount =
+                report.Results.Count(x =>
+                    x.Severity ==
+                    ArchitectureRuleSeverity.Medium);
 
 
             MostAffectedCategory =

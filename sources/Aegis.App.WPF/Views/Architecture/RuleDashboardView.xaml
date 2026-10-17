@@ -200,11 +200,11 @@
                 <StackPanel>
 
 
-                    <TextBlock Text="WARNINGS"
+                    <TextBlock Text="MEDIUM"
                                Style="{StaticResource Text.Eyebrow}"/>
 
 
-                    <TextBlock Text="{Binding WarningCount}"
+                    <TextBlock Text="{Binding MediumCount}"
                                Style="{StaticResource Text.KpiValue}"
                                Foreground="{StaticResource Brush.StatusWarning}"/>
 

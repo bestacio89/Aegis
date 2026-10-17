@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿
+using Microsoft.Extensions.Logging;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -7,10 +8,14 @@ using Aegis.Shared.Architecture.Models.Rules;
 namespace Aegis.Architecture.RuleEngines;
 
 /// <summary>
-/// Converts evaluator facts into deterministic architecture rule results.
+/// Converts evaluator facts into rule evaluations and architecture findings.
 ///
-/// Facts are retained for aggregation, but only facts suitable for rule
-/// evaluation are interpreted as compliance evidence.
+/// Every valid rule/metric comparison is recorded, regardless of whether
+/// the rule passes or fails. Findings contain violations only.
+///
+/// Project-summary facts are excluded from file-level compliance checks.
+/// Missing metrics, inapplicable rules, invalid thresholds, and non-finite
+/// measurements remain distinct evaluation outcomes.
 /// </summary>
 public sealed class RuleEngineCore
 {
@@ -46,7 +51,7 @@ public sealed class RuleEngineCore
         _policy = newPolicy;
 
         _logger.LogInformation(
-            "Aegis rule policy applied → {Name} (v{Version})",
+            "Aegis rule policy applied: {Name} (v{Version})",
             newPolicy.Name ?? "Unnamed",
             newPolicy.Version ?? "1.0");
     }
@@ -66,6 +71,7 @@ public sealed class RuleEngineCore
         var factList = facts.ToList();
         var evaluations = new List<RuleEvaluationResult>();
         var results = new List<ArchitectureRuleresult>();
+        var evaluations = new List<RuleEvaluationResult>();
 
         var evaluatedRuleIds =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -103,9 +109,12 @@ public sealed class RuleEngineCore
             new Dictionary<string, string>(
                 StringComparer.OrdinalIgnoreCase);
 
-        var totalChecks = 0;
+        var checksPassed = 0;
+        var checksViolated = 0;
         var skippedSummaryFacts = 0;
         var skippedNonFiniteMetrics = 0;
+        var skippedInvalidThresholds = 0;
+        var factsWithoutMatchingMetrics = 0;
 
         foreach (var fact in factList)
         {
@@ -113,11 +122,12 @@ public sealed class RuleEngineCore
             {
                 _logger.LogWarning(
                     "Null evaluator fact encountered; skipping it.");
+
                 continue;
             }
 
-            // Project summaries are useful for dashboards and aggregation,
-            // but must not be treated as file-level compliance evidence.
+            // Aggregate/project summaries are not file-level compliance
+            // evidence. Their metrics may still be used by other subsystems.
             if (IsProjectSummary(fact))
             {
                 skippedSummaryFacts++;
@@ -133,6 +143,8 @@ public sealed class RuleEngineCore
                 context,
                 layerCache);
 
+            var matchedAnyRuleMetric = false;
+
             foreach (var rule in applicableRules)
             {
                 if (!ArchitectureRuleMetricContracts.TryResolveMetric(
@@ -144,15 +156,18 @@ public sealed class RuleEngineCore
                     continue;
                 }
 
-                // NaN and infinity have undefined or misleading threshold
-                // behavior. Do not count them as valid rule checks.
+                matchedAnyRuleMetric = true;
+
+                // A non-finite observation cannot produce a meaningful
+                // comparison and must not count as a completed check.
                 if (!double.IsFinite(metricValue))
                 {
                     skippedNonFiniteMetrics++;
 
                     _logger.LogWarning(
-                        "Ignoring non-finite metric {MetricKey} from {Evaluator} " +
-                        "for rule {RuleId}, target {Target}. Value={Value}",
+                        "Skipping non-finite metric {MetricKey} from " +
+                        "{Evaluator} for rule {RuleId}, target {Target}. " +
+                        "Value={Value}",
                         metricKey,
                         fact.Source,
                         rule.Id,
@@ -166,6 +181,8 @@ public sealed class RuleEngineCore
 
                 if (!double.IsFinite(threshold))
                 {
+                    skippedInvalidThresholds++;
+
                     _logger.LogWarning(
                         "Rule {RuleId} has a non-finite threshold {Threshold}; " +
                         "the check was skipped.",
@@ -175,14 +192,53 @@ public sealed class RuleEngineCore
                     continue;
                 }
 
-                totalChecks++;
+                var isViolation = IsViolation(
+                    rule.Operator,
+                    metricValue,
+                    threshold);
+
+                var evaluatedAt = DateTimeOffset.UtcNow;
+
+                // Record both outcomes. Results below remain violations only.
+                evaluations.Add(new RuleEvaluationResult
+                {
+                    RuleId = rule.Id,
+                    RuleName = rule.Name,
+                    MetricKey = metricKey,
+                    Status = isViolation
+                        ? RuleEvaluationStatus.Violated
+                        : RuleEvaluationStatus.Passed,
+                    Scope = "File",
+                    Target = fact.Target,
+                    Domain = domain,
+                    ObservedValue = metricValue,
+                    Threshold = threshold,
+                    ComparisonOperator = rule.Operator.ToString(),
+                    ReasonCode = isViolation
+                        ? "RuleViolated"
+                        : "RulePassed",
+                    Reason = isViolation
+                        ? $"Metric '{metricKey}' violated the configured threshold."
+                        : $"Metric '{metricKey}' satisfied the configured threshold.",
+                    Evaluator = fact.Source,
+                    EvaluatedAt = evaluatedAt
+                });
+
                 evaluatedRuleIds.Add(rule.Id);
+
+                if (isViolation)
+                {
+                    checksViolated++;
+                }
+                else
+                {
+                    checksPassed++;
+                }
 
                 if (!rulesByDomain.TryGetValue(domain, out var domainRules))
                 {
-                    domainRules =
-                        new HashSet<string>(
-                            StringComparer.OrdinalIgnoreCase);
+                    domainRules = new HashSet<string>(
+                        StringComparer.OrdinalIgnoreCase);
 
                     rulesByDomain[domain] = domainRules;
                 }
@@ -190,10 +246,11 @@ public sealed class RuleEngineCore
                 domainRules.Add(rule.Id);
 
                 var bucketKey = (domain, rule.Severity, rule.Category);
+
                 buckets[bucketKey] =
                     buckets.GetValueOrDefault(bucketKey) + 1;
 
-                if (!IsViolation(rule.Operator, metricValue, threshold))
+                if (!isViolation)
                 {
                     continue;
                 }
@@ -205,23 +262,35 @@ public sealed class RuleEngineCore
                     domain,
                     metricKey,
                     metricValue,
-                    threshold));
+                    threshold,
+                    evaluatedAt));
+            }
+
+            if (!matchedAnyRuleMetric && applicableRules.Count > 0)
+            {
+                factsWithoutMatchingMetrics++;
             }
         }
+
+        var totalChecks = checksPassed + checksViolated;
+
+        var rulesNotEvaluated = _rules
+            .Where(rule =>
+                !evaluatedRuleIds.Contains(rule.Id)
+                && !notApplicableReasons.ContainsKey(rule.Id))
+            .Select(rule => rule.Id)
+            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         var stats = new RuleEvaluationStats
         {
             RulesRegistered = _rules.Count,
             RulesEvaluated = evaluatedRuleIds.Count,
             ChecksPerformed = totalChecks,
+            ChecksPassed = checksPassed,
+            ChecksViolated = checksViolated,
 
-            RulesNotEvaluated = _rules
-                .Where(rule =>
-                    !evaluatedRuleIds.Contains(rule.Id)
-                    && !notApplicableReasons.ContainsKey(rule.Id))
-                .Select(rule => rule.Id)
-                .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
-                .ToList(),
+            RulesNotEvaluated = rulesNotEvaluated,
 
             RulesNotApplicable = notApplicableReasons.Keys
                 .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
@@ -243,43 +312,63 @@ public sealed class RuleEngineCore
                 StringComparer.OrdinalIgnoreCase)
         };
 
-        if (stats.RulesNotEvaluated.Count > 0)
+        // This is a metric-production gap, not proof that a contract is
+        // missing. TryResolveMetric only inspects metrics actually emitted
+        // by the evaluator facts supplied to this invocation.
+        if (rulesNotEvaluated.Count > 0)
         {
             var rulesById = _rules.ToDictionary(
                 rule => rule.Id,
                 StringComparer.OrdinalIgnoreCase);
 
-            foreach (var ruleId in stats.RulesNotEvaluated)
+            foreach (var ruleId in rulesNotEvaluated)
             {
-                if (rulesById.TryGetValue(ruleId, out var rule))
+                if (!rulesById.TryGetValue(ruleId, out var rule))
                 {
-                    _logger.LogWarning(
-                        "Rule {RuleId} ({RuleName}) remains unevaluated: " +
-                        "no metric contract matched declared metric {MetricKey}.",
-                        rule.Id,
-                        rule.Name,
-                        rule.MetricKey);
+                    continue;
                 }
+
+                _logger.LogWarning(
+                    "Rule {RuleId} ({RuleName}) remains unevaluated: " +
+                    "no applicable evaluator fact emitted its declared " +
+                    "metric {MetricKey}.",
+                    rule.Id,
+                    rule.Name,
+                    rule.MetricKey);
             }
         }
 
         _logger.LogInformation(
-            "RuleEngineCore evaluated {Facts} facts → {Results} violations " +
-            "({Checks} checks, {Evaluated}/{Registered} rules evaluated; " +
-            "{NotApplicable} rules not applicable; {NotEvaluated} rules lack " +
-            "a metric contract; {SummariesSkipped} project summaries skipped; " +
-            "{InvalidMetrics} non-finite metrics skipped).",
+            "RuleEngineCore processed {Facts} facts: {Violations} violations; " +
+            "{Checks} checks ({Passed} passed, {Violated} violated); " +
+            "{Evaluated}/{Registered} rules evaluated; " +
+            "{NotApplicable} not applicable; {NotEvaluated} not evaluated; " +
+            "{SummariesSkipped} project summaries skipped; " +
+            "{NonFiniteSkipped} non-finite metrics skipped; " +
+            "{InvalidThresholds} invalid thresholds skipped; " +
+            "{FactsWithoutMetrics} facts had no matching rule metrics.",
             factList.Count,
             results.Count,
             totalChecks,
+            checksPassed,
+            checksViolated,
             stats.RulesEvaluated,
             stats.RulesRegistered,
             stats.RulesNotApplicable.Count,
             stats.RulesNotEvaluated.Count,
             skippedSummaryFacts,
-            skippedNonFiniteMetrics);
+            skippedNonFiniteMetrics,
+            skippedInvalidThresholds,
+            factsWithoutMatchingMetrics);
 
+<<<<<<< Updated upstream
         return new RuleEvaluationOutcome(results, stats, evaluations); 
+=======
+        return new RuleEvaluationOutcome(
+            results,
+            stats,
+            evaluations);
+>>>>>>> Stashed changes
     }
 
     private static bool IsProjectSummary(ArchitectureEvaluatorResult fact)
@@ -319,7 +408,8 @@ public sealed class RuleEngineCore
         string layer,
         string metric,
         double value,
-        double threshold)
+        double threshold,
+        DateTimeOffset evaluatedAt)
     {
         var category = ParseCategory(rule.Category);
 
@@ -339,7 +429,7 @@ public sealed class RuleEngineCore
             @namespace,
             $"[{fact.Source}] Metric '{metric}' = {value:0.##}, " +
             $"threshold = {threshold:0.##}. {rule.Recommendation}",
-            DateTimeOffset.UtcNow,
+            evaluatedAt,
             isCompliant: false)
         {
             DetectedBy = fact.Source,
@@ -404,8 +494,7 @@ public sealed class RuleEngineCore
             return true;
         }
 
-        var prefix = parent.EndsWith(
-            Path.DirectorySeparatorChar)
+        var prefix = parent.EndsWith(Path.DirectorySeparatorChar)
             ? parent
             : parent + Path.DirectorySeparatorChar;
 
@@ -451,7 +540,10 @@ public sealed class RuleEngineCore
     }
 
     private static ArchitectureRuleCategory ParseCategory(string category) =>
-        Enum.TryParse(category, true, out ArchitectureRuleCategory parsed)
+        Enum.TryParse(
+            category,
+            ignoreCase: true,
+            out ArchitectureRuleCategory parsed)
             ? parsed
             : ArchitectureRuleCategory.General;
 
@@ -461,6 +553,7 @@ public sealed class RuleEngineCore
 
         if (overrides is not null)
         {
+            // A rule-specific override takes precedence over a metric override.
             foreach (var entry in overrides)
             {
                 if (string.Equals(

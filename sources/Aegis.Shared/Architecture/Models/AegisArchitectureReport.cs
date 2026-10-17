@@ -33,10 +33,32 @@ public sealed class AegisArchitectureReport
     public int RulesEvaluated => EvaluationStats?.RulesEvaluated ?? 0;
     public int ChecksPerformed => EvaluationStats?.ChecksPerformed ?? 0;
 
+    public int RulesApplicable => EvaluationStats?.RulesApplicable ?? 0;
+
+    public int RulesPassed => EvaluationStats?.RulesPassed ?? 0;
+
+    public int RulesViolated => EvaluationStats?.RulesViolated ?? 0;
+
+    public int EvaluationsPassed => EvaluationStats?.EvaluationsPassed ?? 0;
+
+    public int EvaluationsViolated => EvaluationStats?.EvaluationsViolated ?? 0;
+
+    public int EvaluationsErrored => EvaluationStats?.EvaluationsErrored ?? 0;
+    /// <summary>
+    /// Diagnostics produced during analysis that may affect report reliability
+    /// or rule-evaluation coverage.
+    /// </summary>
+    public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];
+
     // 🧮 Derived counts
     public int TotalFilesScanned { get; set; }
     public int TotalFacts => Facts.Count;
     public int TotalViolations => Results.Count(r => !r.IsCompliant);
+    /// <summary>
+    /// All scoped rule outcomes, including passing evaluations.
+    /// Findings remain in Results.
+    /// </summary>
+    public Collection<RuleEvaluationResult> Evaluations { get; init; } = new();
 
     // 🧮 Backwards-compatible quick compliance dictionary
     public Dictionary<ArchitectureRuleCategory, double> ComplianceScores { get; set; } = new();

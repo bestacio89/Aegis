@@ -1,34 +1,73 @@
 ﻿namespace Aegis.Shared.Architecture.Models;
 
 /// <summary>
-/// What the rule engine actually checked. Without this, "0 violations" cannot be told apart from
-/// "nothing was evaluated": rule results only list failures.
+/// Counts and diagnostics describing what the rule engine actually assessed.
+/// Rule counts and scoped evaluation counts are separate dimensions.
 /// </summary>
 public sealed class RuleEvaluationStats
 {
-    /// <summary>Enabled rules known to the engine.</summary>
     public int RulesRegistered { get; init; }
 
-    /// <summary>Rules that were compared against at least one measurement from this project.</summary>
+    public int RulesApplicable { get; init; }
+
+    /// <summary>
+    /// Distinct applicable rules with at least one completed evaluation.
+    /// A completed evaluation may pass or violate.
+    /// </summary>
     public int RulesEvaluated { get; init; }
 
-    /// <summary>Total rule-versus-measurement comparisons performed.</summary>
+    public int RulesPassed { get; init; }
+
+    public int RulesViolated { get; init; }
+
+    public int RulesWithErrors { get; init; }
+
+    public int EvaluationsPassed { get; init; }
+
+    public int EvaluationsViolated { get; init; }
+
+    public int EvaluationsNotEvaluated { get; init; }
+
+    public int EvaluationsInsufficientEvidence { get; init; }
+
+    public int EvaluationsErrored { get; init; }
+<<<<<<< Updated upstream
+=======
+    /// <summary>Individual rule checks that passed.</summary>
+    public int ChecksPassed { get; init; }
+
+    /// <summary>Individual rule checks that produced violations.</summary>
+    public int ChecksViolated { get; init; }
+>>>>>>> Stashed changes
+
+    /// <summary>
+    /// Number of valid rule-to-measurement comparisons completed.
+    /// </summary>
     public int ChecksPerformed { get; init; }
 
-    /// <summary>Registered rules for which no evaluator produced a matching measurement.</summary>
-    public IReadOnlyList<string> RulesNotEvaluated { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> RulesNotEvaluated { get; init; }
+        = Array.Empty<string>();
 
-    /// <summary>Rules excluded because the detected project technology does not match the rule's declared scope.</summary>
-    public IReadOnlyList<string> RulesNotApplicable { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> RulesNotApplicable { get; init; }
+        = Array.Empty<string>();
 
-    /// <summary>Reason each rule was excluded as not applicable.</summary>
-    public IReadOnlyDictionary<string, string> NotApplicableReasons { get; init; } =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<string, string> NotApplicableReasons { get; init; }
+        = new Dictionary<string, string>(
+            StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Checks per domain, severity and category (the denominators for compliance).</summary>
-    public IReadOnlyList<RuleCheckBucket> CheckBuckets { get; init; } = Array.Empty<RuleCheckBucket>();
+    public IReadOnlyDictionary<string, string> NotEvaluatedReasons { get; init; }
+        = new Dictionary<string, string>(
+            StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Distinct rules evaluated per domain.</summary>
-    public IReadOnlyDictionary<string, int> RulesEvaluatedByDomain { get; init; } =
-        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyList<RuleCheckBucket> CheckBuckets { get; init; }
+        = Array.Empty<RuleCheckBucket>();
+
+    public IReadOnlyDictionary<string, int> RulesEvaluatedByDomain { get; init; }
+        = new Dictionary<string, int>(
+            StringComparer.OrdinalIgnoreCase);
+
+    public double EvaluationCoverage =>
+        RulesApplicable == 0
+            ? 1.0
+            : (double)RulesEvaluated / RulesApplicable;
 }

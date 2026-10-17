@@ -2,7 +2,11 @@
 
 namespace Aegis.Shared.Architecture.Models;
 
-/// <summary>Violations found by the rule engine plus the statistics of what it checked.</summary>
+/// <summary>
+/// Complete result of rule interpretation.
+/// Findings and evaluation outcomes are separate collections.
+/// </summary>
 public sealed record RuleEvaluationOutcome(
     IReadOnlyList<ArchitectureRuleresult> Results,
-    RuleEvaluationStats Stats);
+    RuleEvaluationStats Stats,
+    IReadOnlyList<RuleEvaluationResult> Evaluations);

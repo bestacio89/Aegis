@@ -13,7 +13,9 @@ namespace Aegis.Architecture.RuleEngines;
 /// Every valid rule/metric comparison is recorded, regardless of whether
 /// the rule passes or fails. Findings contain violations only.
 ///
-/// Project-summary facts are excluded from file-level compliance checks.
+/// Project-summary facts are matched only to project-scoped rules; file/entity
+/// facts are matched only to file-scoped rules. Explicit scope metadata takes
+/// precedence over the legacy ArchitectureSummary category fallback.
 /// Missing metrics, inapplicable rules, invalid thresholds, and non-finite
 /// measurements remain distinct evaluation outcomes.
 /// </summary>

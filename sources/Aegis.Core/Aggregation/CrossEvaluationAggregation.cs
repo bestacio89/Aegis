@@ -1,4 +1,5 @@
 ﻿using Aegis.Architecture.Scoring;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Rules;
@@ -10,8 +11,13 @@ namespace Aegis.Architecture.Aggregation;
 /// Aggregates RuleEngine outputs into deterministic architecture health metrics.
 ///
 /// Evaluators produce facts.
-/// RuleEngine produces violations.
-/// Aggregator only combines rule results.
+/// RuleEngine produces violations and the statistics of what it checked.
+/// Aggregator only combines them.
+///
+/// Compliance is the share of weighted CHECKS that passed
+/// (1 - weighted violations / weighted checks), per domain and per category.
+/// Violations alone are not enough: a run with no violations and no checks is "not assessed",
+/// not "100% compliant", and a run with violations must still count everything that passed.
 /// </summary>
 public sealed class CrossEvaluatorAggregator
 {
@@ -73,11 +79,14 @@ public sealed class CrossEvaluatorAggregator
 
     /// <summary>
     /// Builds final architecture report from RuleEngine results.
+    /// <paramref name="stats"/> carries what the rule engine actually checked; callers without it
+    /// get the previous violation-only estimate.
     /// </summary>
     public AegisArchitectureReport Aggregate(
         IEnumerable<ArchitectureRuleresult> ruleResults,
         IEnumerable<ArchitectureEvaluatorResult>? facts = null,
-        ProjectArchitectureContext? context = null)
+        ProjectArchitectureContext? context = null,
+        RuleEvaluationStats? stats = null)
     {
         var rules =
             ruleResults
@@ -88,7 +97,8 @@ public sealed class CrossEvaluatorAggregator
         var report =
             new AegisArchitectureReport
             {
-                ScanDate = DateTimeOffset.UtcNow
+                ScanDate = DateTimeOffset.UtcNow,
+                EvaluationStats = stats
             };
 
 
@@ -130,21 +140,6 @@ public sealed class CrossEvaluatorAggregator
 
 
 
-        if (rules.Count == 0)
-        {
-            PopulateAllLayersAsClean(
-                report,
-                context);
-
-            report.Metrics.ProjectHealthIndex = 100;
-
-            report.ComputeCompliance();
-
-            return report;
-        }
-
-
-
         var weighted =
             _weightingEngine
                 .ApplyWeights(rules)
@@ -152,10 +147,9 @@ public sealed class CrossEvaluatorAggregator
 
 
 
-        // Left-join every known layer (from context.Modules) against the actual violation
-        // groups, so a fully compliant layer (e.g. Domain with zero findings) still gets a
-        // 0-violation / 100-health entry instead of being silently absent from report.Domains
-        // — absence previously read as "not evaluated" rather than "evaluated and clean."
+        // Every known layer, every layer with violations and every layer where checks ran gets an
+        // entry, so a fully compliant layer appears as "evaluated and clean" instead of being
+        // silently absent from report.Domains.
         var groupedByLayer =
             weighted
                 .GroupBy(x =>
@@ -168,37 +162,37 @@ public sealed class CrossEvaluatorAggregator
                     StringComparer.OrdinalIgnoreCase);
 
 
-        var knownLayers =
+        var domainNames =
             GetKnownLayerNames(
                 context);
 
+        var additionalDomains =
+            groupedByLayer.Keys
+                .Concat(
+                    stats?.CheckBuckets.Select(b => b.Domain)
+                    ?? Enumerable.Empty<string>());
 
-        foreach (var layerName in knownLayers)
+        foreach (var name in additionalDomains)
         {
-            var rulesForLayer =
-                groupedByLayer.TryGetValue(layerName, out var list)
+            if (!domainNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+            {
+                domainNames.Add(name);
+            }
+        }
+
+
+        foreach (var domainName in domainNames)
+        {
+            var rulesForDomain =
+                groupedByLayer.TryGetValue(domainName, out var list)
                     ? list
                     : new List<ArchitectureRuleresult>();
 
             report.Domains.Add(
                 ComputeDomainSummary(
-                    layerName,
-                    rulesForLayer));
-        }
-
-
-        // Any violation whose layer wasn't in the known-layers list (e.g. genuinely
-        // "Unclassified" files, or a module the layer detector didn't recognize) still needs
-        // to be represented rather than silently dropped.
-        foreach (var kvp in groupedByLayer)
-        {
-            if (!knownLayers.Contains(kvp.Key, StringComparer.OrdinalIgnoreCase))
-            {
-                report.Domains.Add(
-                    ComputeDomainSummary(
-                        kvp.Key,
-                        kvp.Value));
-            }
+                    domainName,
+                    rulesForDomain,
+                    stats));
         }
 
 
@@ -209,38 +203,21 @@ public sealed class CrossEvaluatorAggregator
 
 
 
-        report.ComputeCompliance();
+        report.ComputeCompliance(
+            ComputeCategoryScores(
+                weighted,
+                stats));
 
 
 
         _logger.LogInformation(
-            "Aggregated {Rules} rules into {Domains} domains.",
+            "Aggregated {Rules} violations into {Domains} domains.",
             weighted.Count,
             report.Domains.Count);
 
 
 
         return report;
-    }
-
-
-
-    /// <summary>
-    /// Populates report.Domains with every known layer at full health when there are zero
-    /// violations project-wide — without this, a perfectly clean scan would leave Domains
-    /// empty instead of showing every layer as compliant.
-    /// </summary>
-    private void PopulateAllLayersAsClean(
-        AegisArchitectureReport report,
-        ProjectArchitectureContext? context)
-    {
-        foreach (var layerName in GetKnownLayerNames(context))
-        {
-            report.Domains.Add(
-                ComputeDomainSummary(
-                    layerName,
-                    new List<ArchitectureRuleresult>()));
-        }
     }
 
 
@@ -266,11 +243,82 @@ public sealed class CrossEvaluatorAggregator
 
     private ArchitectureDomainSummary ComputeDomainSummary(
         string domain,
+        List<ArchitectureRuleresult> rules,
+        RuleEvaluationStats? stats)
+    {
+        if (stats is null)
+        {
+            return ComputeLegacyDomainSummary(
+                domain,
+                rules);
+        }
+
+
+        var violations =
+            rules.Count(x => !x.IsCompliant);
+
+
+        var buckets =
+            stats.CheckBuckets
+                .Where(b => string.Equals(
+                    b.Domain,
+                    domain,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+
+        var checks =
+            buckets.Sum(b => b.Checks);
+
+
+        var checkWeight =
+            buckets.Sum(b =>
+                b.Checks * _weightingEngine.WeightOf(b.Severity, b.Category));
+
+
+        var violationWeight =
+            rules.Sum(x => x.WeightedImpact);
+
+
+        // No checks in this domain = not assessed (reported through ChecksPerformed = 0).
+        var score =
+            checks == 0
+                ? 1.0
+                : _weightingEngine.ComputeScore(violationWeight, checkWeight);
+
+
+        var passRate =
+            checks == 0
+                ? 1.0
+                : Math.Clamp(1.0 - (double)violations / checks, 0, 1);
+
+
+        return new ArchitectureDomainSummary
+        {
+            Domain = domain,
+
+            RulesEvaluated =
+                stats.RulesEvaluatedByDomain.GetValueOrDefault(domain),
+
+            ChecksPerformed = checks,
+
+            Violations = violations,
+
+            WeightedScore = score,
+
+            MaintainabilityIndex = passRate * _maintainabilityFactor,
+
+            HealthIndex = Math.Clamp(score * _globalHealthWeight, 0, 1)
+        };
+    }
+
+
+
+    // Previous behaviour, kept for callers that cannot supply check statistics.
+    private ArchitectureDomainSummary ComputeLegacyDomainSummary(
+        string domain,
         List<ArchitectureRuleresult> rules)
     {
-        // An empty rule list means "this layer was evaluated and found clean" — not
-        // "1 rule evaluated, 1 violation," which is what Math.Max(1, rules.Count) previously
-        // produced for every genuinely clean layer once full-layer enumeration was added.
         if (rules.Count == 0)
         {
             return new ArchitectureDomainSummary
@@ -290,11 +338,8 @@ public sealed class CrossEvaluatorAggregator
         }
 
 
-
         var total =
             rules.Count;
-
-
 
         var compliant =
             rules.Count(
@@ -310,17 +355,14 @@ public sealed class CrossEvaluatorAggregator
             Violations =
                 total - compliant,
 
-
             WeightedScore =
                 _weightingEngine
                     .ComputeWeightedCompliance(rules),
-
 
             MaintainabilityIndex =
                 ((double)compliant / total)
                 *
                 _maintainabilityFactor,
-
 
             HealthIndex =
                 rules.Average(
@@ -329,6 +371,68 @@ public sealed class CrossEvaluatorAggregator
                 _globalHealthWeight
         };
     }
+
+
+
+    /// <summary>
+    /// Per-category compliance (0-100) from checks performed. Only categories that were really
+    /// evaluated are returned. Null when no statistics are available.
+    /// </summary>
+    private Dictionary<ArchitectureRuleCategory, double>? ComputeCategoryScores(
+        List<ArchitectureRuleresult> weighted,
+        RuleEvaluationStats? stats)
+    {
+        if (stats is null)
+        {
+            return null;
+        }
+
+
+        var checkWeightByCategory =
+            new Dictionary<ArchitectureRuleCategory, double>();
+
+        foreach (var bucket in stats.CheckBuckets)
+        {
+            var category = ParseCategory(bucket.Category);
+
+            checkWeightByCategory[category] =
+                checkWeightByCategory.GetValueOrDefault(category)
+                + bucket.Checks * _weightingEngine.WeightOf(bucket.Severity, bucket.Category);
+        }
+
+
+        var violationWeightByCategory =
+            weighted
+                .Where(r => !r.IsCompliant)
+                .GroupBy(r => r.Category)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Sum(r => r.WeightedImpact));
+
+
+        var scores =
+            new Dictionary<ArchitectureRuleCategory, double>();
+
+        foreach (var (category, checkWeight) in checkWeightByCategory)
+        {
+            var score =
+                _weightingEngine.ComputeScore(
+                    violationWeightByCategory.GetValueOrDefault(category),
+                    checkWeight);
+
+            scores[category] = Math.Round(score * 100.0, 2);
+        }
+
+
+        return scores;
+    }
+
+
+
+    private static ArchitectureRuleCategory ParseCategory(string category) =>
+        Enum.TryParse<ArchitectureRuleCategory>(category, true, out var parsed)
+            ? parsed
+            : ArchitectureRuleCategory.General;
 
 
 
@@ -351,33 +455,46 @@ public sealed class CrossEvaluatorAggregator
         }
 
 
+        // Domains in which nothing was checked say nothing about compliance, so they must not
+        // dilute (or inflate) the averages. Without statistics, every domain counts as before.
+        var assessed =
+            list
+                .Where(x => x.ChecksPerformed > 0)
+                .ToList();
+
+        if (assessed.Count == 0)
+        {
+            assessed = list;
+        }
+
+
 
         return new GlobalArchitectureMetrics
         {
             ProjectHealthIndex =
                 Math.Round(
-                    list.Average(
+                    assessed.Average(
                         x => x.HealthIndex * 100),
                     2),
 
 
             MaintainabilityIndex =
                 Math.Round(
-                    list.Average(
+                    assessed.Average(
                         x => x.MaintainabilityIndex * 100),
                     2),
 
 
             WeightedCompliance =
                 Math.Round(
-                    list.Average(
+                    assessed.Average(
                         x => x.WeightedScore),
                     3),
 
 
             ResilienceIndex =
                 Math.Round(
-                    ComputeResilience(list),
+                    ComputeResilience(assessed),
                     3)
         };
     }

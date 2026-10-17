@@ -61,11 +61,11 @@ public sealed class CircularDependencyEvaluator
             new List<ArchitectureEvaluatorResult>();
 
 
-        if (Context is null ||
-            Context.Dependencies.Count == 0)
+        if (Context is null || Context.Dependencies.Count == 0)
         {
-            return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(
-                results);
+            // An empty dependency model may mean discovery did not run or found no usable
+            // edges. Do not claim a clean cycle check without graph evidence.
+            return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(results);
         }
 
 
@@ -84,14 +84,25 @@ public sealed class CircularDependencyEvaluator
         foreach (var cycle in cycles)
         {
             token.ThrowIfCancellationRequested();
-
-
-            results.Add(
-                CreateCycleResult(
-                    cycle));
+            results.Add(CreateCycleResult(cycle));
         }
 
-
+        // Emit completion evidence even when the graph is clean. Otherwise, no finding
+        // is indistinguishable from an evaluator that never ran.
+        results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
+        {
+            Category = nameof(ArchitectureRuleCategory.Architecture),
+            Metrics = new Dictionary<string, double>
+            {
+                ["CircularDependencyCount"] = cycles.Count
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["AnalysisCompleted"] = "true",
+                ["Language"] = Context.Language,
+                ["Framework"] = Context.Framework ?? "Unknown"
+            }
+        });
 
         AegisDiagnostics.Report(
             Name,

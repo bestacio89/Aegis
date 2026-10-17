@@ -5,10 +5,11 @@ Aegis rules declare the scope of evidence they are allowed to evaluate.
 - **File scope** rules consume facts for an individual file or code entity.
 - **Project scope** rules consume facts explicitly marked with `EvaluationScope=Project` or categorized as `ArchitectureSummary`.
 
-The rule engine matches facts and rules only when their scopes agree. Project summaries are no longer discarded before metric matching, and project-level findings do not masquerade as file paths. Missing-metric diagnostics are scoped, so a metric emitted at the wrong scope does not count as evidence for a rule.
+The rule engine matches facts and rules only when their scopes agree. Project summaries are no longer discarded before metric matching, and project-level findings do not masquerade as source-file paths. Missing-metric diagnostics are scoped, so a metric emitted at the wrong scope does not count as evidence for a rule.
 
-The scope assignments follow the current metric contract:
-- Project scope: architecture, backend, dependency, infrastructure, performance, and transaction rules.
-- File scope: design-pattern, frontend, and naming rules.
+The current assignments are based on each metric's intended unit of analysis, not only on its rule category.
 
-When adding a rule, choose its scope based on the evaluator that produces the metric and the metric's semantics—not merely the rule's category. A scope change should include a producer/consumer review and regression coverage.
+- **Project scope:** `AEG-ARCH-R1`–`R5`, `AEG-ARCH-R7`–`R12`; `AEG-BACK-R3`–`R4`; all `AEG-DEPS` and `AEG-INF` rules; `AEG-PERF-R1` and `R3`; `AEG-TXN-R1`.
+- **File/entity scope:** `AEG-ARCH-R6`; `AEG-BACK-R1`, `R2`, and `R5`; all design-pattern, frontend, and naming rules; `AEG-PERF-R2` and `R4`; `AEG-TXN-R2`–`R4`.
+
+When adding a rule, choose its scope based on the evaluator that produces the metric and the metric's semantics—not merely the rule's category. A scope change should include a producer/consumer review and regression coverage. Scope matching does not substitute for implementing a missing metric producer or validating its unit, aggregation, and threshold.

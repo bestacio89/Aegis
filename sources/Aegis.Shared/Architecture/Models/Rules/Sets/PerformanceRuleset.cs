@@ -17,7 +17,7 @@ public static class PerformanceRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-PERF-R1",
-            Scope = RuleEvaluationScope.Project,
+            Scope = RuleEvaluationScope.File,
             Name = "Performance Efficiency Below Threshold",
             Category = nameof(ArchitectureRuleCategory.Performance),
             MetricKey = "PerformanceHealthIndex",

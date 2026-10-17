@@ -1,40 +1,184 @@
-﻿using System.Text.RegularExpressions;
+﻿
+using System.Text.RegularExpressions;
+
 using Aegis.Architecture.Evaluators;
 using Aegis.Architecture.Evaluators.Naming.Policies;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Naming;
+
 using Franz.Common.DependencyInjection;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Aegis.Architecture.Evaluators.Naming;
 
 /// <summary>
-/// Evaluates language-level naming consistency and convention adherence.
-/// Framework-specific naming rules are delegated to dedicated frontend evaluators.
+/// Evaluates repository source-file naming conventions and declaration-level
+/// naming consistency.
 ///
-/// Produces:
-/// - NamingComplianceScore
-/// - NamingHealthIndex
-/// - Symbol violation metrics
+/// Uses NamingConventionResolver as the authoritative source of naming rules.
+/// Scores use a 0-100 scale.
 ///
-/// Supported:
-/// - C#
-/// - Java
-/// - Python
-/// - TypeScript
-/// - JavaScript
+/// This evaluator uses language-aware declaration heuristics, not compiler ASTs.
 /// </summary>
 public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly NamingPolicy _policy;
     private readonly NamingConventionResolver _resolver;
 
+    private static readonly HashSet<string> ExcludedDirectories =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".git",
+            ".vs",
+            ".idea",
+            ".vscode",
+            "bin",
+            "obj",
+            "node_modules",
+            "dist",
+            "build",
+            "coverage",
+            "vendor",
+            "packages",
+            "__pycache__",
+            ".venv",
+            "venv",
+            "TestResults"
+        };
+
+    private static readonly Regex TypeDeclarationRx = new(
+        """
+        \b
+        (?:
+            class
+            | interface
+            | enum
+            | record
+            | struct
+            | trait
+        )
+        \s+
+        (?:
+            [A-Za-z_][A-Za-z0-9_]*
+            \s+
+        )?
+        (?<name>[A-Za-z_][A-Za-z0-9_]*)
+        """,
+        RegexOptions.Compiled |
+        RegexOptions.IgnorePatternWhitespace,
+        TimeSpan.FromMilliseconds(500));
+
+    private static readonly Regex PythonClassRx = new(
+        @"(?m)^\s*class\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\(|:)",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
+
+    private static readonly Regex PythonFunctionRx = new(
+        @"(?m)^\s*(?:async\s+)?def\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
+
+    private static readonly Regex CStyleMethodRx = new(
+        """
+        (?mx)
+        ^\s*
+        (?:(?:public|private|protected|internal|static|virtual|override|
+            abstract|async|extern|final|synchronized|native|default|
+            export|declare|inline|constexpr|friend|explicit|operator|
+            protected|readonly|unsafe|new)\s+)*
+        (?:(?:[\w.<>,?\[\]&:*]+\s+)+)?
+        (?<name>[A-Za-z_$][A-Za-z0-9_$]*)
+        \s*
+        \(
+        """,
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(500));
+
+    private static readonly Regex TypeScriptFunctionRx = new(
+        """
+        (?mx)
+        ^\s*
+        (?:(?:export|default|declare|async|abstract|static|public|private|
+            protected|override|readonly|private|public)\s+)*
+        (?:function\s*\*?\s+|(?<name>[A-Za-z_$][A-Za-z0-9_$]*)\s*)
+        (?:
+            function\s*\*?\s+(?<functionName>[A-Za-z_$][A-Za-z0-9_$]*)
+            |
+            \(
+        )
+        """,
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(500));
+
+    private static readonly Regex PythonVariableRx = new(
+        @"(?m)^\s*(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?::[^=\r\n]+)?=(?!=)",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
+
+    private static readonly Regex CStyleVariableRx = new(
+        """
+        (?mx)
+        \b
+        (?:
+            (?:const|let|var|final|static|readonly|volatile|register|auto)
+            \s+
+        )*
+        (?:
+            (?:int|long|short|byte|float|double|decimal|bool|boolean|
+                char|string|String|var|Object|object|const|final)
+            |
+            [A-Z][A-Za-z0-9_<>,?.\[\]]*
+        )
+        \s+
+        (?<name>[A-Za-z_$][A-Za-z0-9_$]*)
+        \s*
+        (?=[=;,:)\[])
+        """,
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(500));
+
+    private static readonly Regex JavaScriptVariableRx = new(
+        @"\b(?:const|let|var)\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*)",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
+
+    private static readonly Regex ConstantDeclarationRx = new(
+        """
+        (?mx)
+        \b
+        (?:
+            const
+            | final
+            | readonly
+        )
+        \s+
+        (?:(?:[\w.<>,?\[\]]+)\s+)?
+        (?<name>[A-Z][A-Z0-9_]{2,})
+        \s*(?:=|;|,)
+        """,
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(500));
+
+    private static readonly Regex PythonConstantDeclarationRx = new(
+        @"(?m)^\s*(?<name>[A-Z][A-Z0-9_]{2,})\s*=",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
+
+    private static readonly Regex InterfaceDeclarationRx = new(
+        @"\binterface\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*)",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
+
+    private static readonly Regex CommentOnlyLineRx = new(
+        @"(?m)^\s*(?://|#|/\*|\*|\*/)",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
 
     public override string Name => "NamingEvaluator";
-
 
     public override string[] SupportedLanguages =>
     [
@@ -45,41 +189,10 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         "JavaScript"
     ];
 
-
     public override string[] SupportedFrameworks =>
     [
         "LanguageAgnostic"
     ];
-
-
-
-    private static readonly Regex TypeRegex =
-        new(
-            @"\b(class|interface|enum|record)\s+([A-Za-z_][A-Za-z0-9_]*)",
-            RegexOptions.Compiled);
-
-
-
-    private static readonly Regex MethodRegex =
-        new(
-            @"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(",
-            RegexOptions.Compiled);
-
-
-
-    private static readonly Regex VariableRegex =
-        new(
-            @"\b(var|let|const|int|float|double|string|bool|decimal)\s+([A-Za-z_][A-Za-z0-9_]*)",
-            RegexOptions.Compiled);
-
-
-
-    private static readonly Regex ConstantRegex =
-        new(
-            @"\b[A-Z][A-Z0-9_]{3,}\b",
-            RegexOptions.Compiled);
-
-
 
     public NamingEvaluator(
         ILogger<NamingEvaluator> logger,
@@ -87,262 +200,190 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         NamingConventionResolver resolver)
         : base(logger)
     {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(resolver);
+
         _policy = options.Value.Naming ?? new NamingPolicy();
         _resolver = resolver;
     }
 
-
-
-    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
-        string projectPath,
-        CancellationToken token)
+    protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
+        EvaluateCoreAsync(
+            string projectPath,
+            CancellationToken token)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
-
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
+        token.ThrowIfCancellationRequested();
 
         if (!_policy.Enabled)
         {
             _logger.LogInformation(
-                "⏭ {Evaluator} disabled by policy.",
+                "{Evaluator} disabled by policy.",
                 Name);
 
-            return results;
+            return [];
         }
 
-
-        if (Context == null)
+        if (Context is null)
         {
             _logger.LogWarning(
-                "⚠️ {Evaluator} skipped because architecture context is missing.",
+                "{Evaluator} skipped because architecture context is missing.",
                 Name);
 
-            return results;
+            return [];
         }
 
+        if (!Directory.Exists(projectPath))
+        {
+            _logger.LogWarning(
+                "{Evaluator} skipped because project directory does not exist: {Path}",
+                Name,
+                projectPath);
 
+            return [];
+        }
 
         var convention = _resolver.Resolve(Context);
-
-
-
-        var files = Directory
-            .EnumerateFiles(
-                projectPath,
-                "*.*",
-                SearchOption.AllDirectories)
-            .Where(IsSupportedFile)
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
-
-
+        var files = EnumerateSourceFiles(projectPath, token);
 
         _logger.LogInformation(
-            "🏷️ Running {Evaluator} on {Count} files ({Language})",
+            "Running {Evaluator} on {Count} source files for language {Language}.",
             Name,
             files.Count,
             Context.Language);
 
-
+        var results = new List<ArchitectureEvaluatorResult>();
+        var unreadableFiles = 0;
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
-
             string content;
 
             try
             {
-                content = await File.ReadAllTextAsync(
-                    file,
-                    token);
+                content = await File.ReadAllTextAsync(file, token);
             }
-            catch
+            catch (OperationCanceledException)
+                when (token.IsCancellationRequested)
             {
+                throw;
+            }
+            catch (IOException exception)
+            {
+                unreadableFiles++;
+
+                _logger.LogDebug(
+                    exception,
+                    "Unable to read source file {File}.",
+                    file);
+
+                continue;
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                unreadableFiles++;
+
+                _logger.LogDebug(
+                    exception,
+                    "Access denied while reading source file {File}.",
+                    file);
+
                 continue;
             }
 
-
-
-            results.Add(
-                EvaluateFile(
-                    file,
-                    content,
-                    convention));
+            results.Add(EvaluateFile(file, content, convention));
         }
 
+        var analyzedFileCount = results.Count;
 
+        var summary = CreateSummary(
+            results,
+            projectPath,
+            files.Count,
+            unreadableFiles);
 
-        if (results.Count > 0)
-        {
-            AddSummary(
-                results,
-                projectPath);
-        }
-
-
+        results.Add(summary);
 
         _logger.LogInformation(
-            "✅ {Evaluator} completed with {Count} results",
+            "{Evaluator} completed. Source files discovered: {Discovered}; analyzed: {Analyzed}; unreadable: {Unreadable}.",
             Name,
-            results.Count);
-
-
+            files.Count,
+            analyzedFileCount,
+            unreadableFiles);
 
         return results;
     }
-
-
-
 
     private ArchitectureEvaluatorResult EvaluateFile(
         string file,
         string content,
         INamingConventionPolicy convention)
     {
-        // CreateResult (from BaseArchitectureEvaluator) always sets Metadata["FilePath"]
-        // to the real file path, regardless of what Target ends up being used for. This
-        // evaluator happened to pass the full path as Target before, so it wasn't broken —
-        // but it wasn't using the reliable, guaranteed path either. Any evaluator-specific
-        // Metrics/Metadata still get added the same way afterward.
-        var result =
-            CreateResult(
-                file,
-                nameof(ArchitectureRuleCategory.Naming));
+        var result = CreateResult(
+            file,
+            nameof(ArchitectureRuleCategory.Naming));
 
-        result.Metadata["FileName"] =
-            Path.GetFileName(file);
+        var language = DetectLanguage(file);
 
-        result.Metadata["Language"] =
-            Context?.Language ?? "Unknown";
+        result.Metadata["FileName"] = Path.GetFileName(file);
+        result.Metadata["Language"] = language;
+        result.Metadata["AnalysisMethod"] = "LanguageAwareDeclarationHeuristics";
 
+        var typeNames = ExtractTypeNames(content, language);
 
+        var typeViolations = typeNames.Count(
+            name => !convention.IsValidTypeName(name));
 
-        var types =
-            TypeRegex
-                .Matches(content)
-                .Cast<Match>()
-                .Select(x => new
-                {
-                    Kind = x.Groups[1].Value,
-                    Name = x.Groups[2].Value
-                })
-                .ToList();
+        var interfaceNames = InterfaceDeclarationRx
+            .Matches(content)
+            .Select(match => match.Groups["name"].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
+        var interfaceViolations = interfaceNames.Count(
+            name => !convention.IsValidInterfaceName(name));
 
+        var methodNames = ExtractMethodNames(content, language);
 
-        int typeViolations =
-            types.Count(x =>
-                !convention.IsValidTypeName(x.Name));
+        var methodViolations = methodNames.Count(
+            name => !convention.IsValidMethodName(name));
 
+        var variableNames = ExtractVariableNames(content, language);
 
+        var variableViolations = variableNames.Count(
+            name => !convention.IsValidVariableName(name));
 
-        int interfaceViolations =
-            types.Count(x =>
-                x.Kind == "interface" &&
-                !convention.IsValidInterfaceName(x.Name));
+        var constantNames = ExtractConstantNames(content, language);
 
+        var constantViolations = constantNames.Count(
+            name => !convention.IsValidConstantName(name));
 
+        var typeScore = ComputeScore(typeNames.Count, typeViolations);
+        var interfaceScore = ComputeScore(
+            interfaceNames.Length,
+            interfaceViolations);
+        var methodScore = ComputeScore(methodNames.Count, methodViolations);
+        var variableScore = ComputeScore(
+            variableNames.Count,
+            variableViolations);
+        var constantScore = ComputeScore(
+            constantNames.Count,
+            constantViolations);
 
-        var methods =
-            MethodRegex
-                .Matches(content)
-                .Cast<Match>()
-                .Select(x =>
-                    x.Groups[1].Value)
-                .Where(IsMethodCandidate)
-                .ToList();
+        var fileScore = convention.IsValidFileName(
+            Path.GetFileNameWithoutExtension(file))
+            ? 100
+            : 0;
 
-
-
-        int methodViolations =
-            methods.Count(x =>
-                !convention.IsValidMethodName(x));
-
-
-
-        var variables =
-            VariableRegex
-                .Matches(content)
-                .Cast<Match>()
-                .Select(x =>
-                    x.Groups[2].Value)
-                .ToList();
-
-
-
-        int variableViolations =
-            variables.Count(x =>
-                !convention.IsValidVariableName(x));
-
-
-
-        var constants =
-            ConstantRegex
-                .Matches(content)
-                .Select(x => x.Value)
-                .ToList();
-
-
-
-        int constantViolations =
-            constants.Count(x =>
-                !convention.IsValidConstantName(x));
-
-
-
-        double typeScore =
-            ComputeScore(
-                types.Count,
-                typeViolations);
-
-
-
-        double interfaceScore =
-            ComputeScore(
-                types.Count(x => x.Kind == "interface"),
-                interfaceViolations);
-
-
-
-        double methodScore =
-            ComputeScore(
-                methods.Count,
-                methodViolations);
-
-
-
-        double variableScore =
-            ComputeScore(
-                variables.Count,
-                variableViolations);
-
-
-
-        double constantScore =
-            ComputeScore(
-                constants.Count,
-                constantViolations);
-
-
-
-        double fileScore =
-            convention.IsValidFileName(
-                Path.GetFileNameWithoutExtension(file))
-                ? 100
-                : 0;
-
-
-
-        double compliance =
+        var compliance =
             typeScore * 0.30 +
             interfaceScore * 0.15 +
             methodScore * 0.20 +
             variableScore * 0.15 +
             constantScore * 0.10 +
             fileScore * 0.10;
-
-
 
         result.Metrics["TypeNamingCompliance"] = typeScore;
         result.Metrics["InterfaceNamingCompliance"] = interfaceScore;
@@ -351,140 +392,319 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         result.Metrics["ConstantNamingCompliance"] = constantScore;
         result.Metrics["FileNamingCompliance"] = fileScore;
 
-
         result.Metrics["TypeViolationCount"] = typeViolations;
         result.Metrics["InterfaceViolationCount"] = interfaceViolations;
         result.Metrics["MethodViolationCount"] = methodViolations;
         result.Metrics["VariableViolationCount"] = variableViolations;
         result.Metrics["ConstantViolationCount"] = constantViolations;
 
-
         result.Metrics["NamingComplianceScore"] =
             Math.Round(compliance, 2);
 
-
-
-        result.Metadata["TypesAnalyzed"] =
-            types.Count.ToString();
-
-        result.Metadata["MethodsAnalyzed"] =
-            methods.Count.ToString();
-
-        result.Metadata["VariablesAnalyzed"] =
-            variables.Count.ToString();
-
-
+        result.Metadata["TypesAnalyzed"] = typeNames.Count.ToString();
+        result.Metadata["InterfacesAnalyzed"] = interfaceNames.Length.ToString();
+        result.Metadata["MethodsAnalyzed"] = methodNames.Count.ToString();
+        result.Metadata["VariablesAnalyzed"] = variableNames.Count.ToString();
+        result.Metadata["ConstantsAnalyzed"] = constantNames.Count.ToString();
 
         return result;
     }
 
-
-
-
-
-    private static void AddSummary(
-        List<ArchitectureEvaluatorResult> results,
-        string projectPath)
+    private ArchitectureEvaluatorResult CreateSummary(
+        IReadOnlyCollection<ArchitectureEvaluatorResult> fileResults,
+        string projectPath,
+        int discoveredFileCount,
+        int unreadableFileCount)
     {
-        var score =
-            results.Average(x =>
-                x.Metrics.GetValueOrDefault(
+        var averageScore = fileResults.Count == 0
+            ? 100
+            : fileResults.Average(result =>
+                result.Metrics.GetValueOrDefault(
                     "NamingComplianceScore",
-                    0));
+                    100));
 
+        var totalViolations = fileResults.Sum(result =>
+            result.Metrics
+                .Where(metric =>
+                    metric.Key.EndsWith(
+                        "ViolationCount",
+                        StringComparison.Ordinal))
+                .Sum(metric => metric.Value));
 
+        return new ArchitectureEvaluatorResult(Name, projectPath)
+        {
+            Category = "NamingSummary",
 
-        var violations =
-            results.Sum(x =>
-                x.Metrics
-                 .Where(m =>
-                     m.Key.EndsWith(
-                         "ViolationCount"))
-                 .Sum(m => m.Value));
-
-
-
-        results.Add(
-            new ArchitectureEvaluatorResult(
-                "NamingEvaluator",
-                projectPath)
+            Metrics =
             {
-                Category = "NamingSummary",
+                ["AnalyzedFiles"] = fileResults.Count,
+                ["DiscoveredFiles"] = discoveredFileCount,
+                ["UnreadableFiles"] = unreadableFileCount,
+                ["AverageNamingComplianceScore"] = Math.Round(averageScore, 2),
+                ["TotalNamingViolations"] = totalViolations,
+                ["NamingHealthIndex"] = Math.Round(averageScore, 2)
+            },
 
-                Metrics =
-                    new Dictionary<string, double>
-                    {
-                        ["AnalyzedFiles"] =
-                            results.Count,
-
-                        ["AverageNamingComplianceScore"] =
-                            score,
-
-                        ["TotalNamingViolations"] =
-                            violations,
-
-                        ["NamingHealthIndex"] =
-                            score
-                    },
-
-                Metadata =
-                    new Dictionary<string, string>
-                    {
-                        ["Evaluator"] =
-                            "NamingEvaluator"
-                    }
-            });
+            Metadata =
+            {
+                ["Evaluator"] = Name,
+                ["ProjectPath"] = projectPath,
+                ["EvaluationStatus"] = fileResults.Count == 0
+                    ? "NoReadableSourceFiles"
+                    : unreadableFileCount > 0
+                        ? "PartiallyEvaluated"
+                        : "Evaluated"
+            }
+        };
     }
 
+    private static List<string> ExtractTypeNames(
+        string content,
+        string language)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
 
+        foreach (Match match in TypeDeclarationRx.Matches(content))
+        {
+            var name = match.Groups["name"].Value;
 
+            if (name.Length > 0)
+            {
+                names.Add(name);
+            }
+        }
 
+        if (language == "Python")
+        {
+            foreach (Match match in PythonClassRx.Matches(content))
+            {
+                names.Add(match.Groups["name"].Value);
+            }
+        }
 
-    private static double ComputeScore(
-        int total,
-        int violations)
+        return names.ToList();
+    }
+
+    private static List<string> ExtractMethodNames(
+        string content,
+        string language)
+    {
+        var names = new List<string>();
+
+        if (language == "Python")
+        {
+            names.AddRange(
+                PythonFunctionRx.Matches(content)
+                    .Select(match => match.Groups["name"].Value));
+
+            return names;
+        }
+
+        foreach (Match match in CStyleMethodRx.Matches(content))
+        {
+            var name = match.Groups["name"].Value;
+
+            if (IsMethodCandidate(name))
+            {
+                names.Add(name);
+            }
+        }
+
+        if (language is "TypeScript" or "JavaScript")
+        {
+            foreach (Match match in TypeScriptFunctionRx.Matches(content))
+            {
+                var name = match.Groups["functionName"].Success
+                    ? match.Groups["functionName"].Value
+                    : match.Groups["name"].Value;
+
+                if (!string.IsNullOrWhiteSpace(name) &&
+                    IsMethodCandidate(name))
+                {
+                    names.Add(name);
+                }
+            }
+        }
+
+        return names;
+    }
+
+    private static List<string> ExtractVariableNames(
+        string content,
+        string language)
+    {
+        var names = new List<string>();
+
+        if (language is "JavaScript" or "TypeScript")
+        {
+            names.AddRange(
+                JavaScriptVariableRx.Matches(content)
+                    .Select(match => match.Groups["name"].Value));
+
+            return names;
+        }
+
+        if (language == "Python")
+        {
+            names.AddRange(
+                PythonVariableRx.Matches(content)
+                    .Select(match => match.Groups["name"].Value));
+
+            return names;
+        }
+
+        names.AddRange(
+            CStyleVariableRx.Matches(content)
+                .Select(match => match.Groups["name"].Value));
+
+        return names;
+    }
+
+    private static List<string> ExtractConstantNames(
+        string content,
+        string language)
+    {
+        var regex = language == "Python"
+            ? PythonConstantDeclarationRx
+            : ConstantDeclarationRx;
+
+        return regex.Matches(content)
+            .Select(match => match.Groups["name"].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static double ComputeScore(int total, int violations)
     {
         if (total == 0)
+        {
             return 100;
-
+        }
 
         return Math.Round(
-            Math.Max(
-                0,
-                100 -
-                (violations * 100.0 / total)),
+            Math.Max(0, 100 - violations * 100.0 / total),
             2);
     }
 
+    private static List<string> EnumerateSourceFiles(
+        string projectPath,
+        CancellationToken token)
+    {
+        var files = new List<string>();
+        var pendingDirectories = new Stack<string>();
 
+        pendingDirectories.Push(Path.GetFullPath(projectPath));
 
+        while (pendingDirectories.Count > 0)
+        {
+            token.ThrowIfCancellationRequested();
 
+            var current = pendingDirectories.Pop();
+
+            IEnumerable<string> directories;
+
+            try
+            {
+                directories = Directory.EnumerateDirectories(current).ToArray();
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var directory in directories)
+            {
+                token.ThrowIfCancellationRequested();
+
+                var name = Path.GetFileName(
+                    Path.TrimEndingDirectorySeparator(directory));
+
+                if (ExcludedDirectories.Contains(name))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if ((File.GetAttributes(directory) &
+                         FileAttributes.ReparsePoint) != 0)
+                    {
+                        continue;
+                    }
+                }
+                catch (IOException)
+                {
+                    continue;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    continue;
+                }
+
+                pendingDirectories.Push(directory);
+            }
+
+            try
+            {
+                files.AddRange(
+                    Directory.EnumerateFiles(current, "*")
+                        .Where(IsSupportedFile));
+            }
+            catch (IOException)
+            {
+                // Preserve results from readable directories.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Preserve results from readable directories.
+            }
+        }
+
+        return files;
+    }
 
     private static bool IsSupportedFile(string file)
     {
-        return
-            file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
-            file.EndsWith(".java", StringComparison.OrdinalIgnoreCase) ||
-            file.EndsWith(".py", StringComparison.OrdinalIgnoreCase);
+        return Path.GetExtension(file).ToLowerInvariant() switch
+        {
+            ".cs" => true,
+            ".java" => true,
+            ".py" => true,
+            ".ts" => true,
+            ".tsx" => true,
+            ".js" => true,
+            ".jsx" => true,
+            _ => false
+        };
     }
 
-
-
-
+    private static string DetectLanguage(string file)
+    {
+        return Path.GetExtension(file).ToLowerInvariant() switch
+        {
+            ".cs" => "C#",
+            ".java" => "Java",
+            ".py" => "Python",
+            ".ts" or ".tsx" => "TypeScript",
+            ".js" or ".jsx" => "JavaScript",
+            _ => "Unknown"
+        };
+    }
 
     private static bool IsMethodCandidate(string name)
     {
-        return name switch
-        {
-            "if" or
-            "for" or
-            "foreach" or
-            "while" or
-            "switch" or
-            "catch" or
-            "return" => false,
-
-            _ => true
-        };
+        return name is not (
+            "if" or "for" or "foreach" or "while" or "switch" or
+            "catch" or "return" or "throw" or "new" or "using" or
+            "lock" or "sizeof" or "typeof" or "nameof" or "await" or
+            "yield" or "super" or "this" or "base" or "function" or
+            "def" or "class" or "interface" or "enum" or "record" or
+            "struct" or "do" or "try" or "finally" or "else" or
+            "elif" or "except" or "with" or "assert" or "del" or
+            "pass" or "lambda" or "async" or "from" or "import");
     }
 }

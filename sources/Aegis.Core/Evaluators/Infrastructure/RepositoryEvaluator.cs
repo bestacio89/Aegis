@@ -1,4 +1,7 @@
-﻿using Aegis.Architecture.Evaluators;
+﻿
+using System.Text.RegularExpressions;
+
+using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Infrastructure;
@@ -6,30 +9,69 @@ using Aegis.Shared.Architecture.Models.Policies.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-using System.Text.RegularExpressions;
-
 namespace Aegis.Architecture.Evaluators.Infrastructure;
 
 /// <summary>
 /// Evaluates repository governance, documentation, CI/CD readiness,
-/// structural organization, dependency hygiene, and maintainability.
+/// structural organization, dependency lockfile presence, and maintainability.
 ///
-/// Produces:
+/// Produces repository-level metrics:
 /// - GovernanceScore
 /// - CICDScore
 /// - StructureScore
 /// - DependencyScore
 /// - MaintainabilityScore
 /// - RepositoryHealthIndex
+///
+/// Component scores use a 0-1 scale. RepositoryHealthIndex uses a 0-100 scale.
 /// </summary>
 public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
 {
     private readonly RepositoryPolicy _policy;
 
+    private static readonly Regex TodoRx = new(
+        @"\b(TODO|FIXME|HACK|XXX)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
 
-    public override string Name =>
-        "RepositoryEvaluator";
+    private static readonly HashSet<string> ExcludedDirectories =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".git",
+            ".vs",
+            ".idea",
+            "bin",
+            "obj",
+            "node_modules",
+            "dist",
+            "build",
+            "coverage",
+            "vendor",
+            "__pycache__",
+            ".venv",
+            "venv",
+            "TestResults"
+        };
 
+    private static readonly HashSet<string> DependencyLockFiles =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "package-lock.json",
+            "npm-shrinkwrap.json",
+            "yarn.lock",
+            "pnpm-lock.yaml",
+            "bun.lock",
+            "bun.lockb",
+            "poetry.lock",
+            "Pipfile.lock",
+            "uv.lock",
+            "packages.lock.json",
+            "Cargo.lock",
+            "Gemfile.lock",
+            "composer.lock"
+        };
+
+    public override string Name => "RepositoryEvaluator";
 
     public override string[] SupportedLanguages =>
     [
@@ -40,7 +82,6 @@ public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
         "Java"
     ];
 
-
     public override string[] SupportedFrameworks =>
     [
         ".NET",
@@ -50,48 +91,33 @@ public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
         "Platform"
     ];
 
-
-
-    private static readonly Regex TodoRx =
-        new(
-            @"\b(TODO|FIXME|HACK|XXX)\b",
-            RegexOptions.IgnoreCase |
-            RegexOptions.Compiled);
-
-
-
-    private static readonly string[] DependencyLockFiles =
-    [
-        "package-lock.json",
-        "yarn.lock",
-        "pnpm-lock.yaml",
-        "poetry.lock",
-        "Pipfile.lock",
-        "packages.lock.json",
-        "pom.xml"
-    ];
-
-
-
     public RepositoryEvaluator(
         ILogger<RepositoryEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy =
-            options.Value.Repository ??
-            new RepositoryPolicy();
+        ArgumentNullException.ThrowIfNull(options);
+
+        _policy = options.Value.Repository ?? new RepositoryPolicy();
     }
-
-
 
     protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
         EvaluateCoreAsync(
             string projectPath,
             CancellationToken token)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
+        token.ThrowIfCancellationRequested();
 
+        if (!Directory.Exists(projectPath))
+        {
+            _logger.LogWarning(
+                "{Evaluator} skipped because repository directory does not exist: {Path}",
+                Name,
+                projectPath);
+
+            return [];
+        }
 
         if (!_policy.EnforceGovernanceFiles &&
             !_policy.EnforceCiPresence &&
@@ -100,348 +126,299 @@ public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
             !_policy.RequireDependencyLock)
         {
             _logger.LogInformation(
-                "⏭ {Evaluator} disabled by policy.",
+                "{Evaluator} disabled by policy.",
                 Name);
 
-            return results;
+            return [];
         }
 
-
-
-        var files =
-            EnumerateRepositoryFiles(projectPath);
-
-
+        var rootPath = Path.GetFullPath(projectPath);
 
         _logger.LogInformation(
-            "🏗️ Running {Evaluator} on repository {Path}",
+            "Running {Evaluator} on repository {Path}.",
             Name,
-            projectPath);
+            rootPath);
 
+        var files = EnumerateRepositoryFiles(rootPath, token);
 
+        token.ThrowIfCancellationRequested();
 
-        var governance =
-            EvaluateGovernance(
-                projectPath);
+        var governance = EvaluateGovernance(rootPath);
+        var cicd = EvaluateCiCd(rootPath);
 
+        var structure = _policy.CheckLargeFiles
+            ? EvaluateStructure(files)
+            : RepositoryMetric.Success();
 
-        var cicd =
-            EvaluateCiCd(
-                projectPath);
+        var maintainability = _policy.CheckTodoDensity
+            ? await EvaluateMaintainabilityAsync(files, token)
+            : RepositoryMetric.Success();
 
+        var dependency = EvaluateDependencies(files);
 
-        var structure =
-            EvaluateStructure(
-                files);
+        token.ThrowIfCancellationRequested();
 
+        var health = ComputeRepositoryHealth(
+            governance.Score,
+            cicd.Score,
+            structure.Score,
+            dependency.Score,
+            maintainability.Score);
 
-        var maintainability =
-            await EvaluateMaintainabilityAsync(
-                files,
-                token);
+        var result = new ArchitectureEvaluatorResult(Name, rootPath)
+        {
+            Category = "Repository",
 
-
-        var dependency =
-            EvaluateDependencies(
-                files);
-
-
-
-        var health =
-            ComputeRepositoryHealth(
-                governance.Score,
-                cicd.Score,
-                structure.Score,
-                dependency.Score,
-                maintainability.Score);
-
-
-
-        results.Add(
-            new ArchitectureEvaluatorResult(
-                Name,
-                projectPath)
+            Metrics =
             {
-                Category =
-                    "Repository",
+                ["GovernanceScore"] = governance.Score,
+                ["CICDScore"] = cicd.Score,
+                ["StructureScore"] = structure.Score,
+                ["DependencyScore"] = dependency.Score,
+                ["MaintainabilityScore"] = maintainability.Score,
 
-                Metrics =
-                {
-                    ["GovernanceScore"] =
-                        governance.Score,
+                ["MissingGovernanceFiles"] = governance.MissingFiles,
+                ["LargeFileCount"] = structure.LargeFiles,
+                ["TodoCount"] = maintainability.TodoCount,
+                ["ProjectCount"] = structure.ProjectCount,
 
-                    ["CICDScore"] =
-                        cicd.Score,
+                ["RepositoryHealthIndex"] = health
+            },
 
-                    ["StructureScore"] =
-                        structure.Score,
-
-                    ["DependencyScore"] =
-                        dependency.Score,
-
-                    ["MaintainabilityScore"] =
-                        maintainability.Score,
-
-                    ["MissingGovernanceFiles"] =
-                        governance.MissingFiles,
-
-                    ["LargeFileCount"] =
-                        structure.LargeFiles,
-
-                    ["TodoCount"] =
-                        maintainability.TodoCount,
-
-                    ["ProjectCount"] =
-                        structure.ProjectCount,
-
-                    ["RepositoryHealthIndex"] =
-                        health
-                },
-
-                Metadata =
-                {
-                    ["Evaluator"] =
-                        Name,
-
-                    ["ProjectPath"] =
-                        projectPath,
-
-                    ["PolicyEnabled"] =
-                        "True"
-                }
-            });
-
-
+            Metadata =
+            {
+                ["Evaluator"] = Name,
+                ["ProjectPath"] = rootPath,
+                ["PolicyEnabled"] = "True",
+                ["RepositoryFileCount"] = files.Count.ToString(),
+                ["GovernanceStatus"] = governance.Status,
+                ["CICDStatus"] = cicd.Status,
+                ["StructureStatus"] = structure.Status,
+                ["MaintainabilityStatus"] = maintainability.Status,
+                ["DependencyStatus"] = dependency.Status
+            }
+        };
 
         _logger.LogInformation(
-            "✅ {Evaluator} completed RepositoryHealthIndex={Health}",
+            "{Evaluator} completed RepositoryHealthIndex={Health}.",
             Name,
             health);
 
-
-
-        return results;
+        return [result];
     }
 
-
-
-    private RepositoryMetric EvaluateGovernance(
-        string projectPath)
+    private RepositoryMetric EvaluateGovernance(string projectPath)
     {
         if (!_policy.EnforceGovernanceFiles)
         {
             return RepositoryMetric.Success();
         }
 
+        var requiredFiles = new HashSet<string>(
+            _policy.RequiredFiles ?? [],
+            StringComparer.OrdinalIgnoreCase);
 
-        var violations = 0;
-        var missing = 0;
-
-
-        foreach (var required in _policy.RequiredFiles)
+        if (_policy.RequireContributingGuide)
         {
-            if (!File.Exists(
-                    Path.Combine(
-                        projectPath,
-                        required)))
+            requiredFiles.Add("CONTRIBUTING.md");
+        }
+
+        // The version requirement is satisfied by either CHANGELOG.md
+        // or version.json. Do not independently require both files.
+        if (_policy.RequireVersionFile)
+        {
+            requiredFiles.Remove("CHANGELOG.md");
+            requiredFiles.Remove("version.json");
+        }
+
+        var missingFiles = new List<string>();
+        var totalRequirements = requiredFiles.Count;
+        var satisfiedRequirements = 0;
+
+        foreach (var requiredFile in requiredFiles)
+        {
+            var fullPath = ResolveRepositoryPath(
+                projectPath,
+                requiredFile);
+
+            if (File.Exists(fullPath))
             {
-                violations++;
-                missing++;
+                satisfiedRequirements++;
+            }
+            else
+            {
+                missingFiles.Add(requiredFile);
             }
         }
 
-
-        if (_policy.RequireContributingGuide &&
-            !File.Exists(
-                Path.Combine(
-                    projectPath,
-                    "CONTRIBUTING.md")))
+        if (_policy.RequireVersionFile)
         {
-            violations++;
+            totalRequirements++;
+
+            var hasVersionFile =
+                File.Exists(Path.Combine(projectPath, "CHANGELOG.md")) ||
+                File.Exists(Path.Combine(projectPath, "version.json"));
+
+            if (hasVersionFile)
+            {
+                satisfiedRequirements++;
+            }
+            else
+            {
+                missingFiles.Add("CHANGELOG.md or version.json");
+            }
         }
 
+        var violations = missingFiles.Count;
 
-        if (_policy.RequireVersionFile &&
-            !File.Exists(
-                    Path.Combine(
-                        projectPath,
-                        "CHANGELOG.md")) &&
-            !File.Exists(
-                    Path.Combine(
-                        projectPath,
-                        "version.json")))
-        {
-            violations++;
-        }
-
+        // Preserve the original scoring model while accounting for every
+        // missing governance requirement.
+        var score = Clamp(1 - violations * 0.1);
 
         return new RepositoryMetric
         {
-            Score =
-                Clamp(
-                    1 -
-                    violations * 0.1),
-
-            MissingFiles =
-                missing
+            Score = score,
+            MissingFiles = violations,
+            Status = violations == 0
+                ? "Compliant"
+                : "RequirementsMissing",
+            Details = string.Join(", ", missingFiles)
         };
     }
 
-
-
-    private RepositoryMetric EvaluateCiCd(
-        string projectPath)
+    private RepositoryMetric EvaluateCiCd(string projectPath)
     {
         if (!_policy.EnforceCiPresence)
         {
             return RepositoryMetric.Success();
         }
 
+        var configuredPaths = _policy.CiPaths ?? [];
 
-        var exists =
-            _policy.CiPaths.Any(
-                path =>
-                    Directory.Exists(
-                        Path.Combine(
-                            projectPath,
-                            path))
-                    ||
-                    File.Exists(
-                        Path.Combine(
-                            projectPath,
-                            path)));
+        var exists = configuredPaths.Any(path =>
+        {
+            var resolvedPath = ResolveRepositoryPath(projectPath, path);
 
+            return File.Exists(resolvedPath) ||
+                   Directory.Exists(resolvedPath);
+        });
 
         return new RepositoryMetric
         {
-            Score =
-                exists
-                    ? 1
-                    : 0.6
+            Score = exists ? 1 : 0.6,
+            Status = exists ? "ConfigurationFound" : "ConfigurationMissing"
         };
     }
-
-
 
     private RepositoryMetric EvaluateStructure(
         IReadOnlyCollection<string> files)
     {
-        var score = 1d;
+        var largeFiles = 0;
 
-
-        var largeFiles =
-            files.Count(
-                file =>
+        foreach (var file in files)
+        {
+            try
+            {
+                if (new FileInfo(file).Length > _policy.MaxFileSizeBytes)
                 {
-                    try
-                    {
-                        return new FileInfo(file).Length >
-                               _policy.MaxFileSizeBytes;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogDebug(
-                            ex,
-                            "Unable to inspect file {File}",
-                            file);
+                    largeFiles++;
+                }
+            }
+            catch (IOException exception)
+            {
+                _logger.LogDebug(
+                    exception,
+                    "Unable to inspect file size for {File}.",
+                    file);
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                _logger.LogDebug(
+                    exception,
+                    "Access denied while inspecting file size for {File}.",
+                    file);
+            }
+        }
 
-                        return false;
-                    }
-                });
+        var projectCount = files.Count(IsProjectFile);
 
+        var score = 1d;
 
         if (largeFiles > 0)
         {
-            score -=
-                Math.Min(
-                    0.3,
-                    largeFiles * 0.02);
+            score -= Math.Min(0.3, largeFiles * 0.02);
         }
 
-
-        var projects =
-            files.Count(
-                IsProjectFile);
-
-
-        if (projects >
-            _policy.MaxProjectsPerRepo)
+        if (projectCount > _policy.MaxProjectsPerRepo)
         {
             score -= 0.15;
         }
 
-
         return new RepositoryMetric
         {
-            Score =
-                Clamp(score),
-
-            LargeFiles =
-                largeFiles,
-
-            ProjectCount =
-                projects
+            Score = Clamp(score),
+            LargeFiles = largeFiles,
+            ProjectCount = projectCount,
+            Status = "Evaluated"
         };
     }
 
-
-
-    private async Task<RepositoryMetric>
-        EvaluateMaintainabilityAsync(
-            IReadOnlyCollection<string> files,
-            CancellationToken token)
+    private async Task<RepositoryMetric> EvaluateMaintainabilityAsync(
+        IReadOnlyCollection<string> files,
+        CancellationToken token)
     {
         if (!_policy.CheckTodoDensity)
         {
             return RepositoryMetric.Success();
         }
 
-
-        var sourceFiles =
-            files.Where(
-                    IsSourceFile)
-                .ToList();
-
+        var sourceFiles = files
+            .Where(IsSourceFile)
+            .ToArray();
 
         var todoCount = 0;
-
+        var unreadableFiles = 0;
 
         foreach (var file in sourceFiles)
         {
             token.ThrowIfCancellationRequested();
 
-
             try
             {
-                var content =
-                    await File.ReadAllTextAsync(
-                        file,
-                        token);
+                var content = await File.ReadAllTextAsync(file, token);
 
-
-                todoCount +=
-                    TodoRx.Matches(content)
-                        .Count;
+                todoCount += TodoRx.Matches(content).Count;
             }
-            catch (Exception ex)
+            catch (OperationCanceledException)
+                when (token.IsCancellationRequested)
             {
+                throw;
+            }
+            catch (IOException exception)
+            {
+                unreadableFiles++;
+
                 _logger.LogDebug(
-                    ex,
-                    "Unable to inspect source file {File}",
+                    exception,
+                    "Unable to inspect maintainability indicators in {File}.",
+                    file);
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                unreadableFiles++;
+
+                _logger.LogDebug(
+                    exception,
+                    "Access denied while inspecting {File}.",
                     file);
             }
         }
 
-
         var score = 1d;
 
-
-        if (sourceFiles.Count > 0)
+        if (sourceFiles.Length > 0)
         {
-            var density =
-                todoCount /
-                (double)sourceFiles.Count;
-
+            var density = todoCount / (double)sourceFiles.Length;
 
             if (density >= _policy.MaxTodoDensity)
             {
@@ -449,18 +426,16 @@ public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
             }
         }
 
-
         return new RepositoryMetric
         {
-            Score =
-                Clamp(score),
-
-            TodoCount =
-                todoCount
+            Score = Clamp(score),
+            TodoCount = todoCount,
+            Status = unreadableFiles > 0
+                ? "PartiallyEvaluated"
+                : "Evaluated",
+            UnreadableFiles = unreadableFiles
         };
     }
-
-
 
     private RepositoryMetric EvaluateDependencies(
         IReadOnlyCollection<string> files)
@@ -470,90 +445,167 @@ public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
             return RepositoryMetric.Success();
         }
 
-
-        var hasLock =
-            files.Any(
-                file =>
-                    DependencyLockFiles.Any(
-                        lockFile =>
-                            file.EndsWith(
-                                lockFile,
-                                StringComparison.OrdinalIgnoreCase)));
-
+        // Compare actual filenames rather than suffixes. In particular,
+        // pom.xml is a Maven project descriptor, not a dependency lockfile.
+        var hasLockFile = files.Any(file =>
+            DependencyLockFiles.Contains(Path.GetFileName(file)));
 
         return new RepositoryMetric
         {
-            Score =
-                hasLock
-                    ? 1
-                    : 0.8
+            Score = hasLockFile ? 1 : 0.8,
+            Status = hasLockFile
+                ? "LockfileFound"
+                : "LockfileMissing"
         };
     }
 
-
-
     private static List<string> EnumerateRepositoryFiles(
-        string path)
+        string rootPath,
+        CancellationToken token)
     {
-        return Directory
-            .EnumerateFiles(
-                path,
-                "*.*",
-                SearchOption.AllDirectories)
-            .Where(
-                f =>
-                    !IsExcludedDir(f))
-            .ToList();
+        var files = new List<string>();
+        var pendingDirectories = new Stack<string>();
+
+        pendingDirectories.Push(rootPath);
+
+        while (pendingDirectories.Count > 0)
+        {
+            token.ThrowIfCancellationRequested();
+
+            var currentDirectory = pendingDirectories.Pop();
+
+            IEnumerable<string> childDirectories;
+
+            try
+            {
+                childDirectories = Directory
+                    .EnumerateDirectories(currentDirectory)
+                    .ToArray();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+
+            foreach (var directory in childDirectories)
+            {
+                token.ThrowIfCancellationRequested();
+
+                var directoryName = Path.GetFileName(
+                    Path.TrimEndingDirectorySeparator(directory));
+
+                if (ExcludedDirectories.Contains(directoryName))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    // Avoid traversing directory links that could lead outside
+                    // the repository or create recursive traversal.
+                    if ((File.GetAttributes(directory) &
+                         FileAttributes.ReparsePoint) != 0)
+                    {
+                        continue;
+                    }
+                }
+                catch (IOException)
+                {
+                    continue;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    continue;
+                }
+
+                pendingDirectories.Push(directory);
+            }
+
+            try
+            {
+                // "*" includes extensionless files such as Dockerfile and
+                // does not omit files without an extension.
+                files.AddRange(Directory.EnumerateFiles(currentDirectory, "*"));
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Continue scanning the rest of the repository.
+            }
+            catch (IOException)
+            {
+                // Continue scanning the rest of the repository.
+            }
+        }
+
+        return files;
     }
 
-
-
-    private static bool IsProjectFile(
-        string file)
+    private static string ResolveRepositoryPath(
+        string projectPath,
+        string relativePath)
     {
+        var root = Path.GetFullPath(projectPath);
+        var resolved = Path.GetFullPath(Path.Combine(root, relativePath));
+        var relative = Path.GetRelativePath(root, resolved);
+
+        if (Path.IsPathRooted(relative) ||
+            relative.Equals("..", StringComparison.Ordinal) ||
+            relative.StartsWith(
+                $"..{Path.DirectorySeparatorChar}",
+                StringComparison.Ordinal) ||
+            relative.StartsWith(
+                $"..{Path.AltDirectorySeparatorChar}",
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Repository policy path '{relativePath}' escapes the repository root.");
+        }
+
+        return resolved;
+    }
+
+    private static bool IsProjectFile(string file)
+    {
+        var name = Path.GetFileName(file);
+        var extension = Path.GetExtension(file);
+
         return
-            file.EndsWith(
-                ".csproj",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(
-                "package.json",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(
-                "pom.xml",
-                StringComparison.OrdinalIgnoreCase);
+            extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".fsproj", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".vbproj", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("package.json", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("pom.xml", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("build.gradle", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase);
     }
 
-
-
-    private static bool IsSourceFile(
-        string file)
+    private static bool IsSourceFile(string file)
     {
-        return
-            file.EndsWith(".cs",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".java",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".ts",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".js",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".py",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".cpp",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".h",
-                StringComparison.OrdinalIgnoreCase);
+        return Path.GetExtension(file).ToLowerInvariant() switch
+        {
+            ".cs" => true,
+            ".java" => true,
+            ".ts" => true,
+            ".tsx" => true,
+            ".js" => true,
+            ".jsx" => true,
+            ".py" => true,
+            ".cpp" => true,
+            ".c" => true,
+            ".h" => true,
+            ".hpp" => true,
+            ".go" => true,
+            ".rs" => true,
+            _ => false
+        };
     }
-
-
 
     private static double ComputeRepositoryHealth(
         double governance,
@@ -568,23 +620,12 @@ public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
                 cicd * 0.20 +
                 structure * 0.25 +
                 dependency * 0.15 +
-                maintainability * 0.15)
-            * 100,
+                maintainability * 0.15) * 100,
             2);
     }
 
-
-
-    private static double Clamp(
-        double value)
-        =>
-            Math.Max(
-                0,
-                Math.Min(
-                    1,
-                    value));
-
-
+    private static double Clamp(double value) =>
+        Math.Max(0, Math.Min(1, value));
 
     private sealed class RepositoryMetric
     {
@@ -598,12 +639,17 @@ public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
 
         public int ProjectCount { get; init; }
 
+        public int UnreadableFiles { get; init; }
 
-        public static RepositoryMetric Success()
-            =>
-                new()
-                {
-                    Score = 1
-                };
+        public string Status { get; init; } = "Evaluated";
+
+        public string Details { get; init; } = string.Empty;
+
+        public static RepositoryMetric Success() =>
+            new()
+            {
+                Score = 1,
+                Status = "NotRequired"
+            };
     }
 }

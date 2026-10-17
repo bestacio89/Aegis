@@ -1,25 +1,108 @@
-﻿using System.Text.Json;
+﻿
+using System.Text.Json;
 using System.Text.RegularExpressions;
-
 using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Infrastructure;
-
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-
+using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
 namespace Aegis.Architecture.Evaluators.Infrastructure;
 
 public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 {
+    private const string FileScope = "File";
+    private const string ProjectScope = "Project";
+
+    private static readonly HashSet<string> ExcludedDirectories =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".git",
+            ".svn",
+            ".hg",
+            "node_modules",
+            "bin",
+            "obj",
+            "dist",
+            "build",
+            "coverage",
+            ".next",
+            ".nuxt",
+            "vendor",
+            "packages",
+            "TestResults",
+            ".idea",
+            ".vs"
+        };
+
+    private static readonly Regex SecretAssignmentRegex = new(
+        @"(?ix)
+        \b
+        (?<key>
+            password|passwd|secret|client_secret|access_token|
+            auth_token|api[_-]?key|private[_-]?key|
+            connectionstring|connection[_-]?string
+        )
+        \b
+        \s*[:=]\s*
+        (?<value>[^,\r\n#;]+)",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
+
+    private static readonly Regex HighEntropyCredentialNameRegex = new(
+        @"(?ix)
+        \b
+        (api[_-]?key|access[_-]?token|client[_-]?secret|
+         private[_-]?key|password|passwd|secret|auth[_-]?token)
+        \b",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
+
+    private static readonly Regex UnsafeDockerCommandRegex = new(
+        @"(?im)
+        ^\s*
+        (?:RUN|CMD|ENTRYPOINT|SHELL)\s+
+        .*?
+        (?:
+            chmod\s+0?777\b|
+            curl\b[^\r\n|]*\|\s*(?:sh|bash)\b|
+            wget\b[^\r\n|]*\|\s*(?:sh|bash)\b|
+            rm\s+-rf\s+/(?:\s|$)
+        )",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
+
+    private static readonly Regex PrivilegedContainerRegex = new(
+        @"(?im)^\s*privileged\s*:\s*true\s*(?:#.*)?$",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
+
+    private static readonly Regex FloatingImageRegex = new(
+     @"(?im)^\s*image\s*:\s*['""]?[^'""\s#]+:(?:latest|stable|main|master)['""]?\s*(?:#.*)?$",
+     RegexOptions.Compiled,
+     TimeSpan.FromMilliseconds(250));
+
+    private static readonly Regex UnpinnedPipRequirementRegex = new(
+        @"^\s*[A-Za-z0-9_.-]+(?:\[[^\]]+\])?\s*(?:$|[<>=!~])",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
+
     private readonly ConfigurationPolicy _policy;
 
-    public override string Name =>
-        "ConfigurationEvaluator";
+    public ConfigurationEvaluator(
+        ILogger<ConfigurationEvaluator> logger,
+        IOptions<AegisArchitecturePolicy> options)
+        : base(logger)
+    {
+        ArgumentNullException.ThrowIfNull(options);
 
+        _policy = options.Value.Configuration ?? new ConfigurationPolicy();
+    }
+
+    public override string Name => nameof(ConfigurationEvaluator);
 
     public override string[] SupportedLanguages =>
     [
@@ -30,602 +113,906 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         "TypeScript"
     ];
 
-
-    // Framework-agnostic: this evaluator detects Docker/CI-CD/config concerns by scanning
-    // for the relevant files itself (Dockerfile, CI pipeline configs, etc.) — it doesn't
-    // need the project's *primary* framework to already equal one of these tooling names.
-    // The previous list here ("Docker", "Kubernetes", ...) meant SupportsFramework almost
-    // never matched a real detected framework (e.g. ".NET (EF Core)"), so this evaluator
-    // was silently skipped for nearly every project regardless of whether Docker/CI-CD
-    // files were actually present.
-    public override string[] SupportedFrameworks =>
-    [
-        "*"
-    ];
-
-
-    private static readonly Regex SecretAssignmentRx =
-        new(
-            @"(?i)(password|passwd|secret|token|apikey|api_key|connectionstring|privatekey)\s*[:=]\s*['""]?([^'""\s]+)",
-            RegexOptions.Compiled);
-
-
-    private static readonly Regex UnsafeDockerCommandRx =
-        new(
-            @"\b(chmod\s+777|curl\s+.*\|\s*sh|wget\s+.*\|\s*sh|rm\s+-rf\s+/|apt-get\s+install)\b",
-            RegexOptions.Compiled |
-            RegexOptions.IgnoreCase);
-
-
-    private static readonly Regex UnsafePipelineCommandRx =
-        new(
-            @"\b(sudo|chmod\s+777|curl\s+.*\|\s*sh|wget\s+.*\|\s*sh|bash\s+-c)\b",
-            RegexOptions.Compiled |
-            RegexOptions.IgnoreCase);
-
-
-
-    public ConfigurationEvaluator(
-        ILogger<ConfigurationEvaluator> logger,
-        IOptions<AegisArchitecturePolicy> options)
-        : base(logger)
-    {
-        _policy =
-            options.Value.Configuration
-            ?? new ConfigurationPolicy();
-    }
-
-
+    public override string[] SupportedFrameworks => ["*"];
 
     protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
         EvaluateCoreAsync(
             string projectPath,
             CancellationToken token)
     {
-        var results = new List<ArchitectureEvaluatorResult>();
-
+        token.ThrowIfCancellationRequested();
 
         if (!_policy.Enabled)
         {
             _logger.LogInformation(
-                "⏭ {Evaluator} disabled by policy.",
+                "{Evaluator} is disabled by policy.",
                 Name);
 
-            return results;
+            return [];
         }
 
+        if (string.IsNullOrWhiteSpace(projectPath))
+        {
+            throw new ArgumentException(
+                "A project directory is required.",
+                nameof(projectPath));
+        }
 
+        var fullProjectPath = Path.GetFullPath(projectPath);
 
-        var files =
-            Directory.EnumerateFiles(
-                    projectPath,
-                    "*.*",
-                    SearchOption.AllDirectories)
-                .Where(IsConfigurationFile)
-                .Where(f => !IsExcludedDir(f))
-                .ToList();
+        if (!Directory.Exists(fullProjectPath))
+        {
+            return
+            [
+                CreateFailureResult(
+                    fullProjectPath,
+                    "ProjectDirectoryNotFound",
+                    $"Project directory does not exist: {fullProjectPath}")
+            ];
+        }
 
+        var diagnostics = new List<string>();
+        var fileResults = new List<ArchitectureEvaluatorResult>();
 
-
-        _logger.LogInformation(
-            "🌍 Running {Evaluator} on {Count} configuration files",
-            Name,
-            files.Count);
-
-
-
-        foreach (var file in files)
+        foreach (var file in EnumerateConfigurationFiles(
+                     fullProjectPath,
+                     diagnostics,
+                     token))
         {
             token.ThrowIfCancellationRequested();
-
 
             string content;
 
             try
             {
-                content =
-                    await File.ReadAllTextAsync(
-                        file,
-                        token);
+                content = await File.ReadAllTextAsync(file, token)
+                    .ConfigureAwait(false);
             }
-            catch
+            catch (OperationCanceledException)
+                when (token.IsCancellationRequested)
             {
+                throw;
+            }
+            catch (IOException exception)
+            {
+                diagnostics.Add(
+                    $"Could not read '{file}': {exception.Message}");
+
+                continue;
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                diagnostics.Add(
+                    $"Access denied for '{file}': {exception.Message}");
+
                 continue;
             }
 
+            var assessment = AssessFile(file, content);
 
-
-            var syntaxScore =
-                EvaluateSyntax(
-                    file,
-                    content);
-
-
-            var secretScore =
-                EvaluateSecrets(
-                    content);
-
-
-            var safetyScore =
-                EvaluateInfrastructureSafety(
-                    file,
-                    content);
-
-
-            var dependencyScore =
-                EvaluateDependencyDiscipline(
-                    file,
-                    content);
-
-
-
-            var integrityScore =
-                ComputeIntegrity(
-                    syntaxScore,
-                    secretScore,
-                    safetyScore,
-                    dependencyScore);
-
-
-
-            results.Add(
-                CreateFileResult(
-                    file,
-                    syntaxScore,
-                    secretScore,
-                    safetyScore,
-                    dependencyScore,
-                    integrityScore));
+            fileResults.Add(CreateFileResult(file, assessment));
         }
 
+        var summary = CreateSummaryResult(
+            fullProjectPath,
+            fileResults,
+            diagnostics);
 
-
-        if (results.Count > 0)
-        {
-            var evaluatedResults =
-                results.ToList();
-
-
-            results.Add(
-                CreateSummaryResult(
-                    projectPath,
-                    evaluatedResults));
-        }
-
-
+        fileResults.Add(summary);
 
         _logger.LogInformation(
-            "✅ {Evaluator} completed with {Count} metric entries",
+            "{Evaluator} completed. Files analyzed: {FileCount}; " +
+            "diagnostics: {DiagnosticCount}.",
             Name,
-            results.Count);
+            fileResults.Count - 1,
+            diagnostics.Count);
 
-
-
-        return results;
+        return fileResults;
     }
 
-
-
-    private ArchitectureEvaluatorResult CreateFileResult(
-        string file,
-        double syntax,
-        double secrets,
-        double safety,
-        double dependencies,
-        double integrity)
-    {
-        return new ArchitectureEvaluatorResult(
-            Name,
-            file)
-        {
-            Category =
-                DetectCategory(file),
-
-            Metrics =
-            {
-                ["SyntaxComplianceScore"] =
-                    syntax,
-
-                ["SecretExposureScore"] =
-                    secrets,
-
-                ["InfrastructureSafetyScore"] =
-                    safety,
-
-                ["DependencyPinningScore"] =
-                    dependencies,
-
-                ["ConfigurationIntegrityScore"] =
-                    integrity
-            },
-
-            Metadata =
-            {
-                ["FileName"] =
-                    Path.GetFileName(file),
-
-                ["FileType"] =
-                    Path.GetExtension(file),
-
-                ["Language"] =
-                    Context?.Language
-                    ?? "Unknown",
-
-                ["Framework"] =
-                    DetectFramework(file),
-
-                ["Target"] =
-                    file,
-
-                ["PolicyEnabled"] =
-                    _policy.Enabled.ToString()
-            }
-        };
-    }
-
-
-
-    private ArchitectureEvaluatorResult CreateSummaryResult(
+    private IEnumerable<string> EnumerateConfigurationFiles(
         string projectPath,
-        IReadOnlyCollection<ArchitectureEvaluatorResult> results)
+        ICollection<string> diagnostics,
+        CancellationToken token)
     {
-        var avgIntegrity =
-            Average(
-                results,
-                "ConfigurationIntegrityScore");
+        var pending = new Stack<string>();
+        pending.Push(projectPath);
 
-
-        var avgSyntax =
-            Average(
-                results,
-                "SyntaxComplianceScore");
-
-
-        var avgSecrets =
-            Average(
-                results,
-                "SecretExposureScore");
-
-
-        var avgSafety =
-            Average(
-                results,
-                "InfrastructureSafetyScore");
-
-
-        var avgDependencies =
-            Average(
-                results,
-                "DependencyPinningScore");
-
-
-
-        return new ArchitectureEvaluatorResult(
-            Name,
-            projectPath)
+        while (pending.Count > 0)
         {
-            Category =
-                "InfrastructureSummary",
+            token.ThrowIfCancellationRequested();
 
-            Metrics =
+            var directory = pending.Pop();
+            IEnumerable<string> subdirectories;
+            IEnumerable<string> files;
+
+            try
             {
-                ["ConfigurationFileCount"] =
-                    results.Count,
+                subdirectories = Directory.EnumerateDirectories(directory)
+                    .ToArray();
 
-                ["AverageIntegrityScore"] =
-                    avgIntegrity,
-
-                ["AverageSyntaxCompliance"] =
-                    avgSyntax,
-
-                ["AverageSecretProtection"] =
-                    avgSecrets,
-
-                ["AverageInfrastructureSafety"] =
-                    avgSafety,
-
-                ["AverageDependencyDiscipline"] =
-                    avgDependencies,
-
-                ["InfrastructureHealthIndex"] =
-                    avgIntegrity * 0.5 +
-                    avgSafety * 0.3 +
-                    avgSecrets * 0.2
-            },
-
-            Metadata =
-            {
-                ["Evaluator"] =
-                    Name,
-
-                ["PolicyEnabled"] =
-                    _policy.Enabled.ToString(),
-
-                ["CheckedFrameworks"] =
-                    string.Join(
-                        ", ",
-                        SupportedFrameworks)
+                files = Directory.EnumerateFiles(directory)
+                    .ToArray();
             }
+            catch (UnauthorizedAccessException exception)
+            {
+                diagnostics.Add(
+                    $"Access denied to directory '{directory}': " +
+                    exception.Message);
+
+                continue;
+            }
+            catch (IOException exception)
+            {
+                diagnostics.Add(
+                    $"Could not enumerate directory '{directory}': " +
+                    exception.Message);
+
+                continue;
+            }
+
+            foreach (var subdirectory in subdirectories)
+            {
+                token.ThrowIfCancellationRequested();
+
+                var directoryName = Path.GetFileName(
+                    subdirectory.TrimEnd(
+                        Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar));
+
+                if (ExcludedDirectories.Contains(directoryName))
+                {
+                    continue;
+                }
+
+                pending.Push(subdirectory);
+            }
+
+            foreach (var file in files)
+            {
+                token.ThrowIfCancellationRequested();
+
+                if (IsConfigurationFile(file))
+                {
+                    yield return file;
+                }
+            }
+        }
+    }
+
+    private FileAssessment AssessFile(string file, string content)
+    {
+        var assessment = new FileAssessment
+        {
+            Category = DetectCategory(file),
+            SyntaxValidation = ValidateSyntax(file, content)
         };
-    }
 
-
-
-    private static double Average(
-        IEnumerable<ArchitectureEvaluatorResult> results,
-        string metric)
-    {
-        return results.Average(
-            r =>
-                r.Metrics.GetValueOrDefault(
-                    metric,
-                    0));
-    }
-
-
-
-    private double EvaluateSyntax(
-        string file,
-        string content)
-    {
-        if (!_policy.ValidateSyntax)
-            return 1;
-
-
-
-        try
+        if (assessment.SyntaxValidation == SyntaxValidationStatus.Invalid)
         {
-            if (file.EndsWith(
-                    ".json",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                JsonDocument.Parse(content);
-            }
-
-
-            if (file.EndsWith(
-                    ".yaml",
-                    StringComparison.OrdinalIgnoreCase)
-                ||
-                file.EndsWith(
-                    ".yml",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                var yaml =
-                    new YamlStream();
-
-                yaml.Load(
-                    new StringReader(content));
-            }
-
-
-            return 1;
+            assessment.Findings.Add(
+                new Finding(
+                    "CFG-SYNTAX-001",
+                    "SyntaxValidation",
+                    "Error",
+                    "The configuration document failed syntax validation."));
         }
-        catch
-        {
-            return 0;
-        }
-    }
 
-
-
-    private double EvaluateSecrets(
-        string content)
-    {
         if (_policy.ForbiddenKeys.Length > 0)
         {
             foreach (var key in _policy.ForbiddenKeys)
             {
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    continue;
+                }
+
                 if (content.Contains(
                         key,
                         StringComparison.OrdinalIgnoreCase))
                 {
-                    return 0;
+                    assessment.Findings.Add(
+                        new Finding(
+                            "CFG-POLICY-001",
+                            "ForbiddenConfigurationKey",
+                            "Warning",
+                            $"Configuration contains a policy-forbidden key: " +
+                            $"{key}."));
+
+                    break;
                 }
             }
         }
 
+        DetectPotentialSecrets(content, assessment);
 
-        return SecretAssignmentRx.IsMatch(content)
-            ? 0.25
-            : 1;
-    }
-
-
-
-    private double EvaluateInfrastructureSafety(
-        string file,
-        string content)
-    {
-        if (!_policy.CheckInfrastructureConfigs)
-            return 1;
-
-
-        var category =
-            DetectCategory(file);
-
-
-        return category switch
+        if (_policy.CheckInfrastructureConfigs)
         {
-            "Container" =>
-                UnsafeDockerCommandRx.IsMatch(content)
-                    ? 0.5
-                    : 1,
+            AssessInfrastructureSafety(file, content, assessment);
+        }
 
-            "Pipeline" =>
-                UnsafePipelineCommandRx.IsMatch(content)
-                    ? 0.5
-                    : 1,
+        AssessDependencyDiscipline(file, content, assessment);
 
-            _ => 1
-        };
+        assessment.SecretExposureScore =
+            ComputeSecretExposureScore(assessment);
+
+        assessment.InfrastructureSafetyScore =
+            ComputeSafetyScore(assessment);
+
+        assessment.DependencyPinningScore =
+            ComputeDependencyScore(assessment);
+
+        assessment.SyntaxComplianceScore =
+            assessment.SyntaxValidation switch
+            {
+                SyntaxValidationStatus.Valid => 100,
+                SyntaxValidationStatus.Invalid => 0,
+                _ => -1
+            };
+
+        assessment.ConfigurationIntegrityScore =
+            ComputeIntegrityScore(assessment);
+
+        return assessment;
     }
 
-
-
-    private static double EvaluateDependencyDiscipline(
+    private static SyntaxValidationStatus ValidateSyntax(
         string file,
         string content)
     {
-        if (!IsDependencyFile(file))
-            return 1;
+        var extension = Path.GetExtension(file);
 
+        try
+        {
+            if (extension.Equals(
+                    ".json",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                using var document = JsonDocument.Parse(content);
 
-        var lines =
-            content.Split(
-                '\n',
-                StringSplitOptions.RemoveEmptyEntries);
+                return SyntaxValidationStatus.Valid;
+            }
 
+            if (extension.Equals(
+                    ".yaml",
+                    StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(
+                    ".yml",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var yaml = new YamlStream();
+                yaml.Load(new StringReader(content));
 
+                return SyntaxValidationStatus.Valid;
+            }
 
-        if (lines.Length == 0)
-            return 1;
-
-
-
-        var unpinned =
-            lines.Count(
-                line =>
-                    !line.StartsWith("#")
-                    &&
-                    !line.Contains("==")
-                    &&
-                    !line.Contains("@")
-                    &&
-                    !line.Contains("^"));
-
-
-
-        return Math.Max(
-            0,
-            1 -
-            (double)unpinned / lines.Length);
+            // No generic parser is available here for .env, Dockerfile,
+            // properties, package manifests, or CI pipeline syntax.
+            return SyntaxValidationStatus.NotValidated;
+        }
+        catch (JsonException)
+        {
+            return SyntaxValidationStatus.Invalid;
+        }
+        catch (YamlException)
+        {
+            return SyntaxValidationStatus.Invalid;
+        }
+        catch (ArgumentException)
+        {
+            return SyntaxValidationStatus.Invalid;
+        }
     }
 
-
-
-    private static bool IsDependencyFile(
-        string file)
+    private static void DetectPotentialSecrets(
+        string content,
+        FileAssessment assessment)
     {
-        return file.Contains(
-                   "requirements",
+        foreach (Match match in SecretAssignmentRegex.Matches(content))
+        {
+            var value = match.Groups["value"].Value.Trim();
+
+            if (IsPlaceholder(value))
+            {
+                continue;
+            }
+
+            assessment.Findings.Add(
+                new Finding(
+                    "CFG-SECRET-001",
+                    "PotentialSecretExposure",
+                    "Warning",
+                    "A configuration value assigned to a credential-like " +
+                    "key may contain a secret."));
+
+            break;
+        }
+
+        // A credential-like name alone is not sufficient evidence of
+        // exposure. Avoid classifying every declaration as a finding.
+        // Actual value validation belongs in a dedicated secret scanner.
+    }
+
+    private static bool IsPlaceholder(string value)
+    {
+        var normalized = value.Trim().Trim('"', '\'', '`');
+
+        if (normalized.Length == 0)
+        {
+            return true;
+        }
+
+        return normalized.StartsWith(
+                   "${",
+                   StringComparison.Ordinal)
+               || normalized.StartsWith(
+                   "$(",
+                   StringComparison.Ordinal)
+               || normalized.StartsWith(
+                   "{{",
+                   StringComparison.Ordinal)
+               || normalized.StartsWith(
+                   "<",
+                   StringComparison.Ordinal)
+               || normalized.Contains(
+                   "your_",
                    StringComparison.OrdinalIgnoreCase)
-               ||
-               file.Contains(
-                   "package",
+               || normalized.Contains(
+                   "placeholder",
+                   StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains(
+                   "example",
+                   StringComparison.OrdinalIgnoreCase)
+               || normalized.Equals(
+                   "changeme",
+                   StringComparison.OrdinalIgnoreCase)
+               || normalized.Equals(
+                   "replace_me",
+                   StringComparison.OrdinalIgnoreCase)
+               || normalized.Equals(
+                   "null",
                    StringComparison.OrdinalIgnoreCase);
     }
 
-
-
-    private static double ComputeIntegrity(
-        double syntax,
-        double secrets,
-        double safety,
-        double dependencies)
+    private static void AssessInfrastructureSafety(
+        string file,
+        string content,
+        FileAssessment assessment)
     {
+        var fileName = Path.GetFileName(file);
+
+        if (fileName.Equals(
+                "Dockerfile",
+                StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith(
+                "Dockerfile.",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            if (UnsafeDockerCommandRegex.IsMatch(content))
+            {
+                assessment.Findings.Add(
+                    new Finding(
+                        "CFG-DOCKER-001",
+                        "UnsafeDockerCommand",
+                        "Warning",
+                        "A Docker instruction contains a potentially unsafe " +
+                        "shell command. Review the command and its context."));
+            }
+        }
+
+        if (PrivilegedContainerRegex.IsMatch(content))
+        {
+            assessment.Findings.Add(
+                new Finding(
+                    "CFG-CONTAINER-001",
+                    "PrivilegedContainer",
+                    "Warning",
+                    "A container configuration enables privileged mode."));
+        }
+
+        if (FloatingImageRegex.IsMatch(content))
+        {
+            assessment.Findings.Add(
+                new Finding(
+                    "CFG-CONTAINER-002",
+                    "FloatingContainerImageTag",
+                    "Warning",
+                    "A container image uses a mutable or floating tag. " +
+                    "Consider an immutable digest."));
+        }
+    }
+
+    private static void AssessDependencyDiscipline(
+        string file,
+        string content,
+        FileAssessment assessment)
+    {
+        var fileName = Path.GetFileName(file);
+
+        if (fileName.Equals(
+                "requirements.txt",
+                StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith(
+                "requirements-",
+                StringComparison.OrdinalIgnoreCase)
+            && fileName.EndsWith(
+                ".txt",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            var requirements = content
+                .Split('\n')
+                .Select(line => line.Trim())
+                .Where(line =>
+                    line.Length > 0
+                    && !line.StartsWith('#')
+                    && !line.StartsWith('-'))
+                .ToArray();
+
+            foreach (var requirement in requirements)
+            {
+                if (!IsPinnedPipRequirement(requirement))
+                {
+                    assessment.Findings.Add(
+                        new Finding(
+                            "CFG-DEPENDENCY-001",
+                            "UnpinnedPythonDependency",
+                            "Warning",
+                            "A Python requirement does not specify an exact " +
+                            "version."));
+
+                    break;
+                }
+            }
+
+            assessment.DependencyCount = requirements.Length;
+            assessment.DependencyAnalysisAvailable = true;
+            return;
+        }
+
+        if (fileName.Equals(
+                "package.json",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(content);
+
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    return;
+                }
+
+                foreach (var sectionName in new[]
+                         {
+                             "dependencies",
+                             "devDependencies",
+                             "optionalDependencies"
+                         })
+                {
+                    if (!document.RootElement.TryGetProperty(
+                            sectionName,
+                            out var dependencies)
+                        || dependencies.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+
+                    foreach (var dependency in dependencies.EnumerateObject())
+                    {
+                        assessment.DependencyCount++;
+
+                        if (!IsExactPackageVersion(dependency.Value))
+                        {
+                            assessment.Findings.Add(
+                                new Finding(
+                                    "CFG-DEPENDENCY-002",
+                                    "NonExactNpmDependency",
+                                    "Information",
+                                    $"Dependency '{dependency.Name}' does not " +
+                                    "declare an exact version in package.json."));
+                        }
+                    }
+                }
+
+                assessment.DependencyAnalysisAvailable = true;
+            }
+            catch (JsonException)
+            {
+                // Syntax validation already records the parse failure.
+                assessment.DependencyAnalysisAvailable = false;
+            }
+        }
+    }
+
+    private static bool IsPinnedPipRequirement(string requirement)
+    {
+        if (requirement.StartsWith(
+                "-e ",
+                StringComparison.OrdinalIgnoreCase)
+            || requirement.Contains(
+                " @ ",
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var operatorIndex = requirement.IndexOf("==", StringComparison.Ordinal);
+
+        if (operatorIndex <= 0)
+        {
+            return false;
+        }
+
+        var version = requirement[(operatorIndex + 2)..].Trim();
+
+        return version.Length > 0
+               && !version.Contains('*')
+               && !version.Contains(',');
+    }
+
+    private static bool IsExactPackageVersion(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var version = value.GetString();
+
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return false;
+        }
+
+        // Conservative: plain numeric semantic versions are treated as
+        // exact. Ranges, tags, workspace references, aliases and Git URLs
+        // require package-manager-specific interpretation.
+        return Regex.IsMatch(
+            version,
+            @"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$",
+            RegexOptions.CultureInvariant,
+            TimeSpan.FromMilliseconds(100));
+    }
+
+    private ArchitectureEvaluatorResult CreateFileResult(
+        string file,
+        FileAssessment assessment)
+    {
+        var result = new ArchitectureEvaluatorResult(Name, file)
+        {
+            Category = assessment.Category
+        };
+
+        result.Metadata["EvaluationScope"] = FileScope;
+        result.Metadata["FilePath"] = file;
+        result.Metadata["FileName"] = Path.GetFileName(file);
+        result.Metadata["FileType"] = Path.GetExtension(file);
+        result.Metadata["Language"] = Context?.Language ?? "Unknown";
+        result.Metadata["Framework"] = DetectFramework(assessment.Category);
+        result.Metadata["PolicyEnabled"] = _policy.Enabled.ToString();
+        result.Metadata["SyntaxValidation"] =
+            assessment.SyntaxValidation.ToString();
+        result.Metadata["DependencyAnalysisAvailable"] =
+            assessment.DependencyAnalysisAvailable.ToString();
+
+        result.Metrics["SyntaxComplianceScore"] =
+            assessment.SyntaxComplianceScore;
+
+        result.Metrics["SecretExposureScore"] =
+            assessment.SecretExposureScore;
+
+        result.Metrics["InfrastructureSafetyScore"] =
+            assessment.InfrastructureSafetyScore;
+
+        result.Metrics["DependencyPinningScore"] =
+            assessment.DependencyPinningScore;
+
+        result.Metrics["ConfigurationIntegrityScore"] =
+            assessment.ConfigurationIntegrityScore;
+
+        result.Metrics["FindingCount"] = assessment.Findings.Count;
+        result.Metrics["DependencyCount"] = assessment.DependencyCount;
+
+        foreach (var finding in assessment.Findings)
+        {
+            result.Metadata[$"Finding.{finding.Id}"] =
+                $"{finding.Severity}: {finding.Description}";
+        }
+
+        return result;
+    }
+
+    private ArchitectureEvaluatorResult CreateSummaryResult(
+        string projectPath,
+        IReadOnlyCollection<ArchitectureEvaluatorResult> results,
+        IReadOnlyCollection<string> diagnostics)
+    {
+        var syntaxScores = results
+            .Select(r => r.Metrics.GetValueOrDefault("SyntaxComplianceScore", -1))
+            .Where(score => score >= 0)
+            .ToArray();
+
+        var secretScores = results
+            .Select(r => r.Metrics.GetValueOrDefault("SecretExposureScore", -1))
+            .Where(score => score >= 0)
+            .ToArray();
+
+        var safetyScores = results
+            .Select(r => r.Metrics.GetValueOrDefault("InfrastructureSafetyScore", -1))
+            .Where(score => score >= 0)
+            .ToArray();
+
+        var dependencyScores = results
+            .Select(r => r.Metrics.GetValueOrDefault("DependencyPinningScore", -1))
+            .Where(score => score >= 0)
+            .ToArray();
+
+        var integrityScores = results
+            .Select(r => r.Metrics.GetValueOrDefault("ConfigurationIntegrityScore", -1))
+            .Where(score => score >= 0)
+            .ToArray();
+
+        var summary = new ArchitectureEvaluatorResult(Name, projectPath)
+        {
+            Category = "InfrastructureSummary"
+        };
+
+        summary.Metadata["EvaluationScope"] = ProjectScope;
+        summary.Metadata["ProjectPath"] = projectPath;
+        summary.Metadata["PolicyEnabled"] = _policy.Enabled.ToString();
+        summary.Metadata["CheckedFrameworks"] =
+            string.Join(", ", SupportedFrameworks);
+        summary.Metadata["AnalysisStatus"] =
+            diagnostics.Count == 0 ? "Completed" : "CompletedWithDiagnostics";
+        summary.Metadata["Diagnostics"] = string.Join(
+            Environment.NewLine,
+            diagnostics.Take(50));
+
+        summary.Metrics["ConfigurationFileCount"] = results.Count;
+        summary.Metrics["DiagnosticCount"] = diagnostics.Count;
+        summary.Metrics["AverageSyntaxCompliance"] = AverageOrUnavailable(syntaxScores);
+        summary.Metrics["AverageSecretProtection"] = AverageOrUnavailable(secretScores);
+        summary.Metrics["AverageInfrastructureSafety"] = AverageOrUnavailable(safetyScores);
+        summary.Metrics["AverageDependencyDiscipline"] = AverageOrUnavailable(dependencyScores);
+        summary.Metrics["AverageIntegrityScore"] = AverageOrUnavailable(integrityScores);
+
+        var findingCount = results.Sum(
+            r => r.Metrics.GetValueOrDefault("FindingCount", 0));
+
+        summary.Metrics["FindingCount"] = findingCount;
+
+        // -1 means unavailable; it is not interpreted as a zero score.
+        summary.Metrics["InfrastructureHealthIndex"] =
+            AverageOrUnavailable(integrityScores);
+
+        return summary;
+    }
+
+    private ArchitectureEvaluatorResult CreateFailureResult(
+        string projectPath,
+        string status,
+        string diagnostic)
+    {
+        var result = new ArchitectureEvaluatorResult(Name, projectPath)
+        {
+            Category = "InfrastructureSummary"
+        };
+
+        result.Metadata["EvaluationScope"] = ProjectScope;
+        result.Metadata["ProjectPath"] = projectPath;
+        result.Metadata["AnalysisStatus"] = status;
+        result.Metadata["Diagnostic"] = diagnostic;
+
+        return result;
+    }
+
+    private static double ComputeSecretExposureScore(
+        FileAssessment assessment)
+    {
+        var hasPotentialExposure = assessment.Findings.Any(
+            finding => finding.Id == "CFG-SECRET-001");
+
+        var hasForbiddenKey = assessment.Findings.Any(
+            finding => finding.Id == "CFG-POLICY-001");
+
+        return hasPotentialExposure || hasForbiddenKey ? 0 : 100;
+    }
+
+    private static double ComputeSafetyScore(FileAssessment assessment)
+    {
+        var safetyFindings = assessment.Findings.Count(
+            finding => finding.Id.StartsWith(
+                "CFG-DOCKER-",
+                StringComparison.Ordinal)
+                || finding.Id.StartsWith(
+                    "CFG-CONTAINER-",
+                    StringComparison.Ordinal));
+
+        return safetyFindings == 0 ? 100 : 0;
+    }
+
+    private static double ComputeDependencyScore(FileAssessment assessment)
+    {
+        if (!assessment.DependencyAnalysisAvailable
+            || assessment.DependencyCount == 0)
+        {
+            return -1;
+        }
+
+        var dependencyFindings = assessment.Findings.Count(
+            finding => finding.Id.StartsWith(
+                "CFG-DEPENDENCY-",
+                StringComparison.Ordinal));
+
+        var unpinnedCount = Math.Min(
+            dependencyFindings,
+            assessment.DependencyCount);
+
         return Math.Round(
-            (
-                syntax * 0.3 +
-                secrets * 0.3 +
-                safety * 0.25 +
-                dependencies * 0.15
-            ) * 100,
+            100.0 * (assessment.DependencyCount - unpinnedCount)
+            / assessment.DependencyCount,
             2);
     }
 
-
-
-    private static bool IsConfigurationFile(
-        string file)
+    private static double ComputeIntegrityScore(FileAssessment assessment)
     {
-        var normalized =
-            file.Replace(
-                '\\',
-                '/');
+        if (assessment.SyntaxComplianceScore < 0)
+        {
+            return -1;
+        }
 
-        return
-            file.EndsWith(".json",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".yaml",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".yml",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".env",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".properties",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            Path.GetFileName(file)
-                .Equals(
-                    "Dockerfile",
-                    StringComparison.OrdinalIgnoreCase)
-            ||
-            normalized.Contains(".github/workflows")
-            ||
-            normalized.Contains(".gitlab-ci.yml");
+        // Do not let unavailable dependency analysis count as perfect.
+        var components = new List<(double Score, double Weight)>
+        {
+            (assessment.SyntaxComplianceScore, 0.30),
+            (assessment.SecretExposureScore, 0.30),
+            (assessment.InfrastructureSafetyScore, 0.25)
+        };
+
+        if (assessment.DependencyPinningScore >= 0)
+        {
+            components.Add((assessment.DependencyPinningScore, 0.15));
+        }
+
+        var totalWeight = components.Sum(component => component.Weight);
+
+        return Math.Round(
+            components.Sum(component => component.Score * component.Weight)
+            / totalWeight,
+            2);
     }
 
-
-
-    private static string DetectCategory(
-        string file)
+    private static double AverageOrUnavailable(IEnumerable<double> values)
     {
-        if (file.Contains(
-                "Docker",
-                StringComparison.OrdinalIgnoreCase))
+        var array = values.ToArray();
+
+        return array.Length == 0
+            ? -1
+            : Math.Round(array.Average(), 2);
+    }
+
+    private static bool IsConfigurationFile(string file)
+    {
+        var name = Path.GetFileName(file);
+        var normalized = file.Replace('\\', '/');
+
+        return Path.GetExtension(file).ToLowerInvariant() is
+                   ".json" or ".yaml" or ".yml" or ".env" or ".properties"
+               || name.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase)
+               || name.StartsWith("Dockerfile.", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("package.json", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("requirements.txt", StringComparison.OrdinalIgnoreCase)
+               || name.StartsWith("requirements-", StringComparison.OrdinalIgnoreCase)
+                   && name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("Pipfile", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("Pipfile.lock", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("poetry.lock", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("package-lock.json", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("pnpm-lock.yaml", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("yarn.lock", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("Cargo.toml", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("Cargo.lock", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("go.mod", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("go.sum", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("pom.xml", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("build.gradle", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("NuGet.config", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("nuget.config", StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains(".github/workflows/", StringComparison.OrdinalIgnoreCase)
+               || normalized.EndsWith(".gitlab-ci.yml", StringComparison.OrdinalIgnoreCase)
+               || name.StartsWith("docker-compose", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("compose.yaml", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("compose.yml", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string DetectCategory(string file)
+    {
+        var name = Path.GetFileName(file);
+        var normalized = file.Replace('\\', '/');
+
+        if (name.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("Dockerfile.", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("docker-compose", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("compose.", StringComparison.OrdinalIgnoreCase))
+        {
             return "Container";
+        }
 
-
-        if (file.Contains(".github",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.Contains(".gitlab",
-                StringComparison.OrdinalIgnoreCase))
+        if (normalized.Contains(".github/workflows/", StringComparison.OrdinalIgnoreCase)
+            || normalized.EndsWith(".gitlab-ci.yml", StringComparison.OrdinalIgnoreCase))
+        {
             return "Pipeline";
+        }
 
+        if (name.Contains("lock", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("package.json", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("requirements.txt", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("requirements-", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("Pipfile", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("Cargo.toml", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("go.mod", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("pom.xml", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("build.gradle", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("NuGet.config", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Dependencies";
+        }
 
-        if (file.EndsWith(".yaml",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".yml",
-                StringComparison.OrdinalIgnoreCase))
-            return "Kubernetes";
-
-
-        if (file.EndsWith(".env",
-                StringComparison.OrdinalIgnoreCase))
+        if (Path.GetExtension(file).Equals(".env", StringComparison.OrdinalIgnoreCase))
+        {
             return "Environment";
+        }
 
+        if (Path.GetExtension(file).Equals(".yaml", StringComparison.OrdinalIgnoreCase)
+            || Path.GetExtension(file).Equals(".yml", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Kubernetes";
+        }
 
         return "Configuration";
     }
 
-
-
-    private static string DetectFramework(
-        string file)
-    {
-        return DetectCategory(file) switch
+    private static string DetectFramework(string category) =>
+        category switch
         {
-            "Container" =>
-                "Docker",
-
-            "Pipeline" =>
-                "CI/CD",
-
-            "Kubernetes" =>
-                "Kubernetes",
-
-            "Environment" =>
-                "Environment",
-
-            _ =>
-                "Generic"
+            "Container" => "Docker",
+            "Pipeline" => "CI/CD",
+            "Dependencies" => "PackageManagement",
+            "Kubernetes" => "Kubernetes",
+            "Environment" => "Environment",
+            _ => "Generic"
         };
+
+    private enum SyntaxValidationStatus
+    {
+        Valid,
+        Invalid,
+        NotValidated
     }
+
+    private sealed class FileAssessment
+    {
+        public string Category { get; set; } = "Configuration";
+        public SyntaxValidationStatus SyntaxValidation { get; set; }
+
+        public double SyntaxComplianceScore { get; set; }
+        public double SecretExposureScore { get; set; }
+        public double InfrastructureSafetyScore { get; set; }
+        public double DependencyPinningScore { get; set; }
+        public double ConfigurationIntegrityScore { get; set; }
+
+        public int DependencyCount { get; set; }
+        public bool DependencyAnalysisAvailable { get; set; }
+
+        public List<Finding> Findings { get; } = [];
+    }
+
+    private sealed record Finding(
+        string Id,
+        string Type,
+        string Severity,
+        string Description);
 }

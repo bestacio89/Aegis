@@ -17,6 +17,7 @@ public static class PersistenceRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-TXN-R1",
+            Scope = RuleEvaluationScope.Project,
             Name = "Transaction Integrity Low",
             Category = nameof(ArchitectureRuleCategory.Persistence),
             MetricKey = "TransactionIntegrityIndex",
@@ -33,6 +34,7 @@ public static class PersistenceRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-TXN-R2",
+            Scope = RuleEvaluationScope.Project,
             Name = "Data Access Hygiene Violation",
             Category = nameof(ArchitectureRuleCategory.Persistence),
             MetricKey = "DataAccessHygieneIndex",
@@ -49,6 +51,7 @@ public static class PersistenceRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-TXN-R3",
+            Scope = RuleEvaluationScope.Project,
             Name = "Connection Pool Misuse",
             Category = nameof(ArchitectureRuleCategory.Persistence),
             MetricKey = "ConnectionPoolAbuseCount",
@@ -64,6 +67,7 @@ public static class PersistenceRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-TXN-R4",
+            Scope = RuleEvaluationScope.Project,
             Name = "Uncommitted Data Detected",
             Category = nameof(ArchitectureRuleCategory.Persistence),
             MetricKey = "UncommittedTransactionCount",

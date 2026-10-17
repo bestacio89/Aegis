@@ -2,6 +2,12 @@
 
 namespace Aegis.Shared.Architecture.Models.Rules;
 
+public enum RuleEvaluationScope
+{
+    File,
+    Project
+}
+
 public sealed class ArchitectureRuleDefinition
 {
     public string Id { get; init; } = "";
@@ -9,6 +15,11 @@ public sealed class ArchitectureRuleDefinition
     public string Name { get; init; } = "";
 
     public string Category { get; init; } = "";
+
+    /// <summary>
+    /// Evidence scope required by this rule: per-file or project aggregate.
+    /// </summary>
+    public RuleEvaluationScope Scope { get; init; } = RuleEvaluationScope.File;
 
     public string MetricKey { get; init; } = "";
 

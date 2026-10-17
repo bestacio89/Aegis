@@ -9,6 +9,9 @@
     <File Path="Aegis.ruleset" />
     <File Path="Directory.Build.props" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Aegis.Architecture.Tests/Aegis.Architecture.Tests.csproj" />
+  </Folder>
   <Folder Name="/sources/">
     <Project Path="sources/Aegis.App.WPF/Aegis.Wpf.csproj" />
     <Project Path="sources/Aegis.Cli/Aegis.Cli.csproj" />

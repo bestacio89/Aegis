@@ -208,6 +208,12 @@ public static class ArchitectureRuleRegistry
                     $"Rule '{rule.Id}' has an invalid severity.");
             }
 
+            if (!Enum.IsDefined(rule.Scope))
+            {
+                errors.Add(
+                    $"Rule '{rule.Id}' has an invalid evaluation scope.");
+            }
+
             if (string.IsNullOrWhiteSpace(rule.Recommendation))
             {
                 errors.Add(

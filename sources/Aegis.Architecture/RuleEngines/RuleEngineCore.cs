@@ -276,7 +276,7 @@ public sealed class RuleEngineCore
 
             if (!matchedAnyRuleMetric && applicableRules.Count > 0)
             {
-                factsWithoutMatchingMetrics++;
+                factsWithoutMatchingScopedMetrics++;
             }
         }
 
@@ -419,7 +419,7 @@ public sealed class RuleEngineCore
             projectSummaryFacts,
             skippedNonFiniteMetrics,
             skippedInvalidThresholds,
-            factsWithoutMatchingMetrics);
+            factsWithoutMatchingScopedMetrics);
 
 
         return new RuleEvaluationOutcome(results, stats, evaluations); 

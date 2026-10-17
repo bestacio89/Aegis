@@ -50,12 +50,12 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             "TestResults"
         };
 
+    // Interfaces are scored separately and must not also inflate the type score.
     private static readonly Regex TypeDeclarationRx = new(
         """
         \b
         (?:
             class
-            | interface
             | enum
             | record
             | struct
@@ -71,6 +71,29 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         RegexOptions.Compiled |
         RegexOptions.IgnorePatternWhitespace,
         TimeSpan.FromMilliseconds(500));
+
+    // Lexical masking prevents declarations in comments and literals from
+    // becoming findings. This is a safeguard, not a substitute for AST parsing.
+    private static readonly Regex NonCodeRx = new(
+        """"
+        (?s)
+        (?<literal>
+            @?"(?:""|\\.|[^"\\])*"
+            | '(?:\\.|[^'\\])*'
+            | """.*?"""
+            | '''.*?'''
+            | \x60(?:\\.|[^\x60\\])*\x60
+        )
+        |
+        (?<comment>
+            //[^\x0D\x0A]*
+            | /\*.*?\*/
+            | \#[^\x0D\x0A]*
+        )
+        """",
+        RegexOptions.Compiled |
+        RegexOptions.IgnorePatternWhitespace,
+        TimeSpan.FromMilliseconds(750));
 
     private static readonly Regex PythonClassRx = new(
         @"(?m)^\s*class\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\(|:)",
@@ -331,13 +354,16 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         result.Metadata["Language"] = language;
         result.Metadata["AnalysisMethod"] = "LanguageAwareDeclarationHeuristics";
 
-        var typeNames = ExtractTypeNames(content, language);
+        var analysisContent = MaskNonCode(content);
+        result.Metadata["AnalysisMethod"] = "LexicallyMaskedDeclarationHeuristics";
+
+        var typeNames = ExtractTypeNames(analysisContent, language);
 
         var typeViolations = typeNames.Count(
             name => !convention.IsValidTypeName(name));
 
         var interfaceNames = InterfaceDeclarationRx
-            .Matches(content)
+            .Matches(analysisContent)
             .Select(match => match.Groups["name"].Value)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
@@ -345,17 +371,17 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         var interfaceViolations = interfaceNames.Count(
             name => !convention.IsValidInterfaceName(name));
 
-        var methodNames = ExtractMethodNames(content, language);
+        var methodNames = ExtractMethodNames(analysisContent, language);
 
         var methodViolations = methodNames.Count(
             name => !convention.IsValidMethodName(name));
 
-        var variableNames = ExtractVariableNames(content, language);
+        var variableNames = ExtractVariableNames(analysisContent, language);
 
         var variableViolations = variableNames.Count(
             name => !convention.IsValidVariableName(name));
 
-        var constantNames = ExtractConstantNames(content, language);
+        var constantNames = ExtractConstantNames(analysisContent, language);
 
         var constantViolations = constantNames.Count(
             name => !convention.IsValidConstantName(name));
@@ -397,6 +423,12 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         result.Metrics["MethodViolationCount"] = methodViolations;
         result.Metrics["VariableViolationCount"] = variableViolations;
         result.Metrics["ConstantViolationCount"] = constantViolations;
+        result.Metrics["DeclarationsAnalyzed"] =
+            typeNames.Count +
+            interfaceNames.Length +
+            methodNames.Count +
+            variableNames.Count +
+            constantNames.Count;
 
         result.Metrics["NamingComplianceScore"] =
             Math.Round(compliance, 2);
@@ -417,7 +449,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         int unreadableFileCount)
     {
         var averageScore = fileResults.Count == 0
-            ? 100
+            ? 0
             : fileResults.Average(result =>
                 result.Metrics.GetValueOrDefault(
                     "NamingComplianceScore",
@@ -442,6 +474,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                 ["UnreadableFiles"] = unreadableFileCount,
                 ["AverageNamingComplianceScore"] = Math.Round(averageScore, 2),
                 ["TotalNamingViolations"] = totalViolations,
+                ["DeclarationsAnalyzed"] = fileResults.Sum(result =>
+                    result.Metrics.GetValueOrDefault("DeclarationsAnalyzed", 0)),
                 ["NamingHealthIndex"] = Math.Round(averageScore, 2)
             },
 
@@ -449,13 +483,34 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             {
                 ["Evaluator"] = Name,
                 ["ProjectPath"] = projectPath,
-                ["EvaluationStatus"] = fileResults.Count == 0
-                    ? "NoReadableSourceFiles"
-                    : unreadableFileCount > 0
-                        ? "PartiallyEvaluated"
-                        : "Evaluated"
+                ["EvaluationStatus"] = discoveredFileCount == 0
+                    ? "NoApplicableFiles"
+                    : fileResults.Count == 0
+                        ? "AnalysisFailed"
+                        : unreadableFileCount > 0
+                            ? "PartiallyEvaluated"
+                            : "Evaluated"
             }
         };
+    }
+
+    private static string MaskNonCode(string content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        return NonCodeRx.Replace(content, match =>
+            string.Create(
+                match.Length,
+                match.Value,
+                static (span, value) =>
+                {
+                    for (var index = 0; index < value.Length; index++)
+                    {
+                        span[index] = value[index] is '\r' or '\n'
+                            ? value[index]
+                            : ' ';
+                    }
+                }));
     }
 
     private static List<string> ExtractTypeNames(

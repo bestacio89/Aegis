@@ -338,6 +338,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
             Metadata =
             {
+                [EvaluationScopeMetadataKey] = ProjectScope,
                 ["Evaluator"] = Name,
                 ["PolicyEnabled"] = _policy.Enabled.ToString(),
                 ["SupportedFrameworks"] = string.Join(

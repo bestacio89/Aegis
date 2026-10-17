@@ -2,10 +2,16 @@ name: architecture tests
 
 on:
   pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   push:
     branches:
       - main
       - develop
+      - 'fix/**'
 
 permissions:
   contents: read

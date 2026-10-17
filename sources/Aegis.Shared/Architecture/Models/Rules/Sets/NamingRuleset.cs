@@ -17,6 +17,7 @@ public static class NamingRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-NAM-R1",
+            Scope = RuleEvaluationScope.File,
             Name = "Type Naming Compliance Too Low",
             Category = nameof(ArchitectureRuleCategory.Naming),
             MetricKey = "TypeNamingCompliance",
@@ -28,6 +29,7 @@ public static class NamingRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-NAM-R2",
+            Scope = RuleEvaluationScope.File,
             Name = "Interface Naming Compliance Too Low",
             Category = nameof(ArchitectureRuleCategory.Naming),
             MetricKey = "InterfaceNamingCompliance",
@@ -43,6 +45,7 @@ public static class NamingRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-NAM-R3",
+            Scope = RuleEvaluationScope.File,
             Name = "Method Naming Style Non-Compliant",
             Category = nameof(ArchitectureRuleCategory.Naming),
             MetricKey = "MethodNamingCompliance",
@@ -58,6 +61,7 @@ public static class NamingRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-NAM-R4",
+            Scope = RuleEvaluationScope.File,
             Name = "Variable Naming Style Non-Compliant",
             Category = nameof(ArchitectureRuleCategory.Naming),
             MetricKey = "VariableNamingCompliance",
@@ -73,6 +77,7 @@ public static class NamingRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-NAM-R5",
+            Scope = RuleEvaluationScope.File,
             Name = "File Naming Compliance Too Low",
             Category = nameof(ArchitectureRuleCategory.Naming),
             MetricKey = "FileNamingCompliance",
@@ -88,6 +93,7 @@ public static class NamingRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-NAM-R6",
+            Scope = RuleEvaluationScope.File,
             Name = "Global Naming Compliance Low",
             Category = nameof(ArchitectureRuleCategory.Naming),
             MetricKey = "NamingComplianceScore",

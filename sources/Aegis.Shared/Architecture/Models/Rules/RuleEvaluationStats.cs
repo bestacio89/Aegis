@@ -31,14 +31,12 @@ public sealed class RuleEvaluationStats
     public int EvaluationsInsufficientEvidence { get; init; }
 
     public int EvaluationsErrored { get; init; }
-<<<<<<< Updated upstream
-=======
     /// <summary>Individual rule checks that passed.</summary>
     public int ChecksPassed { get; init; }
 
     /// <summary>Individual rule checks that produced violations.</summary>
     public int ChecksViolated { get; init; }
->>>>>>> Stashed changes
+
 
     /// <summary>
     /// Number of valid rule-to-measurement comparisons completed.

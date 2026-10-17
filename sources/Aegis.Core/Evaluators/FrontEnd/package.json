@@ -1,0 +1,15 @@
+{
+  "name": "aegis-frontend-analyzers",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Compiler-backed frontend analysis tools for Aegis",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "@angular/compiler": "21.2.23",
+    "@angular/compiler-cli": "21.2.23",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,12 +1,6 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿
+<Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Shared build configuration -->
-
-
-
-  <!-- =============================================
-       AEGIS CORE — Rule Engine and Evaluation Logic
-       ============================================= -->
   <PropertyGroup>
     <AssemblyName>Aegis.Core</AssemblyName>
     <RootNamespace>Aegis.Core</RootNamespace>
@@ -14,22 +8,28 @@
       Core rule engine and evaluation logic for Aegis.
       Handles scanning orchestration, rule evaluation, and scoring.
     </Description>
+
+    <FrontendAnalyzerDirectory>
+      $(MSBuildProjectDirectory)\Evaluators\FrontEnd
+    </FrontendAnalyzerDirectory>
+
+    <FrontendAnalyzerEntryPoint>
+      $(FrontendAnalyzerDirectory)\frontend-analyzer.mjs
+    </FrontendAnalyzerEntryPoint>
+
+    <FrontendAnalyzerOutputDirectory>
+      $(OutDir)Evaluators\FrontEnd
+    </FrontendAnalyzerOutputDirectory>
   </PropertyGroup>
 
-  <!-- =============================================
-       Folder Structure (for clarity in Solution Explorer)
-       ============================================= -->
+  <ItemGroup>
+    <Compile Include="Evaluators\FrontEnd\frontend-analyzer.mjs" />
+  </ItemGroup>
 
-  <!-- =============================================
-       Project References
-       ============================================= -->
   <ItemGroup>
     <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />
   </ItemGroup>
 
-  <!-- =============================================
-       Dependencies (explicit)
-       ============================================= -->
   <ItemGroup>
     <!-- Franz Framework Core -->
     <PackageReference Include="Franz.Common.Mediator" Version="2.2.17" />
@@ -38,10 +38,45 @@
 
     <!-- Utilities -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-
-    <!-- Optional: future extensibility -->
     <PackageReference Include="FluentValidation" Version="12.1.1" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
+
+    <!-- C# syntax and semantic analysis -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+
+    <!-- Razor parsing: retain until the Razor evaluator is migrated and verified -->
+    <PackageReference Include="Microsoft.AspNetCore.Razor.Language" Version="6.0.36" />
+
+    <!-- Retained pending usage audit in other evaluators -->
+    <PackageReference Include="Jint" Version="4.2.1" />
+    <PackageReference Include="AngleSharp" Version="1.3.0" />
   </ItemGroup>
+
+  <!-- Restore the locked frontend analyzer dependencies before compiling. -->
+  <Target Name="RestoreFrontendAnalyzerDependencies" BeforeTargets="Build" Condition="Exists('$(FrontendAnalyzerDirectory)\package.json')">
+
+    <Error Condition="!Exists('$(FrontendAnalyzerDirectory)\package-lock.json')" Text="Frontend analyzer package-lock.json is missing. Run npm install in Evaluators\FrontEnd." />
+
+    <Error Condition="'$(DesignTimeBuild)' != 'true' and '$(FrontendAnalyzerEntryPoint)' != '' and !Exists('$(FrontendAnalyzerEntryPoint)')" Text="Frontend analyzer entry point is missing: $(FrontendAnalyzerEntryPoint)" />
+
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(FrontendAnalyzerDirectory)" Condition="'$(DesignTimeBuild)' != 'true'" />
+  </Target>
+
+  <!-- Copy the analyzer and its locked runtime dependencies to Aegis.Core output. -->
+  <Target Name="CopyFrontendAnalyzerToOutput" AfterTargets="Build" Condition="Exists('$(FrontendAnalyzerDirectory)\package.json')">
+
+    <ItemGroup>
+      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\frontend-analyzer.mjs" />
+      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\package.json" />
+      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\package-lock.json" />
+      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\node_modules\**\*" />
+    </ItemGroup>
+
+    <Error Condition="!Exists('$(FrontendAnalyzerDirectory)\node_modules\typescript\package.json')" Text="TypeScript analyzer dependencies are not installed." />
+
+    <MakeDir Directories="$(FrontendAnalyzerOutputDirectory)" />
+
+    <Copy SourceFiles="@(FrontendAnalyzerRuntimeFiles)" DestinationFiles="@(FrontendAnalyzerRuntimeFiles->'$(FrontendAnalyzerOutputDirectory)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

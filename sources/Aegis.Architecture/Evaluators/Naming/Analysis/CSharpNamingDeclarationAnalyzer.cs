@@ -185,10 +185,20 @@ public sealed class CSharpNamingDeclarationAnalyzer : INamingDeclarationAnalyzer
                 return;
 
             var position = identifier.GetLocation().GetLineSpan().StartLinePosition;
-            var isPublic = modifiers.Any(SyntaxKind.PublicKeyword)
-                || modifiers.Any(SyntaxKind.ProtectedKeyword)
-                || modifiers.Any(SyntaxKind.InternalKeyword)
-                || modifiers.Any(SyntaxKind.PrivateKeyword);
+            // Explicit private/protected-private/private-protected declarations are
+            // not public API. Internal and protected declarations are included in
+            // the current public-facing naming policy; private is never evidence
+            // of public visibility.
+            var accessibility = modifiers.FirstOrDefault(modifier =>
+                modifier.IsKind(SyntaxKind.PublicKeyword)
+                || modifier.IsKind(SyntaxKind.PrivateKeyword)
+                || modifier.IsKind(SyntaxKind.ProtectedKeyword)
+                || modifier.IsKind(SyntaxKind.InternalKeyword));
+
+            var isPublic =
+                accessibility.IsKind(SyntaxKind.PublicKeyword)
+                || accessibility.IsKind(SyntaxKind.ProtectedKeyword)
+                || accessibility.IsKind(SyntaxKind.InternalKeyword);
 
             _declarations.Add(new NamingDeclaration(
                 identifier.ValueText,

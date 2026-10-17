@@ -17,6 +17,7 @@ public static class BackendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-BACK-R1",
+            Scope = RuleEvaluationScope.Project,
             Name = "Cohesion Too Low",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "CohesionIndex",
@@ -32,6 +33,7 @@ public static class BackendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-BACK-R2",
+            Scope = RuleEvaluationScope.Project,
             Name = "Complexity Exceeds Recommended Limit",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "CyclomaticComplexityIndex",
@@ -47,6 +49,7 @@ public static class BackendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-BACK-R3",
+            Scope = RuleEvaluationScope.Project,
             Name = "Dependency Graph Too Dense",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "DependencyGraphDensity",
@@ -62,6 +65,7 @@ public static class BackendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-BACK-R4",
+            Scope = RuleEvaluationScope.Project,
             Name = "Error Handling Incomplete",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "ErrorHandlingCoverage",
@@ -77,6 +81,7 @@ public static class BackendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-BACK-R5",
+            Scope = RuleEvaluationScope.Project,
             Name = "Maintainability Index Too Low",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "MaintainabilityIndex",

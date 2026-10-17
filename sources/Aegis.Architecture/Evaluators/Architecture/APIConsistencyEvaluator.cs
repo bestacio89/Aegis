@@ -1,8 +1,8 @@
-﻿using System.Text.Json;
+﻿
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
-using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
 using Franz.Common.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -40,7 +40,7 @@ public sealed class ApiConsistencyEvaluator
     ];
 
     private static readonly Regex RouteRx = new(
-        @"[""'](\/[a-zA-Z0-9_\-\/\{\}]+)[""']",
+        @"[""'](\/?[a-zA-Z0-9_\-\/\{\}]+)[""']",
         RegexOptions.Compiled);
 
     private static readonly Regex HttpAttributeRx = new(
@@ -52,7 +52,7 @@ public sealed class ApiConsistencyEvaluator
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex UppercaseRouteRx = new(
-        @"/[^\s]*[A-Z]",
+        @"/[^/\s]*[A-Z]",
         RegexOptions.Compiled);
 
     private static readonly Regex TrailingSlashRx = new(
@@ -65,12 +65,12 @@ public sealed class ApiConsistencyEvaluator
 
     public ApiConsistencyEvaluator(
         ILogger<ApiConsistencyEvaluator> logger,
-        IOptions<AegisArchitecturePolicy> options)
+        IOptions<ApiConsistencyPolicy> options)
         : base(logger)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        _policy = options.Value.ApiConsistency
+        _policy = options.Value
             ?? new ApiConsistencyPolicy();
     }
 
@@ -103,6 +103,12 @@ public sealed class ApiConsistencyEvaluator
             return [];
         }
 
+        _logger.LogDebug(
+            "API policy: Lowercase={Lowercase}, NoTrailingSlash={NoTrailingSlash}, Pluralization={Pluralization}",
+            _policy.EnforceLowercaseRoutes,
+            _policy.EnforceNoTrailingSlash,
+            _policy.CheckPluralization);
+
         var results = new List<ArchitectureEvaluatorResult>();
 
         foreach (var file in files)
@@ -115,7 +121,8 @@ public sealed class ApiConsistencyEvaluator
             {
                 content = await File.ReadAllTextAsync(file, token);
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            catch (OperationCanceledException)
+                when (token.IsCancellationRequested)
             {
                 throw;
             }
@@ -126,6 +133,7 @@ public sealed class ApiConsistencyEvaluator
                     "{Evaluator} could not read API file {File}.",
                     Name,
                     file);
+
                 continue;
             }
             catch (UnauthorizedAccessException ex)
@@ -135,6 +143,7 @@ public sealed class ApiConsistencyEvaluator
                     "{Evaluator} could not access API file {File}.",
                     Name,
                     file);
+
                 continue;
             }
 
@@ -183,13 +192,12 @@ public sealed class ApiConsistencyEvaluator
                 trailingSlashViolations++;
             }
 
-            if (DuplicateSegmentRx.IsMatch(route))
+            if (_policy.CheckPluralization
+                && DuplicateSegmentRx.IsMatch(route))
             {
                 duplicateSegments++;
             }
 
-            // The existing evaluator already models versioning as a score.
-            // Count each discovered route without an explicit /vN segment.
             if (!ApiVersionRx.IsMatch(route))
             {
                 missingVersioning++;
@@ -198,10 +206,22 @@ public sealed class ApiConsistencyEvaluator
 
         var endpointCount = HttpAttributeRx.Matches(content).Count;
 
-        var routeScore = ComputeScore(routes.Count, uppercaseViolations);
-        var slashScore = ComputeScore(routes.Count, trailingSlashViolations);
-        var duplicationScore = ComputeScore(routes.Count, duplicateSegments);
-        var versionScore = ComputeScore(routes.Count, missingVersioning);
+        var routeScore = ComputeScore(
+            routes.Count,
+            uppercaseViolations);
+
+        var slashScore = ComputeScore(
+            routes.Count,
+            trailingSlashViolations);
+
+        var duplicationScore = ComputeScore(
+            routes.Count,
+            duplicateSegments);
+
+        var versionScore = ComputeScore(
+            routes.Count,
+            missingVersioning);
+
         var maturityScore = endpointCount > 0 ? 100d : 0d;
 
         var apiConsistency =
@@ -221,10 +241,17 @@ public sealed class ApiConsistencyEvaluator
         result.Metrics["ApiVersioningScore"] = versionScore;
         result.Metrics["EndpointDiscoveryScore"] = maturityScore;
 
-        result.Metrics["UppercaseRouteViolations"] = uppercaseViolations;
-        result.Metrics["TrailingSlashViolations"] = trailingSlashViolations;
-        result.Metrics["DuplicateRouteViolations"] = duplicateSegments;
-        result.Metrics["MissingVersionViolations"] = missingVersioning;
+        result.Metrics["UppercaseRouteViolations"] =
+            uppercaseViolations;
+
+        result.Metrics["TrailingSlashViolations"] =
+            trailingSlashViolations;
+
+        result.Metrics["DuplicateRouteViolations"] =
+            duplicateSegments;
+
+        result.Metrics["MissingVersionViolations"] =
+            missingVersioning;
 
         result.Metrics["ApiConsistencyIndex"] =
             Math.Round(apiConsistency, 2);
@@ -252,11 +279,21 @@ public sealed class ApiConsistencyEvaluator
     {
         var name = Path.GetFileNameWithoutExtension(file);
 
-        return name.Contains("controller", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("endpoint", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("route", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("resource", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("api", StringComparison.OrdinalIgnoreCase);
+        return name.Contains(
+                   "controller",
+                   StringComparison.OrdinalIgnoreCase)
+            || name.Contains(
+                   "endpoint",
+                   StringComparison.OrdinalIgnoreCase)
+            || name.Contains(
+                   "route",
+                   StringComparison.OrdinalIgnoreCase)
+            || name.Contains(
+                   "resource",
+                   StringComparison.OrdinalIgnoreCase)
+            || name.Contains(
+                   "api",
+                   StringComparison.OrdinalIgnoreCase);
     }
 
     private static double ComputeScore(int total, int violations)
@@ -275,7 +312,6 @@ public sealed class ApiConsistencyEvaluator
         List<ArchitectureEvaluatorResult> results,
         string projectPath)
     {
-        // Capture the number of file results before appending the summary.
         var analyzedFiles = results.Count;
 
         var average = results.Average(

@@ -382,6 +382,15 @@
                             FontSize="11"
                             VerticalAlignment="Center" />
 
+                        <TextBlock
+                            Text="{Binding AnalysisStage}"
+                            Margin="10,0,0,0"
+                            FontSize="11"
+                            MaxWidth="380"
+                            TextTrimming="CharacterEllipsis"
+                            VerticalAlignment="Center"
+                            Foreground="{StaticResource Brush.TextMuted}" />
+
                     </StackPanel>
 
                     <TextBlock

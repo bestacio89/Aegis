@@ -306,7 +306,7 @@ You can:
 
 ### Architecture rule evaluation scopes
 
-Architecture rules declare whether their evidence is file/entity-scoped or project-scoped. `RuleEngineCore` matches facts only to rules with the same declared scope, and registry validation rejects rules whose scope is unspecified. Project aggregate facts must declare `EvaluationScope=Project`; missing metric producers and metric-unit mismatches remain explicit diagnostics rather than being inferred through aliases.
+Architecture rules declare whether their evidence is file/entity-scoped or project-scoped. `RuleEngineCore` matches facts only to rules with the same declared scope, and registry validation rejects rules whose scope is unspecified. Project aggregate facts should declare `EvaluationScope=Project`; the `ArchitectureSummary` category remains a legacy fallback when scope metadata is absent, while explicit `File` metadata takes precedence. Missing metric producers and metric-unit mismatches remain explicit diagnostics rather than being inferred through aliases.
 
 See [Rule Evaluation Scope](Docs/Rule-Evaluation-Scope.md) for the rule-level assignments and contract.
 

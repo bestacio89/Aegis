@@ -1,6 +1,8 @@
 using Aegis.Architecture.RuleEngines;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
+using Aegis.Shared.Architecture.Models.Rules;
+using Aegis.Shared.Architecture.Enums;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -79,4 +81,28 @@ public sealed class RuleEngineScopeTests
                 evaluation.RuleId == "AEG-NAM-R1"
                 && evaluation.Scope == "Project");
     }
+    [Fact]
+    public void Registry_validation_rejects_an_unspecified_rule_scope()
+    {
+        var rule = new ArchitectureRuleDefinition
+        {
+            Id = "AEG-ARCH-R1",
+            Name = "Circular Dependencies Detected",
+            Category = "Architecture",
+            MetricKey = "CircularDependencyCount",
+            Threshold = 0,
+            Operator = ComparisonOperator.GreaterThan,
+            Severity = ArchitectureRuleSeverity.Blocker,
+            Recommendation = "Remove circular dependencies."
+        };
+
+        var errors = ArchitectureRuleRegistry.Validate([rule]);
+
+        Assert.Contains(
+            errors,
+            error => error.Contains(
+                "no valid, explicitly declared evaluation scope",
+                StringComparison.Ordinal));
+    }
+
 }

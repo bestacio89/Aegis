@@ -2,6 +2,7 @@
 using System.Text.RegularExpressions;
 
 using Aegis.Architecture.Evaluators;
+using Aegis.Architecture.Evaluators.Naming.Analysis;
 using Aegis.Architecture.Evaluators.Naming.Policies;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
@@ -28,6 +29,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 {
     private readonly NamingPolicy _policy;
     private readonly NamingConventionResolver _resolver;
+    private readonly CSharpNamingDeclarationAnalyzer _csharpAnalyzer;
 
     private static readonly HashSet<string> ExcludedDirectories =
         new(StringComparer.OrdinalIgnoreCase)
@@ -220,14 +222,17 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
     public NamingEvaluator(
         ILogger<NamingEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options,
-        NamingConventionResolver resolver)
+        NamingConventionResolver resolver,
+        CSharpNamingDeclarationAnalyzer csharpAnalyzer)
         : base(logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(resolver);
+        ArgumentNullException.ThrowIfNull(csharpAnalyzer);
 
         _policy = options.Value.Naming ?? new NamingPolicy();
         _resolver = resolver;
+        _csharpAnalyzer = csharpAnalyzer;
     }
 
     protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
@@ -326,10 +331,22 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                     : null,
                 Context.Confidence);
 
-            results.Add(EvaluateFile(
-                file,
-                content,
-                _resolver.Resolve(fileContext)));
+            var convention = _resolver.Resolve(fileContext);
+
+            if (_csharpAnalyzer.CanAnalyze(file, language))
+            {
+                var analysis = await _csharpAnalyzer.AnalyzeAsync(
+                    file,
+                    content,
+                    fileContext.Framework,
+                    token).ConfigureAwait(false);
+
+                results.Add(EvaluateCSharpFile(file, analysis, convention));
+            }
+            else
+            {
+                results.Add(EvaluateFile(file, content, convention));
+            }
         }
 
         var analyzedFileCount = results.Count;
@@ -350,6 +367,139 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             unreadableFiles);
 
         return results;
+    }
+
+
+    /// <summary>
+    /// Evaluates C# declarations discovered by Roslyn. Parser diagnostics are
+    /// retained as coverage metadata and are never counted as naming violations.
+    /// </summary>
+    private ArchitectureEvaluatorResult EvaluateCSharpFile(
+        string file,
+        NamingAnalysisResult analysis,
+        INamingConventionPolicy convention)
+    {
+        ArgumentNullException.ThrowIfNull(analysis);
+        ArgumentNullException.ThrowIfNull(convention);
+
+        var result = CreateResult(
+            file,
+            nameof(ArchitectureRuleCategory.Naming));
+
+        result.Metadata["FileName"] = Path.GetFileName(file);
+        result.Metadata["Language"] = analysis.Language;
+        result.Metadata["AnalysisMethod"] = analysis.AnalyzerId;
+        result.Metadata["AnalyzerId"] = analysis.AnalyzerId;
+        result.Metadata["SourceLineCount"] = analysis.SourceLineCount.ToString();
+        result.Metadata["EvaluationStatus"] = analysis.Status.ToString();
+        result.Metadata["AnalysisDiagnosticCount"] = analysis.Diagnostics.Count.ToString();
+
+        if (analysis.Diagnostics.Count > 0)
+        {
+            result.Metadata["AnalysisDiagnostics"] = string.Join(
+                Environment.NewLine,
+                analysis.Diagnostics.Take(10).Select(diagnostic =>
+                    $"{diagnostic.Code}({diagnostic.Line?.ToString() ?? "?"}," +
+                    $"{diagnostic.Column?.ToString() ?? "?"}): {diagnostic.Message}"));
+        }
+
+        var declarations = analysis.Declarations;
+
+        var typeNames = declarations
+            .Where(declaration => declaration.Kind is
+                NamingDeclarationKind.Type
+                or NamingDeclarationKind.Struct
+                or NamingDeclarationKind.Record
+                or NamingDeclarationKind.Enum
+                or NamingDeclarationKind.Delegate)
+            .Select(declaration => declaration.Name)
+            .ToList();
+
+        var interfaceNames = declarations
+            .Where(declaration => declaration.Kind == NamingDeclarationKind.Interface)
+            .Select(declaration => declaration.Name)
+            .ToArray();
+
+        var methodNames = declarations
+            .Where(declaration => declaration.Kind == NamingDeclarationKind.Method)
+            .Select(declaration => declaration.Name)
+            .ToList();
+
+        var variableNames = declarations
+            .Where(declaration => declaration.Kind is
+                NamingDeclarationKind.Field
+                or NamingDeclarationKind.LocalVariable
+                or NamingDeclarationKind.Parameter)
+            .Select(declaration => declaration.Name)
+            .ToList();
+
+        var constantNames = declarations
+            .Where(declaration => declaration.Kind == NamingDeclarationKind.Constant)
+            .Select(declaration => declaration.Name)
+            .ToList();
+
+        var typeViolations = typeNames.Count(name => !convention.IsValidTypeName(name));
+        var interfaceViolations = interfaceNames.Count(name => !convention.IsValidInterfaceName(name));
+        var methodViolations = methodNames.Count(name => !convention.IsValidMethodName(name));
+        var variableViolations = variableNames.Count(name => !convention.IsValidVariableName(name));
+        var constantViolations = constantNames.Count(name => !convention.IsValidConstantName(name));
+
+        var typeScore = ComputeScore(typeNames.Count, typeViolations);
+        var interfaceScore = ComputeScore(interfaceNames.Length, interfaceViolations);
+        var methodScore = ComputeScore(methodNames.Count, methodViolations);
+        var variableScore = ComputeScore(variableNames.Count, variableViolations);
+        var constantScore = ComputeScore(constantNames.Count, constantViolations);
+
+        var fileScore = convention.IsValidFileName(Path.GetFileNameWithoutExtension(file))
+            ? 100
+            : 0;
+
+        var declarationCount =
+            typeNames.Count +
+            interfaceNames.Length +
+            methodNames.Count +
+            variableNames.Count +
+            constantNames.Count;
+
+        var weightedScore = 0d;
+        var activeWeight = 0d;
+
+        AddDimension(typeNames.Count, typeScore, 0.30, ref weightedScore, ref activeWeight);
+        AddDimension(interfaceNames.Length, interfaceScore, 0.15, ref weightedScore, ref activeWeight);
+        AddDimension(methodNames.Count, methodScore, 0.20, ref weightedScore, ref activeWeight);
+        AddDimension(variableNames.Count, variableScore, 0.15, ref weightedScore, ref activeWeight);
+        AddDimension(constantNames.Count, constantScore, 0.10, ref weightedScore, ref activeWeight);
+
+        weightedScore += fileScore * 0.10;
+        activeWeight += 0.10;
+
+        var compliance = declarationCount == 0
+            ? 0
+            : Math.Round(weightedScore / activeWeight, 2);
+
+        result.Metrics["TypeNamingCompliance"] = typeScore;
+        result.Metrics["InterfaceNamingCompliance"] = interfaceScore;
+        result.Metrics["MethodNamingCompliance"] = methodScore;
+        result.Metrics["VariableNamingCompliance"] = variableScore;
+        result.Metrics["ConstantNamingCompliance"] = constantScore;
+        result.Metrics["FileNamingCompliance"] = fileScore;
+
+        result.Metrics["TypeViolationCount"] = typeViolations;
+        result.Metrics["InterfaceViolationCount"] = interfaceViolations;
+        result.Metrics["MethodViolationCount"] = methodViolations;
+        result.Metrics["VariableViolationCount"] = variableViolations;
+        result.Metrics["ConstantViolationCount"] = constantViolations;
+        result.Metrics["DeclarationsAnalyzed"] = declarationCount;
+        result.Metrics["NamingEvidenceAvailable"] = declarationCount > 0 ? 1 : 0;
+        result.Metrics["NamingComplianceScore"] = Math.Round(compliance, 2);
+
+        result.Metadata["TypesAnalyzed"] = typeNames.Count.ToString();
+        result.Metadata["InterfacesAnalyzed"] = interfaceNames.Length.ToString();
+        result.Metadata["MethodsAnalyzed"] = methodNames.Count.ToString();
+        result.Metadata["VariablesAnalyzed"] = variableNames.Count.ToString();
+        result.Metadata["ConstantsAnalyzed"] = constantNames.Count.ToString();
+
+        return result;
     }
 
     private ArchitectureEvaluatorResult EvaluateFile(

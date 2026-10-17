@@ -479,7 +479,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         int discoveredFileCount,
         int unreadableFileCount)
     {
-remove old average        var totalDeclarations = fileResults.Sum(result =>
+        var totalDeclarations = fileResults.Sum(result =>
             result.Metrics.GetValueOrDefault("DeclarationsAnalyzed", 0));
 
         var averageScore = totalDeclarations == 0

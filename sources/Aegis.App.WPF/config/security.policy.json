@@ -4,7 +4,6 @@
     "EnforceSafeCryptography": true,
     "DetectWeakSSLProtocols": true,
     "Enabled": true,
-    "minimumScore": 75.0
+    "MinimumScore": 75.0
   }
-
 }

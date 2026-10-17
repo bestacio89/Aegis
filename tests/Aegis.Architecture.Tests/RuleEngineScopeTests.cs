@@ -21,7 +21,7 @@ public sealed class RuleEngineScopeTests
             "ArchitecturalEvaluator",
             "SampleProject")
         {
-            Category = "ArchitectureSummary",
+            Category = "Architecture",
             Metrics = new Dictionary<string, double>
             {
                 ["CircularDependencyCount"] = 1

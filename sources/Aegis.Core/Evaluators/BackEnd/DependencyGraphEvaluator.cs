@@ -1,4 +1,5 @@
-﻿using Aegis.Architecture.Diagnostics;
+﻿
+using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
@@ -14,12 +15,7 @@ public sealed class DependencyGraphEvaluator
 {
     private readonly DependencyGraphPolicy _policy;
 
-
-
-    public override string Name =>
-        "DependencyGraphEvaluator";
-
-
+    public override string Name => "DependencyGraphEvaluator";
 
     public override string[] SupportedLanguages =>
     [
@@ -28,8 +24,6 @@ public sealed class DependencyGraphEvaluator
         "TypeScript",
         "JavaScript"
     ];
-
-
 
     public override string[] SupportedFrameworks =>
     [
@@ -40,256 +34,264 @@ public sealed class DependencyGraphEvaluator
         "Node"
     ];
 
-
-
     public DependencyGraphEvaluator(
         ILogger<DependencyGraphEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy =
-            options.Value.DependencyGraph
+        ArgumentNullException.ThrowIfNull(options);
+
+        _policy = options.Value.DependencyGraph
             ?? new DependencyGraphPolicy();
     }
-
-
 
     protected override Task<IEnumerable<ArchitectureEvaluatorResult>>
         EvaluateCoreAsync(
             string projectPath,
             CancellationToken token)
     {
-        var results =
-            new List<ArchitectureEvaluatorResult>();
+        token.ThrowIfCancellationRequested();
 
+        var results = new List<ArchitectureEvaluatorResult>();
 
-
-        if (Context is null)
-            return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(results);
-
-
-
-        if (Context.Dependencies.Count == 0)
+        if (Context is not { } context)
         {
-            AegisDiagnostics.Report(
-                Name,
-                DiagnosticLevel.Trace,
-                "No dependency relations available.");
-
             return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(
                 results);
         }
 
-
+        var relations = context.Dependencies.ToList();
 
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Trace,
-            $"Evaluating dependency graph with {Context.Dependencies.Count} relations.");
+            $"Evaluating dependency graph with {relations.Count} relations.");
 
+        EvaluateLayerCoupling(results, relations, token);
 
+        token.ThrowIfCancellationRequested();
 
-        EvaluateLayerCoupling(
-            results,
-            token);
-
-
-
-        EvaluateGraphSummary(
-            results);
-
-
+        EvaluateGraphSummary(results, relations, token);
 
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Info,
             $"Dependency graph evaluation completed with {results.Count} result(s).");
 
-
-
         return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(
             results);
     }
 
-
-
     private void EvaluateLayerCoupling(
         List<ArchitectureEvaluatorResult> results,
+        IReadOnlyCollection<ArchitectureDependencyContext> relations,
         CancellationToken token)
     {
-        if (Context is null)
+        if (Context is not { } context)
+        {
             return;
+        }
 
+        var sourceGroups = relations
+            .Where(relation =>
+                !string.IsNullOrWhiteSpace(relation.SourceLayer))
+            .GroupBy(
+                relation => relation.SourceLayer,
+                StringComparer.OrdinalIgnoreCase);
 
-
-        var groups =
-            Context.Dependencies
-                .GroupBy(
-                    x => x.SourceLayer,
-                    StringComparer.OrdinalIgnoreCase);
-
-
-
-        foreach (var group in groups)
+        foreach (var group in sourceGroups)
         {
             token.ThrowIfCancellationRequested();
 
+            var dependencies = group
+                .Select(relation => relation.TargetLayer)
+                .Where(layer => !string.IsNullOrWhiteSpace(layer))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(layer => layer, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
+            var dependencyCount = dependencies.Count;
 
-            var dependencies =
-                group
-                    .Select(x => x.TargetLayer)
-                    .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-
-
-            var dependencyCount =
-                dependencies.Count;
-
-
-
-            if (dependencyCount <=
-                _policy.MaxDependenciesPerModule)
+            if (dependencyCount <= _policy.MaxDependenciesPerModule)
             {
                 continue;
             }
 
+            // This result describes a layer-level aggregate, not a source file.
+            var result = CreateAggregateResult(
+                "DependencyGraphViolation");
 
+            result.ProjectName = context.ProjectName;
+            result.Language = context.Language;
+            result.Framework = context.Framework;
+            result.Layer = group.Key;
+            result.DetectionConfidence = context.Confidence;
 
-            var result =
-                CreateResult(
-                    group.Key,
-                    "DependencyGraphViolation");
-
-
-
-            result.ProjectName =
-                Context.ProjectName;
-
-            result.Language =
-                Context.Language;
-
-            result.Framework =
-                Context.Framework;
-
-            result.Layer =
-                group.Key;
-
-            result.DetectionConfidence =
-                Context.Confidence;
-
-
-
-            result.Metrics["DependencyCount"] =
-                dependencyCount;
-
-            result.Metrics["RelationCount"] =
-                group.Count();
-
+            result.Metrics["DependencyCount"] = dependencyCount;
+            result.Metrics["RelationCount"] = group.Count();
             result.Metrics["MaxDependenciesThreshold"] =
                 _policy.MaxDependenciesPerModule;
+            result.Metrics["Violation"] = 1;
 
-            result.Metrics["Violation"] =
-                1;
-
-
-
-            result.Metadata["Rule"] =
-                "DEP001";
-
-            result.Metadata["Layer"] =
-                group.Key;
-
-            result.Metadata["Dependencies"] =
-                string.Join(
-                    ", ",
-                    dependencies.Take(10));
-
-
+            result.Metadata["Rule"] = "DEP001";
+            result.Metadata["Layer"] = group.Key;
+            result.Metadata["MeasurementMethod"] =
+                "Count of distinct non-empty target layers referenced by this source layer.";
+            result.Metadata["Dependencies"] = string.Join(
+                ", ",
+                dependencies.Take(10));
+            result.Metadata["DependencyListTruncated"] =
+                (dependencies.Count > 10).ToString();
 
             results.Add(result);
         }
     }
 
-
-
     private void EvaluateGraphSummary(
-        List<ArchitectureEvaluatorResult> results)
+        List<ArchitectureEvaluatorResult> results,
+        IReadOnlyCollection<ArchitectureDependencyContext> relations,
+        CancellationToken token)
     {
-        if (Context is null)
+        token.ThrowIfCancellationRequested();
+
+        if (Context is not { } context)
+        {
             return;
+        }
 
+        var layers = relations
+            .SelectMany(relation => new[]
+            {
+                relation.SourceLayer,
+                relation.TargetLayer
+            })
+            .Where(layer => !string.IsNullOrWhiteSpace(layer))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
+        var validSourceRelations = relations
+            .Where(relation =>
+                !string.IsNullOrWhiteSpace(relation.SourceLayer))
+            .ToList();
 
-        var result =
-            CreateResult(
-                Context.RootPath,
-                "DependencyGraphSummary");
+        var distinctLayerDependencyCount = validSourceRelations
+            .Where(relation =>
+                !string.IsNullOrWhiteSpace(relation.TargetLayer))
+            .Select(relation => (
+                Source: relation.SourceLayer,
+                Target: relation.TargetLayer))
+            .Distinct(LayerEdgeTupleComparer.Instance)
+            .Count();
 
+        var sourceLayerCount = validSourceRelations
+            .Select(relation => relation.SourceLayer)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
 
+        var averageDependencies = CalculateAverageDependencies(
+            validSourceRelations);
 
-        result.ProjectName =
-            Context.ProjectName;
+        var missingSourceLayerCount = relations.Count(
+            relation => string.IsNullOrWhiteSpace(relation.SourceLayer));
 
-        result.Language =
-            Context.Language;
+        var missingTargetLayerCount = relations.Count(
+            relation => string.IsNullOrWhiteSpace(relation.TargetLayer));
 
-        result.Framework =
-            Context.Framework;
+        var result = CreateAggregateResult(
+            "DependencyGraphSummary");
 
-        result.DetectionConfidence =
-            Context.Confidence;
+        result.ProjectName = context.ProjectName;
+        result.Language = context.Language;
+        result.Framework = context.Framework;
+        result.DetectionConfidence = context.Confidence;
 
+        result.Metrics["TotalRelations"] = relations.Count;
+        result.Metrics["TotalLayers"] = layers.Count;
+        result.Metrics["SourceLayerCount"] = sourceLayerCount;
+        result.Metrics["DistinctLayerDependencyCount"] =
+            distinctLayerDependencyCount;
+        result.Metrics["AverageDependencies"] = averageDependencies;
+        result.Metrics["RelationsMissingSourceLayer"] =
+            missingSourceLayerCount;
+        result.Metrics["RelationsMissingTargetLayer"] =
+            missingTargetLayerCount;
 
-
-        result.Metrics["TotalRelations"] =
-            Context.Dependencies.Count;
-
-        result.Metrics["TotalLayers"] =
-            Context.Dependencies
-                .Select(x => x.SourceLayer)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Count();
-
-        result.Metrics["AverageDependencies"] =
-            CalculateAverageDependencies();
-
-
-
-        result.Metadata["Language"] =
-            Context.Language;
-
-        result.Metadata["Framework"] =
-            Context.Framework
-            ?? "Unknown";
-
-
+        result.Metadata["MeasurementMethod"] =
+            "Layer-level summary derived from detected dependency relations.";
+        result.Metadata["GraphHasRelations"] =
+            (relations.Count > 0).ToString();
 
         results.Add(result);
     }
 
-
-
-    private double CalculateAverageDependencies()
+    private static double CalculateAverageDependencies(
+        IReadOnlyCollection<ArchitectureDependencyContext> relations)
     {
-        if (Context is null)
-            return 0;
-
-
-
-        return Context.Dependencies
+        var groups = relations
+            .Where(relation =>
+                !string.IsNullOrWhiteSpace(relation.SourceLayer))
             .GroupBy(
-                x => x.SourceLayer,
+                relation => relation.SourceLayer,
                 StringComparer.OrdinalIgnoreCase)
-            .Select(
-                group =>
-                    group
-                        .Select(x => x.TargetLayer)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .Count())
-            .DefaultIfEmpty(0)
+            .ToList();
+
+        if (groups.Count == 0)
+        {
+            return 0;
+        }
+
+        return groups
+            .Select(group =>
+                group
+                    .Select(relation => relation.TargetLayer)
+                    .Where(layer => !string.IsNullOrWhiteSpace(layer))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count())
             .Average();
+    }
+
+    private ArchitectureEvaluatorResult CreateAggregateResult(
+        string resultName)
+    {
+        var context = Context;
+
+        var result = new ArchitectureEvaluatorResult(Name, resultName)
+        {
+            ProjectName = context?.ProjectName,
+            Language = context?.Language,
+            Framework = context?.Framework,
+            DetectionConfidence = context?.Confidence ?? 0
+        };
+
+        result.Metadata["EvaluationScope"] = ProjectScope;
+
+        return result;
+    }
+
+    private sealed class LayerEdgeTupleComparer
+        : IEqualityComparer<(string Source, string Target)>
+    {
+        public static LayerEdgeTupleComparer Instance { get; } = new();
+
+        public bool Equals(
+            (string Source, string Target) x,
+            (string Source, string Target) y)
+        {
+            return string.Equals(
+                       x.Source,
+                       y.Source,
+                       StringComparison.OrdinalIgnoreCase)
+                   && string.Equals(
+                       x.Target,
+                       y.Target,
+                       StringComparison.OrdinalIgnoreCase);
+        }
+
+        public int GetHashCode((string Source, string Target) edge)
+        {
+            return HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(edge.Source),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(edge.Target));
+        }
     }
 }

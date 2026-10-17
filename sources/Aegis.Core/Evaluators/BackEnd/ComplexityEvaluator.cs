@@ -1,4 +1,7 @@
-﻿using System.Text.RegularExpressions;
+﻿
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -11,22 +14,41 @@ using Microsoft.Extensions.Options;
 namespace Aegis.Architecture.Evaluators.BackEnd;
 
 /// <summary>
-/// Evaluates method complexity and size against configured policy.
+/// Estimates method complexity and size using source-pattern heuristics.
 ///
-/// Produces violations only when methods exceed allowed complexity limits.
-///
-/// Discovery responsibility belongs to detectors.
-/// Rule interpretation belongs to the RuleEngine.
+/// This evaluator is not a compiler-backed cyclomatic-complexity analyzer.
+/// Rule interpretation and compliance decisions belong to the RuleEngine.
 /// </summary>
 public sealed class ComplexityEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly ComplexityPolicy _policy;
 
+    private static readonly Regex CSharpJavaMethodRegex = new(
+        @"^[ \t]*(?:(?:public|private|protected|internal)\s+)(?:(?:static|abstract|virtual|override|sealed|async|final|synchronized|native|default|strictfp|extern|new)\s+)*(?:[\w<>,?.\[\]]+\s+)+(?<name>[A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:where\s+[^{;]+?\s*)?(?<terminator>\{|=>)",
+        RegexOptions.Compiled
+        | RegexOptions.Multiline
+        | RegexOptions.CultureInvariant);
 
-    public override string Name =>
-        "ComplexityEvaluator";
+    private static readonly Regex PythonMethodRegex = new(
+        @"^[ \t]*(?:async\s+)?def\s+(?<name>[A-Za-z_]\w*)\s*\([^:\r\n]*\)\s*(?:->\s*[^:\r\n]+)?\s*:",
+        RegexOptions.Compiled
+        | RegexOptions.Multiline
+        | RegexOptions.CultureInvariant);
 
+    private static readonly Regex CSharpDecisionRegex = new(
+        @"\b(?:if|for|foreach|while|catch|case)\b|&&|\|\||\?(?![?.])",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex JavaDecisionRegex = new(
+        @"\b(?:if|for|while|catch|case)\b|&&|\|\||\?(?![?.])",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex PythonDecisionRegex = new(
+        @"\b(?:if|elif|for|while|except)\b|\band\b|\bor\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    public override string Name => "ComplexityEvaluator";
 
     public override string[] SupportedLanguages =>
     [
@@ -35,7 +57,6 @@ public sealed class ComplexityEvaluator
         "Python"
     ];
 
-
     public override string[] SupportedFrameworks =>
     [
         "ASP.NET",
@@ -43,378 +64,708 @@ public sealed class ComplexityEvaluator
         "FastAPI"
     ];
 
-
-
-    private static readonly Regex MethodRegex =
-        new(
-            @"((public|private|protected|internal|def)\s+.*?(\{|\:))",
-            RegexOptions.Compiled);
-
-
-
-    private static readonly string[] ComplexityKeywords =
-    [
-        "if",
-        "for",
-        "foreach",
-        "while",
-        "switch",
-        "case",
-        "catch",
-        "?",
-        "&&",
-        "||"
-    ];
-
-
-
     public ComplexityEvaluator(
         ILogger<ComplexityEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy =
-            options.Value.Complexity
-            ?? new ComplexityPolicy();
+        ArgumentNullException.ThrowIfNull(options);
+
+        _policy = options.Value.Complexity ?? new ComplexityPolicy();
     }
-
-
 
     protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
         EvaluateCoreAsync(
             string projectPath,
             CancellationToken token)
     {
-        var results =
-            new List<ArchitectureEvaluatorResult>();
-
+        token.ThrowIfCancellationRequested();
 
         if (Context is null)
-            return results;
+        {
+            _logger.LogWarning(
+                "{Evaluator}: no architecture context is available.",
+                Name);
 
+            return [];
+        }
 
+        var language = Context.Language;
+        var extensions = GetExtensions(language);
 
-        var files =
-            ResolveSourceFiles(
-                projectPath,
-                GetExtensions(Context.Language));
+        if (extensions.Length == 0)
+        {
+            _logger.LogWarning(
+                "{Evaluator}: unsupported language {Language}.",
+                Name,
+                language);
 
+            return [];
+        }
 
+        var files = ResolveSourceFiles(projectPath, extensions)
+            .Where(IsEligibleSourceFile)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         if (files.Count == 0)
         {
             AegisDiagnostics.Report(
                 Name,
                 DiagnosticLevel.Trace,
-                "No source files found for complexity analysis.");
+                "No eligible source files found for complexity analysis.");
 
-            return results;
+            return [];
         }
-
-
 
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Trace,
             $"Analyzing complexity for {files.Count} files " +
-            $"({Context.Language}/{Context.Framework}).");
+            $"({language}/{Context.Framework}).");
 
-
+        var results = new List<ArchitectureEvaluatorResult>();
+        var analyzedMethods = 0;
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
+            string content;
 
-            var content =
-                await File.ReadAllTextAsync(
-                    file,
-                    token);
+            try
+            {
+                content = await File.ReadAllTextAsync(file, token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (IOException exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "{Evaluator}: could not read {FilePath}.",
+                    Name,
+                    file);
 
+                continue;
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "{Evaluator}: access denied for {FilePath}.",
+                    Name,
+                    file);
 
+                continue;
+            }
 
-            foreach (Match match in MethodRegex.Matches(content))
+            token.ThrowIfCancellationRequested();
+
+            var methods = language.Equals(
+                "Python",
+                StringComparison.OrdinalIgnoreCase)
+                ? ExtractPythonMethods(content)
+                : ExtractBraceLanguageMethods(content, language);
+
+            foreach (var method in methods)
             {
                 token.ThrowIfCancellationRequested();
 
+                analyzedMethods++;
 
-                var method =
-                    ExtractMethodBlock(
-                        content,
-                        match.Index);
+                var metrics = MeasureMethod(
+                    method.Content,
+                    language);
 
-
-
-                if (string.IsNullOrWhiteSpace(method))
-                    continue;
-
-
-
-                var complexity =
-                    CountDecisionPoints(
-                        method);
-
-
-
-                var lines =
-                    method
-                        .Split(
-                            '\n',
-                            StringSplitOptions.RemoveEmptyEntries)
-                        .Length;
-
-
-
-                var violations =
-                    EvaluateViolations(
-                        complexity,
-                        lines);
-
-
+                var violations = EvaluateViolations(
+                    metrics.Complexity,
+                    metrics.LineCount);
 
                 if (violations.Count == 0)
+                {
                     continue;
-
-
+                }
 
                 results.Add(
                     CreateViolation(
                         file,
-                        complexity,
-                        lines,
+                        method.Name,
+                        method.StartLine,
+                        metrics.Complexity,
+                        metrics.LineCount,
                         violations));
             }
         }
 
-
-
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Info,
-            $"Complexity evaluation completed with {results.Count} violation(s).");
-
-
+            $"Complexity evaluation completed: {analyzedMethods} method(s) " +
+            $"analyzed, {results.Count} finding(s).");
 
         return results;
     }
-
-
 
     private List<string> EvaluateViolations(
         int complexity,
         int lines)
     {
-        var violations =
-            new List<string>();
+        var violations = new List<string>();
 
-
-        if (complexity >
-            _policy.MaxCyclomaticComplexity)
+        if (complexity > _policy.MaxCyclomaticComplexity)
         {
-            violations.Add(
-                "CMP001");
+            violations.Add("CMP001");
         }
 
-
-        if (lines >
-            _policy.MaxLinesPerMethod)
+        if (lines > _policy.MaxLinesPerMethod)
         {
-            violations.Add(
-                "CMP002");
+            violations.Add("CMP002");
         }
-
 
         return violations;
     }
 
-
-
     private ArchitectureEvaluatorResult CreateViolation(
         string file,
+        string methodName,
+        int startLine,
         int complexity,
         int lines,
         IReadOnlyCollection<string> violations)
     {
-        var result =
-            CreateResult(
-                file,
-                "ComplexityViolation");
+        var result = CreateResult(
+            file,
+            "ComplexityViolation");
 
+        result.ProjectName = Context?.ProjectName;
+        result.Language = Context?.Language;
+        result.Framework = Context?.Framework;
+        result.Layer = ResolveLayer(file);
+        result.DetectionConfidence = Context?.Confidence ?? 0;
 
-        result.ProjectName =
-            Context?.ProjectName;
+        result.Metrics["CyclomaticComplexity"] = complexity;
+        result.Metrics["MethodLineCount"] = lines;
+        result.Metrics["ComplexityFinding"] = 1;
 
-        result.Language =
-            Context?.Language;
-
-        result.Framework =
-            Context?.Framework;
-
-        result.Layer =
-            ResolveLayer(file);
-
-        result.DetectionConfidence =
-            Context?.Confidence ?? 0;
-
-        result.Metrics["CyclomaticComplexity"] =
-            complexity;
-
-        result.Metrics["MethodLineCount"] =
-            lines;
-
-        result.Metrics["Violation"] =
-            1;
-
-        result.Metrics["ComplexityCompliance"] =
-            0;
-
-
-
-        result.Metadata["Rules"] =
-            string.Join(
-                ",",
-                violations);
-
+        result.Metadata["MethodName"] = methodName;
+        result.Metadata["StartLine"] = startLine.ToString(CultureInfo.InvariantCulture);
+        result.Metadata["Rules"] = string.Join(",", violations);
         result.Metadata["MaxCyclomaticThreshold"] =
-            _policy.MaxCyclomaticComplexity.ToString();
-
+            _policy.MaxCyclomaticComplexity.ToString(
+                CultureInfo.InvariantCulture);
         result.Metadata["MaxLinesThreshold"] =
-            _policy.MaxLinesPerMethod.ToString();
-
-        result.Metadata["Language"] =
-            Context?.Language ?? "Unknown";
-
-        result.Metadata["Framework"] =
-            Context?.Framework ?? "Unknown";
-
-        result.Metadata["Layer"] =
-            ResolveLayer(file) ?? "Unknown";
-
+            _policy.MaxLinesPerMethod.ToString(
+                CultureInfo.InvariantCulture);
+        result.Metadata["Language"] = Context?.Language ?? "Unknown";
+        result.Metadata["Framework"] = Context?.Framework ?? "Unknown";
+        result.Metadata["Layer"] = ResolveLayer(file) ?? "Unknown";
+        result.Metadata["MeasurementMethod"] = "SourcePatternHeuristic";
+        result.Metadata["Interpretation"] =
+            "Estimated complexity and physical method size; not compiler-backed analysis.";
 
         return result;
     }
 
-
-
-    private static string[] GetExtensions(
+    private static (int Complexity, int LineCount) MeasureMethod(
+        string methodContent,
         string language)
     {
-        return language switch
+        var sanitized = language.Equals(
+            "Python",
+            StringComparison.OrdinalIgnoreCase)
+            ? SanitizePythonText(methodContent)
+            : SanitizeBraceLanguageText(methodContent);
+
+        var decisionRegex = language switch
         {
-            "C#" =>
-            [
-                ".cs"
-            ],
-
-            "Java" =>
-            [
-                ".java"
-            ],
-
-            "Python" =>
-            [
-                ".py"
-            ],
-
-            _ =>
-            []
+            "C#" => CSharpDecisionRegex,
+            "Java" => JavaDecisionRegex,
+            "Python" => PythonDecisionRegex,
+            _ => throw new NotSupportedException(
+                $"Unsupported language: {language}")
         };
+
+        // Cyclomatic complexity starts at one and increases for detected
+        // decision points. This is an estimate, not an AST calculation.
+        var complexity = 1 + decisionRegex.Matches(sanitized).Count;
+
+        var lineCount = sanitized
+            .Split('\n')
+            .Count(line => !string.IsNullOrWhiteSpace(line));
+
+        return (complexity, lineCount);
     }
 
-
-
-    private string? ResolveLayer(
-        string file)
-    {
-        return Context?
-            .Layers
-            .FirstOrDefault(
-                layer =>
-                    layer.Files.Contains(
-                        file,
-                        StringComparer.OrdinalIgnoreCase))
-            ?.Name;
-    }
-
-
-
-    private static string ExtractMethodBlock(
+    private static List<MethodRegion> ExtractBraceLanguageMethods(
         string content,
-        int start)
+        string language)
     {
-        var brace =
-            content.IndexOf(
-                '{',
-                start);
+        var results = new List<MethodRegion>();
+        var sanitized = SanitizeBraceLanguageText(content);
 
+        foreach (Match match in CSharpJavaMethodRegex.Matches(sanitized))
+        {
+            var name = match.Groups["name"].Value;
+            var terminator = match.Groups["terminator"];
 
+            var start = match.Index;
+            var bodyStart = terminator.Index;
 
-        if (brace < 0)
-            return string.Empty;
+            string methodContent;
 
+            if (terminator.Value == "=>")
+            {
+                var end = FindExpressionBodyEnd(sanitized, bodyStart + 2);
 
+                if (end < 0)
+                {
+                    continue;
+                }
 
+                methodContent = content[start..(end + 1)];
+            }
+            else
+            {
+                var end = FindMatchingBrace(sanitized, bodyStart);
+
+                if (end < 0)
+                {
+                    continue;
+                }
+
+                methodContent = content[start..(end + 1)];
+            }
+
+            results.Add(
+                new MethodRegion(
+                    name,
+                    CountLineNumber(content, start),
+                    methodContent));
+        }
+
+        return results;
+    }
+
+    private static List<MethodRegion> ExtractPythonMethods(string content)
+    {
+        var results = new List<MethodRegion>();
+        var sanitized = SanitizePythonText(content);
+        var matches = PythonMethodRegex.Matches(sanitized);
+
+        for (var index = 0; index < matches.Count; index++)
+        {
+            var match = matches[index];
+            var start = match.Index;
+            var lineStart = content.LastIndexOf('\n', Math.Max(0, start - 1)) + 1;
+            var declarationLine = content[lineStart..FindLineEnd(content, start)];
+            var baseIndent = CountIndent(declarationLine);
+            var nextMethodStart = index + 1 < matches.Count
+                ? matches[index + 1].Index
+                : content.Length;
+
+            var blockEnd = FindPythonBlockEnd(
+                content,
+                sanitized,
+                start,
+                nextMethodStart,
+                baseIndent);
+
+            if (blockEnd <= start)
+            {
+                continue;
+            }
+
+            results.Add(
+                new MethodRegion(
+                    match.Groups["name"].Value,
+                    CountLineNumber(content, start),
+                    content[start..blockEnd]));
+        }
+
+        return results;
+    }
+
+    private static int FindPythonBlockEnd(
+        string content,
+        string sanitized,
+        int start,
+        int nextMethodStart,
+        int baseIndent)
+    {
+        var position = start;
+
+        while (position < nextMethodStart)
+        {
+            var lineEnd = FindLineEnd(sanitized, position);
+            var line = sanitized[position..lineEnd];
+
+            if (!string.IsNullOrWhiteSpace(line)
+                && CountIndent(line) <= baseIndent
+                && position > start)
+            {
+                return position;
+            }
+
+            if (lineEnd >= sanitized.Length)
+            {
+                return content.Length;
+            }
+
+            position = lineEnd + 1;
+        }
+
+        return nextMethodStart;
+    }
+
+    private static int FindMatchingBrace(
+        string sanitized,
+        int openingBrace)
+    {
         var depth = 0;
 
-
-
-        for (var i = brace; i < content.Length; i++)
+        for (var index = openingBrace; index < sanitized.Length; index++)
         {
-            if (content[i] == '{')
+            if (sanitized[index] == '{')
+            {
                 depth++;
-
-
-            if (content[i] == '}')
+            }
+            else if (sanitized[index] == '}')
             {
                 depth--;
 
-
                 if (depth == 0)
                 {
-                    return content[
-                        start..(i + 1)];
+                    return index;
                 }
             }
         }
 
-
-
-        return string.Empty;
+        return -1;
     }
 
-
-
-    private static int CountDecisionPoints(
-        string code)
+    private static int FindExpressionBodyEnd(
+        string sanitized,
+        int expressionStart)
     {
-        return ComplexityKeywords.Sum(
-            keyword =>
-                Regex.Matches(
-                    code,
-                    Regex.Escape(keyword))
-                .Count);
+        var parentheses = 0;
+        var brackets = 0;
+        var braces = 0;
+
+        for (var index = expressionStart; index < sanitized.Length; index++)
+        {
+            var character = sanitized[index];
+
+            switch (character)
+            {
+                case '(':
+                    parentheses++;
+                    break;
+                case ')':
+                    parentheses--;
+                    break;
+                case '[':
+                    brackets++;
+                    break;
+                case ']':
+                    brackets--;
+                    break;
+                case '{':
+                    braces++;
+                    break;
+                case '}':
+                    braces--;
+                    break;
+                case ';' when parentheses == 0 && brackets == 0 && braces == 0:
+                    return index;
+            }
+        }
+
+        return -1;
     }
 
-
-
-    private static bool IsExcludedDir(
-        string file)
+    private static int CountLineNumber(string content, int index)
     {
-        return
-            file.Contains(
-                $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.Contains(
-                $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.Contains(
-                "Generated",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.Contains(
-                "Test",
-                StringComparison.OrdinalIgnoreCase);
+        var line = 1;
+
+        for (var i = 0; i < index && i < content.Length; i++)
+        {
+            if (content[i] == '\n')
+            {
+                line++;
+            }
+        }
+
+        return line;
+    }
+
+    private static int FindLineEnd(string content, int start)
+    {
+        var end = content.IndexOf('\n', start);
+        return end < 0 ? content.Length : end;
+    }
+
+    private static int CountIndent(string line)
+    {
+        var count = 0;
+
+        while (count < line.Length
+               && (line[count] == ' ' || line[count] == '\t'))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    private static string SanitizeBraceLanguageText(string content)
+    {
+        var chars = content.ToCharArray();
+        var state = LexicalState.Code;
+
+        for (var i = 0; i < chars.Length; i++)
+        {
+            var current = chars[i];
+            var next = i + 1 < chars.Length ? chars[i + 1] : '\0';
+
+            switch (state)
+            {
+                case LexicalState.Code:
+                    if (current == '/' && next == '/')
+                    {
+                        chars[i] = chars[i + 1] = ' ';
+                        i++;
+                        state = LexicalState.LineComment;
+                    }
+                    else if (current == '/' && next == '*')
+                    {
+                        chars[i] = chars[i + 1] = ' ';
+                        i++;
+                        state = LexicalState.BlockComment;
+                    }
+                    else if (current == '"')
+                    {
+                        chars[i] = ' ';
+                        state = LexicalState.String;
+                    }
+                    else if (current == '\'')
+                    {
+                        chars[i] = ' ';
+                        state = LexicalState.Character;
+                    }
+
+                    break;
+
+                case LexicalState.LineComment:
+                    if (current == '\n')
+                    {
+                        state = LexicalState.Code;
+                    }
+                    else
+                    {
+                        chars[i] = ' ';
+                    }
+
+                    break;
+
+                case LexicalState.BlockComment:
+                    if (current == '*' && next == '/')
+                    {
+                        chars[i] = chars[i + 1] = ' ';
+                        i++;
+                        state = LexicalState.Code;
+                    }
+                    else if (current != '\n' && current != '\r')
+                    {
+                        chars[i] = ' ';
+                    }
+
+                    break;
+
+                case LexicalState.String:
+                case LexicalState.Character:
+                    var terminator = state == LexicalState.String ? '"' : '\'';
+
+                    if (current == '\\' && i + 1 < chars.Length)
+                    {
+                        chars[i] = ' ';
+
+                        if (chars[i + 1] != '\n' && chars[i + 1] != '\r')
+                        {
+                            chars[i + 1] = ' ';
+                        }
+
+                        i++;
+                    }
+                    else if (current == terminator)
+                    {
+                        chars[i] = ' ';
+                        state = LexicalState.Code;
+                    }
+                    else if (current != '\n' && current != '\r')
+                    {
+                        chars[i] = ' ';
+                    }
+
+                    break;
+            }
+        }
+
+        return new string(chars);
+    }
+
+    private static string SanitizePythonText(string content)
+    {
+        var chars = content.ToCharArray();
+        var state = LexicalState.Code;
+        char quote = '\0';
+        var tripleQuoted = false;
+
+        for (var i = 0; i < chars.Length; i++)
+        {
+            var current = chars[i];
+
+            if (state == LexicalState.Code)
+            {
+                if (current == '#')
+                {
+                    state = LexicalState.LineComment;
+                    chars[i] = ' ';
+                }
+                else if (current is '\'' or '"')
+                {
+                    quote = current;
+                    tripleQuoted = i + 2 < chars.Length
+                        && chars[i + 1] == current
+                        && chars[i + 2] == current;
+
+                    chars[i] = ' ';
+
+                    if (tripleQuoted)
+                    {
+                        chars[i + 1] = ' ';
+                        chars[i + 2] = ' ';
+                        i += 2;
+                    }
+
+                    state = LexicalState.String;
+                }
+            }
+            else if (state == LexicalState.LineComment)
+            {
+                if (current == '\n')
+                {
+                    state = LexicalState.Code;
+                }
+                else
+                {
+                    chars[i] = ' ';
+                }
+            }
+            else if (state == LexicalState.String)
+            {
+                if (current == '\\' && i + 1 < chars.Length)
+                {
+                    chars[i] = ' ';
+
+                    if (chars[i + 1] != '\n' && chars[i + 1] != '\r')
+                    {
+                        chars[i + 1] = ' ';
+                    }
+
+                    i++;
+                    continue;
+                }
+
+                if (tripleQuoted
+                    && current == quote
+                    && i + 2 < chars.Length
+                    && chars[i + 1] == quote
+                    && chars[i + 2] == quote)
+                {
+                    chars[i] = chars[i + 1] = chars[i + 2] = ' ';
+                    i += 2;
+                    state = LexicalState.Code;
+                    continue;
+                }
+
+                if (!tripleQuoted && current == quote)
+                {
+                    chars[i] = ' ';
+                    state = LexicalState.Code;
+                    continue;
+                }
+
+                if (current != '\n' && current != '\r')
+                {
+                    chars[i] = ' ';
+                }
+            }
+        }
+
+        return new string(chars);
+    }
+
+    private static string[] GetExtensions(string language)
+    {
+        return language switch
+        {
+            "C#" => [".cs"],
+            "Java" => [".java"],
+            "Python" => [".py"],
+            _ => []
+        };
+    }
+
+    private static bool IsEligibleSourceFile(string file)
+    {
+        var segments = file.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+
+        if (segments.Any(segment =>
+                segment.Equals("bin", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("obj", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Test", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Tests", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("node_modules", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals(".git", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var name = Path.GetFileName(file);
+
+        return !name.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".designer.cs", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string? ResolveLayer(string file)
+    {
+        return Context?
+            .Layers
+            .FirstOrDefault(
+                layer => layer.Files.Contains(
+                    file,
+                    StringComparer.OrdinalIgnoreCase))
+            ?.Name;
+    }
+
+    private sealed record MethodRegion(
+        string Name,
+        int StartLine,
+        string Content);
+
+    private enum LexicalState
+    {
+        Code,
+        LineComment,
+        BlockComment,
+        String,
+        Character
     }
 }

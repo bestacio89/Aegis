@@ -78,10 +78,10 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         """"
         (?s)
         (?<literal>
-            @?"(?:""|\\.|[^"\\])*"
-            | '(?:\\.|[^'\\])*'
-            | """.*?"""
+            """.*?"""
             | '''.*?'''
+            | @?"(?:""|\\.|[^"\\])*"
+            | '(?:\\.|[^'\\])*'
             | \x60(?:\\.|[^\x60\\])*\x60
         )
         |

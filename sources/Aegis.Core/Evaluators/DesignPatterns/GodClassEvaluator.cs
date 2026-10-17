@@ -1,6 +1,15 @@
-﻿using System.Text.RegularExpressions;
+﻿
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Aegis.Architecture.Diagnostics;
+using Aegis.Architecture.Evaluators;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
@@ -13,30 +22,140 @@ using Microsoft.Extensions.Options;
 
 namespace Aegis.Architecture.Evaluators.DesignPatterns;
 
-
-
 /// <summary>
-/// Detects God Class tendencies.
+/// Collects heuristic structural measurements for potential God Classes.
 ///
-/// Produces structural metrics:
-/// - class size
-/// - method density
-/// - property/method distribution
-/// - complexity indicators
-///
-/// RuleEngine determines severity and remediation.
+/// Measurements are scoped to individual classes where the source syntax
+/// can be isolated. RuleEngine determines severity and remediation.
+/// This evaluator does not perform semantic or AST analysis.
 /// </summary>
 public sealed class GodClassEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly DesignPatternPolicy _policy;
 
+    private static readonly string[] Extensions =
+    [
+        ".cs",
+        ".java",
+        ".ts",
+        ".py"
+    ];
 
+    private static readonly Regex ClassRegex = new(
+        @"\bclass\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public override string Name =>
-        "GodClassEvaluator";
+    private static readonly Regex PythonClassRegex = new(
+        @"^[ \t]*class[ \t]+(?<name>[A-Za-z_][A-Za-z0-9_]*)\b",
+        RegexOptions.Compiled |
+        RegexOptions.CultureInvariant |
+        RegexOptions.Multiline);
 
+    // Matches common quoted strings, character literals, C# verbatim strings,
+    // and TypeScript template literals. This is intentionally a lexical
+    // approximation; it is not a complete language lexer.
+    private static readonly Regex StringLiteralRegex = new(
+        """
+        @"(?:""|[^"])*"|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`
+        """,
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex BlockCommentRegex = new(
+        @"/\*[\s\S]*?\*/",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex LineCommentRegex = new(
+        @"//[^\r\n]*",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex PythonCommentRegex = new(
+        @"\#[^\r\n]*",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex CSharpJavaMethodRegex = new(
+        """
+        \b(?:(?:public|private|protected|internal|static|virtual|override|abstract|final|synchronized|async|extern|native)\s+)+
+        (?:<[^>{}]+>\s*)?
+        [A-Za-z_$][A-Za-z0-9_.$<>,?\[\]]*\s+
+        [A-Za-z_$][A-Za-z0-9_$]*\s*\(
+        """,
+        RegexOptions.Compiled |
+        RegexOptions.CultureInvariant |
+        RegexOptions.IgnorePatternWhitespace);
+
+    private static readonly Regex TypeScriptMethodRegex = new(
+        """
+        ^[ \t]*
+        (?:(?:public|private|protected|static|async|override|abstract|readonly)\s+)*
+        [A-Za-z_$][A-Za-z0-9_$]*\s*
+        (?:<[^>{}]+>\s*)?
+        \([^;{}]*\)\s*
+        (?::\s*[^;{}=]+)?\s*
+        \{
+        """,
+        RegexOptions.Compiled |
+        RegexOptions.CultureInvariant |
+        RegexOptions.IgnorePatternWhitespace |
+        RegexOptions.Multiline);
+
+    private static readonly Regex PythonMethodRegex = new(
+        @"^[ \t]*def[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(",
+        RegexOptions.Compiled |
+        RegexOptions.CultureInvariant |
+        RegexOptions.Multiline);
+
+    private static readonly Regex CSharpPropertyRegex = new(
+        """
+        \b(?:(?:public|private|protected|internal|static|virtual|override|abstract|readonly|required|new)\s+)+
+        [A-Za-z_$][A-Za-z0-9_.$<>,?\[\]]*\s+
+        [A-Za-z_$][A-Za-z0-9_$]*\s*
+        \{[^{}]*(?:\bget\b|\bset\b|\binit\b)[^{}]*\}
+        """,
+        RegexOptions.Compiled |
+        RegexOptions.CultureInvariant |
+        RegexOptions.IgnorePatternWhitespace);
+
+    private static readonly Regex CSharpJavaFieldRegex = new(
+        """
+        \b(?:(?:public|private|protected|internal|static|readonly|final|volatile|transient)\s+)+
+        [A-Za-z_$][A-Za-z0-9_.$<>,?\[\]]*\s+
+        [A-Za-z_$][A-Za-z0-9_$]*\s*(?:=|;)
+        """,
+        RegexOptions.Compiled |
+        RegexOptions.CultureInvariant |
+        RegexOptions.IgnorePatternWhitespace);
+
+    private static readonly Regex TypeScriptPropertyRegex = new(
+        """
+        ^[ \t]*
+        (?:(?:public|private|protected|readonly|static|override)\s+)*
+        [A-Za-z_$][A-Za-z0-9_$]*\s*\??\s*:\s*
+        [^=;(){}]+
+        (?:=[^;]+)?;?
+        $
+        """,
+        RegexOptions.Compiled |
+        RegexOptions.CultureInvariant |
+        RegexOptions.IgnorePatternWhitespace |
+        RegexOptions.Multiline);
+
+    private static readonly Regex PythonPropertyRegex = new(
+        @"^[ \t]*@[A-Za-z_][A-Za-z0-9_.]*\.setter[ \t]*$",
+        RegexOptions.Compiled |
+        RegexOptions.CultureInvariant |
+        RegexOptions.Multiline);
+
+    public GodClassEvaluator(
+        ILogger<GodClassEvaluator> logger,
+        IOptions<AegisArchitecturePolicy> options)
+        : base(logger)
+    {
+        _policy = options.Value.Architecture.DesignPatterns
+            ?? new DesignPatternPolicy();
+    }
+
+    public override string Name => "GodClassEvaluator";
 
     public override string[] SupportedLanguages =>
     [
@@ -46,8 +165,6 @@ public sealed class GodClassEvaluator
         "TypeScript"
     ];
 
-
-
     public override string[] SupportedFrameworks =>
     [
         "ASP.NET",
@@ -56,55 +173,15 @@ public sealed class GodClassEvaluator
         "FastAPI"
     ];
 
-
-
-    private static readonly Regex ClassRx =
-        new(
-            @"class\s+(\w+)\b",
-            RegexOptions.Compiled);
-
-
-
-    private static readonly Regex MethodRx =
-        new(
-            @"\b(public|private|protected|def|function)\s+\w+\s*\(",
-            RegexOptions.Compiled);
-
-
-
-    private static readonly Regex PropertyRx =
-        new(
-            @"\b(get|set|var|val|let|this\.)\w+",
-            RegexOptions.Compiled);
-
-
-
-    public GodClassEvaluator(
-        ILogger<GodClassEvaluator> logger,
-        IOptions<AegisArchitecturePolicy> options)
-        : base(logger)
-    {
-        _policy =
-            options.Value.DesignPatterns
-            ?? new DesignPatternPolicy();
-    }
-
-
-
     protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
         EvaluateCoreAsync(
             string projectPath,
             CancellationToken token)
     {
-        var results =
-            new List<ArchitectureEvaluatorResult>();
-
-
+        var results = new List<ArchitectureEvaluatorResult>();
 
         if (Context is null)
             return results;
-
-
 
         if (!_policy.DetectGodClasses)
         {
@@ -116,352 +193,436 @@ public sealed class GodClassEvaluator
             return results;
         }
 
-
-
-        var files =
-            ResolveSourceFiles(
-                projectPath,
-                ".cs",
-                ".java",
-                ".ts",
-                ".py");
-
-
-
-        if (files.Count == 0)
-            return results;
-
-
+        var files = ResolveSourceFiles(projectPath, Extensions);
+        var analyzedFiles = 0;
+        var unreadableFiles = 0;
+        var classMetrics = new List<Dictionary<string, double>>();
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
-
             string content;
 
             try
             {
-                content =
-                    await File.ReadAllTextAsync(
-                        file,
-                        token);
+                content = await File.ReadAllTextAsync(file, token);
             }
-            catch (Exception ex)
+            catch (OperationCanceledException)
             {
-                AegisDiagnostics.Report(
-                    Name,
-                    DiagnosticLevel.Warning,
-                    $"Unable to read {file}.",
-                    ex);
+                throw;
+            }
+            catch (IOException ex)
+            {
+                unreadableFiles++;
+
+                _logger.LogWarning(
+                    ex,
+                    "Unable to read {FilePath} during God Class evaluation.",
+                    file);
+
+                continue;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                unreadableFiles++;
+
+                _logger.LogWarning(
+                    ex,
+                    "Access denied to {FilePath} during God Class evaluation.",
+                    file);
 
                 continue;
             }
 
+            analyzedFiles++;
 
+            var language = ResolveLanguage(file);
+            var sanitized = SanitizeSource(content, language);
+            var classRegex = language == "Python"
+                ? PythonClassRegex
+                : ClassRegex;
 
-            foreach (Match match in ClassRx.Matches(content))
+            foreach (Match match in classRegex.Matches(sanitized))
             {
-                var className =
-                    match.Groups[1].Value;
+                token.ThrowIfCancellationRequested();
 
+                var className = match.Groups["name"].Value;
 
-                var layer =
-                    ResolveLayer(file);
-
-
-
-                var scaling =
-                    GetScalingFactor(
-                        layer);
-
-
-
-                var methodCount =
-                    MethodRx.Matches(content)
-                    .Count;
-
-
-
-                var propertyCount =
-                    PropertyRx.Matches(content)
-                    .Count;
-
-
-
-                var lineCount =
-                    content.Count(
-                        c =>
-                            c == '\n')
-                    + 1;
-
-
-
-                var maxMethods =
-                    (int)
-                    (
-                        _policy.MaxMethodsPerClass *
-                        scaling
-                    );
-
-
-
-                var maxLines =
-                    (int)
-                    (
-                        _policy.MaxLinesPerClass *
-                        scaling
-                    );
-
-
-
-                var lineRatio =
-                    lineCount /
-                    (double)Math.Max(
-                        1,
-                        maxLines);
-
-
-
-                var methodRatio =
-                    methodCount /
-                    (double)Math.Max(
-                        1,
-                        maxMethods);
-
-
-
-                var propertyRatio =
-                    methodCount + propertyCount == 0
-                        ? 0
-                        :
-                        propertyCount /
-                        (double)
-                        (
-                            methodCount +
-                            propertyCount
-                        );
-
-
-
-                var severity =
-                    ComputeGodFactor(
-                        lineRatio,
-                        methodRatio,
-                        propertyRatio);
-
-
-
-                results.Add(
-                    CreateResult(
-                        file,
+                if (!TryExtractClassBody(
+                        sanitized,
+                        match,
+                        language,
+                        out var classBody))
+                {
+                    _logger.LogDebug(
+                        "Could not isolate class {ClassName} in {FilePath}.",
                         className,
-                        layer,
-                        lineCount,
-                        methodCount,
-                        propertyCount,
-                        severity,
-                        methodCount /
-                            (double)Math.Max(
-                                1,
-                                lineCount),
-                        propertyRatio));
+                        file);
+
+                    continue;
+                }
+
+                var methods = CountMethods(classBody, language);
+                var properties = CountProperties(classBody, language);
+                var lines = CountLines(classBody);
+                var layer = ResolveLayer(file);
+                var scaling = GetScalingFactor(layer);
+
+                var maxMethods = Math.Max(
+                    1,
+                    (int)(_policy.MaxMethodsPerClass * scaling));
+
+                var maxLines = Math.Max(
+                    1,
+                    (int)(_policy.MaxLinesPerClass * scaling));
+
+                var lineRatio = lines / (double)maxLines;
+                var methodRatio = methods / (double)maxMethods;
+
+                var propertyRatio = methods + properties == 0
+                    ? 0
+                    : properties / (double)(methods + properties);
+
+                var methodDensity = methods / (double)Math.Max(1, lines);
+
+                var severity = ComputeGodFactor(
+                    lineRatio,
+                    methodRatio,
+                    propertyRatio);
+
+                var metrics = new Dictionary<string, double>
+                {
+                    ["LineCount"] = lines,
+                    ["MethodCount"] = methods,
+                    ["PropertyCount"] = properties,
+                    ["MethodDensity"] = methodDensity,
+                    ["PropertyRatio"] = propertyRatio,
+                    ["LineLimitRatio"] = lineRatio,
+                    ["MethodLimitRatio"] = methodRatio,
+                    ["GodClassSeverity"] = severity,
+                    ["GodClassComplianceScore"] = Math.Round(
+                        (1 - Math.Min(severity, 1)) * 100,
+                        2)
+                };
+
+                classMetrics.Add(metrics);
+
+                results.Add(CreateClassResult(
+                    projectPath,
+                    file,
+                    className,
+                    language,
+                    layer,
+                    metrics));
             }
         }
 
-
-
-        if (results.Count > 0)
-        {
-            results.Add(
-                CreateSummary(
-                    projectPath,
-                    results));
-        }
-
-
+        results.Add(CreateSummary(
+            projectPath,
+            files.Count,
+            analyzedFiles,
+            unreadableFiles,
+            classMetrics));
 
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Info,
-            $"God class evaluation completed with {results.Count} entries.");
-
-
+            $"God Class evaluation completed: {classMetrics.Count} classes across " +
+            $"{analyzedFiles}/{files.Count} readable source files; " +
+            $"{unreadableFiles} files unreadable.");
 
         return results;
     }
 
-
-
-    private ArchitectureEvaluatorResult CreateResult(
+    private ArchitectureEvaluatorResult CreateClassResult(
+        string projectPath,
         string file,
         string className,
+        string language,
         string layer,
-        int lines,
-        int methods,
-        int properties,
-        double severity,
-        double density,
-        double propertyRatio)
+        Dictionary<string, double> metrics)
     {
-        return new ArchitectureEvaluatorResult(
-            Name,
-            file)
+        var result = new ArchitectureEvaluatorResult(Name, className)
         {
-            ProjectName =
-                Context!.ProjectName,
-
-            Language =
-                Context.Language,
-
-            Framework =
-                Context.Framework,
-
-
-            Layer =
-                layer,
-
-
-            DetectionConfidence =
-                Context.Confidence,
-
-
-            Category =
-                "DesignPattern",
-
-
-            Metrics =
-            {
-                ["LineCount"] =
-                    lines,
-
-                ["MethodCount"] =
-                    methods,
-
-                ["PropertyCount"] =
-                    properties,
-
-                ["MethodDensity"] =
-                    density,
-
-                ["PropertyRatio"] =
-                    propertyRatio,
-
-                ["GodClassSeverity"] =
-                    severity,
-
-                ["GodClassComplianceScore"] =
-                    Math.Round(
-                        (1 -
-                         Math.Min(
-                             severity,
-                             1))
-                        * 100,
-                        2)
-            },
-
-
-            Metadata =
-            {
-                ["FilePath"] = file,
-
-                ["ClassName"] =
-                    className,
-
-                ["Language"] =
-                    Context.Language,
-
-                ["Framework"] =
-                    Context.Framework
-                    ?? "Unknown",
-
-                ["Layer"] =
-                    layer
-            }
+            Target = projectPath,
+            Category = ArchitectureRuleCategory.DesignPatterns.ToString(),
+            Layer = layer,
+            Metrics = metrics
         };
+
+        result.Metadata[FilePathMetadataKey] = file;
+        result.Metadata[EvaluationScopeMetadataKey] = FileScope;
+        result.Metadata["ClassName"] = className;
+        result.Metadata["Language"] = language;
+        result.Metadata["Layer"] = layer;
+        result.Metadata["SemanticAnalysisPerformed"] = "false";
+        result.Metadata["StructuralAnalysisHeuristic"] = "true";
+
+        return result;
     }
-
-
 
     private ArchitectureEvaluatorResult CreateSummary(
         string projectPath,
-        IEnumerable<ArchitectureEvaluatorResult> entries)
+        int discoveredFiles,
+        int analyzedFiles,
+        int unreadableFiles,
+        IReadOnlyCollection<Dictionary<string, double>> classMetrics)
     {
-        var results =
-            entries.ToList();
+        var averageCompliance = classMetrics.Count == 0
+            ? 0
+            : classMetrics.Average(metrics =>
+                metrics.GetValueOrDefault("GodClassComplianceScore"));
 
+        var averageSeverity = classMetrics.Count == 0
+            ? 0
+            : classMetrics.Average(metrics =>
+                metrics.GetValueOrDefault("GodClassSeverity"));
 
-
-        return new ArchitectureEvaluatorResult(
+        var summary = new ArchitectureEvaluatorResult(
             Name,
-            projectPath)
+            "GodClassSummary")
         {
-            ProjectName =
-                Context?.ProjectName ?? string.Empty,
-
-
-            Category =
-                "DesignPatternSummary",
-
-
+            Target = projectPath,
+            Category = ArchitectureRuleCategory.DesignPatterns.ToString(),
             Metrics =
             {
-                ["ClassCount"] =
-                    results.Count,
-
-                ["AverageComplianceScore"] =
-                    results.Average(
-                        x =>
-                            x.Metrics.GetValueOrDefault(
-                                "GodClassComplianceScore")),
-
-
-                ["AverageSeverity"] =
-                    results.Average(
-                        x =>
-                            x.Metrics.GetValueOrDefault(
-                                "GodClassSeverity"))
-            },
-
-
-            Metadata =
-            {
-                ["Evaluator"] =
-                    Name
+                ["DiscoveredFiles"] = discoveredFiles,
+                ["AnalyzedFiles"] = analyzedFiles,
+                ["UnreadableFiles"] = unreadableFiles,
+                ["ClassCount"] = classMetrics.Count,
+                ["AverageComplianceScore"] = averageCompliance,
+                ["AverageSeverity"] = averageSeverity
             }
         };
+
+        summary.Metadata[EvaluationScopeMetadataKey] = ProjectScope;
+        summary.Metadata["Evaluator"] = Name;
+        summary.Metadata["SemanticAnalysisPerformed"] = "false";
+        summary.Metadata["StructuralAnalysisHeuristic"] = "true";
+
+        return summary;
     }
 
-
-
-    private string ResolveLayer(
-        string file)
+    private string ResolveLayer(string file)
     {
         return Context?
             .Layers
-            .FirstOrDefault(
-                layer =>
-                    layer.Files.Contains(
-                        file,
-                        StringComparer.OrdinalIgnoreCase))
+            .FirstOrDefault(layer =>
+                layer.Files.Contains(
+                    file,
+                    StringComparer.OrdinalIgnoreCase))
             ?.Name
-            ??
-            "Unknown";
+            ?? "Unknown";
     }
 
-
-
-    private double GetScalingFactor(
-        string layer)
+    private double GetScalingFactor(string layer)
     {
-        return _policy.LayerScaling.TryGetValue(
-            layer,
-            out var scale)
-            ? scale
-            : 1.0;
+        if (_policy.LayerScaling.TryGetValue(layer, out var scale) &&
+            double.IsFinite(scale) &&
+            scale > 0)
+        {
+            return scale;
+        }
+
+        return 1.0;
     }
 
+    private static string ResolveLanguage(string file)
+    {
+        return Path.GetExtension(file).ToLowerInvariant() switch
+        {
+            ".cs" => "C#",
+            ".java" => "Java",
+            ".ts" => "TypeScript",
+            ".py" => "Python",
+            _ => "Unknown"
+        };
+    }
 
+    private static string SanitizeSource(
+        string source,
+        string language)
+    {
+        var sanitized = StringLiteralRegex.Replace(
+            source,
+            match => PreserveLayout(match.Value));
+
+        if (language == "Python")
+        {
+            // Python triple-quoted docstrings and multiline strings are not
+            // fully handled by this lexical sanitizer.
+            return PythonCommentRegex.Replace(
+                sanitized,
+                match => PreserveLayout(match.Value));
+        }
+
+        sanitized = BlockCommentRegex.Replace(
+            sanitized,
+            match => PreserveLayout(match.Value));
+
+        return LineCommentRegex.Replace(
+            sanitized,
+            match => PreserveLayout(match.Value));
+    }
+
+    private static string PreserveLayout(string value)
+    {
+        var chars = value.ToCharArray();
+
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (chars[i] is not '\r' and not '\n')
+                chars[i] = ' ';
+        }
+
+        return new string(chars);
+    }
+
+    private static int CountLines(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return 0;
+
+        return body.Split('\n')
+            .Count(line => !string.IsNullOrWhiteSpace(line));
+    }
+
+    private static int CountMethods(
+        string classBody,
+        string language)
+    {
+        return language switch
+        {
+            "Python" => PythonMethodRegex.Matches(classBody).Count,
+            "TypeScript" => TypeScriptMethodRegex.Matches(classBody).Count,
+            _ => CSharpJavaMethodRegex.Matches(classBody).Count
+        };
+    }
+
+    private static int CountProperties(
+        string classBody,
+        string language)
+    {
+        return language switch
+        {
+            "Python" => PythonPropertyRegex.Matches(classBody).Count,
+            "TypeScript" => TypeScriptPropertyRegex.Matches(classBody).Count,
+            "C#" => CSharpPropertyRegex.Matches(classBody).Count,
+            _ => CSharpJavaFieldRegex.Matches(classBody).Count
+        };
+    }
+
+    private static bool TryExtractClassBody(
+        string source,
+        Match classMatch,
+        string language,
+        out string classBody)
+    {
+        classBody = string.Empty;
+
+        if (language == "Python")
+        {
+            var lineEnd = source.IndexOf('\n', classMatch.Index);
+
+            if (lineEnd < 0)
+                lineEnd = source.Length;
+
+            var headerIndent = CountIndentation(source, classMatch.Index);
+            var bodyStart = lineEnd < source.Length ? lineEnd + 1 : lineEnd;
+            var cursor = bodyStart;
+
+            while (cursor < source.Length)
+            {
+                var nextLineEnd = source.IndexOf('\n', cursor);
+
+                if (nextLineEnd < 0)
+                    nextLineEnd = source.Length;
+
+                var line = source.AsSpan(cursor, nextLineEnd - cursor);
+
+                if (!IsBlank(line))
+                {
+                    var indentation = CountIndentation(source, cursor);
+
+                    if (indentation <= headerIndent)
+                        break;
+                }
+
+                cursor = nextLineEnd < source.Length
+                    ? nextLineEnd + 1
+                    : nextLineEnd;
+            }
+
+            classBody = source.Substring(bodyStart, cursor - bodyStart);
+            return true;
+        }
+
+        var openingBrace = source.IndexOf(
+            '{',
+            classMatch.Index + classMatch.Length);
+
+        if (openingBrace < 0)
+            return false;
+
+        var depth = 0;
+
+        for (var i = openingBrace; i < source.Length; i++)
+        {
+            if (source[i] == '{')
+            {
+                depth++;
+            }
+            else if (source[i] == '}')
+            {
+                depth--;
+
+                if (depth == 0)
+                {
+                    classBody = source.Substring(
+                        openingBrace + 1,
+                        i - openingBrace - 1);
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsBlank(ReadOnlySpan<char> line)
+    {
+        foreach (var character in line)
+        {
+            if (!char.IsWhiteSpace(character))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static int CountIndentation(
+        string source,
+        int position)
+    {
+        var lineStart = source.LastIndexOf('\n', Math.Max(0, position - 1));
+        lineStart = lineStart < 0 ? 0 : lineStart + 1;
+
+        var indentation = 0;
+
+        for (var i = lineStart; i < source.Length && i < position; i++)
+        {
+            if (source[i] == ' ')
+                indentation++;
+            else if (source[i] == '\t')
+                indentation += 4;
+            else
+                break;
+        }
+
+        return indentation;
+    }
 
     private static double ComputeGodFactor(
         double lineRatio,

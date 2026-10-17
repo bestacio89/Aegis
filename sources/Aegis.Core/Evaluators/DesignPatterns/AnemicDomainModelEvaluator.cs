@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Text;
+using System.Text.RegularExpressions;
 
 using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Models;
@@ -13,74 +14,41 @@ using Microsoft.Extensions.Options;
 
 namespace Aegis.Architecture.Evaluators.DesignPatterns;
 
-
 /// <summary>
-/// Evaluates domain model characteristics and produces metrics
-/// that allow RuleEngine to identify anemic domain models.
+/// Evaluates observable state and behavior characteristics of domain-model
+/// candidates in C# and Java source files.
 ///
-/// The evaluator does not decide severity.
-/// It only exposes architectural facts:
-/// - State density
-/// - Behavior density
-/// - Entity signals
-/// - Aggregate signals
+/// This evaluator produces lexical metrics and heuristic indicators.
+/// It does not establish domain-model quality or definitively diagnose
+/// anemic domain models.
 ///
-/// Rule interpretation belongs to RuleEngine.
+/// Semantic analysis of method bodies, inherited members, and domain behavior
+/// belongs to compiler-backed or language-specific analysis services.
 /// </summary>
 public sealed class AnemicDomainModelEvaluator
     : BaseArchitectureEvaluator, IScopedDependency
 {
     private readonly DesignPatternPolicy _policy;
 
+    private static readonly Regex TypeDeclarationRegex = new(
+        @"\b(?:class|record(?:\s+(?:class|struct))?)\s+([A-Za-z_][A-Za-z0-9_]*)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex PropertyRegex = new(
+        @"\b[A-Za-z_][A-Za-z0-9_<>.,?\[\]\s]*\s+[A-Za-z_][A-Za-z0-9_]*\s*\{\s*(?:get|set|init)\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public override string Name =>
-        "AnemicDomainModelEvaluator";
+    private static readonly Regex FieldRegex = new(
+        @"(?m)^\s*(?:(?:public|private|protected|internal|static|final|readonly|volatile|transient|const|constexpr|mutable)\s+)*(?:[A-Za-z_][A-Za-z0-9_$.<>?,\[\]]*\s+)+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:=[^;]*)?;",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex MethodRegex = new(
+        @"(?m)^\s*(?:(?:public|private|protected|internal|static|final|abstract|virtual|override|sealed|async|synchronized|native|extern|default|strictfp)\s+)*(?:[A-Za-z_][A-Za-z0-9_$.<>?,\[\]]*\s+)+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-
-    public override string[] SupportedLanguages =>
-    [
-        "C#",
-        "Java"
-    ];
-
-
-
-    public override string[] SupportedFrameworks =>
-    [
-        "ASP.NET",
-        "Spring Boot",
-        "FastAPI",
-        "Node",
-        "Angular",
-        "React",
-        "Vue"
-    ];
-
-
-
-
-    private static readonly Regex ClassRegex =
-        new(
-            @"\bclass\s+([A-Z][A-Za-z0-9_]*)",
-            RegexOptions.Compiled);
-
-
-
-    private static readonly Regex PropertyRegex =
-        new(
-            @"\b(public|private|protected)\s+[A-Za-z0-9_<>,\[\]?]+\s+\w+\s*\{",
-            RegexOptions.Compiled);
-
-
-
-    private static readonly Regex MethodRegex =
-        new(
-            @"\b(public|private|protected|internal)\s+[A-Za-z0-9_<>,\[\]?]+\s+\w+\s*\(",
-            RegexOptions.Compiled);
-
-
+    private static readonly Regex ConstructorRegex = new(
+        @"(?m)^\s*(?:(?:public|private|protected|internal)\s+)*(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly string[] DomainIndicators =
     [
@@ -88,389 +56,619 @@ public sealed class AnemicDomainModelEvaluator
         "Aggregate",
         "Domain",
         "Model",
-        "Root"
+        "Root",
+        "ValueObject"
     ];
 
+    private static readonly string[] DomainPathIndicators =
+    [
+        "/Domain/",
+        "/Core/",
+        "/Entities/",
+        "/Aggregates/",
+        "/ValueObjects/"
+    ];
 
+    public override string Name => "AnemicDomainModelEvaluator";
+
+    public override string[] SupportedLanguages =>
+    [
+        "C#",
+        "Java"
+    ];
+
+    public override string[] SupportedFrameworks =>
+    [
+        "ASP.NET",
+        "Spring Boot"
+    ];
 
     public AnemicDomainModelEvaluator(
         ILogger<AnemicDomainModelEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
         : base(logger)
     {
-        _policy =
-            options.Value.DesignPatterns
+        ArgumentNullException.ThrowIfNull(options);
+
+        _policy = options.Value.DesignPatterns
             ?? new DesignPatternPolicy();
     }
-
-
 
     protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
         EvaluateCoreAsync(
             string projectPath,
             CancellationToken token)
     {
-        var results =
-            new List<ArchitectureEvaluatorResult>();
+        token.ThrowIfCancellationRequested();
 
+        var results = new List<ArchitectureEvaluatorResult>();
 
-
-        if (Context is null)
+        if (Context is not { } context)
+        {
             return results;
-
-
+        }
 
         if (!_policy.DetectAnemicDomainModels)
         {
             AegisDiagnostics.Report(
                 Name,
                 DiagnosticLevel.Trace,
-                "Anemic domain model detection disabled by policy.");
+                "Anemic domain model analysis disabled by policy.");
 
             return results;
         }
 
-
-
-        var files =
-            EnumerateApplicationFiles(projectPath)
-                .Where(IsSupportedSourceFile)
-                .Where(IsDomainCandidateFile)
-                .ToList();
-
-
+        var files = ResolveSourceFiles(
+                projectPath,
+                ".cs",
+                ".java")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         if (files.Count == 0)
         {
             AegisDiagnostics.Report(
                 Name,
                 DiagnosticLevel.Trace,
-                "No domain candidates detected.");
+                "No supported source files were found.");
 
             return results;
         }
 
-
+        var analyzedFiles = 0;
+        var unreadableFiles = 0;
+        var candidateTypes = 0;
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
-
-
             string content;
 
             try
             {
-                content =
-                    await File.ReadAllTextAsync(
-                        file,
-                        token);
+                content = await File.ReadAllTextAsync(file, token);
             }
-            catch
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
+                throw;
+            }
+            catch (Exception ex) when (
+                ex is IOException
+                or UnauthorizedAccessException
+                or System.Security.SecurityException)
+            {
+                unreadableFiles++;
+
+                AegisDiagnostics.Report(
+                    Name,
+                    DiagnosticLevel.Warning,
+                    $"Unable to read source file '{file}'.",
+                    ex);
+
                 continue;
             }
 
+            analyzedFiles++;
 
+            token.ThrowIfCancellationRequested();
 
-            foreach (Match match in ClassRegex.Matches(content))
+            var sanitizedContent = SanitizeCode(content);
+            var fileIsDomainCandidate = IsDomainCandidateFile(file);
+
+            foreach (Match typeMatch in TypeDeclarationRegex.Matches(sanitizedContent))
             {
                 token.ThrowIfCancellationRequested();
 
+                var typeName = typeMatch.Groups[1].Value;
 
-
-                var className =
-                    match.Groups[1].Value;
-
-
-
-                if (!IsDomainType(className))
+                if (!fileIsDomainCandidate && !IsDomainType(typeName))
+                {
                     continue;
+                }
 
+                var openingBrace = sanitizedContent.IndexOf(
+                    '{',
+                    typeMatch.Index + typeMatch.Length);
 
-
-                var classBlock =
-                    ExtractClassBlock(
-                        content,
-                        match.Index);
-
-
-
-                if (string.IsNullOrWhiteSpace(classBlock))
+                if (openingBrace < 0)
+                {
+                    // Forwards declarations and incomplete source are not
+                    // treated as analyzable class bodies.
                     continue;
+                }
 
+                var closingBrace = FindMatchingBrace(
+                    sanitizedContent,
+                    openingBrace);
 
+                if (closingBrace < 0)
+                {
+                    AegisDiagnostics.Report(
+                        Name,
+                        DiagnosticLevel.Trace,
+                        $"Unable to find the closing brace for type '{typeName}' in '{file}'.");
 
-                var properties =
-                    PropertyRegex
-                        .Matches(classBlock)
-                        .Count;
+                    continue;
+                }
 
+                var typeBody = sanitizedContent[
+                    (openingBrace + 1)..closingBrace];
 
+                var propertyCount = CountMatches(
+                    PropertyRegex,
+                    typeBody);
 
-                var methods =
-                    MethodRegex
-                        .Matches(classBlock)
-                        .Count;
+                var fieldCount = CountMatches(
+                    FieldRegex,
+                    typeBody);
 
+                var methodCount = CountMethods(
+                    typeBody,
+                    typeName);
 
+                var constructorCount = CountConstructors(
+                    typeBody,
+                    typeName);
 
-                var behaviorRatio =
-                    properties == 0
-                        ? methods
-                        :
-                        (double)methods / properties;
+                var stateMemberCount = propertyCount + fieldCount;
 
+                var behaviorRatio = stateMemberCount == 0
+                    ? methodCount
+                    : (double)methodCount / stateMemberCount;
 
+                var behaviorScore = CalculateBehaviorScore(
+                    stateMemberCount,
+                    methodCount);
 
-                var domainBehaviorScore =
-                    CalculateBehaviorScore(
-                        properties,
-                        methods);
+                var result = CreateTypeResult(
+                    file,
+                    typeName,
+                    propertyCount,
+                    fieldCount,
+                    methodCount,
+                    constructorCount,
+                    behaviorRatio,
+                    behaviorScore);
 
-
-
-                results.Add(
-                    CreateResult(
-                        file,
-                        className,
-                        properties,
-                        methods,
-                        behaviorRatio,
-                        domainBehaviorScore));
+                results.Add(result);
+                candidateTypes++;
             }
         }
-
-
 
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Info,
-            $"Anemic domain analysis completed with {results.Count} entries.");
-
-
+            $"Domain model analysis completed. " +
+            $"Files discovered: {files.Count}; " +
+            $"Files analyzed: {analyzedFiles}; " +
+            $"Unreadable files: {unreadableFiles}; " +
+            $"Candidate types: {candidateTypes}; " +
+            $"Results: {results.Count}.");
 
         return results;
     }
 
-
-
-    private ArchitectureEvaluatorResult CreateResult(
+    private ArchitectureEvaluatorResult CreateTypeResult(
         string file,
-        string className,
-        int properties,
-        int methods,
+        string typeName,
+        int propertyCount,
+        int fieldCount,
+        int methodCount,
+        int constructorCount,
         double behaviorRatio,
         double behaviorScore)
     {
-        return new ArchitectureEvaluatorResult(
-            Name,
-            file)
-        {
-            ProjectName =
-                Context?.ProjectName,
+        var context = Context;
 
-            Language =
-                Context?.Language,
+        var result = CreateResult(file, "DesignPattern");
 
-            Framework =
-                Context?.Framework,
+        result.ProjectName = context?.ProjectName;
+        result.Language = context?.Language;
+        result.Framework = context?.Framework;
+        result.Layer = ResolveLayer(file);
+        result.DetectionConfidence = context?.Confidence ?? 0;
+        result.Category = "DesignPattern";
 
-            Layer =
-                ResolveLayer(file),
+        result.Metrics["Properties"] = propertyCount;
+        result.Metrics["Fields"] = fieldCount;
+        result.Metrics["StateMemberCount"] = propertyCount + fieldCount;
+        result.Metrics["Methods"] = methodCount;
+        result.Metrics["Constructors"] = constructorCount;
+        result.Metrics["BehaviorRatio"] = behaviorRatio;
+        result.Metrics["DomainBehaviorScore"] = behaviorScore;
 
-            DetectionConfidence =
-                Context?.Confidence ?? 0,
+        result.Metadata["FilePath"] = file;
+        result.Metadata["ClassName"] = typeName;
+        result.Metadata["Language"] = context?.Language ?? "Unknown";
+        result.Metadata["Framework"] = context?.Framework ?? "Unknown";
+        result.Metadata["EvaluationScope"] = FileScope;
+        result.Metadata["MeasurementMethod"] =
+            "Lexical count of property declarations, field declarations, and method-like declarations.";
+        result.Metadata["ScoreInterpretation"] =
+            "Heuristic state-to-method balance indicator; not a definitive anemic-domain-model diagnosis.";
+        result.Metadata["SemanticAnalysisPerformed"] = false.ToString();
+        result.Metadata["InheritanceResolved"] = false.ToString();
+        result.Metadata["MethodBehaviorClassified"] = false.ToString();
 
-            Category =
-                "DesignPattern",
-
-
-            Metrics =
-            {
-                ["Properties"] =
-                    properties,
-
-                ["Methods"] =
-                    methods,
-
-                ["BehaviorRatio"] =
-                    behaviorRatio,
-
-                ["DomainBehaviorScore"] =
-                    behaviorScore
-            },
-
-
-            Metadata =
-            {
-                ["FilePath"] = file,
-
-                ["ClassName"] =
-                    className,
-
-                ["Language"] =
-                    Context?.Language ?? "Unknown",
-
-                ["Framework"] =
-                    Context?.Framework ?? "Unknown",
-
-                ["ArchitectureStyle"] =
-                    string.Join(
-                        ",",
-                        Context?.Framework ?? "Unknown")
-            }
-        };
+        return result;
     }
 
+    private static int CountMatches(
+        Regex regex,
+        string content)
+    {
+        return regex.Matches(content).Count;
+    }
 
+    private static int CountMethods(
+        string typeBody,
+        string typeName)
+    {
+        var count = 0;
+
+        foreach (Match match in MethodRegex.Matches(typeBody))
+        {
+            var methodName = match.Groups["name"].Value;
+
+            if (methodName.Equals(
+                    typeName,
+                    StringComparison.Ordinal))
+            {
+                // Constructors are reported separately.
+                continue;
+            }
+
+            count++;
+        }
+
+        return count;
+    }
+
+    private static int CountConstructors(
+        string typeBody,
+        string typeName)
+    {
+        var count = 0;
+
+        foreach (Match match in ConstructorRegex.Matches(typeBody))
+        {
+            if (match.Groups["name"].Value.Equals(
+                    typeName,
+                    StringComparison.Ordinal))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
 
     private static double CalculateBehaviorScore(
-        int properties,
-        int methods)
+        int stateMemberCount,
+        int methodCount)
     {
-        if (properties == 0)
-            return methods > 0 ? 100 : 0;
+        if (stateMemberCount <= 0)
+        {
+            return methodCount > 0 ? 100 : 0;
+        }
 
-
-
-        var ratio =
-            (double)methods / properties;
-
-
+        var ratio = (double)methodCount / stateMemberCount;
 
         return Math.Round(
-            Math.Min(
-                ratio,
-                1) *
-            100,
+            Math.Min(ratio, 1.0) * 100.0,
             2);
     }
 
-
-
-    private bool IsDomainCandidateFile(
-        string file)
+    private static bool IsDomainCandidateFile(string file)
     {
-        var normalized =
-            file.Replace(
-                '\\',
-                '/');
+        var normalized = file.Replace('\\', '/');
 
-
-
-        return normalized.Contains(
-                   "/Domain/",
-                   StringComparison.OrdinalIgnoreCase)
-
-               ||
-
-               normalized.Contains(
-                   "/Core/",
-                   StringComparison.OrdinalIgnoreCase)
-
-               ||
-
-               normalized.Contains(
-                   "/Entities/",
-                   StringComparison.OrdinalIgnoreCase)
-
-               ||
-
-               normalized.Contains(
-                   "/Aggregates/",
-                   StringComparison.OrdinalIgnoreCase);
+        return DomainPathIndicators.Any(indicator =>
+            normalized.Contains(
+                indicator,
+                StringComparison.OrdinalIgnoreCase));
     }
 
-
-
-    private static bool IsSupportedSourceFile(
-        string file)
+    private static bool IsDomainType(string typeName)
     {
-        return
-            file.EndsWith(
-                ".cs",
-                StringComparison.OrdinalIgnoreCase)
-
-            ||
-
-            file.EndsWith(
-                ".java",
-                StringComparison.OrdinalIgnoreCase);
+        return DomainIndicators.Any(indicator =>
+            typeName.Contains(
+                indicator,
+                StringComparison.OrdinalIgnoreCase));
     }
 
-
-
-    private static bool IsDomainType(
-        string className)
-    {
-        return DomainIndicators.Any(
-            indicator =>
-                className.Contains(
-                    indicator,
-                    StringComparison.OrdinalIgnoreCase));
-    }
-
-
-
-    private string? ResolveLayer(
-        string file)
+    private string? ResolveLayer(string file)
     {
         return Context?
             .Layers
-            .FirstOrDefault(
-                layer =>
-                    layer.Files.Contains(
-                        file,
-                        StringComparer.OrdinalIgnoreCase))
+            .FirstOrDefault(layer =>
+                layer.Files.Contains(
+                    file,
+                    StringComparer.OrdinalIgnoreCase))
             ?.Name;
     }
 
-
-
-    private static string ExtractClassBlock(
+    private static int FindMatchingBrace(
         string content,
-        int start)
+        int openingBrace)
     {
-        var brace =
-            content.IndexOf(
-                '{',
-                start);
-
-
-
-        if (brace < 0)
-            return string.Empty;
-
-
-
         var depth = 0;
 
-
-
-        for (var i = brace; i < content.Length; i++)
+        for (var index = openingBrace; index < content.Length; index++)
         {
-            if (content[i] == '{')
+            if (content[index] == '{')
+            {
                 depth++;
-
-
-
-            if (content[i] == '}')
+            }
+            else if (content[index] == '}')
             {
                 depth--;
 
-
                 if (depth == 0)
                 {
-                    return content[
-                        start..(i + 1)];
+                    return index;
                 }
             }
         }
 
+        return -1;
+    }
 
+    /// <summary>
+    /// Replaces comments and string/character literal contents with spaces,
+    /// preserving newlines and source offsets for subsequent regex matching
+    /// and brace balancing.
+    ///
+    /// Handles common C# and Java comments, ordinary strings, character
+    /// literals, C# verbatim strings, C# raw strings, and Java text blocks.
+    /// It is a lexical approximation, not a complete language lexer.
+    /// </summary>
+    private static string SanitizeCode(string content)
+    {
+        var buffer = new StringBuilder(content);
+        var inLineComment = false;
+        var inBlockComment = false;
+        var inString = false;
+        var inCharacter = false;
+        var isVerbatimString = false;
+        var rawStringQuoteCount = 0;
 
-        return string.Empty;
+        for (var index = 0; index < content.Length; index++)
+        {
+            var current = content[index];
+            var next = index + 1 < content.Length
+                ? content[index + 1]
+                : '\0';
+
+            if (inLineComment)
+            {
+                if (current == '\n')
+                {
+                    inLineComment = false;
+                }
+                else if (current != '\r')
+                {
+                    buffer[index] = ' ';
+                }
+
+                continue;
+            }
+
+            if (inBlockComment)
+            {
+                if (current == '*' && next == '/')
+                {
+                    buffer[index] = ' ';
+                    buffer[index + 1] = ' ';
+                    index++;
+                    inBlockComment = false;
+                    continue;
+                }
+
+                if (current is not '\r' and not '\n')
+                {
+                    buffer[index] = ' ';
+                }
+
+                continue;
+            }
+
+            if (inString)
+            {
+                if (rawStringQuoteCount > 0)
+                {
+                    if (current == '"')
+                    {
+                        var quoteCount = CountConsecutiveQuotes(
+                            content,
+                            index);
+
+                        if (quoteCount >= rawStringQuoteCount)
+                        {
+                            for (var offset = 0; offset < rawStringQuoteCount; offset++)
+                            {
+                                buffer[index + offset] = ' ';
+                            }
+
+                            index += rawStringQuoteCount - 1;
+                            inString = false;
+                            rawStringQuoteCount = 0;
+                            continue;
+                        }
+                    }
+
+                    if (current is not '\r' and not '\n')
+                    {
+                        buffer[index] = ' ';
+                    }
+
+                    continue;
+                }
+
+                if (isVerbatimString && current == '"' && next == '"')
+                {
+                    buffer[index] = ' ';
+                    buffer[index + 1] = ' ';
+                    index++;
+                    continue;
+                }
+
+                if (!isVerbatimString && current == '\\')
+                {
+                    buffer[index] = ' ';
+
+                    if (index + 1 < content.Length)
+                    {
+                        if (content[index + 1] is not '\r' and not '\n')
+                        {
+                            buffer[index + 1] = ' ';
+                        }
+
+                        index++;
+                    }
+
+                    continue;
+                }
+
+                if (current == '"')
+                {
+                    buffer[index] = ' ';
+                    inString = false;
+                    isVerbatimString = false;
+                    continue;
+                }
+
+                if (current is not '\r' and not '\n')
+                {
+                    buffer[index] = ' ';
+                }
+
+                continue;
+            }
+
+            if (inCharacter)
+            {
+                if (current == '\\')
+                {
+                    buffer[index] = ' ';
+
+                    if (index + 1 < content.Length)
+                    {
+                        if (content[index + 1] is not '\r' and not '\n')
+                        {
+                            buffer[index + 1] = ' ';
+                        }
+
+                        index++;
+                    }
+
+                    continue;
+                }
+
+                if (current == '\'')
+                {
+                    buffer[index] = ' ';
+                    inCharacter = false;
+                    continue;
+                }
+
+                if (current is not '\r' and not '\n')
+                {
+                    buffer[index] = ' ';
+                }
+
+                continue;
+            }
+
+            if (current == '/' && next == '/')
+            {
+                buffer[index] = ' ';
+                buffer[index + 1] = ' ';
+                index++;
+                inLineComment = true;
+                continue;
+            }
+
+            if (current == '/' && next == '*')
+            {
+                buffer[index] = ' ';
+                buffer[index + 1] = ' ';
+                index++;
+                inBlockComment = true;
+                continue;
+            }
+
+            if (current == '"')
+            {
+                var quoteCount = CountConsecutiveQuotes(
+                    content,
+                    index);
+
+                if (quoteCount >= 3)
+                {
+                    rawStringQuoteCount = quoteCount;
+                    inString = true;
+
+                    for (var offset = 0; offset < quoteCount; offset++)
+                    {
+                        buffer[index + offset] = ' ';
+                    }
+
+                    index += quoteCount - 1;
+                    continue;
+                }
+
+                isVerbatimString = index > 0 && content[index - 1] == '@';
+                inString = true;
+                buffer[index] = ' ';
+                continue;
+            }
+
+            if (current == '\'')
+            {
+                inCharacter = true;
+                buffer[index] = ' ';
+            }
+        }
+
+        return buffer.ToString();
+    }
+
+    private static int CountConsecutiveQuotes(
+        string content,
+        int startIndex)
+    {
+        var count = 0;
+
+        for (var index = startIndex;
+             index < content.Length && content[index] == '"';
+             index++)
+        {
+            count++;
+        }
+
+        return count;
     }
 }

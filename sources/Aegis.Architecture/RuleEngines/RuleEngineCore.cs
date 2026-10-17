@@ -111,10 +111,10 @@ public sealed class RuleEngineCore
 
         var checksPassed = 0;
         var checksViolated = 0;
-        var skippedSummaryFacts = 0;
+        var projectSummaryFacts = 0;
         var skippedNonFiniteMetrics = 0;
         var skippedInvalidThresholds = 0;
-        var factsWithoutMatchingMetrics = 0;
+        var factsWithoutMatchingScopedMetrics = 0;
 
         foreach (var fact in factList)
         {
@@ -126,27 +126,35 @@ public sealed class RuleEngineCore
                 continue;
             }
 
-            // Aggregate/project summaries are not file-level compliance
-            // evidence. Their metrics may still be used by other subsystems.
-            if (IsProjectSummary(fact))
+            var isProjectFact = IsProjectSummary(fact);
+
+            if (isProjectFact)
             {
-                skippedSummaryFacts++;
-                continue;
+                projectSummaryFacts++;
             }
 
             var filePath =
                 fact.Metadata?.GetValueOrDefault(FilePathKey)
                 ?? fact.Target;
 
-            var domain = ResolveLayerCached(
-                filePath,
-                context,
-                layerCache);
+            var domain = isProjectFact
+                ? "Project"
+                : ResolveLayerCached(
+                    filePath,
+                    context,
+                    layerCache);
 
             var matchedAnyRuleMetric = false;
 
             foreach (var rule in applicableRules)
             {
+                // Scope is part of the rule contract. Do not compare project
+                // aggregates with per-file thresholds, or vice versa.
+                if ((rule.Scope == RuleEvaluationScope.Project) != isProjectFact)
+                {
+                    continue;
+                }
+
                 if (!ArchitectureRuleMetricContracts.TryResolveMetric(
                         rule,
                         fact.Metrics,
@@ -208,7 +216,7 @@ public sealed class RuleEngineCore
                     Status = isViolation
                         ? RuleEvaluationStatus.Violated
                         : RuleEvaluationStatus.Passed,
-                    Scope = "File",
+                    Scope = rule.Scope.ToString(),
                     Target = fact.Target,
                     Domain = domain,
                     ObservedValue = metricValue,
@@ -286,24 +294,31 @@ public sealed class RuleEngineCore
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var eligibleFacts = factList
-            .Where(fact => fact is not null && !IsProjectSummary(fact))
+            .Where(fact => fact is not null)
             .ToList();
 
         foreach (var rule in applicableRules.Where(rule =>
                      !evaluatedRuleIds.Contains(rule.Id)))
         {
-            var hasMetricEvidence = eligibleFacts.Any(fact =>
+            var expectsProjectFacts = rule.Scope == RuleEvaluationScope.Project;
+            var scopedFacts = eligibleFacts
+                .Where(fact => IsProjectSummary(fact) == expectsProjectFacts)
+                .ToList();
+
+            var hasMetricEvidence = scopedFacts.Any(fact =>
                 ArchitectureRuleMetricContracts.TryResolveMetric(
                     rule,
                     fact.Metrics,
                     out _,
                     out _));
 
+            var scopeLabel = rule.Scope.ToString().ToLowerInvariant();
+
             notEvaluatedReasons[rule.Id] = hasMetricEvidence
-                ? $"Metric '{rule.MetricKey}' was emitted, but no valid comparison completed. Check for non-finite observations or an invalid threshold."
-                : eligibleFacts.Count == 0
-                    ? $"No file-level evaluator facts were available for metric '{rule.MetricKey}'."
-                    : $"No file-level evaluator fact emitted declared metric '{rule.MetricKey}'.";
+                ? $"Metric '{rule.MetricKey}' was emitted at {scopeLabel} scope, but no valid comparison completed. Check for non-finite observations or an invalid threshold."
+                : scopedFacts.Count == 0
+                    ? $"No {scopeLabel}-scope evaluator facts were available for metric '{rule.MetricKey}'."
+                    : $"No {scopeLabel}-scope evaluator fact emitted declared metric '{rule.MetricKey}'.";
         }
 
         var distinctPassedRules = evaluations
@@ -388,10 +403,10 @@ public sealed class RuleEngineCore
             "{Checks} checks ({Passed} passed, {Violated} violated); " +
             "{Evaluated}/{Registered} rules evaluated; " +
             "{NotApplicable} not applicable; {NotEvaluated} not evaluated; " +
-            "{SummariesSkipped} project summaries skipped; " +
+            "{ProjectSummaries} project summaries processed; " +
             "{NonFiniteSkipped} non-finite metrics skipped; " +
             "{InvalidThresholds} invalid thresholds skipped; " +
-            "{FactsWithoutMetrics} facts had no matching rule metrics.",
+            "{FactsWithoutMetrics} facts had no matching scoped rule metrics.",
             factList.Count,
             results.Count,
             totalChecks,
@@ -401,7 +416,7 @@ public sealed class RuleEngineCore
             stats.RulesRegistered,
             stats.RulesNotApplicable.Count,
             stats.RulesNotEvaluated.Count,
-            skippedSummaryFacts,
+            projectSummaryFacts,
             skippedNonFiniteMetrics,
             skippedInvalidThresholds,
             factsWithoutMatchingMetrics);
@@ -452,9 +467,10 @@ public sealed class RuleEngineCore
     {
         var category = ParseCategory(rule.Category);
 
-        var filePath =
-            fact.Metadata?.GetValueOrDefault(FilePathKey)
-            ?? fact.Target;
+        var filePath = rule.Scope == RuleEvaluationScope.Project
+            ? string.Empty
+            : fact.Metadata?.GetValueOrDefault(FilePathKey)
+              ?? fact.Target;
 
         var @namespace =
             fact.Metadata?.GetValueOrDefault("Namespace");

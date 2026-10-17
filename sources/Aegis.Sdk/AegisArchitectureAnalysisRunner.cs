@@ -59,15 +59,22 @@ public sealed class AegisArchitectureAnalysisRunner
     public async Task<AegisAnalysisSessionResult> RunSessionAsync(
         string projectPath,
         string? policyPath = null,
-        CancellationToken token = default)
+        CancellationToken token = default,
+        IProgress<AnalysisProgressInfo>? progress = null)
     {
         try
         {
+            Report(progress, 1, "Preparing", "Loading policy");
+
             var policy = await LoadPolicyAsync(policyPath, token);
 
             _engine.ApplyPolicy(policy);
 
+            Report(progress, 4, "Preparing", "Policy applied");
+
             _logger.LogInformation("🔍 Detecting project context for {Path}", projectPath);
+
+            Report(progress, 5, "Detecting project", projectPath);
 
             var context = ProjectArchitectureContextDetector.Detect(projectPath);
 
@@ -78,6 +85,8 @@ public sealed class AegisArchitectureAnalysisRunner
                 context.DomainType,
                 context.Layer);
 
+            Report(progress, 9, "Opening audit session", null);
+
             var reportEntity = await _customReportRepo.CreateSessionAsync(projectPath, context, token);
 
             // Analysis run with path exclusion filter for 'client' directories
@@ -86,13 +95,22 @@ public sealed class AegisArchitectureAnalysisRunner
                 context,
                 token,
                 path => !path.Contains(@"\client", StringComparison.OrdinalIgnoreCase)
-                     && !path.Contains("/client", StringComparison.OrdinalIgnoreCase));
+                     && !path.Contains("/client", StringComparison.OrdinalIgnoreCase),
+                progress);
+
+            Report(progress, 92, "Saving results", $"{report.Results.Count:N0} rule results");
 
             await PersistRuleResultsAsync(reportEntity.Id, report, token);
 
+            Report(progress, 96, "Saving snapshot", "Serializing the full report");
+
             await _customReportRepo.FinalizeReportAsync(reportEntity.Id, report, token);
 
+            Report(progress, 99, "Comparing", "Previous report");
+
             await CompareWithPreviousAsync(reportEntity, token);
+
+            Report(progress, 100, "Complete", null);
 
             _logger.LogInformation(
                 "✅ Audit session {Id} complete for {Project}",
@@ -111,9 +129,16 @@ public sealed class AegisArchitectureAnalysisRunner
         catch (Exception ex)
         {
             _logger.LogError(ex, "❌ Aegis session failed for {Path}", projectPath);
-            return new AegisAnalysisSessionResult { Success = false };
+            return new AegisAnalysisSessionResult { Success = false, ErrorMessage = ex.Message };
         }
     }
+
+    private static void Report(
+        IProgress<AnalysisProgressInfo>? progress,
+        double percent,
+        string stage,
+        string? detail) =>
+        progress?.Report(new AnalysisProgressInfo(percent, stage, detail));
 
     private async Task<AegisArchitecturePolicy> LoadPolicyAsync(string? policyPath, CancellationToken token)
     {
@@ -148,7 +173,7 @@ public sealed class AegisArchitectureAnalysisRunner
         string format,
         string outputPath,
         ArchitectureReportDetailLevel detailLevel = ArchitectureReportDetailLevel.FullForensic,
-        ReportLanguage  language = ReportLanguage.English,
+        ReportLanguage language = ReportLanguage.English,
         CancellationToken token = default)
     {
         if (!_exporters.TryGetValue(format, out var exporter))
@@ -157,7 +182,7 @@ public sealed class AegisArchitectureAnalysisRunner
             throw new InvalidOperationException($"No report exporter registered for format '{format}'.");
         }
 
-        await exporter.ExportAsync(report, context, outputPath, detailLevel, language ,token);
+        await exporter.ExportAsync(report, context, outputPath, detailLevel, language, token);
 
         _logger.LogInformation("📄 {Format} report exported → {Path}", format, outputPath);
     }

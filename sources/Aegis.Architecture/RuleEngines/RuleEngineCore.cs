@@ -372,12 +372,14 @@ public sealed class RuleEngineCore
                 }
 
                 _logger.LogWarning(
-                    "Rule {RuleId} ({RuleName}) remains unevaluated: " +
-                    "no applicable evaluator fact emitted its declared " +
-                    "metric {MetricKey}.",
+                    "Rule {RuleId} ({RuleName}) remains unevaluated. " +
+                    "Metric={MetricKey}; Reason={Reason}",
                     rule.Id,
                     rule.Name,
-                    rule.MetricKey);
+                    rule.MetricKey,
+                    notEvaluatedReasons.GetValueOrDefault(
+                        rule.Id,
+                        "No completed evaluation was recorded."));
             }
         }
 

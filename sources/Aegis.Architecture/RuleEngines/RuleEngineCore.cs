@@ -71,7 +71,7 @@ public sealed class RuleEngineCore
         var factList = facts.ToList();
         var evaluations = new List<RuleEvaluationResult>();
         var results = new List<ArchitectureRuleresult>();
-        var evaluations = new List<RuleEvaluationResult>();
+     
 
         var evaluatedRuleIds =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -361,14 +361,8 @@ public sealed class RuleEngineCore
             skippedInvalidThresholds,
             factsWithoutMatchingMetrics);
 
-<<<<<<< Updated upstream
+
         return new RuleEvaluationOutcome(results, stats, evaluations); 
-=======
-        return new RuleEvaluationOutcome(
-            results,
-            stats,
-            evaluations);
->>>>>>> Stashed changes
     }
 
     private static bool IsProjectSummary(ArchitectureEvaluatorResult fact)

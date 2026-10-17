@@ -406,14 +406,7 @@ public sealed class RuleEngineCore
             skippedInvalidThresholds,
             factsWithoutMatchingMetrics);
 
-<<<<<<< Updated upstream
-        return new RuleEvaluationOutcome(results, stats, evaluations); 
-=======
-        return new RuleEvaluationOutcome(
-            results,
-            stats,
-            evaluations);
->>>>>>> Stashed changes
+        return new RuleEvaluationOutcome(results, stats, evaluations);
     }
 
     private static bool IsProjectSummary(ArchitectureEvaluatorResult fact)

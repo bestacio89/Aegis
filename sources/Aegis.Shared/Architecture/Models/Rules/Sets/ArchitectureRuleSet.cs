@@ -169,7 +169,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R12",
-            Scope = RuleEvaluationScope.Project,
+            Scope = RuleEvaluationScope.File,
             Name = "Node Coupling Too High",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "NodeCouplingIndex",

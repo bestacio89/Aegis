@@ -93,7 +93,7 @@ public static class NamingRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-NAM-R6",
-            Scope = RuleEvaluationScope.File,
+            Scope = RuleEvaluationScope.Project,
             Name = "Global Naming Compliance Low",
             Category = nameof(ArchitectureRuleCategory.Naming),
             MetricKey = "NamingComplianceScore",

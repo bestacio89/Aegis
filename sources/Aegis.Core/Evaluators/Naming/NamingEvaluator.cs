@@ -50,12 +50,12 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             "TestResults"
         };
 
+    // Interfaces are scored separately and must not also inflate the type score.
     private static readonly Regex TypeDeclarationRx = new(
         """
         \b
         (?:
             class
-            | interface
             | enum
             | record
             | struct
@@ -71,6 +71,29 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         RegexOptions.Compiled |
         RegexOptions.IgnorePatternWhitespace,
         TimeSpan.FromMilliseconds(500));
+
+    // Lexical masking prevents declarations in comments and literals from
+    // becoming findings. This is a safeguard, not a substitute for AST parsing.
+    private static readonly Regex NonCodeRx = new(
+        """"
+        (?s)
+        (?<literal>
+            """.*?"""
+            | '''.*?'''
+            | @?"(?:""|\\.|[^"\\])*"
+            | '(?:\\.|[^'\\])*'
+            | \x60(?:\\.|[^\x60\\])*\x60
+        )
+        |
+        (?<comment>
+            //[^\x0D\x0A]*
+            | /\*.*?\*/
+            | \#[^\x0D\x0A]*
+        )
+        """",
+        RegexOptions.Compiled |
+        RegexOptions.IgnorePatternWhitespace,
+        TimeSpan.FromMilliseconds(750));
 
     private static readonly Regex PythonClassRx = new(
         @"(?m)^\s*class\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\(|:)",
@@ -243,8 +266,10 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             return [];
         }
 
-        var convention = _resolver.Resolve(Context);
-        var files = EnumerateSourceFiles(projectPath, token);
+        var files = EnumerateSourceFiles(projectPath, token)
+            .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(file => file, StringComparer.Ordinal)
+            .ToList();
 
         _logger.LogInformation(
             "Running {Evaluator} on {Count} source files for language {Language}.",
@@ -293,7 +318,18 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                 continue;
             }
 
-            results.Add(EvaluateFile(file, content, convention));
+            var language = DetectLanguage(file);
+            var fileContext = new ProjectArchitectureContext(
+                language,
+                string.Equals(language, Context.Language, StringComparison.OrdinalIgnoreCase)
+                    ? Context.Framework
+                    : null,
+                Context.Confidence);
+
+            results.Add(EvaluateFile(
+                file,
+                content,
+                _resolver.Resolve(fileContext)));
         }
 
         var analyzedFileCount = results.Count;
@@ -331,13 +367,16 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         result.Metadata["Language"] = language;
         result.Metadata["AnalysisMethod"] = "LanguageAwareDeclarationHeuristics";
 
-        var typeNames = ExtractTypeNames(content, language);
+        var analysisContent = MaskNonCode(content);
+        result.Metadata["AnalysisMethod"] = "LexicallyMaskedDeclarationHeuristics";
+
+        var typeNames = ExtractTypeNames(analysisContent, language);
 
         var typeViolations = typeNames.Count(
             name => !convention.IsValidTypeName(name));
 
         var interfaceNames = InterfaceDeclarationRx
-            .Matches(content)
+            .Matches(analysisContent)
             .Select(match => match.Groups["name"].Value)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
@@ -345,17 +384,17 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         var interfaceViolations = interfaceNames.Count(
             name => !convention.IsValidInterfaceName(name));
 
-        var methodNames = ExtractMethodNames(content, language);
+        var methodNames = ExtractMethodNames(analysisContent, language);
 
         var methodViolations = methodNames.Count(
             name => !convention.IsValidMethodName(name));
 
-        var variableNames = ExtractVariableNames(content, language);
+        var variableNames = ExtractVariableNames(analysisContent, language);
 
         var variableViolations = variableNames.Count(
             name => !convention.IsValidVariableName(name));
 
-        var constantNames = ExtractConstantNames(content, language);
+        var constantNames = ExtractConstantNames(analysisContent, language);
 
         var constantViolations = constantNames.Count(
             name => !convention.IsValidConstantName(name));
@@ -377,13 +416,32 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             ? 100
             : 0;
 
-        var compliance =
-            typeScore * 0.30 +
-            interfaceScore * 0.15 +
-            methodScore * 0.20 +
-            variableScore * 0.15 +
-            constantScore * 0.10 +
-            fileScore * 0.10;
+        var declarationCount =
+            typeNames.Count +
+            interfaceNames.Length +
+            methodNames.Count +
+            variableNames.Count +
+            constantNames.Count;
+
+        // Only dimensions with observed declarations contribute to the score.
+        // An empty file has no declaration-compliance score; file-name compliance
+        // remains independently visible as its own metric.
+        var weightedScore = 0d;
+        var activeWeight = 0d;
+
+        AddDimension(typeNames.Count, typeScore, 0.30, ref weightedScore, ref activeWeight);
+        AddDimension(interfaceNames.Length, interfaceScore, 0.15, ref weightedScore, ref activeWeight);
+        AddDimension(methodNames.Count, methodScore, 0.20, ref weightedScore, ref activeWeight);
+        AddDimension(variableNames.Count, variableScore, 0.15, ref weightedScore, ref activeWeight);
+        AddDimension(constantNames.Count, constantScore, 0.10, ref weightedScore, ref activeWeight);
+
+        // File naming is applicable to every discovered source file.
+        weightedScore += fileScore * 0.10;
+        activeWeight += 0.10;
+
+        var compliance = declarationCount == 0
+            ? 0
+            : Math.Round(weightedScore / activeWeight, 2);
 
         result.Metrics["TypeNamingCompliance"] = typeScore;
         result.Metrics["InterfaceNamingCompliance"] = interfaceScore;
@@ -397,6 +455,11 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         result.Metrics["MethodViolationCount"] = methodViolations;
         result.Metrics["VariableViolationCount"] = variableViolations;
         result.Metrics["ConstantViolationCount"] = constantViolations;
+        result.Metrics["DeclarationsAnalyzed"] = declarationCount;
+        result.Metrics["NamingEvidenceAvailable"] = declarationCount > 0 ? 1 : 0;
+        result.Metadata["EvaluationStatus"] = declarationCount == 0
+            ? "NoDeclarations"
+            : "Evaluated";
 
         result.Metrics["NamingComplianceScore"] =
             Math.Round(compliance, 2);
@@ -416,12 +479,14 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         int discoveredFileCount,
         int unreadableFileCount)
     {
-        var averageScore = fileResults.Count == 0
-            ? 100
-            : fileResults.Average(result =>
-                result.Metrics.GetValueOrDefault(
-                    "NamingComplianceScore",
-                    100));
+        var totalDeclarations = fileResults.Sum(result =>
+            result.Metrics.GetValueOrDefault("DeclarationsAnalyzed", 0));
+
+        var averageScore = totalDeclarations == 0
+            ? 0
+            : fileResults
+                .Where(result => result.Metrics.GetValueOrDefault("DeclarationsAnalyzed", 0) > 0)
+                .Average(result => result.Metrics.GetValueOrDefault("NamingComplianceScore", 0));
 
         var totalViolations = fileResults.Sum(result =>
             result.Metrics
@@ -442,6 +507,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                 ["UnreadableFiles"] = unreadableFileCount,
                 ["AverageNamingComplianceScore"] = Math.Round(averageScore, 2),
                 ["TotalNamingViolations"] = totalViolations,
+                ["DeclarationsAnalyzed"] = totalDeclarations,
                 ["NamingHealthIndex"] = Math.Round(averageScore, 2)
             },
 
@@ -449,13 +515,36 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             {
                 ["Evaluator"] = Name,
                 ["ProjectPath"] = projectPath,
-                ["EvaluationStatus"] = fileResults.Count == 0
-                    ? "NoReadableSourceFiles"
-                    : unreadableFileCount > 0
-                        ? "PartiallyEvaluated"
-                        : "Evaluated"
+                ["EvaluationStatus"] = discoveredFileCount == 0
+                    ? "NoApplicableFiles"
+                    : fileResults.Count == 0
+                        ? "AnalysisFailed"
+                        : unreadableFileCount > 0
+                            ? "PartiallyEvaluated"
+                            : totalDeclarations == 0
+                                ? "NoDeclarations"
+                                : "Evaluated"
             }
         };
+    }
+
+    private static string MaskNonCode(string content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        return NonCodeRx.Replace(content, match =>
+            string.Create(
+                match.Length,
+                match.Value,
+                static (span, value) =>
+                {
+                    for (var index = 0; index < value.Length; index++)
+                    {
+                        span[index] = value[index] is '\r' or '\n'
+                            ? value[index]
+                            : ' ';
+                    }
+                }));
     }
 
     private static List<string> ExtractTypeNames(
@@ -574,11 +663,27 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             .ToList();
     }
 
+    private static void AddDimension(
+        int count,
+        double score,
+        double weight,
+        ref double weightedScore,
+        ref double activeWeight)
+    {
+        if (count <= 0)
+        {
+            return;
+        }
+
+        weightedScore += score * weight;
+        activeWeight += weight;
+    }
+
     private static double ComputeScore(int total, int violations)
     {
         if (total == 0)
         {
-            return 100;
+            return 0;
         }
 
         return Math.Round(

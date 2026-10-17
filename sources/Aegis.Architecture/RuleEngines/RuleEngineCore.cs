@@ -282,10 +282,52 @@ public sealed class RuleEngineCore
             .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        var notEvaluatedReasons =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var eligibleFacts = factList
+            .Where(fact => fact is not null && !IsProjectSummary(fact))
+            .ToList();
+
+        foreach (var rule in applicableRules.Where(rule =>
+                     !evaluatedRuleIds.Contains(rule.Id)))
+        {
+            var hasMetricEvidence = eligibleFacts.Any(fact =>
+                ArchitectureRuleMetricContracts.TryResolveMetric(
+                    rule,
+                    fact.Metrics,
+                    out _,
+                    out _));
+
+            notEvaluatedReasons[rule.Id] = hasMetricEvidence
+                ? $"Metric '{rule.MetricKey}' was emitted, but no valid comparison completed. Check for non-finite observations or an invalid threshold."
+                : eligibleFacts.Count == 0
+                    ? $"No file-level evaluator facts were available for metric '{rule.MetricKey}'."
+                    : $"No file-level evaluator fact emitted declared metric '{rule.MetricKey}'.";
+        }
+
+        var distinctPassedRules = evaluations
+            .Where(evaluation => evaluation.Status == RuleEvaluationStatus.Passed)
+            .Select(evaluation => evaluation.RuleId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        var distinctViolatedRules = evaluations
+            .Where(evaluation => evaluation.Status == RuleEvaluationStatus.Violated)
+            .Select(evaluation => evaluation.RuleId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
         var stats = new RuleEvaluationStats
         {
             RulesRegistered = _rules.Count,
+            RulesApplicable = applicableRules.Count,
             RulesEvaluated = evaluatedRuleIds.Count,
+            RulesPassed = distinctPassedRules,
+            RulesViolated = distinctViolatedRules,
+            EvaluationsPassed = checksPassed,
+            EvaluationsViolated = checksViolated,
+            EvaluationsNotEvaluated = notEvaluatedReasons.Count,
             ChecksPerformed = totalChecks,
             ChecksPassed = checksPassed,
             ChecksViolated = checksViolated,
@@ -297,6 +339,7 @@ public sealed class RuleEngineCore
                 .ToList(),
 
             NotApplicableReasons = notApplicableReasons,
+            NotEvaluatedReasons = notEvaluatedReasons,
 
             CheckBuckets = buckets
                 .Select(kv => new RuleCheckBucket(
@@ -329,12 +372,14 @@ public sealed class RuleEngineCore
                 }
 
                 _logger.LogWarning(
-                    "Rule {RuleId} ({RuleName}) remains unevaluated: " +
-                    "no applicable evaluator fact emitted its declared " +
-                    "metric {MetricKey}.",
+                    "Rule {RuleId} ({RuleName}) remains unevaluated. " +
+                    "Metric={MetricKey}; Reason={Reason}",
                     rule.Id,
                     rule.Name,
-                    rule.MetricKey);
+                    rule.MetricKey,
+                    notEvaluatedReasons.GetValueOrDefault(
+                        rule.Id,
+                        "No completed evaluation was recorded."));
             }
         }
 

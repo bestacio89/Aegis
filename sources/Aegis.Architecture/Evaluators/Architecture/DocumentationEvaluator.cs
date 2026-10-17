@@ -23,20 +23,23 @@ public sealed class DocumentationEvaluator :
         | RegexOptions.Multiline
         | RegexOptions.CultureInvariant;
 
+    // Deliberately simple: avoid a complex declaration regex that can prevent
+    // the entire evaluator from initializing. This counts public declaration
+    // lines rather than attempting complete language parsing.
     private static readonly Regex CSharpDeclarationRegex = new(
-        @"^[ \t]*public\s+(?:(?:abstract|static|sealed|partial|virtual|override|async|new|readonly|unsafe|extern)\s+)*(?:(?:class|interface|record(?:\s+(?:class|struct))?|struct|enum|delegate)\s+\w+|(?:(?:[\w<>,?.\[\]\(\):]+\s+)+\w+\s*(?:\([^;{}]*\)\s*(?:where\s+[^{}]+)?|(?:\{|\=\>|\=\s*[^;]+;)))",
+        @"^[ \t]*public\b[^\r\n]*",
         SourceRegexOptions);
 
     private static readonly Regex JavaDeclarationRegex = new(
-        @"^[ \t]*public\s+(?:(?:abstract|static|final|synchronized|native|default|strictfp)\s+)*(?:(?:class|interface|enum|record)\s+\w+|(?:[\w<>,?.\[\]@]+\s+)+\w+\s*\([^;{}]*\)\s*(?:throws\s+[\w., ]+)?\s*\{?|(?:[\w<>,?.\[\]@]+\s+)+\w+\s*(?:=[^;]*)?;)",
+        @"^[ \t]*public\b[^\r\n]*",
         SourceRegexOptions);
 
     private static readonly Regex TypeScriptDeclarationRegex = new(
-        @"^[ \t]*(?:export\s+(?:default\s+)?|declare\s+export\s+)?(?:(?:abstract|declare|async)\s+)*(?:class|interface|type|function|enum|namespace)\s+\w+|^[ \t]*export\s+(?:declare\s+)?(?:const|let|var)\s+\w+",
+        @"^[ \t]*(?:(?:export|declare)\s+)*(?:(?:abstract|async|default)\s+)*(?:class|interface|type|function|enum|namespace)\s+\w+|^[ \t]*export\s+(?:declare\s+)?(?:const|let|var)\s+\w+",
         SourceRegexOptions);
 
     private static readonly Regex PythonDeclarationRegex = new(
-        @"^[ \t]*(?:async\s+)?(?:def|class)\s+([A-Za-z]\w*)\s*(?:\([^:\r\n]*\))?\s*(?:->\s*[^:\r\n]+)?\s*:",
+        @"^[ \t]*(?:async\s+)?(?:def|class)\s+([A-Za-z]\w*)\s*(?:\([^:\r\n]*\))?[^:\r\n]*:",
         SourceRegexOptions);
 
     private static readonly Regex CSharpXmlDocumentationRegex = new(
@@ -115,9 +118,11 @@ public sealed class DocumentationEvaluator :
 
             try
             {
-                content = await File.ReadAllTextAsync(file, token);
+                content = await File.ReadAllTextAsync(file, token)
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
+                when (token.IsCancellationRequested)
             {
                 throw;
             }

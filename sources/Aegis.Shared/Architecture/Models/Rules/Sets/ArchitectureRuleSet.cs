@@ -89,7 +89,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R6",
-            Scope = RuleEvaluationScope.Project,
+            Scope = RuleEvaluationScope.File,
             Name = "Controller Logic Leakage",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "ControllerLogicDensity",

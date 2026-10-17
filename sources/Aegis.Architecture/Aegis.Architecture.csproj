@@ -1,5 +1,4 @@
-﻿
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <AssemblyName>Aegis.Architecture</AssemblyName>
@@ -23,60 +22,71 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Evaluators\FrontEnd\frontend-analyzer.mjs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Franz Framework Core -->
     <PackageReference Include="Franz.Common.Mediator" Version="2.2.17" />
     <PackageReference Include="Franz.Common.Logging" Version="2.2.17" />
     <PackageReference Include="Franz.Common.DependencyInjection" Version="2.2.17" />
 
-    <!-- Utilities -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="FluentValidation" Version="12.1.1" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
 
-    <!-- C# syntax and semantic analysis -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
-
-    <!-- Razor parsing: retain until the Razor evaluator is migrated and verified -->
     <PackageReference Include="Microsoft.AspNetCore.Razor.Language" Version="6.0.36" />
 
-    <!-- Retained pending usage audit in other evaluators -->
     <PackageReference Include="Jint" Version="4.2.1" />
     <PackageReference Include="AngleSharp" Version="1.3.0" />
   </ItemGroup>
 
-  <!-- Restore the locked frontend analyzer dependencies before compiling. -->
-  <Target Name="RestoreFrontendAnalyzerDependencies" BeforeTargets="Build" Condition="Exists('$(FrontendAnalyzerDirectory)\package.json')">
+  <!-- Validate and restore the Node.js analyzer dependencies before building. -->
+  <Target
+    Name="PrepareFrontendAnalyzer"
+    BeforeTargets="Build"
+    Condition="Exists('$(FrontendAnalyzerDirectory)\package.json') and '$(DesignTimeBuild)' != 'true'">
 
-    <Error Condition="!Exists('$(FrontendAnalyzerDirectory)\package-lock.json')" Text="Frontend analyzer package-lock.json is missing. Run npm install in Evaluators\FrontEnd." />
+    <Error
+      Condition="!Exists('$(FrontendAnalyzerEntryPoint)')"
+      Text="Frontend analyzer entry point is missing: $(FrontendAnalyzerEntryPoint)" />
 
-    <Error Condition="'$(DesignTimeBuild)' != 'true' and '$(FrontendAnalyzerEntryPoint)' != '' and !Exists('$(FrontendAnalyzerEntryPoint)')" Text="Frontend analyzer entry point is missing: $(FrontendAnalyzerEntryPoint)" />
+    <Error
+      Condition="!Exists('$(FrontendAnalyzerDirectory)\package-lock.json')"
+      Text="Frontend analyzer package-lock.json is missing. Run npm install in Evaluators\FrontEnd." />
 
-    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(FrontendAnalyzerDirectory)" Condition="'$(DesignTimeBuild)' != 'true'" />
+    <Exec
+      Command="npm ci --no-audit --no-fund"
+      WorkingDirectory="$(FrontendAnalyzerDirectory)" />
+
+    <Error
+      Condition="!Exists('$(FrontendAnalyzerDirectory)\node_modules\typescript\package.json')"
+      Text="Frontend analyzer dependency 'typescript' is missing after npm ci." />
+
+    <Error
+      Condition="!Exists('$(FrontendAnalyzerDirectory)\node_modules\@angular\compiler\package.json')"
+      Text="Frontend analyzer dependency '@angular/compiler' is missing after npm ci." />
   </Target>
 
-  <!-- Copy the analyzer and its locked runtime dependencies to Aegis.Architecture output. -->
-  <Target Name="CopyFrontendAnalyzerToOutput" AfterTargets="Build" Condition="Exists('$(FrontendAnalyzerDirectory)\package.json')">
+  <!-- Copy the analyzer as a runtime asset, never as a C# Compile item. -->
+  <Target
+    Name="CopyFrontendAnalyzerToOutput"
+    AfterTargets="Build"
+    Condition="Exists('$(FrontendAnalyzerDirectory)\package.json')">
 
     <ItemGroup>
-      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\frontend-analyzer.mjs" />
+      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerEntryPoint)" />
       <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\package.json" />
       <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\package-lock.json" />
       <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\node_modules\**\*" />
     </ItemGroup>
 
-    <Error Condition="!Exists('$(FrontendAnalyzerDirectory)\node_modules\typescript\package.json')" Text="TypeScript analyzer dependencies are not installed." />
-
     <MakeDir Directories="$(FrontendAnalyzerOutputDirectory)" />
 
-    <Copy SourceFiles="@(FrontendAnalyzerRuntimeFiles)" DestinationFiles="@(FrontendAnalyzerRuntimeFiles->'$(FrontendAnalyzerOutputDirectory)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy
+      SourceFiles="@(FrontendAnalyzerRuntimeFiles)"
+      DestinationFiles="@(FrontendAnalyzerRuntimeFiles->'$(FrontendAnalyzerOutputDirectory)\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

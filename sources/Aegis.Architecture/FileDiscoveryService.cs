@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Aegis.Core
+namespace Aegis.Architecture
 {
     public static class FileDiscoveryService
     {

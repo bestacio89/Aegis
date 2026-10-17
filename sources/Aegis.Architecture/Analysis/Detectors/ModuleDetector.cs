@@ -38,7 +38,7 @@ internal static class ModuleDetector
             var module = new ProjectModuleContext
             {
                 // Real project/module name taken from the actual project file
-                // (e.g. "Aegis.Core" from "Aegis.Core.csproj"), not a folder-name guess.
+                // (e.g. "Aegis.Architecture" from "Aegis.Architecture.csproj"), not a folder-name guess.
                 // Folder names and project names can diverge, and this is the name that
                 // actually identifies the module to anything consuming this context —
                 // including the layer detector, which now uses this name directly.

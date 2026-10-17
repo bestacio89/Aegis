@@ -9,7 +9,7 @@ using Aegis.Shared.Architecture.Models.Policies.FrontEnd;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Aegis.Core.Evaluators.FrontEnd.src;
+namespace Aegis.Architecture.Evaluators.FrontEnd.src;
 
 public sealed class ReactEvaluator : BaseArchitectureEvaluator
 {
@@ -620,7 +620,7 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
                     var repositoryCandidate = Path.Combine(
                         current.FullName,
                         "sources",
-                        "Aegis.Core",
+                        "Aegis.Architecture",
                         "Evaluators",
                         "FrontEnd",
                         AnalyzerFileName);

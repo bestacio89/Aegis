@@ -9,7 +9,7 @@ using Aegis.Shared.Architecture.Models.Policies.FrontEnd;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Aegis.Core.Evaluators.FrontEnd.src;
+namespace Aegis.Architecture.Evaluators.FrontEnd.src;
 
 /// <summary>
 /// Evaluates Angular projects through the dedicated Node.js frontend analyzer.
@@ -652,7 +652,7 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
                 Path.Combine(
                     current.FullName,
                     "sources",
-                    "Aegis.Core",
+                    "Aegis.Architecture",
                     "Evaluators",
                     "FrontEnd",
                     AnalyzerFileName));

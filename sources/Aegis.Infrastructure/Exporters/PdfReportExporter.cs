@@ -358,7 +358,7 @@ public sealed class PdfReportExporter : IReportExporter
     }
 
     /// <summary>
-    /// New: compliance broken down by real layer/module (Aegis.Core, Aegis.Shared, etc.)
+    /// New: compliance broken down by real layer/module (Aegis.Architecture, Aegis.Shared, etc.)
     /// rather than only by rule category. report.Domains now has full coverage — every
     /// detected layer appears here, including layers with zero findings — and
     /// HealthIndex/WeightedScore are stored as 0-1 fractions, so both are scaled to a

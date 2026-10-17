@@ -11,7 +11,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Aegis.Core.Evaluators.FrontEnd.src;
+namespace Aegis.Architecture.Evaluators.FrontEnd.src;
 
 /// <summary>
 /// Evaluates Blazor components using Roslyn C# syntax analysis and

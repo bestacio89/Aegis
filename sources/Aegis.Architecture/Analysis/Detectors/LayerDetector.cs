@@ -1,6 +1,6 @@
 ﻿using Aegis.Shared.Architecture.Models;
 
-namespace Aegis.Core.Analysis.Detectors
+namespace Aegis.Architecture.Analysis.Detectors
 {
     internal static class LayerDetector
     {
@@ -8,7 +8,7 @@ namespace Aegis.Core.Analysis.Detectors
         {
             foreach (var module in ctx.Modules)
             {
-                // The layer IS the real project/module (e.g. "Aegis.Core", "Aegis.Shared",
+                // The layer IS the real project/module (e.g. "Aegis.Architecture", "Aegis.Shared",
                 // "Aegis.App.WPF") — not a guessed semantic bucket like "Api"/"Domain"/
                 // "Infrastructure" derived from keyword matching on the folder name.
                 //

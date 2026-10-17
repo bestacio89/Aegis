@@ -2,8 +2,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <AssemblyName>Aegis.Core</AssemblyName>
-    <RootNamespace>Aegis.Core</RootNamespace>
+    <AssemblyName>Aegis.Architecture</AssemblyName>
+    <RootNamespace>Aegis.Architecture</RootNamespace>
     <Description>
       Core rule engine and evaluation logic for Aegis.
       Handles scanning orchestration, rule evaluation, and scoring.
@@ -62,7 +62,7 @@
     <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(FrontendAnalyzerDirectory)" Condition="'$(DesignTimeBuild)' != 'true'" />
   </Target>
 
-  <!-- Copy the analyzer and its locked runtime dependencies to Aegis.Core output. -->
+  <!-- Copy the analyzer and its locked runtime dependencies to Aegis.Architecture output. -->
   <Target Name="CopyFrontendAnalyzerToOutput" AfterTargets="Build" Condition="Exists('$(FrontendAnalyzerDirectory)\package.json')">
 
     <ItemGroup>

@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace Aegis.Core.Evaluators.FrontEnd.src;
+namespace Aegis.Architecture.Evaluators.FrontEnd.src;
 
 public sealed class RazorEvaluator : BaseArchitectureEvaluator
 {

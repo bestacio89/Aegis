@@ -29,6 +29,7 @@ public sealed partial class SecurityWorkspaceViewModel : ObservableObject
         SecurityOverviewViewModel overview,
         SecurityDomainsViewModel domains,
         SecurityFindingsViewModel findings,
+        SecurityLiveViewModel live,
         ILogger<SecurityWorkspaceViewModel> logger)
     {
         _scanService = scanService;
@@ -37,12 +38,17 @@ public sealed partial class SecurityWorkspaceViewModel : ObservableObject
         Overview = overview;
         Domains = domains;
         Findings = findings;
+        Live = live;
 
         var overviewTab = new SecurityTab("Overview", "\uE80F", overview);
         var domainsTab = new SecurityTab("Domains", "\uE81E", domains);
         _findingsTab = new SecurityTab("Findings", "\uE7BA", findings);
 
-        Tabs = new ObservableCollection<SecurityTab> { overviewTab, domainsTab, _findingsTab };
+        // Live probing is a separate concept from static file checking: its own tab, its own scope
+        // gate and its own results. It never shares a score with the static tabs.
+        var liveTab = new SecurityTab("Live probing", "\uE774", live);
+
+        Tabs = new ObservableCollection<SecurityTab> { overviewTab, domainsTab, _findingsTab, liveTab };
         SelectedTab = overviewTab;
 
         domains.OpenDomainRequested = category =>
@@ -58,6 +64,7 @@ public sealed partial class SecurityWorkspaceViewModel : ObservableObject
     public SecurityOverviewViewModel Overview { get; }
     public SecurityDomainsViewModel Domains { get; }
     public SecurityFindingsViewModel Findings { get; }
+    public SecurityLiveViewModel Live { get; }
 
     public ObservableCollection<SecurityTab> Tabs { get; }
     public IReadOnlyList<string> ExportFormats { get; }
@@ -90,11 +97,18 @@ public sealed partial class SecurityWorkspaceViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActiveContent))]
+    [NotifyPropertyChangedFor(nameof(IsStaticTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsLiveTabSelected))]
     private SecurityTab? selectedTab;
 
     public bool NoResult => !HasResult;
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
     public object? ActiveContent => SelectedTab?.ViewModel;
+
+    /// <summary>True on the Overview/Domains/Findings tabs; the header Run/Cancel/Export act on the static scan.</summary>
+    public bool IsStaticTabSelected => SelectedTab?.ViewModel is not SecurityLiveViewModel;
+
+    public bool IsLiveTabSelected => SelectedTab?.ViewModel is SecurityLiveViewModel;
 
     // -------------------------------------------------------------- commands
 

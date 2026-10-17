@@ -1,0 +1,247 @@
+﻿<UserControl x:Class="Aegis.Wpf.Views.Security.SecurityLiveView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Aegis.Wpf.Converters"
+             Background="{StaticResource Brush.Ink}"
+             Foreground="{StaticResource Brush.TextPrimary}"
+             FontFamily="{StaticResource Font.Body}">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:SecuritySeverityToBrushConverter x:Key="SeverityBrush"/>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Margin" Value="0,10,0,4"/>
+        </Style>
+
+        <Style x:Key="LiveTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource Brush.Panel}"/>
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource Brush.TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Line}"/>
+            <Setter Property="Padding" Value="8,6"/>
+        </Style>
+
+        <!-- Detail card hides itself while nothing is selected. -->
+        <Style x:Key="DetailCard" TargetType="Border" BasedOn="{StaticResource Card.Structural}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SelectedResult}" Value="{x:Null}">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="400"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ========================= SCOPE PANEL ========================= -->
+        <Grid Margin="0,0,12,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
+            <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="LIVE PROBING" Style="{StaticResource Text.Eyebrow}"
+                                   Foreground="{StaticResource Brush.AccentStructural}"/>
+                        <TextBlock Text="Observes running systems. Nothing is probed without a recorded scope that is inside its authorized window. Passive probes only read what the target volunteers."
+                                   Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
+                                   TextWrapping="Wrap" Margin="0,6,0,0"/>
+
+                        <TextBlock Text="Targets (one per line: host or host:port)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding TargetsText, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource LiveTextBox}"
+                                 AcceptsReturn="True" Height="96"
+                                 VerticalScrollBarVisibility="Auto"
+                                 FontFamily="{StaticResource Font.Data}"/>
+
+                        <TextBlock Text="Authorization reference (contract, annex, ticket)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding AuthorizationReference, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource LiveTextBox}"/>
+
+                        <TextBlock Text="Authorized by (client side)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding AuthorizedBy, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource LiveTextBox}"/>
+
+                        <TextBlock Text="Authorized testing window" Style="{StaticResource FieldLabel}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <DatePicker Grid.Column="0" SelectedDate="{Binding ValidFrom, Mode=TwoWay}"/>
+                            <DatePicker Grid.Column="2" SelectedDate="{Binding ValidUntil, Mode=TwoWay}"/>
+                        </Grid>
+
+                        <TextBlock Text="Maximum intensity" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox ItemsSource="{Binding IntensityOptions}"
+                                  SelectedItem="{Binding MaxIntensity, Mode=TwoWay}"/>
+
+                        <CheckBox IsChecked="{Binding ConsentAcknowledged, Mode=TwoWay}"
+                                  Foreground="{StaticResource Brush.TextPrimary}"
+                                  Margin="0,14,0,0">
+                            <TextBlock TextWrapping="Wrap" FontSize="12"
+                                       Text="I hold written authorization to test every target listed above, and they are within the agreed scope."/>
+                        </CheckBox>
+
+                        <!-- What is still missing before the scope can run. -->
+                        <ItemsControl ItemsSource="{Binding ScopeIssues}" Margin="0,12,0,0"
+                                      Visibility="{Binding HasScopeIssues, Converter={StaticResource BoolToVis}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="11"
+                                               Foreground="{StaticResource Brush.StatusWarning}" Margin="0,0,0,3"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                            <Button Content="Run live probing" Command="{Binding RunLiveCommand}"
+                                    Style="{StaticResource Button.Primary}" Padding="14,7" Margin="0,0,8,0"/>
+                            <Button Content="Cancel" Command="{Binding CancelLiveCommand}"
+                                    Padding="14,7" Margin="0,0,8,0"/>
+                            <Button Content="Export evidence" Command="{Binding ExportEvidenceCommand}"
+                                    Padding="14,7"/>
+                        </StackPanel>
+
+                        <ProgressBar IsIndeterminate="True" Height="3" BorderThickness="0" Margin="0,12,0,0"
+                                     Foreground="{StaticResource Brush.AccentStructural}"
+                                     Background="{StaticResource Brush.Line}"
+                                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
+
+                        <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{StaticResource Brush.TextMuted}" Margin="0,8,0,0"/>
+                        <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{StaticResource Brush.StatusCritical}" Margin="0,4,0,0"
+                                   Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- ========================= RESULTS ========================= -->
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="190"/>
+            </Grid.RowDefinitions>
+
+            <!-- Observations -->
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="3"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
+                <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Style="{StaticResource StatusChip}" Background="{StaticResource Brush.AccentStructural}"/>
+                                <TextBlock Text="Observed (live)" Style="{StaticResource Text.SectionTitle}"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding ResultsSummary}" FontSize="12"
+                                       Foreground="{StaticResource Brush.TextMuted}" Margin="0,4,0,8"/>
+                        </StackPanel>
+
+                        <DataGrid Grid.Row="1"
+                                  ItemsSource="{Binding Results}"
+                                  SelectedItem="{Binding SelectedResult, Mode=TwoWay}"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  SelectionMode="Single" HeadersVisibility="Column"
+                                  Style="{StaticResource Grid.Ledger}"
+                                  ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}">
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="Severity" Width="105">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{Binding Severity, Converter={StaticResource SeverityBrush}}"
+                                                    CornerRadius="3" Padding="8,3" HorizontalAlignment="Left">
+                                                <TextBlock Text="{Binding Severity}"
+                                                           Foreground="{StaticResource Brush.Ink}"
+                                                           FontWeight="SemiBold" FontSize="11"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="150"/>
+                                <DataGridTextColumn Header="Observation" Binding="{Binding Title}" Width="*"/>
+                                <DataGridTextColumn Header="Confidence" Binding="{Binding Confidence}" Width="110"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Detail -->
+            <Border Grid.Row="1" Style="{StaticResource DetailCard}" Margin="0,10,0,0" MaxHeight="210">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel DataContext="{Binding SelectedResult}">
+                        <TextBlock Text="{Binding Title}" Style="{StaticResource Text.SectionTitle}" TextWrapping="Wrap"/>
+                        <TextBlock Foreground="{StaticResource Brush.TextMuted}" FontSize="11" Margin="0,2,0,8"
+                                   FontFamily="{StaticResource Font.Data}">
+                            <Run Text="{Binding ProbeName, Mode=OneWay}"/>
+                            <Run Text=" | "/>
+                            <Run Text="{Binding Target, Mode=OneWay}"/>
+                            <Run Text=" | "/>
+                            <Run Text="{Binding ObservedAtUtc, Mode=OneWay, StringFormat='{}{0:u}'}"/>
+                        </TextBlock>
+                        <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <TextBlock Text="{Binding Remediation, StringFormat='Remediation: {0}', TargetNullValue=''}"
+                                   TextWrapping="Wrap" Foreground="{StaticResource Brush.StatusCompliant}" Margin="0,0,0,6"/>
+                        <TextBlock Text="{Binding ControlReference, StringFormat='Control: {0}', TargetNullValue=''}"
+                                   TextWrapping="Wrap" Foreground="{StaticResource Brush.TextMuted}" FontSize="11"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Probe log -->
+            <Grid Grid.Row="2" Margin="0,10,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="3"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Style="{StaticResource Card.TopRule}"/>
+                <Border Grid.Row="1" Style="{StaticResource Card.Structural}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource StatusChip}" Background="{StaticResource Brush.AccentStructural}"/>
+                            <TextBlock Text="Probe log (hash-chained)" Style="{StaticResource Text.SectionTitle}"/>
+                        </StackPanel>
+                        <ListBox x:Name="LogList" Grid.Row="1" Margin="0,6,0,0"
+                                 ItemsSource="{Binding LogEntries}"
+                                 Background="Transparent" BorderThickness="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Summary}" FontSize="11"
+                                               FontFamily="{StaticResource Font.Data}"
+                                               Foreground="{StaticResource Brush.TextMuted}"/>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

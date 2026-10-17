@@ -27,6 +27,12 @@ public sealed class AegisArchitectureReport
     // ⚖️ Global metrics (mutable because it's recomputed)
     public GlobalArchitectureMetrics Metrics { get; set; } = new();
 
+    // 🔎 What the rule engine actually checked (violations alone cannot show that)
+    public RuleEvaluationStats? EvaluationStats { get; set; }
+    public int RulesRegistered => EvaluationStats?.RulesRegistered ?? 0;
+    public int RulesEvaluated => EvaluationStats?.RulesEvaluated ?? 0;
+    public int ChecksPerformed => EvaluationStats?.ChecksPerformed ?? 0;
+
     // 🧮 Derived counts
     public int TotalFilesScanned { get; set; }
     public int TotalFacts => Facts.Count;
@@ -39,40 +45,57 @@ public sealed class AegisArchitectureReport
     // Covers every category that has at least one registered rule — not just the
     // categories that happen to have a violation — so a clean category is reported
     // as 100% / PASSED instead of being silently absent from the report.
-    public void ComputeCompliance()
+    //
+    // When the engine's check statistics are available the caller passes per-category scores
+    // (0-100) computed from checks performed, and only categories that were really evaluated are
+    // listed: a category with registered rules but no matching measurement is "not evaluated",
+    // not "100% compliant". Without them the legacy violation-only estimate is used.
+    public void ComputeCompliance(IReadOnlyDictionary<ArchitectureRuleCategory, double>? evaluatedCategoryScores = null)
     {
-        var allCategories = ArchitectureRuleRegistry.All
-            .Select(r => ParseCategory(r.Category))
-            .Distinct()
-            .ToList();
-
         ComplianceScores.Clear();
 
-        var grouped = Results
-            .GroupBy(r => r.Category)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        foreach (var category in allCategories)
+        if (evaluatedCategoryScores is not null)
         {
-            if (grouped.TryGetValue(category, out var categoryResults))
-            {
-                var severityPenalty = categoryResults.Sum(r =>
-                    r.IsCompliant ? 0 : ((int)r.Severity + 1) * 10);
-
-                var score = Math.Max(0, 100 - severityPenalty / Math.Max(1, categoryResults.Count));
+            foreach (var (category, score) in evaluatedCategoryScores)
                 ComplianceScores[category] = score;
-            }
-            else
+        }
+        else
+        {
+            var allCategories = ArchitectureRuleRegistry.All
+                .Select(r => ParseCategory(r.Category))
+                .Distinct()
+                .ToList();
+
+            var grouped = Results
+                .GroupBy(r => r.Category)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var category in allCategories)
             {
-                // Rules exist for this category and none of them fired — genuinely clean.
-                ComplianceScores[category] = 100;
+                if (grouped.TryGetValue(category, out var categoryResults))
+                {
+                    var severityPenalty = categoryResults.Sum(r =>
+                        r.IsCompliant ? 0 : ((int)r.Severity + 1) * 10);
+
+                    var score = Math.Max(0, 100 - severityPenalty / Math.Max(1, categoryResults.Count));
+                    ComplianceScores[category] = score;
+                }
+                else
+                {
+                    // Rules exist for this category and none of them fired — genuinely clean.
+                    ComplianceScores[category] = 100;
+                }
             }
         }
 
         // Compute domain health averages if available
         if (Domains.Any())
         {
-            Metrics.ProjectHealthIndex = Domains.Average(d => d.HealthIndex * 100);
+            // Domains in which nothing was checked must not dilute the health of the ones that were.
+            var assessed = Domains.Where(d => d.ChecksPerformed > 0).ToList();
+            var basis = assessed.Count > 0 ? assessed : Domains;
+
+            Metrics.ProjectHealthIndex = basis.Average(d => d.HealthIndex * 100);
         }
         else
         {

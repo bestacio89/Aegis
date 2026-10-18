@@ -1,8 +1,11 @@
 using Aegis.Architecture.Bootstrap;
+using Aegis.Architecture.Evaluators.Persistence;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Aegis.Architecture.Tests;
@@ -241,15 +244,13 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             }
             """);
 
-        using var provider = CreateProvider(policy =>
-        {
-            policy.Transaction.RequireExplicitCommit = true;
-            policy.Transaction.RequireRollbackOnFailure = true;
-        });
-        using var scope = provider.CreateScope();
-        var evaluator = GetEvaluator(
-            scope.ServiceProvider,
-            "ArchitecturalTransactionEvaluator");
+        var policy = new AegisArchitecturePolicy();
+        policy.Transaction.RequireExplicitCommit = true;
+        policy.Transaction.RequireRollbackOnFailure = true;
+
+        var evaluator = new ArchitecturalTransactionEvaluator(
+            NullLogger<ArchitecturalTransactionEvaluator>.Instance,
+            Options.Create(policy));
 
         var results = (await evaluator.EvaluateAsync(project.Root, CreateContext(project))).ToArray();
         var fileResult = Assert.Single(

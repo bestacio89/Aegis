@@ -62,6 +62,59 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.NotNull(context.DetectionStrategy);
     }
 
+
+    [Fact]
+    public void Detect_identifies_dotnet_manifests_entry_point_deployment_and_modules()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var program = Path.Combine(directory.Path, "Program.cs");
+        var project = Path.Combine(directory.Path, "Sample.csproj");
+        var dockerfile = Path.Combine(directory.Path, "Dockerfile");
+        var deployment = Path.Combine(directory.Path, "k8s", "deployment.yaml");
+        var moduleProject = Path.Combine(directory.Path, "src", "Application", "Application.csproj");
+        var moduleSource = Path.Combine(directory.Path, "src", "Application", "OrderService.cs");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(deployment)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(moduleProject)!);
+
+        File.WriteAllText(program, "public static class Program { public static void Main() { } }");
+        File.WriteAllText(project, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
+                <PackageReference Include="Franz.Common.DependencyInjection" Version="2.3.0" />
+              </ItemGroup>
+            </Project>
+            """);
+        File.WriteAllText(dockerfile, "FROM mcr.microsoft.com/dotnet/aspnet:10.0");
+        File.WriteAllText(deployment, "apiVersion: apps/v1");
+        File.WriteAllText(moduleProject, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        File.WriteAllText(moduleSource, "public sealed class OrderService { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal("C#", context.Language);
+        Assert.Equal(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.DotNet, context.BuildSystem);
+        Assert.Equal(".NET (EF Core)", context.Framework);
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Contains("EntityFrameworkCore", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(program, context.EntryPointFile);
+        Assert.True(context.IsDockerized);
+        Assert.True(context.UsesKubernetes);
+        Assert.True(context.IsDeployable);
+        Assert.Equal(2, context.Modules.Count);
+        Assert.All(context.Modules, module =>
+        {
+            Assert.NotEmpty(module.Layers);
+            Assert.Contains(module.Layers, layer => layer.Name == module.Name);
+        });
+        Assert.Contains(context.PatternsDetected, pattern => pattern == "Repository Pattern");
+        Assert.Contains(context.PatternsDetected, pattern => pattern == "Dependency Injection");
+        Assert.Equal(context.Modules.Count.ToString(), context.MetadataMap["DetectedModules"]);
+    }
+
     private sealed class TemporaryDirectory : IDisposable
     {
         public string Path { get; } = System.IO.Path.Combine(

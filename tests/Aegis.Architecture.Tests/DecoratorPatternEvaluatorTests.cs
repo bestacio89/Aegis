@@ -12,11 +12,14 @@ public sealed class DecoratorPatternEvaluatorTests
     [Fact]
     public async Task Structural_wrapper_without_decorator_intent_is_not_a_naming_violation()
     {
-        var directory = Directory.CreateTempSubdirectory();
+        var directory = Path.Combine(
+            Directory.GetCurrentDirectory(),
+            $"AegisDecoratorFixture_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
 
         try
         {
-            var file = Path.Combine(directory.FullName, "ServiceWrapper.cs");
+            var file = Path.Combine(directory, "ServiceWrapper.cs");
             await File.WriteAllTextAsync(
                 file,
                 """
@@ -46,7 +49,7 @@ public sealed class DecoratorPatternEvaluatorTests
                 Options.Create(new AegisArchitecturePolicy()));
 
             var results = (await evaluator.EvaluateAsync(
-                directory.FullName,
+                directory,
                 new ProjectArchitectureContext())).ToArray();
 
             var classResult = Assert.Single(
@@ -73,7 +76,7 @@ public sealed class DecoratorPatternEvaluatorTests
         }
         finally
         {
-            directory.Delete(recursive: true);
+            Directory.Delete(directory, recursive: true);
         }
     }
 }

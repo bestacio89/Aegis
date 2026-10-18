@@ -123,6 +123,100 @@ public sealed class RuleEngineCoreBehaviorTests
                 && evaluation.Scope == "File");
     }
 
+    [Fact]
+    public void EvaluateDetailed_marks_framework_specific_rules_not_applicable_for_a_different_detected_family()
+    {
+        var rule = ArchitectureRuleRegistry.GetById("AEG-FRONT-R1");
+        Assert.NotNull(rule);
+
+        var fact = FrontendFact(rule!, "Widget.ts", 1);
+        var context = new ProjectArchitectureContext
+        {
+            Framework = "React"
+        };
+
+        var outcome = CreateEngine().EvaluateDetailed(context, [fact]);
+
+        Assert.Contains(rule!.Id, outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == rule.Id);
+        Assert.Contains(
+            outcome.Stats.NotApplicableReasons,
+            pair => pair.Key == rule.Id
+                && pair.Value.Contains("React", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void EvaluateDetailed_keeps_framework_rule_applicable_when_technology_is_unknown()
+    {
+        var rule = ArchitectureRuleRegistry.GetById("AEG-FRONT-R1");
+        Assert.NotNull(rule);
+
+        var fact = FrontendFact(rule!, "Widget.ts", 1);
+        var context = new ProjectArchitectureContext
+        {
+            Framework = "UnknownFramework"
+        };
+
+        var outcome = CreateEngine().EvaluateDetailed(context, [fact]);
+
+        Assert.DoesNotContain(rule!.Id, outcome.Stats.RulesNotApplicable);
+        Assert.Contains(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == rule.Id);
+    }
+
+    [Fact]
+    public void EvaluateDetailed_rejects_ambiguous_case_insensitive_metric_matches()
+    {
+        var rule = ArchitectureRuleRegistry.GetById("AEG-ARCH-R1");
+        Assert.NotNull(rule);
+
+        var metrics = new Dictionary<string, double>(StringComparer.Ordinal)
+        {
+            [rule!.MetricKey.ToLowerInvariant()] = 0,
+            [rule.MetricKey.ToUpperInvariant()] = 1
+        };
+
+        var fact = new ArchitectureEvaluatorResult("ArchitecturalEvaluator", "SampleProject")
+        {
+            Category = "Architecture",
+            Metrics = metrics,
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = rule.Scope.ToString()
+            }
+        };
+
+        var outcome = CreateEngine().EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [fact]);
+
+        Assert.DoesNotContain(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == rule.Id);
+        Assert.Contains(rule.Id, outcome.Stats.RulesNotEvaluated);
+    }
+
+    private static ArchitectureEvaluatorResult FrontendFact(
+        ArchitectureRuleDefinition rule,
+        string target,
+        double value) =>
+        new("AngularEvaluator", target)
+        {
+            Category = "Frontend",
+            Metrics = new Dictionary<string, double>
+            {
+                [rule.MetricKey] = value
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = rule.Scope.ToString(),
+                ["FilePath"] = $"src/{target}"
+            }
+        };
+
     private static RuleEngineCore CreateEngine() =>
         new(NullLogger<RuleEngineCore>.Instance, new AegisArchitecturePolicy());
 

@@ -1,4 +1,4 @@
-name: architecture tests
+name: non-WPF quality gates
 
 on:
   pull_request:
@@ -16,11 +16,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: architecture-tests-${{ github.event.pull_request.number || github.ref }}
+  group: non-wpf-quality-gates-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  architecture-tests:
+  non-wpf-quality-gates:
     runs-on: windows-latest
     steps:
       - name: checkout
@@ -36,5 +36,49 @@ jobs:
         with:
           node-version: 22
 
-      - name: run architecture tests
-        run: dotnet test tests/Aegis.Architecture.Tests/Aegis.Architecture.Tests.csproj --configuration Release
+      - name: run all non-WPF test projects
+        shell: pwsh
+        run: |
+          $projects = Get-ChildItem tests -Recurse -Filter *.csproj | Sort-Object FullName
+          if (-not $projects) {
+            throw "No test projects were discovered under tests/."
+          }
+
+          foreach ($project in $projects) {
+            Write-Host "::group::Testing $($project.FullName)"
+            dotnet test $project.FullName --configuration Release --logger "console;verbosity=normal" --logger "trx;LogFileName=$($project.BaseName).trx" --collect "XPlat Code Coverage"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Tests failed for $($project.FullName)."
+            }
+            Write-Host "::endgroup::"
+          }
+
+      - name: build all non-WPF production projects
+        shell: pwsh
+        run: |
+          $projects = Get-ChildItem sources -Recurse -Filter *.csproj |
+            Where-Object { $_.FullName -notmatch '[\\/]Aegis\.App\.WPF[\\/]' } |
+            Sort-Object FullName
+
+          if (-not $projects) {
+            throw "No non-WPF production projects were discovered under sources/."
+          }
+
+          foreach ($project in $projects) {
+            Write-Host "::group::Building $($project.FullName)"
+            dotnet build $project.FullName --configuration Release
+            if ($LASTEXITCODE -ne 0) {
+              throw "Build failed for $($project.FullName)."
+            }
+            Write-Host "::endgroup::"
+          }
+
+      - name: upload test and coverage results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: non-wpf-test-results
+          path: |
+            tests/**/TestResults/**/*.trx
+            tests/**/TestResults/**/coverage.cobertura.xml
+          if-no-files-found: warn

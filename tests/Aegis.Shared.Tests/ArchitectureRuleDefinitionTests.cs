@@ -70,13 +70,8 @@ public sealed class ArchitectureRuleDefinitionTests
     [Fact]
     public void Policy_threshold_overrides_are_case_insensitive()
     {
-        var policy = new AegisArchitecturePolicy
-        {
-            RuleThresholds = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["AEG-ARCH-R1"] = 3
-            }
-        };
+        var policy = new AegisArchitecturePolicy();
+        policy.RuleThresholds["AEG-ARCH-R1"] = 3;
 
         Assert.True(policy.RuleThresholds.TryGetValue("aeg-arch-r1", out var threshold));
         Assert.Equal(3, threshold);

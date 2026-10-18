@@ -8,7 +8,7 @@ using Xunit;
 namespace Aegis.Architecture.Tests;
 
 [CollectionDefinition("Frontend analyzer environment", DisableParallelization = true)]
-public sealed class FrontendAnalyzerEnvironmentCollection;
+public sealed class FrontendAnalyzerEnvironmentCollection { }
 
 [Collection("Frontend analyzer environment")]
 public sealed class FrontendAnalyzerContractTests
@@ -62,7 +62,7 @@ public sealed class FrontendAnalyzerContractTests
     }
 
     [Fact]
-    public async Task ReactEvaluator_maps_file_metrics_and_rejects_no_valid_evidence()
+    public async Task ReactEvaluator_maps_file_metrics_and_analyzer_metadata()
     {
         using var project = new TemporaryProject();
         project.Write("front/src/App.tsx", """

@@ -108,7 +108,7 @@ public sealed class CSharpNamingDeclarationAnalyzerTests
         Assert.All(result.Diagnostics, diagnostic =>
         {
             Assert.Equal("BrokenService.cs", diagnostic.FilePath);
-            Assert.False(string.IsNullOrWhiteSpace(diagnostic.Id));
+            Assert.False(string.IsNullOrWhiteSpace(diagnostic.Code));
             Assert.False(string.IsNullOrWhiteSpace(diagnostic.Message));
         });
     }

@@ -194,7 +194,7 @@ public sealed class ArchitectureEvaluatorBehaviorTests
                     {
                         for (var inner = 0; inner < 10; inner++)
                         {
-                            System.Threading.Tasks.Task.Delay(1).Wait();
+                            System.Threading.Thread.Sleep(1);
                             System.IO.File.ReadAllText("fixture.txt");
                         }
                     }
@@ -291,7 +291,8 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         var results = (await evaluator.EvaluateAsync(project.Root, CreateContext(project))).ToArray();
         var fileResult = Assert.Single(
             results,
-            result => result.Metrics.ContainsKey("ConfigurationIntegrityScore"));
+            result => result.Metadata.GetValueOrDefault("FileName") == "appsettings.json"
+                && result.Metrics.ContainsKey("ConfigurationIntegrityScore"));
         var summary = Assert.Single(
             results,
             result => result.Metrics.ContainsKey("ConfigurationFileCount"));

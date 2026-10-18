@@ -71,7 +71,7 @@ public sealed class RemainingPatternEvaluatorBehaviorTests
         Assert.True(result.Metrics["SubscriptionCount"] >= 1);
         Assert.Equal(1, result.Metrics["LifecycleManaged"]);
         Assert.Equal(0, result.Metrics["LeakRisk"]);
-        Assert.Equal("false", result.Metadata["SemanticAnalysisPerformed"]);
+        Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
         AssertAllMetricsAreFinite(results);
     }
 
@@ -131,7 +131,7 @@ public sealed class RemainingPatternEvaluatorBehaviorTests
         Assert.True(result.Metrics["MediatorCallCount"] >= 1);
         Assert.True(result.Metrics["MediatorHandlerContractCount"] >= 1);
         Assert.Equal(1, result.Metrics["UsesMediator"]);
-        Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
+        Assert.Equal("false", result.Metadata["SemanticAnalysisPerformed"]);
         AssertAllMetricsAreFinite(results);
     }
 

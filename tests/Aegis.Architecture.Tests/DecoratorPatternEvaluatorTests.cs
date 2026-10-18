@@ -57,7 +57,7 @@ public sealed class DecoratorPatternEvaluatorTests
                 results,
                 result => result.Metadata.GetValueOrDefault("ClassName") == "ServiceWrapper");
 
-            Assert.Equal("true", classResult.Metadata["DecoratorCandidate"]);
+            Assert.Equal("True", classResult.Metadata["DecoratorCandidate"]);
             Assert.Equal(
                 "NotApplicable",
                 classResult.Metadata["NamingConventionCompliant"]);

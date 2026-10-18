@@ -57,14 +57,14 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             "back/ComplexityFixture.cs",
             $"""
             public sealed class ComplexityFixture
-            {{
-                public int HighComplexity({parameters})
-                {{
+            {
+                public int HighComplexity({{parameters}})
+                {
                     var count = 0;
-            {decisions}
+            {{decisions}}
                     return count;
-                }}
-            }}
+                }
+            }
             """);
 
         using var provider = CreateProvider();

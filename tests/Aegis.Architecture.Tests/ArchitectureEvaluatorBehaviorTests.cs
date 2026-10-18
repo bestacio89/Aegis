@@ -1,5 +1,6 @@
 using Aegis.Architecture.Bootstrap;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -240,7 +241,11 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             }
             """);
 
-        using var provider = CreateProvider();
+        using var provider = CreateProvider(policy =>
+        {
+            policy.Transaction.RequireExplicitCommit = true;
+            policy.Transaction.RequireRollbackOnFailure = true;
+        });
         using var scope = provider.CreateScope();
         var evaluator = GetEvaluator(
             scope.ServiceProvider,
@@ -252,9 +257,9 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             result => result.Metrics.ContainsKey("TransactionIntegrityIndex")
                 && result.Metadata.GetValueOrDefault("FileName") == "TransactionFixture.cs");
 
+        Assert.Equal("True", fileResult.Metadata["ContainsTransactionScope"]);
         Assert.Equal(60, fileResult.Metrics["CommitScore"]);
         Assert.Equal(60, fileResult.Metrics["RollbackScore"]);
-        Assert.Equal("True", fileResult.Metadata["ContainsTransactionScope"]);
         AssertAllMetricsAreFinite(results);
     }
 
@@ -302,12 +307,17 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         AssertAllMetricsAreFinite(results);
     }
 
-    private static ServiceProvider CreateProvider()
+    private static ServiceProvider CreateProvider(
+        Action<AegisArchitecturePolicy>? configure = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddOptions();
         services.AddAegisCore();
+
+        if (configure is not null)
+            services.Configure(configure);
+
         return services.BuildServiceProvider(validateScopes: true);
     }
 

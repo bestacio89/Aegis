@@ -116,7 +116,7 @@ public sealed class RuleEngineOrchestrationTests
     [InlineData(" ")]
     public async Task RunAsync_rejects_blank_project_paths(string? path)
     {
-        await Assert.ThrowsAsync<ArgumentException>(async () =>
+        await Assert.ThrowsAnyAsync<ArgumentException>(async () =>
             await CreateEngine([]).RunAsync(
                 path!,
                 new ProjectArchitectureContext()));

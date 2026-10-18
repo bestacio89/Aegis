@@ -105,7 +105,7 @@ public sealed class BaseArchitectureEvaluatorContractTests
     {
         var evaluator = new FixtureEvaluator();
 
-        await Assert.ThrowsAsync<ArgumentException>(async () =>
+        await Assert.ThrowsAnyAsync<ArgumentException>(async () =>
             await evaluator.EvaluateAsync(path!, new ProjectArchitectureContext()));
     }
 

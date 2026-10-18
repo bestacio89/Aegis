@@ -53,19 +53,17 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             Enumerable.Range(0, decisionCount)
                 .Select(index => $"        if (condition{index}) {{ count++; }}"));
 
-        project.Write(
-            "back/ComplexityFixture.cs",
-            $"""
-            public sealed class ComplexityFixture
-            {
-                public int HighComplexity({{parameters}})
-                {
-                    var count = 0;
-            {{decisions}}
-                    return count;
-                }
-            }
-            """);
+        var source = $@"public sealed class ComplexityFixture
+{{
+    public int HighComplexity({parameters})
+    {{
+        var count = 0;
+{decisions}
+        return count;
+    }}
+}}";
+
+        project.Write("back/ComplexityFixture.cs", source);
 
         using var provider = CreateProvider();
         using var scope = provider.CreateScope();

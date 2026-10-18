@@ -138,7 +138,8 @@ public sealed class AdditionalEvaluatorBehaviorTests
         var referenceResults = await Evaluate(project, "UnusedReferenceEvaluator", "JavaScript", "Node");
         var referenceSummary = Assert.Single(
             referenceResults,
-            result => result.Metrics.ContainsKey("DeclaredReferences"));
+            result => result.Metrics.ContainsKey("DeclaredReferences")
+                && result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
 
         Assert.True(referenceSummary.Metrics["DeclaredReferences"] >= 3);
         Assert.Equal(bool.FalseString, referenceSummary.Metadata["UnusedReferencesDetermined"]);
@@ -150,16 +151,19 @@ public sealed class AdditionalEvaluatorBehaviorTests
     public async Task CohesionEvaluator_reports_structural_measurements_for_a_type()
     {
         using var project = new TemporaryProject();
-        project.Write("back/OrderProcessor.cs", """
-            public sealed class OrderProcessor
-            {
-                private int _count;
-                private string _name = string.Empty;
+        var methods = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 15).Select(index =>
+                $"    public void Operation{index}() {{ }}"));
 
-                public void Process() { _count++; }
-                public void Rename(string name) { _name = name; }
-            }
-            """);
+        project.Write(
+            "back/OrderProcessor.cs",
+            $@"public sealed class OrderProcessor
+{{
+    private int _count;
+    private string _name = string.Empty;
+{methods}
+}}");
 
         var results = await Evaluate(project, "CohesionEvaluator", "C#", "ASP.NET");
         var result = Assert.Single(

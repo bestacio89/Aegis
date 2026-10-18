@@ -112,7 +112,7 @@ public sealed class AdditionalEvaluatorBehaviorTests
     public async Task DependencyManifest_evaluators_count_declarations_without_claiming_usage_or_registry_validation()
     {
         using var project = new TemporaryProject();
-        project.Write("package.json", """
+        project.Write("back/package.json", """
             {
               "name": "fixture",
               "dependencies": {
@@ -161,7 +161,7 @@ public sealed class AdditionalEvaluatorBehaviorTests
             }
             """);
 
-        var results = await Evaluate(project, "CohesionEvaluator", "C#", "ASP.NET Core");
+        var results = await Evaluate(project, "CohesionEvaluator", "C#", "ASP.NET");
         var result = Assert.Single(
             results,
             item => item.Metrics.ContainsKey("FieldCount")
@@ -262,9 +262,12 @@ public sealed class AdditionalEvaluatorBehaviorTests
 
         var results = await Evaluate(project, "CouplingEvaluator", context);
 
-        Assert.Contains(results, result =>
-            result.Metrics.ContainsKey("CrossLayerDependencyCount")
-            && result.Metrics["CrossLayerDependencyCount"] >= 1);
+        var architecturalSummary = Assert.Single(
+            results,
+            result => result.Metrics.ContainsKey("CrossLayerDependencyCount"));
+        Assert.Equal(0, architecturalSummary.Metrics["CrossLayerDependencyCount"]);
+        Assert.Equal(1, architecturalSummary.Metrics["UnclassifiedDependencyCount"]);
+        Assert.Equal(0, architecturalSummary.Metrics["ArchitecturalCouplingClassificationComplete"]);
         Assert.Contains(results, result =>
             result.Metrics.ContainsKey("ExternalDependencyCount")
             && result.Metrics["ExternalDependencyCount"] == 2);
@@ -286,7 +289,7 @@ public sealed class AdditionalEvaluatorBehaviorTests
             result => result.Metrics.ContainsKey("RepositoryHealthIndex"));
 
         Assert.InRange(summary.Metrics["RepositoryHealthIndex"], 0, 100);
-        Assert.True(summary.Metrics["RepositoryFileCount"] >= 2);
+        Assert.True(int.Parse(summary.Metadata["RepositoryFileCount"]) >= 2);
         AssertAllMetricsAreFinite(results);
     }
 

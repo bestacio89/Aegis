@@ -136,7 +136,8 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         var results = (await evaluator.EvaluateAsync(project.Root, CreateContext(project))).ToArray();
         var finding = Assert.Single(
             results,
-            result => result.Metrics.ContainsKey("SecretsDetected"));
+            result => result.Target == "SecurityFixture.cs"
+                && result.Metrics.ContainsKey("SecretsDetected"));
 
         Assert.True(finding.Metrics["SecretsDetected"] >= 1);
         Assert.False(string.IsNullOrWhiteSpace(finding.Target));
@@ -342,10 +343,29 @@ public sealed class ArchitectureEvaluatorBehaviorTests
     private sealed class TemporaryProject : IDisposable
     {
         public string Root { get; } = Path.Combine(
-            Path.GetTempPath(),
+            FindRepositoryRoot(),
             $"AegisEvaluatorBehavior_{Guid.NewGuid():N}");
 
         public TemporaryProject() => Directory.CreateDirectory(Root);
+
+        private static string FindRepositoryRoot()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+            while (directory is not null)
+            {
+                if (Directory.Exists(Path.Combine(directory.FullName, "sources"))
+                    && Directory.Exists(Path.Combine(directory.FullName, "tests")))
+                {
+                    return directory.FullName;
+                }
+
+                directory = directory.Parent;
+            }
+
+            throw new DirectoryNotFoundException(
+                "Could not locate the Aegis repository root for evaluator fixtures.");
+        }
 
         public string Write(string relativePath, string content)
         {

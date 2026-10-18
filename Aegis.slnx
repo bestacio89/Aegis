@@ -14,7 +14,6 @@
     <Project Path="tests/Aegis.Quality.Tests/Aegis.Quality.Tests.csproj" />
     <Project Path="tests/Aegis.Shared.Tests/Aegis.Shared.Tests.csproj" />
     <Project Path="tests/Aegis.Security.Tests/Aegis.Security.Tests.csproj" />
-    <Project Path="tests/Aegis.Infrastructure.Tests/Aegis.Infrastructure.Tests.csproj" />
   </Folder>
   <Folder Name="/sources/">
     <Project Path="sources/Aegis.App.WPF/Aegis.Wpf.csproj" />

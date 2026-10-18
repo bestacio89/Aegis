@@ -74,8 +74,7 @@ public static class PluginRegistrar
                 var assembly = Assembly.LoadFrom(dll);
                 logger?.LogInformation("Loaded plugin assembly: {Name}", assembly.GetName().Name);
             }
-            catch (Exception exception) when (
-                exception is BadImageFormatException or FileLoadException or FileNotFoundException)
+            catch (Exception exception)
             {
                 logger?.LogError(exception, "Failed to load plugin assembly from {Dll}.", dll);
             }

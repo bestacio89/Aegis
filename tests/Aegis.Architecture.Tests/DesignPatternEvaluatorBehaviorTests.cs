@@ -72,7 +72,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.True(result.Metrics["InstantiationCount"] >= 1);
         Assert.Equal(1, result.Metrics["AbstractionScore"]);
         Assert.True(result.Metrics.ContainsKey("FactoryComplianceScore"));
-        Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
+        Assert.Equal("false", result.Metadata["SemanticAnalysisPerformed"]);
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.Equal(2, result.Metrics["StateMemberCount"]);
         Assert.Equal(0, result.Metrics["Methods"]);
         Assert.Equal(0, result.Metrics["BehaviorRatio"]);
-        Assert.Equal("false", result.Metadata["SemanticAnalysisPerformed"]);
+        Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
     }
 
     [Fact]

@@ -54,6 +54,8 @@ public sealed class DecoratorPatternEvaluatorTests
             "NotApplicable",
             classResult.Metadata["NamingConventionCompliant"]);
         Assert.False(classResult.Metrics.ContainsKey("DecoratorNamingCompliance"));
+        Assert.False(classResult.Metrics.ContainsKey("DecoratorComplianceScore"));
+        Assert.True(classResult.Metrics.ContainsKey("StructuralComplianceScore"));
 
         var summary = Assert.Single(results.Where(result =>
             result.Metadata.GetValueOrDefault("EvaluationScope") == "Project"));

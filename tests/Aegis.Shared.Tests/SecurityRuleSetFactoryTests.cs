@@ -38,8 +38,8 @@ public sealed class SecurityRuleSetFactoryTests
         Assert.Equal("TLSv1.0", rule.EvidencePattern);
         Assert.Equal("Require modern TLS.", rule.Remediation);
         Assert.Equal("https://example.invalid/security", rule.ReferenceUrl);
-        Assert.Equal(["transport", "encryption"], rule.Tags);
-        Assert.Equal([".json", ".yml"], rule.AffectedArtifacts);
+        Assert.Equal(new[] { "transport", "encryption" }, rule.Tags);
+        Assert.Equal(new[] { ".json", ".yml" }, rule.AffectedArtifacts);
         Assert.True(rule.MinScore < rule.MaxScore);
         Assert.Equal("CVSS", rule.ThresholdType);
         Assert.Equal("Static", rule.DetectionVector);
@@ -102,7 +102,7 @@ public sealed class SecurityRuleSetFactoryTests
         Assert.Equal("32", rule.GdprArticle);
         Assert.False(rule.RequiredForCompliance);
         Assert.Equal(2.5, rule.ControlWeight);
-        Assert.Equal(["internal-policy-17"], rule.GovernanceReferences);
+        Assert.Equal(new[] { "internal-policy-17" }, rule.GovernanceReferences);
         Assert.True(rule.MinScore < rule.MaxScore);
     }
 

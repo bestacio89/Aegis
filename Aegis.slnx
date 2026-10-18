@@ -15,6 +15,7 @@
     <Project Path="tests/Aegis.Shared.Tests/Aegis.Shared.Tests.csproj" />
     <Project Path="tests/Aegis.Security.Tests/Aegis.Security.Tests.csproj" />
     <Project Path="tests/Aegis.Infrastructure.Tests/Aegis.Infrastructure.Tests.csproj" />
+    <Project Path="tests/Aegis.Sdk.Tests/Aegis.Sdk.Tests.csproj" />
   </Folder>
   <Folder Name="/sources/">
     <Project Path="sources/Aegis.App.WPF/Aegis.Wpf.csproj" />
@@ -25,7 +26,7 @@
     <Project Path="sources/Aegis.Security/Aegis.Security.csproj" />
     <Project Path="sources/Aegis.Shared/Aegis.Shared.csproj" />
   </Folder>
-  <Project Path="sources/Aegis.Installer/Aegis.Installer.csproj" Id="2458c1c1-c1f2-4ad1-9c02-512b4ab1e00f" />
+  <Project Path="sources/Aegis.Installer/Aegis.Installer.wixproj" Id="2458c1c1-c1f2-4ad1-9c02-512b4ab1e00f" />
   <Project Path="sources/Package1/Package1.wixproj" Type="b7dd6f7e-def8-4e67-b5b7-07ef123db6f0" Id="48df3b60-dcc7-4fa2-ab14-e0c183cb3e51">
     <Platform Solution="*|Any CPU" Project="x64" />
   </Project>

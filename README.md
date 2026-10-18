@@ -308,9 +308,7 @@ You can:
 
 Architecture rules declare whether their evidence is file/entity-scoped or project-scoped. `RuleEngineCore` matches facts only to rules with the same declared scope, and registry validation rejects rules whose scope is unspecified. Project aggregate facts should declare `EvaluationScope=Project`; the `ArchitectureSummary` category remains a legacy fallback when scope metadata is absent, while explicit `File` metadata takes precedence. Missing metric producers and metric-unit mismatches remain explicit diagnostics rather than being inferred through aliases.
 
-Decorator candidate detection and naming compliance are separate signals. A structurally inferred wrapper without explicit `Decorator` naming intent is not counted as a naming violation, and naming-compliance metrics are omitted when the convention is not applicable.
-
-See [Rule Evaluation Scope](Docs/Rule-Evaluation-Scope.md) for the rule-level assignments and contract, and [Decorator Evidence](Docs/Decorator-Evidence.md) for the candidate/naming distinction.
+See [Rule Evaluation Scope](Docs/Rule-Evaluation-Scope.md) for the rule-level assignments and contract.
 
 ---
 

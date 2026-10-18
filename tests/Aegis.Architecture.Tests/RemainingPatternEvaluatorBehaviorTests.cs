@@ -71,7 +71,7 @@ public sealed class RemainingPatternEvaluatorBehaviorTests
         Assert.True(result.Metrics["SubscriptionCount"] >= 1);
         Assert.Equal(1, result.Metrics["LifecycleManaged"]);
         Assert.Equal(0, result.Metrics["LeakRisk"]);
-        Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
+        Assert.Equal("false", result.Metadata["SemanticAnalysisPerformed"]);
         AssertAllMetricsAreFinite(results);
     }
 

@@ -68,7 +68,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.True(result.Metrics["InstantiationCount"] >= 1);
         Assert.Equal(1, result.Metrics["AbstractionScore"]);
         Assert.True(result.Metrics.ContainsKey("FactoryComplianceScore"));
-        Assert.Equal("false", result.Metadata["SemanticAnalysisPerformed"]);
+        Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
     }
 
     [Fact]

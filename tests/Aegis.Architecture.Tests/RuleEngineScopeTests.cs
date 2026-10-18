@@ -106,4 +106,69 @@ public sealed class RuleEngineScopeTests
                 StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void Non_finite_project_metric_does_not_complete_a_rule_evaluation()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var fact = new ArchitectureEvaluatorResult(
+            "ArchitecturalEvaluator",
+            "SampleProject")
+        {
+            Category = "Architecture",
+            Metrics = new Dictionary<string, double>
+            {
+                ["CircularDependencyCount"] = double.NaN
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [fact]);
+
+        Assert.DoesNotContain(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == "AEG-ARCH-R1");
+    }
+
+    [Fact]
+    public void Non_finite_rule_threshold_does_not_complete_a_rule_evaluation()
+    {
+        var policy = new AegisArchitecturePolicy();
+        policy.RuleThresholds["AEG-ARCH-R1"] = double.PositiveInfinity;
+
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            policy);
+
+        var fact = new ArchitectureEvaluatorResult(
+            "ArchitecturalEvaluator",
+            "SampleProject")
+        {
+            Category = "Architecture",
+            Metrics = new Dictionary<string, double>
+            {
+                ["CircularDependencyCount"] = 1
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [fact]);
+
+        Assert.DoesNotContain(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == "AEG-ARCH-R1");
+    }
+
 }

@@ -288,6 +288,16 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             FROM example/service:latest
             RUN chmod 777 /app
             """);
+        project.Write(
+            "package.json",
+            """
+            {
+              "name": "configuration-fixture",
+              "dependencies": {
+                "example-package": "latest"
+              }
+            }
+            """);
 
         using var provider = CreateProvider();
         using var scope = provider.CreateScope();
@@ -302,9 +312,21 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             results,
             result => result.Metrics.ContainsKey("ConfigurationFileCount"));
 
-        Assert.True(fileResult.Metrics.ContainsKey("SecretExposureScore"));
         Assert.True(fileResult.Metrics.ContainsKey("InfrastructureSafetyScore"));
-        Assert.True(summary.Metrics["ConfigurationFileCount"] >= 1);
+        Assert.True(fileResult.Metrics.ContainsKey("SyntaxComplianceScore"));
+        Assert.True(fileResult.Metrics.ContainsKey("ConfigurationIntegrityScore"));
+        Assert.False(fileResult.Metrics.ContainsKey("SecretExposureScore"));
+        Assert.False(fileResult.Metrics.ContainsKey("DependencyPinningScore"));
+        Assert.False(fileResult.Metrics.ContainsKey("DependencyCount"));
+
+        Assert.True(summary.Metrics["ConfigurationFileCount"] >= 2);
+        Assert.False(summary.Metrics.ContainsKey("AverageSecretProtection"));
+        Assert.False(summary.Metrics.ContainsKey("AverageDependencyDiscipline"));
+
+        Assert.DoesNotContain(results, result =>
+            result.Metadata.Keys.Any(key =>
+                key.StartsWith("Finding.CFG-SECRET-", StringComparison.Ordinal)
+                || key.StartsWith("Finding.CFG-DEPENDENCY-", StringComparison.Ordinal)));
         AssertAllMetricsAreFinite(results);
     }
 

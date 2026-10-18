@@ -1,4 +1,4 @@
-﻿using Aegis.Sdk.Contracts;
+using Aegis.Sdk.Contracts;
 using Aegis.Shared.Contracts;
 using Franz.Common.DependencyInjection;
 using Franz.Common.DependencyInjection.Extensions;
@@ -19,33 +19,35 @@ public static class PluginRegistrar
         ILogger? logger = null,
         Func<Assembly, bool>? assemblyFilter = null)
     {
-        // 1️⃣ Load all Aegis assemblies or apply filter if provided.
+        ArgumentNullException.ThrowIfNull(services);
+
         var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => !a.IsDynamic &&
-                        (assemblyFilter?.Invoke(a) ??
-                         a.FullName!.StartsWith("Aegis", StringComparison.OrdinalIgnoreCase)))
+            .Where(assembly => !assembly.IsDynamic &&
+                (assemblyFilter?.Invoke(assembly) ??
+                 (assembly.FullName?.StartsWith("Aegis", StringComparison.OrdinalIgnoreCase) ?? false)))
             .ToList();
 
-        logger?.LogInformation("🔍 Scanning {Count} assemblies for Aegis plugins...", assemblies.Count);
+        logger?.LogInformation(
+            "Scanning {AssemblyCount} assemblies for Aegis plugins.",
+            assemblies.Count);
 
-        // 2️⃣ Register using Scrutor and Franz conventions.
         services.Scan(scan => scan
             .FromAssemblies(assemblies)
-            .AddClasses(c => c.AssignableTo<IEvaluator>())
+            .AddClasses(classes => classes.AssignableTo<IEvaluator>())
                 .AsImplementedInterfaces()
                 .WithScopedLifetime()
-            .AddClasses(c => c.AssignableTo<IReportExporter>())
+            .AddClasses(classes => classes.AssignableTo<IReportExporter>())
                 .AsImplementedInterfaces()
                 .WithScopedLifetime()
-            .AddClasses(c => c.AssignableTo<IPlugin>())
+            .AddClasses(classes => classes.AssignableTo<IPlugin>())
                 .AsImplementedInterfaces()
-                .WithSingletonLifetime()
-        );
+                .WithScopedLifetime());
 
-        // 3️⃣ Optionally register any other IScopedDependency automatically (Franz model).
-        services.AddScopedDependencies(a => a.FullName?.StartsWith("Aegis") ?? false);
+        services.AddScopedDependencies(
+            assembly => assembly.FullName?.StartsWith("Aegis", StringComparison.OrdinalIgnoreCase) ?? false);
 
-        logger?.LogInformation("✅ Plugin discovery complete — {ServiceCount} services registered.",
+        logger?.LogInformation(
+            "Plugin discovery complete. {ServiceCount} service descriptors registered.",
             services.Count);
 
         return services;
@@ -56,6 +58,8 @@ public static class PluginRegistrar
     /// </summary>
     public static void LoadExternalPlugins(string pluginPath, ILogger? logger = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginPath);
+
         if (!Directory.Exists(pluginPath))
         {
             logger?.LogWarning("Plugin directory '{Path}' not found.", pluginPath);
@@ -68,11 +72,12 @@ public static class PluginRegistrar
             try
             {
                 var assembly = Assembly.LoadFrom(dll);
-                logger?.LogInformation("📦 Loaded plugin assembly: {Name}", assembly.GetName().Name);
+                logger?.LogInformation("Loaded plugin assembly: {Name}", assembly.GetName().Name);
             }
-            catch (Exception ex)
+            catch (Exception exception) when (
+                exception is BadImageFormatException or FileLoadException or FileNotFoundException)
             {
-                logger?.LogError(ex, "❌ Failed to load plugin {Dll}", dll);
+                logger?.LogError(exception, "Failed to load plugin assembly from {Dll}.", dll);
             }
         }
     }

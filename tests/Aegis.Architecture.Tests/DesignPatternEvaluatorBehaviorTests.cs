@@ -1,7 +1,10 @@
 using Aegis.Architecture.Bootstrap;
+using Aegis.Architecture.Evaluators.DesignPatterns;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Aegis.Architecture.Tests;
@@ -12,7 +15,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
     public async Task BuilderEvaluator_reports_build_and_fluent_mutation_signals()
     {
         using var project = new TemporaryProject();
-        project.Write("back/OrderBuilder.cs", """
+        project.Write("back/FluentOrderAssembler.cs", """
             public sealed class OrderBuilder
             {
                 private string _id = string.Empty;
@@ -133,7 +136,13 @@ public sealed class DesignPatternEvaluatorBehaviorTests
             }
             """);
 
-        var results = await Evaluate(project, "StrategyPatternEvaluator");
+        var policy = new AegisArchitecturePolicy();
+        policy.Architecture.DesignPatterns.EnforceStrategyPattern = true;
+        var evaluator = new StrategyPatternEvaluator(
+            NullLogger<StrategyPatternEvaluator>.Instance,
+            Options.Create(policy));
+
+        var results = await Evaluate(project, evaluator);
         var result = Assert.Single(
             results,
             item => item.Metadata.GetValueOrDefault("ClassName") == "HolidayStrategy");
@@ -192,7 +201,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.Equal(1, result.Metrics["HasStaticInstanceMember"]);
         Assert.Equal(1, result.Metrics["HasPrivateConstructor"]);
         Assert.True(result.Metrics.ContainsKey("SingletonComplianceScore"));
-        Assert.Equal("False", result.Metadata["RuntimeUniquenessVerified"]);
+        Assert.Equal("false", result.Metadata["RuntimeUniquenessVerified"]);
     }
 
     [Fact]
@@ -214,7 +223,13 @@ public sealed class DesignPatternEvaluatorBehaviorTests
             }
             """);
 
-        var results = await Evaluate(project, "CommandPatternEvaluator");
+        var policy = new AegisArchitecturePolicy();
+        policy.Architecture.DesignPatterns.EnforceCommandPattern = true;
+        var evaluator = new CommandPatternEvaluator(
+            NullLogger<CommandPatternEvaluator>.Instance,
+            Options.Create(policy));
+
+        var results = await Evaluate(project, evaluator);
         var result = Assert.Single(
             results,
             item => item.Metadata.GetValueOrDefault("CommandName") == "CreateOrderCommand");
@@ -231,19 +246,19 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         project.Write("back/OrderFacade.cs", """
             public sealed class OrderFacade
             {
-                private readonly OrderService _orders;
-                private readonly PaymentService _payments;
+                private readonly OrderService OrderService;
+                private readonly PaymentService PaymentService;
 
-                public OrderFacade(OrderService orders, PaymentService payments)
+                public OrderFacade(OrderService OrderService, PaymentService PaymentService)
                 {
-                    _orders = orders;
-                    _payments = payments;
+                    this.OrderService = OrderService;
+                    this.PaymentService = PaymentService;
                 }
 
                 public void Checkout(Order order)
                 {
-                    _orders.Save(order);
-                    _payments.Charge(order);
+                    OrderService.Save(order);
+                    PaymentService.Charge(order);
                 }
             }
 
@@ -299,7 +314,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.True(result.Metrics.ContainsKey("GodClassComplianceScore"));
     }
 
-    private static async Task<ArchitectureEvaluatorResult[]> Evaluate(
+    private static Task<ArchitectureEvaluatorResult[]> Evaluate(
         TemporaryProject project,
         string evaluatorName)
     {
@@ -315,6 +330,13 @@ public sealed class DesignPatternEvaluatorBehaviorTests
             scope.ServiceProvider.GetServices<IEvaluator>(),
             item => item.Name == evaluatorName);
 
+        return Evaluate(project, evaluator);
+    }
+
+    private static async Task<ArchitectureEvaluatorResult[]> Evaluate(
+        TemporaryProject project,
+        IEvaluator evaluator)
+    {
         var context = new ProjectArchitectureContext
         {
             ProjectName = "DesignPatternFixture",

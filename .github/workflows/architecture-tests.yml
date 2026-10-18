@@ -46,7 +46,7 @@ jobs:
 
           foreach ($project in $projects) {
             Write-Host "::group::Testing $($project.FullName)"
-            dotnet test $project.FullName --configuration Release --logger "console;verbosity=normal"
+            dotnet test $project.FullName --configuration Release --logger "console;verbosity=normal" --logger "trx;LogFileName=$($project.BaseName).trx" --collect "XPlat Code Coverage"
             if ($LASTEXITCODE -ne 0) {
               throw "Tests failed for $($project.FullName)."
             }
@@ -72,3 +72,13 @@ jobs:
             }
             Write-Host "::endgroup::"
           }
+
+      - name: upload test and coverage results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: non-wpf-test-results
+          path: |
+            tests/**/TestResults/**/*.trx
+            tests/**/TestResults/**/coverage.cobertura.xml
+          if-no-files-found: warn

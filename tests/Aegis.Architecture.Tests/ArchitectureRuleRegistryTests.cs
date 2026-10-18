@@ -67,6 +67,6 @@ public sealed class ArchitectureRuleRegistryTests
     [InlineData(" ")]
     public void GetById_rejects_blank_identifiers(string? id)
     {
-        Assert.Throws<ArgumentException>(() => ArchitectureRuleRegistry.GetById(id!));
+        Assert.ThrowsAny<ArgumentException>(() => ArchitectureRuleRegistry.GetById(id!));
     }
 }

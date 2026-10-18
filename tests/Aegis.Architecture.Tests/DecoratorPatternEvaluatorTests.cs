@@ -13,7 +13,7 @@ public sealed class DecoratorPatternEvaluatorTests
     public async Task Structural_wrapper_without_decorator_intent_is_not_a_naming_violation()
     {
         var directory = Path.Combine(
-            Path.GetTempPath(),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../")),
             $"AegisDecoratorFixture_{Guid.NewGuid():N}");
         var sourceDirectory = Path.Combine(directory, "back");
         Directory.CreateDirectory(sourceDirectory);

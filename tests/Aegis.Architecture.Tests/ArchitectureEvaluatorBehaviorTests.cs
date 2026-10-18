@@ -234,7 +234,7 @@ public sealed class ArchitectureEvaluatorBehaviorTests
 
             public sealed class TransactionFixture
             {
-                public void Save()
+                public void Execute()
                 {
                     using var scope = new TransactionScope();
                     SaveChanges();

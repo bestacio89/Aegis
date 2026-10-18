@@ -202,7 +202,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.Equal(1, result.Metrics["HasStaticInstanceMember"]);
         Assert.Equal(1, result.Metrics["HasPrivateConstructor"]);
         Assert.True(result.Metrics.ContainsKey("SingletonComplianceScore"));
-        Assert.Equal("false", result.Metadata["RuntimeUniquenessVerified"]);
+        Assert.Equal(bool.FalseString, result.Metadata["RuntimeUniquenessVerified"]);
     }
 
     [Fact]
@@ -215,7 +215,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
                 public int OrderId { get; init; }
             }
 
-            public sealed class CreateOrderCommandHandler
+            public sealed class CreateOrderHandler
             {
                 public void Handle(CreateOrderCommand command)
                 {
@@ -236,7 +236,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
             item => item.Metadata.GetValueOrDefault("CommandName") == "CreateOrderCommand");
 
         Assert.Equal(1, result.Metrics["HasHandlerPair"]);
-        Assert.Equal("CreateOrderCommandHandler", result.Metadata["ExpectedHandler"]);
+        Assert.Equal("CreateOrderHandler", result.Metadata["ExpectedHandler"]);
         Assert.True(result.Metrics.ContainsKey("CommandComplianceScore"));
     }
 

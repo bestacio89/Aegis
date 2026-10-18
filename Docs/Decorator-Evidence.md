@@ -12,4 +12,6 @@ A structurally inferred wrapper without that explicit naming signal is not count
 
 At project scope, `DecoratorNamingApplicableCount` is the denominator for naming compliance. The aggregate `DecoratorNamingCompliance` metric is omitted when no applicable naming evidence exists; it is not fabricated as 100% or 0%.
 
+Class-level evidence is file-scoped and aggregate naming evidence is project-scoped. Producers should set `EvaluationScope` metadata explicitly so the rule engine does not have to infer scope from category names.
+
 The evaluator still marks its structural analysis as heuristic and does not claim semantic compilation. Findings should retain that provenance so consumers can distinguish static evidence from verified semantic analysis.

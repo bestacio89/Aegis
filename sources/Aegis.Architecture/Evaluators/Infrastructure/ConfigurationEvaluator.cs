@@ -38,29 +38,6 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
             ".vs"
         };
 
-    private static readonly Regex SecretAssignmentRegex = new(
-        @"(?ix)
-        \b
-        (?<key>
-            password|passwd|secret|client_secret|access_token|
-            auth_token|api[_-]?key|private[_-]?key|
-            connectionstring|connection[_-]?string
-        )
-        \b
-        \s*[:=]\s*
-        (?<value>[^,\r\n#;]+)",
-        RegexOptions.Compiled,
-        TimeSpan.FromMilliseconds(250));
-
-    private static readonly Regex HighEntropyCredentialNameRegex = new(
-        @"(?ix)
-        \b
-        (api[_-]?key|access[_-]?token|client[_-]?secret|
-         private[_-]?key|password|passwd|secret|auth[_-]?token)
-        \b",
-        RegexOptions.Compiled,
-        TimeSpan.FromMilliseconds(250));
-
     private static readonly Regex UnsafeDockerCommandRegex = new(
         @"(?im)
         ^\s*
@@ -84,11 +61,6 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
      @"(?im)^\s*image\s*:\s*['""]?[^'""\s#]+:(?:latest|stable|main|master)['""]?\s*(?:#.*)?$",
      RegexOptions.Compiled,
      TimeSpan.FromMilliseconds(250));
-
-    private static readonly Regex UnpinnedPipRequirementRegex = new(
-        @"^\s*[A-Za-z0-9_.-]+(?:\[[^\]]+\])?\s*(?:$|[<>=!~])",
-        RegexOptions.Compiled,
-        TimeSpan.FromMilliseconds(250));
 
     private readonly ConfigurationPolicy _policy;
 
@@ -324,23 +296,13 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
             }
         }
 
-        DetectPotentialSecrets(content, assessment);
-
         if (_policy.CheckInfrastructureConfigs)
         {
             AssessInfrastructureSafety(file, content, assessment);
         }
 
-        AssessDependencyDiscipline(file, content, assessment);
-
-        assessment.SecretExposureScore =
-            ComputeSecretExposureScore(assessment);
-
         assessment.InfrastructureSafetyScore =
             ComputeSafetyScore(assessment);
-
-        assessment.DependencyPinningScore =
-            ComputeDependencyScore(assessment);
 
         assessment.SyntaxComplianceScore =
             assessment.SyntaxValidation switch
@@ -404,76 +366,6 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         }
     }
 
-    private static void DetectPotentialSecrets(
-        string content,
-        FileAssessment assessment)
-    {
-        foreach (Match match in SecretAssignmentRegex.Matches(content))
-        {
-            var value = match.Groups["value"].Value.Trim();
-
-            if (IsPlaceholder(value))
-            {
-                continue;
-            }
-
-            assessment.Findings.Add(
-                new Finding(
-                    "CFG-SECRET-001",
-                    "PotentialSecretExposure",
-                    "Warning",
-                    "A configuration value assigned to a credential-like " +
-                    "key may contain a secret."));
-
-            break;
-        }
-
-        // A credential-like name alone is not sufficient evidence of
-        // exposure. Avoid classifying every declaration as a finding.
-        // Actual value validation belongs in a dedicated secret scanner.
-    }
-
-    private static bool IsPlaceholder(string value)
-    {
-        var normalized = value.Trim().Trim('"', '\'', '`');
-
-        if (normalized.Length == 0)
-        {
-            return true;
-        }
-
-        return normalized.StartsWith(
-                   "${",
-                   StringComparison.Ordinal)
-               || normalized.StartsWith(
-                   "$(",
-                   StringComparison.Ordinal)
-               || normalized.StartsWith(
-                   "{{",
-                   StringComparison.Ordinal)
-               || normalized.StartsWith(
-                   "<",
-                   StringComparison.Ordinal)
-               || normalized.Contains(
-                   "your_",
-                   StringComparison.OrdinalIgnoreCase)
-               || normalized.Contains(
-                   "placeholder",
-                   StringComparison.OrdinalIgnoreCase)
-               || normalized.Contains(
-                   "example",
-                   StringComparison.OrdinalIgnoreCase)
-               || normalized.Equals(
-                   "changeme",
-                   StringComparison.OrdinalIgnoreCase)
-               || normalized.Equals(
-                   "replace_me",
-                   StringComparison.OrdinalIgnoreCase)
-               || normalized.Equals(
-                   "null",
-                   StringComparison.OrdinalIgnoreCase);
-    }
-
     private static void AssessInfrastructureSafety(
         string file,
         string content,
@@ -522,158 +414,6 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         }
     }
 
-    private static void AssessDependencyDiscipline(
-        string file,
-        string content,
-        FileAssessment assessment)
-    {
-        var fileName = Path.GetFileName(file);
-
-        if (fileName.Equals(
-                "requirements.txt",
-                StringComparison.OrdinalIgnoreCase)
-            || fileName.StartsWith(
-                "requirements-",
-                StringComparison.OrdinalIgnoreCase)
-            && fileName.EndsWith(
-                ".txt",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            var requirements = content
-                .Split('\n')
-                .Select(line => line.Trim())
-                .Where(line =>
-                    line.Length > 0
-                    && !line.StartsWith('#')
-                    && !line.StartsWith('-'))
-                .ToArray();
-
-            foreach (var requirement in requirements)
-            {
-                if (!IsPinnedPipRequirement(requirement))
-                {
-                    assessment.Findings.Add(
-                        new Finding(
-                            "CFG-DEPENDENCY-001",
-                            "UnpinnedPythonDependency",
-                            "Warning",
-                            "A Python requirement does not specify an exact " +
-                            "version."));
-
-                    break;
-                }
-            }
-
-            assessment.DependencyCount = requirements.Length;
-            assessment.DependencyAnalysisAvailable = true;
-            return;
-        }
-
-        if (fileName.Equals(
-                "package.json",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                using var document = JsonDocument.Parse(content);
-
-                if (document.RootElement.ValueKind != JsonValueKind.Object)
-                {
-                    return;
-                }
-
-                foreach (var sectionName in new[]
-                         {
-                             "dependencies",
-                             "devDependencies",
-                             "optionalDependencies"
-                         })
-                {
-                    if (!document.RootElement.TryGetProperty(
-                            sectionName,
-                            out var dependencies)
-                        || dependencies.ValueKind != JsonValueKind.Object)
-                    {
-                        continue;
-                    }
-
-                    foreach (var dependency in dependencies.EnumerateObject())
-                    {
-                        assessment.DependencyCount++;
-
-                        if (!IsExactPackageVersion(dependency.Value))
-                        {
-                            assessment.Findings.Add(
-                                new Finding(
-                                    "CFG-DEPENDENCY-002",
-                                    "NonExactNpmDependency",
-                                    "Information",
-                                    $"Dependency '{dependency.Name}' does not " +
-                                    "declare an exact version in package.json."));
-                        }
-                    }
-                }
-
-                assessment.DependencyAnalysisAvailable = true;
-            }
-            catch (JsonException)
-            {
-                // Syntax validation already records the parse failure.
-                assessment.DependencyAnalysisAvailable = false;
-            }
-        }
-    }
-
-    private static bool IsPinnedPipRequirement(string requirement)
-    {
-        if (requirement.StartsWith(
-                "-e ",
-                StringComparison.OrdinalIgnoreCase)
-            || requirement.Contains(
-                " @ ",
-                StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        var operatorIndex = requirement.IndexOf("==", StringComparison.Ordinal);
-
-        if (operatorIndex <= 0)
-        {
-            return false;
-        }
-
-        var version = requirement[(operatorIndex + 2)..].Trim();
-
-        return version.Length > 0
-               && !version.Contains('*')
-               && !version.Contains(',');
-    }
-
-    private static bool IsExactPackageVersion(JsonElement value)
-    {
-        if (value.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        var version = value.GetString();
-
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            return false;
-        }
-
-        // Conservative: plain numeric semantic versions are treated as
-        // exact. Ranges, tags, workspace references, aliases and Git URLs
-        // require package-manager-specific interpretation.
-        return Regex.IsMatch(
-            version,
-            @"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$",
-            RegexOptions.CultureInvariant,
-            TimeSpan.FromMilliseconds(100));
-    }
-
     private ArchitectureEvaluatorResult CreateFileResult(
         string file,
         FileAssessment assessment)
@@ -692,26 +432,16 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         result.Metadata["PolicyEnabled"] = _policy.Enabled.ToString();
         result.Metadata["SyntaxValidation"] =
             assessment.SyntaxValidation.ToString();
-        result.Metadata["DependencyAnalysisAvailable"] =
-            assessment.DependencyAnalysisAvailable.ToString();
-
         result.Metrics["SyntaxComplianceScore"] =
             assessment.SyntaxComplianceScore;
 
-        result.Metrics["SecretExposureScore"] =
-            assessment.SecretExposureScore;
-
         result.Metrics["InfrastructureSafetyScore"] =
             assessment.InfrastructureSafetyScore;
-
-        result.Metrics["DependencyPinningScore"] =
-            assessment.DependencyPinningScore;
 
         result.Metrics["ConfigurationIntegrityScore"] =
             assessment.ConfigurationIntegrityScore;
 
         result.Metrics["FindingCount"] = assessment.Findings.Count;
-        result.Metrics["DependencyCount"] = assessment.DependencyCount;
 
         foreach (var finding in assessment.Findings)
         {
@@ -732,18 +462,8 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
             .Where(score => score >= 0)
             .ToArray();
 
-        var secretScores = results
-            .Select(r => r.Metrics.GetValueOrDefault("SecretExposureScore", -1))
-            .Where(score => score >= 0)
-            .ToArray();
-
         var safetyScores = results
             .Select(r => r.Metrics.GetValueOrDefault("InfrastructureSafetyScore", -1))
-            .Where(score => score >= 0)
-            .ToArray();
-
-        var dependencyScores = results
-            .Select(r => r.Metrics.GetValueOrDefault("DependencyPinningScore", -1))
             .Where(score => score >= 0)
             .ToArray();
 
@@ -771,9 +491,7 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         summary.Metrics["ConfigurationFileCount"] = results.Count;
         summary.Metrics["DiagnosticCount"] = diagnostics.Count;
         summary.Metrics["AverageSyntaxCompliance"] = AverageOrUnavailable(syntaxScores);
-        summary.Metrics["AverageSecretProtection"] = AverageOrUnavailable(secretScores);
         summary.Metrics["AverageInfrastructureSafety"] = AverageOrUnavailable(safetyScores);
-        summary.Metrics["AverageDependencyDiscipline"] = AverageOrUnavailable(dependencyScores);
         summary.Metrics["AverageIntegrityScore"] = AverageOrUnavailable(integrityScores);
 
         var findingCount = results.Sum(
@@ -806,18 +524,6 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         return result;
     }
 
-    private static double ComputeSecretExposureScore(
-        FileAssessment assessment)
-    {
-        var hasPotentialExposure = assessment.Findings.Any(
-            finding => finding.Id == "CFG-SECRET-001");
-
-        var hasForbiddenKey = assessment.Findings.Any(
-            finding => finding.Id == "CFG-POLICY-001");
-
-        return hasPotentialExposure || hasForbiddenKey ? 0 : 100;
-    }
-
     private static double ComputeSafetyScore(FileAssessment assessment)
     {
         var safetyFindings = assessment.Findings.Count(
@@ -831,54 +537,24 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         return safetyFindings == 0 ? 100 : 0;
     }
 
-    private static double ComputeDependencyScore(FileAssessment assessment)
-    {
-        if (!assessment.DependencyAnalysisAvailable
-            || assessment.DependencyCount == 0)
-        {
-            return -1;
-        }
-
-        var dependencyFindings = assessment.Findings.Count(
-            finding => finding.Id.StartsWith(
-                "CFG-DEPENDENCY-",
-                StringComparison.Ordinal));
-
-        var unpinnedCount = Math.Min(
-            dependencyFindings,
-            assessment.DependencyCount);
-
-        return Math.Round(
-            100.0 * (assessment.DependencyCount - unpinnedCount)
-            / assessment.DependencyCount,
-            2);
-    }
-
     private static double ComputeIntegrityScore(FileAssessment assessment)
     {
+        // Unsupported formats remain unvalidated; infrastructure checks may still
+        // report independently measured safety signals for those files.
         if (assessment.SyntaxComplianceScore < 0)
         {
             return -1;
         }
 
-        // Do not let unavailable dependency analysis count as perfect.
-        var components = new List<(double Score, double Weight)>
-        {
-            (assessment.SyntaxComplianceScore, 0.30),
-            (assessment.SecretExposureScore, 0.30),
-            (assessment.InfrastructureSafetyScore, 0.25)
-        };
-
-        if (assessment.DependencyPinningScore >= 0)
-        {
-            components.Add((assessment.DependencyPinningScore, 0.15));
-        }
-
-        var totalWeight = components.Sum(component => component.Weight);
+        var policyIntegrityScore = assessment.Findings.Any(
+            finding => finding.Id == "CFG-POLICY-001")
+            ? 0
+            : 100;
 
         return Math.Round(
-            components.Sum(component => component.Score * component.Weight)
-            / totalWeight,
+            assessment.SyntaxComplianceScore * 0.60
+            + assessment.InfrastructureSafetyScore * 0.25
+            + policyIntegrityScore * 0.15,
             2);
     }
 
@@ -999,13 +675,8 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         public SyntaxValidationStatus SyntaxValidation { get; set; }
 
         public double SyntaxComplianceScore { get; set; }
-        public double SecretExposureScore { get; set; }
         public double InfrastructureSafetyScore { get; set; }
-        public double DependencyPinningScore { get; set; }
         public double ConfigurationIntegrityScore { get; set; }
-
-        public int DependencyCount { get; set; }
-        public bool DependencyAnalysisAvailable { get; set; }
 
         public List<Finding> Findings { get; } = [];
     }

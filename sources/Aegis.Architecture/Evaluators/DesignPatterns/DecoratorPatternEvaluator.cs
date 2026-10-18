@@ -142,6 +142,7 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         var unreadableFiles = 0;
         var candidateCount = 0;
         var structurallySupportedCount = 0;
+        var namingApplicableCount = 0;
         var namingViolationCount = 0;
 
         foreach (var file in sourceFiles)
@@ -230,9 +231,17 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
                     structurallySupportedCount++;
                 }
 
-                if (!analysis.HasValidDecoratorName)
+                // Structural heuristics can identify wrappers that are not
+                // intended decorators. Enforce the naming convention only when
+                // the class name explicitly signals decorator intent.
+                if (analysis.HasDecoratorSuffix)
                 {
-                    namingViolationCount++;
+                    namingApplicableCount++;
+
+                    if (!analysis.HasValidDecoratorName)
+                    {
+                        namingViolationCount++;
+                    }
                 }
 
                 var result = CreateClassResult(
@@ -253,6 +262,7 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
             unreadableFiles,
             candidateCount,
             structurallySupportedCount,
+            namingApplicableCount,
             namingViolationCount);
 
         results.Add(summaryResult);
@@ -468,8 +478,15 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         result.Metrics["HasDecoratorSuffix"] =
             analysis.HasDecoratorSuffix ? 1 : 0;
 
-        result.Metrics["HasValidDecoratorName"] =
-            analysis.HasValidDecoratorName ? 1 : 0;
+        if (analysis.HasDecoratorSuffix)
+        {
+            result.Metrics["HasValidDecoratorName"] =
+                analysis.HasValidDecoratorName ? 1 : 0;
+
+            // This metric is absent when naming compliance is not applicable.
+            result.Metrics["DecoratorNamingCompliance"] =
+                analysis.HasValidDecoratorName ? 100 : 0;
+        }
 
         result.Metrics["ComponentMemberCount"] =
             analysis.ComponentMemberCount;
@@ -483,13 +500,16 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         result.Metrics["StructuralComplianceScore"] =
             analysis.StructuralComplianceScore;
 
-        result.Metrics["DecoratorNamingCompliance"] =
-            analysis.HasValidDecoratorName ? 100 : 0;
-
-        result.Metrics["DecoratorComplianceScore"] =
-            analysis.HasValidDecoratorName
-                ? analysis.StructuralComplianceScore
-                : analysis.StructuralComplianceScore * 0.75;
+        // An overall decorator score is meaningful only when naming intent
+        // makes the naming dimension applicable. Otherwise expose structural
+        // evidence without asserting full pattern compliance.
+        if (analysis.HasDecoratorSuffix)
+        {
+            result.Metrics["DecoratorComplianceScore"] =
+                analysis.HasValidDecoratorName
+                    ? analysis.StructuralComplianceScore
+                    : analysis.StructuralComplianceScore * 0.75;
+        }
 
         result.Metadata[BaseArchitectureEvaluator.FilePathMetadataKey] = file;
         result.Metadata[BaseArchitectureEvaluator.EvaluationScopeMetadataKey] =
@@ -500,12 +520,14 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         result.Metadata["DecoratorCandidate"] =
             analysis.IsDecoratorCandidate.ToString();
 
-        result.Metadata["NamingConventionCompliant"] =
-            analysis.HasValidDecoratorName.ToString();
+        result.Metadata["NamingConventionCompliant"] = analysis.HasDecoratorSuffix
+            ? analysis.HasValidDecoratorName.ToString()
+            : "NotApplicable";
 
         result.Metadata["WrappedComponentRole"] = analysis.WrappedRole;
         result.Metadata["SemanticAnalysisPerformed"] = "false";
-        result.Metadata["NamingConventionVerified"] = "false";
+        result.Metadata["NamingConventionVerified"] =
+            analysis.HasDecoratorSuffix.ToString();
         result.Metadata["StructuralAnalysisHeuristic"] = "true";
         result.Metadata["Layer"] = ResolveLayer(file);
 
@@ -519,6 +541,7 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         int unreadableFiles,
         int candidateCount,
         int structurallySupportedCount,
+        int namingApplicableCount,
         int namingViolationCount)
     {
         var summaryResult = new ArchitectureEvaluatorResult(
@@ -537,12 +560,18 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         summaryResult.Metrics["StructurallySupportedCandidateCount"] =
             structurallySupportedCount;
 
+        summaryResult.Metrics["DecoratorNamingApplicableCount"] =
+            namingApplicableCount;
+
         summaryResult.Metrics["DecoratorNamingViolationCount"] =
             namingViolationCount;
 
-        summaryResult.Metrics["DecoratorNamingCompliance"] = candidateCount == 0
-            ? 100
-            : (candidateCount - namingViolationCount) * 100.0 / candidateCount;
+        if (namingApplicableCount > 0)
+        {
+            summaryResult.Metrics["DecoratorNamingCompliance"] =
+                (namingApplicableCount - namingViolationCount)
+                * 100.0 / namingApplicableCount;
+        }
 
         summaryResult.Metrics["StructuralSupportRate"] = candidateCount == 0
             ? 100
@@ -553,7 +582,8 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
             BaseArchitectureEvaluator.ProjectScope;
 
         summaryResult.Metadata["SemanticAnalysisPerformed"] = "false";
-        summaryResult.Metadata["NamingConventionVerified"] = "false";
+        summaryResult.Metadata["NamingConventionVerified"] =
+            (namingApplicableCount > 0).ToString();
         summaryResult.Metadata["StructuralAnalysisHeuristic"] = "true";
 
         return summaryResult;

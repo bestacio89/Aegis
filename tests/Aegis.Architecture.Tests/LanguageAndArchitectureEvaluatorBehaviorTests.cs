@@ -49,6 +49,9 @@ public sealed class LanguageAndArchitectureEvaluatorBehaviorTests
             }
 
             @code {
+                [Inject]
+                public IOrderService InjectedService { get; set; } = default!;
+
                 private List<string> Orders = new();
 
                 protected override async Task OnInitializedAsync()
@@ -96,7 +99,8 @@ public sealed class LanguageAndArchitectureEvaluatorBehaviorTests
         var results = await Evaluate(project, "RazorEvaluator", "Razor", "ASP.NET Core MVC");
         var view = Assert.Single(
             results,
-            result => result.Metrics.ContainsKey("PresentationSeparationScore"));
+            result => result.Metrics.ContainsKey("PresentationSeparationScore")
+                && result.Metadata.GetValueOrDefault("EvaluationScope") == "File");
 
         Assert.True(view.Metrics["MarkupElementCount"] >= 2);
         Assert.True(view.Metrics["InjectDirectiveCount"] >= 1);

@@ -1,6 +1,7 @@
 using Aegis.Architecture.Bootstrap;
 using Aegis.Architecture.Evaluators.DesignPatterns;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;

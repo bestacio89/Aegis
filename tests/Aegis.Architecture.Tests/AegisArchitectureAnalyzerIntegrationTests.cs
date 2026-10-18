@@ -1,4 +1,5 @@
 using Aegis.Architecture.Aggregation;
+using Aegis.Architecture.Evaluators;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Architecture.Scoring;
 using Aegis.Architecture.Services;
@@ -56,10 +57,10 @@ public sealed class AegisArchitectureAnalyzerIntegrationTests
         Assert.True(report.TotalFilesScanned >= 1);
 
         Assert.Contains(report.Facts, fact =>
-            fact.Name == "CircularDependencyEvaluator"
+            fact.Source == "CircularDependencyEvaluator"
             && fact.Metrics.GetValueOrDefault("CircularDependencyCount") == 1);
         Assert.Contains(report.Facts, fact =>
-            fact.Name == "ProjectContextFact"
+            fact.Source == "ProjectContextFact"
             && fact.Metadata.GetValueOrDefault("Language") == "C#");
 
         var violation = Assert.Single(

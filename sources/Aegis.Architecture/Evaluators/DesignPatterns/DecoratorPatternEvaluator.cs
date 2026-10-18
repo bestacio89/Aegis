@@ -500,9 +500,16 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         result.Metrics["StructuralComplianceScore"] =
             analysis.StructuralComplianceScore;
 
-        // Naming convention and structural evidence are independent signals.
-        result.Metrics["DecoratorComplianceScore"] =
-            analysis.StructuralComplianceScore;
+        // An overall decorator score is meaningful only when naming intent
+        // makes the naming dimension applicable. Otherwise expose structural
+        // evidence without asserting full pattern compliance.
+        if (analysis.HasDecoratorSuffix)
+        {
+            result.Metrics["DecoratorComplianceScore"] =
+                analysis.HasValidDecoratorName
+                    ? analysis.StructuralComplianceScore
+                    : analysis.StructuralComplianceScore * 0.75;
+        }
 
         result.Metadata[BaseArchitectureEvaluator.FilePathMetadataKey] = file;
         result.Metadata[BaseArchitectureEvaluator.EvaluationScopeMetadataKey] =

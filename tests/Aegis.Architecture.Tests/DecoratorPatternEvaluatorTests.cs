@@ -15,11 +15,12 @@ public sealed class DecoratorPatternEvaluatorTests
         var directory = Path.Combine(
             Directory.GetCurrentDirectory(),
             $"AegisDecoratorFixture_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(directory);
+        var sourceDirectory = Path.Combine(directory, "back");
+        Directory.CreateDirectory(sourceDirectory);
 
         try
         {
-            var file = Path.Combine(directory, "ServiceWrapper.cs");
+            var file = Path.Combine(sourceDirectory, "ServiceWrapper.cs");
             await File.WriteAllTextAsync(
                 file,
                 """

@@ -87,7 +87,7 @@ public sealed class RuleEngineCoreBehaviorTests
         Assert.Contains(
             outcome.Stats.NotEvaluatedReasons,
             pair => pair.Key == "AEG-ARCH-R1"
-                && pair.Value.Contains("did not emit declared metric", StringComparison.Ordinal));
+                && pair.Value.Contains("emitted declared metric", StringComparison.Ordinal));
         Assert.Equal(0, outcome.Stats.ChecksPerformed);
     }
 

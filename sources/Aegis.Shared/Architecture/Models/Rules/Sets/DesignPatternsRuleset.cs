@@ -17,6 +17,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-DEC001",
+            Scope = RuleEvaluationScope.File,
             Name = "Decorator Delegation Compliance Low",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "DecoratorPatternComplianceIndex",
@@ -28,6 +29,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-DEC002",
+            Scope = RuleEvaluationScope.File,
             Name = "Decorator Self-Reference Detected",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "DecoratorSelfReferenceCount",
@@ -39,6 +41,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-FAC001",
+            Scope = RuleEvaluationScope.File,
             Name = "Facade Exposure Too Broad",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "FacadePublicMethodCount",
@@ -50,6 +53,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-FAC002",
+            Scope = RuleEvaluationScope.File,
             Name = "Facade Missing Encapsulation",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "FacadePatternComplianceIndex",
@@ -61,6 +65,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-REPO001",
+            Scope = RuleEvaluationScope.File,
             Name = "Repository Abstraction Missing",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "RepositoryInterfaceComplianceIndex",
@@ -72,6 +77,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-REPO002",
+            Scope = RuleEvaluationScope.File,
             Name = "Repository Performing External I/O",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "RepositoryIOOperationCount",
@@ -83,6 +89,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-BLD001",
+            Scope = RuleEvaluationScope.File,
             Name = "Builder Pattern Incomplete Implementation",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "BuilderPatternComplianceIndex",
@@ -94,6 +101,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-BLD002",
+            Scope = RuleEvaluationScope.File,
             Name = "Builder Mutability Violation",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "BuilderMutabilityViolationCount",
@@ -105,6 +113,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-FACR001",
+            Scope = RuleEvaluationScope.File,
             Name = "Factory Pattern Compliance Low",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "FactoryPatternComplianceIndex",
@@ -116,6 +125,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-FACR002",
+            Scope = RuleEvaluationScope.File,
             Name = "Factory Direct Instantiation Detected",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "FactoryDirectInstantiationCount",
@@ -131,6 +141,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-CMD001",
+            Scope = RuleEvaluationScope.File,
             Name = "Command Missing Corresponding Handler",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "CommandHandlerPairingIndex",
@@ -142,6 +153,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-CMD002",
+            Scope = RuleEvaluationScope.File,
             Name = "Command Handler Overload Detected",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "CommandHandlerOverloadCount",
@@ -153,6 +165,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-MEDI001",
+            Scope = RuleEvaluationScope.File,
             Name = "Mediator Centralization Too High",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "MediatorCouplingIndex",
@@ -164,6 +177,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-MEDI002",
+            Scope = RuleEvaluationScope.File,
             Name = "Mediator Direct Handler Calls Detected",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "MediatorDirectCallCount",
@@ -175,6 +189,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-STRAT001",
+            Scope = RuleEvaluationScope.File,
             Name = "Strategy Pattern Conditional Selection",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "StrategyConditionalCount",
@@ -186,6 +201,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-STRAT002",
+            Scope = RuleEvaluationScope.File,
             Name = "Strategy Compliance Low",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "StrategyPatternComplianceIndex",
@@ -197,6 +213,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-OBS001",
+            Scope = RuleEvaluationScope.File,
             Name = "Observer Missing Unsubscribe Mechanism",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "ObserverUnsubscribeMissingCount",
@@ -208,6 +225,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-OBS002",
+            Scope = RuleEvaluationScope.File,
             Name = "Observer Tight Coupling Detected",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "ObserverCouplingIndex",
@@ -223,6 +241,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-SING001",
+            Scope = RuleEvaluationScope.File,
             Name = "Singleton Thread Safety Missing",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "SingletonThreadSafetyIndex",
@@ -234,6 +253,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-SING002",
+            Scope = RuleEvaluationScope.File,
             Name = "Singleton Global State Detected",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "SingletonGlobalStateUsage",
@@ -249,6 +269,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-GOD001",
+            Scope = RuleEvaluationScope.File,
             Name = "God Class Detected",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "GodClassDensity",
@@ -260,6 +281,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-ADM001",
+            Scope = RuleEvaluationScope.File,
             Name = "Anemic Domain Model Detected",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "AnemicDomainModelIndex",
@@ -271,6 +293,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-CIRC001",
+            Scope = RuleEvaluationScope.File,
             Name = "Circular Pattern Reference Detected",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "PatternCircularReferenceCount",
@@ -282,6 +305,7 @@ public static class DesignPatternRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DES-OVER001",
+            Scope = RuleEvaluationScope.File,
             Name = "Pattern Overuse Detected",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "PatternOveruseIndex",

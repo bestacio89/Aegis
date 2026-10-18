@@ -17,6 +17,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R1",
+            Scope = RuleEvaluationScope.Project,
             Name = "Circular Dependencies Detected",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "CircularDependencyCount",
@@ -32,6 +33,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R2",
+            Scope = RuleEvaluationScope.Project,
             Name = "Layer Isolation Breach",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "LayerIsolationCompliance",
@@ -43,6 +45,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R3",
+            Scope = RuleEvaluationScope.Project,
             Name = "Forbidden Layer Reference Detected",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "ForbiddenReferenceCount",
@@ -58,6 +61,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R4",
+            Scope = RuleEvaluationScope.Project,
             Name = "Cross-Domain Leakage Detected",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "CrossDomainLeakageCount",
@@ -69,6 +73,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R5",
+            Scope = RuleEvaluationScope.Project,
             Name = "Infrastructure Dependency Inversion Broken",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "InfrastructureInversionCompliance",
@@ -84,6 +89,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R6",
+            Scope = RuleEvaluationScope.File,
             Name = "Controller Logic Leakage",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "ControllerLogicDensity",
@@ -95,6 +101,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R7",
+            Scope = RuleEvaluationScope.Project,
             Name = "API Consistency Below Standard",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "ApiConsistencyIndex",
@@ -110,6 +117,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R8",
+            Scope = RuleEvaluationScope.Project,
             Name = "God Class Found in Core Layer",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "GodClassDensity",
@@ -121,6 +129,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R9",
+            Scope = RuleEvaluationScope.Project,
             Name = "Layer Cohesion Too Low",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "LayerCohesionIndex",
@@ -136,6 +145,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R10",
+            Scope = RuleEvaluationScope.Project,
             Name = "Security Compliance Low",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "SecurityComplianceIndex",
@@ -147,6 +157,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R11",
+            Scope = RuleEvaluationScope.Project,
             Name = "Documentation Coverage Below Standard",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "DocumentationCoverage",
@@ -158,6 +169,7 @@ public static class ArchitectureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-ARCH-R12",
+            Scope = RuleEvaluationScope.File,
             Name = "Node Coupling Too High",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "NodeCouplingIndex",

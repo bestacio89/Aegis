@@ -10,6 +10,7 @@ public static class InfrastructureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-INF-R1",
+            Scope = RuleEvaluationScope.Project,
             Name = "Configuration Hygiene Low",
             Category = nameof(ArchitectureRuleCategory.Infrastructure),
             MetricKey = "ConfigurationHealthIndex",
@@ -21,6 +22,7 @@ public static class InfrastructureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-INF-R2",
+            Scope = RuleEvaluationScope.Project,
             Name = "Logging Hygiene Low",
             Category = nameof(ArchitectureRuleCategory.Infrastructure),
             MetricKey = "LoggingHygieneIndex",
@@ -32,6 +34,7 @@ public static class InfrastructureRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-INF-R3",
+            Scope = RuleEvaluationScope.Project,
             Name = "Repository Hygiene Low",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "RepositoryHealthIndex",

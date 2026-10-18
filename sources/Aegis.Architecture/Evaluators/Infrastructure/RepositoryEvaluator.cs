@@ -187,6 +187,7 @@ public sealed class RepositoryEvaluator : BaseArchitectureEvaluator
 
             Metadata =
             {
+                [EvaluationScopeMetadataKey] = ProjectScope,
                 ["Evaluator"] = Name,
                 ["ProjectPath"] = rootPath,
                 ["PolicyEnabled"] = "True",

@@ -24,6 +24,7 @@ public static class FrontendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-FRONT-R1",
+            Scope = RuleEvaluationScope.File,
             Name = "Angular Selector Naming Violation",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "SelectorScore",
@@ -38,6 +39,7 @@ public static class FrontendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-FRONT-R2",
+            Scope = RuleEvaluationScope.File,
             Name = "Angular Component Complexity",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "ComplexityScore",
@@ -56,6 +58,7 @@ public static class FrontendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-FRONT-R3",
+            Scope = RuleEvaluationScope.File,
             Name = "React Hook Misuse",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "HookDisciplineScore",
@@ -70,6 +73,7 @@ public static class FrontendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-FRONT-R4",
+            Scope = RuleEvaluationScope.File,
             Name = "React Component Typing Violation",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "TypingScore",
@@ -88,6 +92,7 @@ public static class FrontendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-FRONT-R5",
+            Scope = RuleEvaluationScope.File,
             Name = "Razor View Business Logic Leakage",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "PresentationSeparationScore",
@@ -102,6 +107,7 @@ public static class FrontendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-FRONT-R6",
+            Scope = RuleEvaluationScope.File,
             Name = "Razor Entity Exposure",
             Category = nameof(ArchitectureRuleCategory.Security),
             MetricKey = "ViewModelScore",
@@ -116,6 +122,7 @@ public static class FrontendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-FRONT-R7",
+            Scope = RuleEvaluationScope.File,
             Name = "Razor Data Access Leakage",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "DataIsolationScore",
@@ -134,6 +141,7 @@ public static class FrontendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-FRONT-R8",
+            Scope = RuleEvaluationScope.File,
             Name = "Blazor Component Complexity",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "ComplexityScore",
@@ -148,6 +156,7 @@ public static class FrontendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-FRONT-R9",
+            Scope = RuleEvaluationScope.File,
             Name = "Blazor Inline Code Overuse",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "CodeBehindScore",
@@ -162,6 +171,7 @@ public static class FrontendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-FRONT-R10",
+            Scope = RuleEvaluationScope.File,
             Name = "Blazor Dependency Construction Violation",
             Category = nameof(ArchitectureRuleCategory.Architecture),
             MetricKey = "DependencyInjectionScore",
@@ -180,6 +190,7 @@ public static class FrontendRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-FRONT-R11",
+            Scope = RuleEvaluationScope.File,
             Name = "Frontend Component Complexity Too High",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
             MetricKey = "ComplexityScore",

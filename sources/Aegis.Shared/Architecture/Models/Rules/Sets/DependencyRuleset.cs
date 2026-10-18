@@ -17,6 +17,7 @@ public static class DependencyRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DEPS-R1",
+            Scope = RuleEvaluationScope.Project,
             Name = "Outdated Package Ratio Too High",
             Category = nameof(ArchitectureRuleCategory.Dependency),
             MetricKey = "OutdatedPackageRatio",
@@ -32,6 +33,7 @@ public static class DependencyRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DEPS-R2",
+            Scope = RuleEvaluationScope.Project,
             Name = "Dependency Freshness Too Low",
             Category = nameof(ArchitectureRuleCategory.Dependency),
             MetricKey = "DependencyFreshness",
@@ -47,6 +49,7 @@ public static class DependencyRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DEPS-R3",
+            Scope = RuleEvaluationScope.Project,
             Name = "Unused References Detected",
             Category = nameof(ArchitectureRuleCategory.Dependency),
             MetricKey = "UnusedReferenceCount",
@@ -62,6 +65,7 @@ public static class DependencyRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-DEPS-R4",
+            Scope = RuleEvaluationScope.Project,
             Name = "Version Drift Too Large",
             Category = nameof(ArchitectureRuleCategory.Dependency),
             MetricKey = "MajorVersionDrift",

@@ -682,6 +682,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
             Metadata =
             {
+                [EvaluationScopeMetadataKey] = ProjectScope,
                 ["Evaluator"] = Name,
                 ["ProjectPath"] = projectPath,
                 ["EvaluationStatus"] = discoveredFileCount == 0

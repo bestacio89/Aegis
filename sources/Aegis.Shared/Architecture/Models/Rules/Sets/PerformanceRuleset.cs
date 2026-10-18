@@ -17,6 +17,7 @@ public static class PerformanceRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-PERF-R1",
+            Scope = RuleEvaluationScope.File,
             Name = "Performance Efficiency Below Threshold",
             Category = nameof(ArchitectureRuleCategory.Performance),
             MetricKey = "PerformanceHealthIndex",
@@ -33,6 +34,7 @@ public static class PerformanceRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-PERF-R2",
+            Scope = RuleEvaluationScope.File,
             Name = "Threading or Async Misuse",
             Category = nameof(ArchitectureRuleCategory.Performance),
             MetricKey = "AsyncUsageCompliance",
@@ -49,6 +51,7 @@ public static class PerformanceRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-PERF-R3",
+            Scope = RuleEvaluationScope.Project,
             Name = "Memory Allocation Excessive",
             Category = nameof(ArchitectureRuleCategory.Performance),
             MetricKey = "MemoryAllocationRate",
@@ -60,6 +63,7 @@ public static class PerformanceRuleset
         new ArchitectureRuleDefinition
         {
             Id = "AEG-PERF-R4",
+            Scope = RuleEvaluationScope.File,
             Name = "Blocking I/O Detected",
             Category = nameof(ArchitectureRuleCategory.Performance),
             MetricKey = "BlockingIOCount",

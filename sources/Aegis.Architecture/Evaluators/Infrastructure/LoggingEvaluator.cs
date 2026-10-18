@@ -302,7 +302,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                     ", ",
                     DetectFrameworks(language)),
                 ["PolicyEnabled"] = _policy.Enabled.ToString(),
-                ["EvaluationScope"] = "LoggingConventions"
+                ["EvaluationScope"] = FileScope,
             }
         };
     }
@@ -344,7 +344,6 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 ["SupportedFrameworks"] = string.Join(
                     ", ",
                     SupportedFrameworks),
-                ["EvaluationScope"] = "LoggingConventions",
                 ["ScoringNote"] =
                     "Scores are heuristic indicators based on files containing recognized logging calls."
             }
@@ -379,7 +378,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                         : loggingFileCount == 0
                             ? "NoRecognizedLoggingCalls"
                             : "NoFilesEvaluated",
-                ["EvaluationScope"] = "LoggingConventions"
+                ["EvaluationScope"] = ProjectScope
             }
         };
     }

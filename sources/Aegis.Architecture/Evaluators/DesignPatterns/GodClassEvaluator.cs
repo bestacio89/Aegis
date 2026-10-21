@@ -392,7 +392,11 @@ public sealed class GodClassEvaluator
                 ["UnreadableFiles"] = unreadableFiles,
                 ["ClassCount"] = classMetrics.Count,
                 ["AverageComplianceScore"] = averageCompliance,
-                ["AverageSeverity"] = averageSeverity
+                ["AverageSeverity"] = averageSeverity,
+                ["GodClassDensity"] = classMetrics.Count == 0
+                    ? 0d
+                    : classMetrics.Count(metrics => metrics.GetValueOrDefault("GodClassSeverity") > 0.25d)
+                        / (double)classMetrics.Count
             }
         };
 

@@ -69,6 +69,17 @@ public sealed class RuleEngine
     private const double EvaluatorsStart = 10;
     private const double EvaluatorsEnd = 80;
 
+    private static readonly HashSet<string> RepositoryWideEvaluatorNames =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "ArchitecturalEvaluator",
+            "CircularDependencyEvaluator",
+            "ConfigurationEvaluator",
+            "DependencyGraphEvaluator",
+            "PackageVersionEvaluator",
+            "RepositoryEvaluator"
+        };
+
     /// <summary>
     /// Executes the analysis pipeline.
     /// Evaluator failures are recorded without discarding successful results
@@ -99,9 +110,10 @@ public sealed class RuleEngine
             // inspect repository-level configuration/manifests once. All
             // technology-specific evaluators execute against detected project
             // boundaries so one project's framework cannot suppress another.
-            var repositoryWide = evaluator.SupportedLanguages.Contains("*", StringComparer.OrdinalIgnoreCase)
-                && (evaluator.SupportedFrameworks.Contains("*", StringComparer.OrdinalIgnoreCase)
-                    || evaluator.SupportedFrameworks.Contains("LanguageAgnostic", StringComparer.OrdinalIgnoreCase));
+            var repositoryWide = RepositoryWideEvaluatorNames.Contains(evaluator.Name)
+                || (evaluator.SupportedLanguages.Contains("*", StringComparer.OrdinalIgnoreCase)
+                    && (evaluator.SupportedFrameworks.Contains("*", StringComparer.OrdinalIgnoreCase)
+                        || evaluator.SupportedFrameworks.Contains("LanguageAgnostic", StringComparer.OrdinalIgnoreCase));
 
             if (repositoryWide)
             {
@@ -191,6 +203,7 @@ public sealed class RuleEngine
                     if (pathFilter is not null && !pathFilter(evidencePath))
                         continue;
 
+                    result.Source = evaluator.Name;
                     result.ProjectName ??= evaluationContext.ProjectName;
                     facts.Add(result);
                 }

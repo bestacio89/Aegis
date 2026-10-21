@@ -305,6 +305,8 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.True(fileResult.Metrics["AlgorithmicEfficiencyScore"] < 100);
         Assert.True(fileResult.Metrics["ConcurrencyScore"] < 100);
         Assert.True(fileResult.Metrics["IOMaturityScore"] < 100);
+        Assert.Equal(2, fileResult.Metrics["BlockingIOCount"]);
+        Assert.Equal("File", fileResult.Metadata["EvaluationScope"]);
         AssertAllMetricsAreFinite(results);
     }
 

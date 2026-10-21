@@ -233,7 +233,6 @@ public sealed class PdfReportExporter : IReportExporter
 
         var health = report.Metrics?.ProjectHealthIndex ?? 0;
         var stats = report.EvaluationStats;
-        var coverage = stats?.EvaluationCoverage;
         var coveragePercent = stats is not null && stats.RulesApplicable > 0
             ? (double)stats.RulesEvaluated / stats.RulesApplicable * 100.0
             : 0.0;

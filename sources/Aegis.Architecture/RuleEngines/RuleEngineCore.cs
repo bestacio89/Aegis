@@ -117,6 +117,7 @@ public sealed class RuleEngineCore
         var skippedNonFiniteMetrics = 0;
         var skippedInvalidThresholds = 0;
         var factsWithoutMatchingScopedMetrics = 0;
+        var factsWithMetricsAtWrongScope = 0;
 
         foreach (var fact in factList)
         {
@@ -146,27 +147,35 @@ public sealed class RuleEngineCore
                     context,
                     layerCache);
 
-            var matchedAnyRuleMetric = false;
+            var matchedAnyDeclaredMetric = false;
+            var matchedAnyScopedMetric = false;
 
             foreach (var rule in applicableRules)
             {
-                // Scope is part of the rule contract. Do not compare project
-                // aggregates with per-file thresholds, or vice versa.
+                var metricExists = ArchitectureRuleMetricContracts.TryResolveMetric(
+                    rule,
+                    fact.Metrics,
+                    out var metricKey,
+                    out var metricValue);
+
+                if (metricExists)
+                {
+                    matchedAnyDeclaredMetric = true;
+                }
+
+                // Scope is part of the rule contract. Track recognized metrics
+                // emitted at the wrong scope separately from unknown metrics.
                 if ((rule.Scope == RuleEvaluationScope.Project) != isProjectFact)
                 {
                     continue;
                 }
 
-                if (!ArchitectureRuleMetricContracts.TryResolveMetric(
-                        rule,
-                        fact.Metrics,
-                        out var metricKey,
-                        out var metricValue))
+                if (!metricExists)
                 {
                     continue;
                 }
 
-                matchedAnyRuleMetric = true;
+                matchedAnyScopedMetric = true;
 
                 // A non-finite observation cannot produce a meaningful
                 // comparison and must not count as a completed check.
@@ -276,9 +285,13 @@ public sealed class RuleEngineCore
                     evaluatedAt));
             }
 
-            if (!matchedAnyRuleMetric && applicableRules.Count > 0)
+            if (applicableRules.Count > 0 && !matchedAnyDeclaredMetric)
             {
                 factsWithoutMatchingScopedMetrics++;
+            }
+            else if (matchedAnyDeclaredMetric && !matchedAnyScopedMetric)
+            {
+                factsWithMetricsAtWrongScope++;
             }
         }
 
@@ -350,6 +363,8 @@ public sealed class RuleEngineCore
             ChecksViolated = checksViolated,
 
             RulesNotEvaluated = rulesNotEvaluated,
+            FactsWithoutMatchingScopedMetrics = factsWithoutMatchingScopedMetrics,
+            FactsWithMetricsAtWrongScope = factsWithMetricsAtWrongScope,
 
             RulesNotApplicable = notApplicableReasons.Keys
                 .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
@@ -408,7 +423,8 @@ public sealed class RuleEngineCore
             "{ProjectSummaries} project summaries processed; " +
             "{NonFiniteSkipped} non-finite metrics skipped; " +
             "{InvalidThresholds} invalid thresholds skipped; " +
-            "{FactsWithoutMetrics} facts had no matching scoped rule metrics.",
+            "{FactsWithoutMetrics} facts had no declared rule metric; " +
+            "{WrongScopeFacts} facts had declared metrics only at the wrong scope.",
             factList.Count,
             results.Count,
             totalChecks,
@@ -421,7 +437,8 @@ public sealed class RuleEngineCore
             projectSummaryFacts,
             skippedNonFiniteMetrics,
             skippedInvalidThresholds,
-            factsWithoutMatchingScopedMetrics);
+            factsWithoutMatchingScopedMetrics,
+            factsWithMetricsAtWrongScope);
 
 
         return new RuleEvaluationOutcome(results, stats, evaluations); 

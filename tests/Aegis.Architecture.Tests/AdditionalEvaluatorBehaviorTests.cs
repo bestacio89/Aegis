@@ -27,15 +27,26 @@ public sealed class AdditionalEvaluatorBehaviorTests
 
         var fileResult = Assert.Single(
             results,
-            result => result.Metrics.ContainsKey("ApiConsistencyIndex"));
+            result => result.Metadata.GetValueOrDefault("FileName") == "OrdersController.cs"
+                && result.Metrics.ContainsKey("ApiConsistencyIndex"));
 
         Assert.True(fileResult.Metrics["UppercaseRouteViolations"] >= 1);
         Assert.True(fileResult.Metrics["TrailingSlashViolations"] >= 1);
         Assert.True(fileResult.Metrics["MissingVersionViolations"] >= 1);
         Assert.Equal(100, fileResult.Metrics["EndpointDiscoveryScore"]);
-        Assert.Contains(results, result =>
-            result.Metadata.GetValueOrDefault("EvaluationScope") == "Project"
-            && result.Metrics.ContainsKey("ApiMaturityIndex"));
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project"
+                && result.Metrics.ContainsKey("ApiMaturityIndex"));
+
+        // AEG-ARCH-R7 is project-scoped and declares ApiConsistencyIndex.
+        // The summary must emit that exact contract, not only a differently
+        // named alias.
+        Assert.True(summary.Metrics.ContainsKey("ApiConsistencyIndex"));
+        Assert.Equal(
+            summary.Metrics["ApiConsistencyIndex"],
+            summary.Metrics["AverageApiConsistencyIndex"]);
+        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
         AssertAllMetricsAreFinite(results);
     }
 

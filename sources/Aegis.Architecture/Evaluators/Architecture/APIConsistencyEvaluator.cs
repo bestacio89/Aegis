@@ -314,10 +314,20 @@ public sealed class ApiConsistencyEvaluator
     {
         var analyzedFiles = results.Count;
 
+        // Every file result carries ApiConsistencyIndex, including files
+        // with no detected routes. Keep the denominator explicit so the
+        // project metric is not averaged over violation-only findings.
         var average = results.Average(
-            result => result.Metrics.GetValueOrDefault(
-                "ApiConsistencyIndex",
-                0));
+            result => result.Metrics["ApiConsistencyIndex"]);
+
+        var totalRoutes = results.Sum(
+            result => double.TryParse(
+                result.Metadata.GetValueOrDefault("RouteCount"),
+                System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var count)
+                    ? count
+                    : 0);
 
         results.Add(
             new ArchitectureEvaluatorResult(
@@ -328,13 +338,17 @@ public sealed class ApiConsistencyEvaluator
                 Metrics =
                 {
                     ["AnalyzedFiles"] = analyzedFiles,
-                    ["AverageApiConsistencyIndex"] = average,
-                    ["ApiMaturityIndex"] = average
+                    ["TotalRoutesAnalyzed"] = totalRoutes,
+                    ["ApiConsistencyIndex"] = Math.Round(average, 2),
+                    ["AverageApiConsistencyIndex"] = Math.Round(average, 2),
+                    ["ApiMaturityIndex"] = Math.Round(average, 2)
                 },
                 Metadata =
                 {
                     [EvaluationScopeMetadataKey] = ProjectScope,
-                    ["Evaluator"] = "ApiConsistencyEvaluator"
+                    ["Evaluator"] = "ApiConsistencyEvaluator",
+                    ["Aggregation"] = "Arithmetic mean of ApiConsistencyIndex across all analyzed API-boundary files.",
+                    ["AnalysisComplete"] = "true"
                 }
             });
     }

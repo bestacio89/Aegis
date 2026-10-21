@@ -13,14 +13,24 @@ internal static class FrameworkDetector
         switch (ctx.Language)
         {
             case "C#":
-                foreach (var proj in files.Where(f => f.EndsWith(".csproj")))
+                foreach (var proj in files.Where(f => f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
                 {
-                    var xml = XDocument.Load(proj);
-                    foreach (var pkg in xml.Descendants("PackageReference"))
+                    try
                     {
-                        var name = pkg.Attribute("Include")?.Value ?? pkg.Attribute("Update")?.Value;
-                        if (!string.IsNullOrWhiteSpace(name))
-                            deps.Add(name);
+                        var xml = XDocument.Load(proj);
+                        foreach (var pkg in xml.Descendants("PackageReference"))
+                        {
+                            var name = pkg.Attribute("Include")?.Value ?? pkg.Attribute("Update")?.Value;
+                            if (!string.IsNullOrWhiteSpace(name))
+                                deps.Add(name);
+                        }
+                    }
+                    catch (Exception exception) when (exception is System.Xml.XmlException
+                        or IOException or UnauthorizedAccessException)
+                    {
+                        // Configuration diagnostics own malformed/unreadable
+                        // project files. One bad manifest must not abort detection
+                        // of other projects and frameworks in the repository.
                     }
                 }
                 ctx.DetectedDependencies = deps.ToList();

@@ -184,13 +184,10 @@ public sealed class ComplexityEvaluator
                     metrics.Complexity,
                     metrics.LineCount);
 
-                if (violations.Count == 0)
-                {
-                    continue;
-                }
-
+                // Emit every measured method, not only violations. Rule ratios
+                // and coverage must include compliant methods in their denominator.
                 results.Add(
-                    CreateViolation(
+                    CreateMethodMeasurement(
                         file,
                         method.Name,
                         method.StartLine,
@@ -228,7 +225,7 @@ public sealed class ComplexityEvaluator
         return violations;
     }
 
-    private ArchitectureEvaluatorResult CreateViolation(
+    private ArchitectureEvaluatorResult CreateMethodMeasurement(
         string file,
         string methodName,
         int startLine,
@@ -238,7 +235,7 @@ public sealed class ComplexityEvaluator
     {
         var result = CreateResult(
             file,
-            "ComplexityViolation");
+            "ComplexityMeasurement");
 
         result.ProjectName = Context?.ProjectName;
         result.Language = Context?.Language;
@@ -247,12 +244,17 @@ public sealed class ComplexityEvaluator
         result.DetectionConfidence = Context?.Confidence ?? 0;
 
         result.Metrics["CyclomaticComplexity"] = complexity;
+        result.Metrics["EstimatedCyclomaticComplexity"] = complexity;
         result.Metrics["MethodLineCount"] = lines;
-        result.Metrics["ComplexityFinding"] = 1;
+        result.Metrics["ComplexityFinding"] = violations.Count > 0 ? 1 : 0;
 
         result.Metadata["MethodName"] = methodName;
         result.Metadata["StartLine"] = startLine.ToString(CultureInfo.InvariantCulture);
-        result.Metadata["Rules"] = string.Join(",", violations);
+        result.Metadata["Rules"] = violations.Count == 0
+            ? "None"
+            : string.Join(",", violations);
+        result.Metadata["AnalysisComplete"] = "true";
+        result.Metadata["AnalysisStatus"] = "Completed";
         result.Metadata["MaxCyclomaticThreshold"] =
             _policy.MaxCyclomaticComplexity.ToString(
                 CultureInfo.InvariantCulture);

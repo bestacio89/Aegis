@@ -22,8 +22,10 @@ public sealed class CSharpNamingConventionPolicy : INamingConventionPolicy
         => Regex.IsMatch(name, @"^[a-z_][a-zA-Z0-9]*$");
 
 
+    // C# follows .NET naming conventions: const fields commonly use PascalCase.
+    // Upper snake case remains accepted for interoperability and explicit team conventions.
     public bool IsValidConstantName(string name)
-        => Regex.IsMatch(name, @"^[A-Z][A-Z0-9_]*$");
+        => Regex.IsMatch(name, @"^(?:[A-Z][a-zA-Z0-9]*|[A-Z][A-Z0-9_]+)$");
 
 
     public bool IsValidFileName(string name)

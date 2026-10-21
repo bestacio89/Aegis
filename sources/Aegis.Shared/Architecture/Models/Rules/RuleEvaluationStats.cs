@@ -43,6 +43,18 @@ public sealed class RuleEvaluationStats
     /// </summary>
     public int ChecksPerformed { get; init; }
 
+    /// <summary>
+    /// Evaluator facts that contain no metric key declared by any applicable rule.
+    /// This is a metric-production gap, not an evaluator execution failure.
+    /// </summary>
+    public int FactsWithoutMatchingScopedMetrics { get; init; }
+
+    /// <summary>
+    /// Evaluator facts whose metric keys are known, but only match rules at a
+    /// different scope than the fact's declared scope.
+    /// </summary>
+    public int FactsWithMetricsAtWrongScope { get; init; }
+
     public IReadOnlyList<string> RulesNotEvaluated { get; init; }
         = Array.Empty<string>();
 

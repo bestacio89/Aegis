@@ -50,4 +50,44 @@ public sealed class RuleMetricScopeDiagnosticTests
             outcome.Stats.NotEvaluatedReasons["AEG-ARCH-R1"],
             StringComparison.OrdinalIgnoreCase);
     }
+    [Fact]
+    public void Incomplete_project_analysis_explains_withheld_metric()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var summary = new ArchitectureEvaluatorResult(
+            "ArchitecturalEvaluator",
+            "ArchitectureSummary")
+        {
+            Category = "ArchitectureSummary",
+            Metrics = new Dictionary<string, double>
+            {
+                ["ObservedDependencyCount"] = 4,
+                ["ClassifiedDependencyCount"] = 2,
+                ["IncompleteDependencyCount"] = 2
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project",
+                ["AnalysisComplete"] = "false",
+                ["AnalysisStatus"] = "Incomplete"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [summary]);
+
+        Assert.Contains("AEG-ARCH-R2", outcome.Stats.RulesNotEvaluated);
+        Assert.Contains(
+            "incomplete analysis",
+            outcome.Stats.NotEvaluatedReasons["AEG-ARCH-R2"],
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == "AEG-ARCH-R2");
+    }
+
 }

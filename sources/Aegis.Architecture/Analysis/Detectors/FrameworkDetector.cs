@@ -62,36 +62,34 @@ internal static class FrameworkDetector
                 ".razor",
                 StringComparison.OrdinalIgnoreCase));
 
-        if (hasBlazorComponents)
-        {
-            ctx.DetectedFrameworks.Add("Blazor");
-        }
+        var hasUnityProjectEvidence = files.Any(file =>
+            file.EndsWith(".asmdef", StringComparison.OrdinalIgnoreCase)
+            || file.EndsWith("ProjectVersion.txt", StringComparison.OrdinalIgnoreCase)
+                && file.Contains($"{Path.DirectorySeparatorChar}ProjectSettings{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+            || file.EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase)
+                && file.Contains($"{Path.DirectorySeparatorChar}Packages{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                && SafeReadText(file).Contains("com.unity", StringComparison.OrdinalIgnoreCase));
 
+        AddFramework(ctx, ".NET");
+        if (hasBlazorComponents)
+            AddFramework(ctx, "Blazor");
+        if (hasUnityProjectEvidence)
+            AddFramework(ctx, "Unity");
+
+        // Read project SDK metadata independently from the repository's primary
+        // framework. A mixed repository may contain Web, class-library and Unity
+        // projects simultaneously.
         var hasWebSdk = files
-            .Where(file => file.EndsWith(
-                ".csproj",
-                StringComparison.OrdinalIgnoreCase))
+            .Where(file => file.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
             .Any(projectFile =>
             {
                 try
                 {
                     var project = XDocument.Load(projectFile);
                     var sdk = project.Root?.Attribute("Sdk")?.Value;
-                    return sdk?.Contains(
-                        "Microsoft.NET.Sdk.Web",
-                        StringComparison.OrdinalIgnoreCase) == true;
+                    return sdk?.Contains("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase) == true;
                 }
-                catch (System.Xml.XmlException)
-                {
-                    // Malformed project files are handled by configuration
-                    // diagnostics; framework detection should not crash scanning.
-                    return false;
-                }
-                catch (IOException)
-                {
-                    return false;
-                }
-                catch (UnauthorizedAccessException)
+                catch (Exception ex) when (ex is System.Xml.XmlException or IOException or UnauthorizedAccessException)
                 {
                     return false;
                 }
@@ -108,16 +106,18 @@ internal static class FrameworkDetector
             ctx.DetectedFrameworks.Add("ASP.NET Core");
         }
 
-        if (hasBlazorComponents)
-        {
-            // Prefer Blazor as the primary UI framework while retaining ASP.NET
-            // Core as additional evidence when this is a server-hosted app.
-            ctx.Framework = "Blazor";
-        }
-        else if (hasAspNetCore)
-        {
+        if (hasAspNetCore)
+            AddFramework(ctx, "ASP.NET Core");
+
+        // Keep the primary framework aligned with the project's server/runtime
+        // identity when backend evidence exists. Blazor remains a first-class
+        // additional framework signal and is applied to Razor facts individually.
+        if (hasAspNetCore)
             ctx.Framework = "ASP.NET Core";
-        }
+        else if (hasBlazorComponents)
+            ctx.Framework = "Blazor";
+        else if (hasUnityProjectEvidence)
+            ctx.Framework = "Unity";
         else if (deps.Any(d =>
                      d.Contains("EntityFrameworkCore", StringComparison.OrdinalIgnoreCase)))
         {
@@ -127,6 +127,19 @@ internal static class FrameworkDetector
         {
             ctx.Framework = ".NET";
         }
+    }
+
+    private static void AddFramework(ProjectArchitectureContext context, string framework)
+    {
+        if (!context.DetectedFrameworks.Contains(framework, StringComparer.OrdinalIgnoreCase))
+            context.DetectedFrameworks.Add(framework);
+    }
+
+    private static string SafeReadText(string path)
+    {
+        try { return File.ReadAllText(path); }
+        catch (IOException) { return string.Empty; }
+        catch (UnauthorizedAccessException) { return string.Empty; }
     }
 
     private static void DetectJavaFramework(ProjectArchitectureContext ctx, List<string> files, HashSet<string> deps)

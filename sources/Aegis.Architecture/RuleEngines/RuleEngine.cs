@@ -309,7 +309,19 @@ public sealed class RuleEngine
             return false;
         }
 
-        return SupportsFramework(evaluator, context.Framework);
+        // A repository context may contain several valid framework signals.
+        // The primary framework is descriptive, not an exclusive allow-list.
+        var frameworks = new List<string>();
+        if (!string.IsNullOrWhiteSpace(context.Framework))
+            frameworks.Add(context.Framework);
+        if (context.DetectedFrameworks is not null)
+            frameworks.AddRange(context.DetectedFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+        if (frameworks.Count == 0)
+            return SupportsFramework(evaluator, context.Framework);
+
+        return frameworks.Distinct(StringComparer.OrdinalIgnoreCase)
+            .Any(framework => SupportsFramework(evaluator, framework));
     }
 
     private static bool SupportsLanguage(

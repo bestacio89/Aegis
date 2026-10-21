@@ -41,6 +41,35 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.True(result.Metrics["FluentReturnCount"] >= 1);
         Assert.True(result.Metrics["MutationCount"] >= 1);
         Assert.Equal("File", result.Metadata["EvaluationScope"]);
+        Assert.Equal(100, result.Metrics["BuilderPatternComplianceIndex"]);
+        Assert.Equal(0, result.Metrics["BuilderMutabilityViolationCount"]);
+    }
+
+    [Fact]
+    public async Task BuilderEvaluator_does_not_emit_rule_metrics_for_non_candidates()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/OrderService.cs", """
+            public sealed class OrderService
+            {
+                public Order Get(int id) => new Order(id);
+            }
+
+            public sealed class Order
+            {
+                public Order(int id) => Id = id;
+                public int Id { get; }
+            }
+            """);
+
+        var results = await Evaluate(project, "BuilderPatternEvaluator");
+
+        Assert.DoesNotContain(
+            results,
+            result => result.Metrics.ContainsKey("BuilderPatternComplianceIndex"));
+        Assert.DoesNotContain(
+            results,
+            result => result.Metrics.ContainsKey("BuilderMutabilityViolationCount"));
     }
 
     [Fact]
@@ -172,6 +201,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
 
         Assert.Equal(2, result.Metrics["Properties"]);
         Assert.Equal(2, result.Metrics["StateMemberCount"]);
+        Assert.Equal(1, result.Metrics["AnemicDomainModelIndex"]);
         Assert.Equal(0, result.Metrics["Methods"]);
         Assert.Equal(0, result.Metrics["BehaviorRatio"]);
         Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
@@ -312,7 +342,11 @@ public sealed class DesignPatternEvaluatorBehaviorTests
 
         Assert.True(result.Metrics["MethodCount"] >= 14);
         Assert.True(result.Metrics["PropertyCount"] >= 2);
+        Assert.True(result.Metrics["GodClassSeverity"] > 0.25);
         Assert.True(result.Metrics.ContainsKey("GodClassComplianceScore"));
+        Assert.Contains(results, item =>
+            item.Metadata.GetValueOrDefault("EvaluationScope") == "Project"
+            && item.Metrics.ContainsKey("GodClassDensity"));
     }
 
     private static Task<ArchitectureEvaluatorResult[]> Evaluate(

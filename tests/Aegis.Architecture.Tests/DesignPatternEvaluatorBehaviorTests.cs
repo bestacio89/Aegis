@@ -208,6 +208,21 @@ public sealed class DesignPatternEvaluatorBehaviorTests
     }
 
 
+
+    [Fact]
+    public async Task GodClassEvaluator_withholds_density_when_no_classes_were_analyzed()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Empty.cs", "namespace Empty;");
+
+        var results = await Evaluate(project, "GodClassEvaluator");
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+
+        Assert.False(summary.Metrics.ContainsKey("GodClassDensity"));
+    }
+
     [Fact]
     public async Task AnemicDomainModelEvaluator_does_not_treat_stateless_types_as_candidates()
     {

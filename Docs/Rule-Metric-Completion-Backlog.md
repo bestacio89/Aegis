@@ -37,6 +37,16 @@ The project summary from `ApiConsistencyEvaluator` now emits `ApiConsistencyInde
 
 `ConfigurationEvaluator` logged repeated `JsonReaderException` and `YamlDotNet.Core.SemanticErrorException` exceptions while ending with 295 files analyzed and zero diagnostics. This discrepancy needs investigation. Malformed inputs must be counted and explained in evaluator results; they must not disappear from diagnostics or be mistaken for successfully analyzed configuration. The scan should continue where safe.
 
+### Contract corrections made during implementation
+
+The baseline inventory records the metric keys declared at the time of the HeroService scan. The implementation must change a contract when its name or semantics do not match the evidence actually produced:
+
+- `AEG-BACK-R2`: changed from `CyclomaticComplexityIndex` to `EstimatedCyclomaticComplexity`. The current producer uses source-pattern heuristics, not compiler-backed cyclomatic complexity; it now emits a measurement for compliant and violating methods.
+- `AEG-BACK-R5`: changed from `MaintainabilityIndex` to `MaintainabilityScore`. The producer emits a documented Aegis heuristic based on lexical decision points, excess file length, and comment-density policy. It is explicitly not presented as a standard industry maintainability index.
+- `AEG-FRONT-R11`: remains a Razor fallback only where a dedicated framework-specific complexity rule does not apply. Shared metric names cannot be reused across framework facts.
+
+These corrections intentionally supersede the original metric names in the baseline tables. They do not mark the remaining inventory complete.
+
 ## Non-negotiable design contracts
 
 1. **Separate statistics by responsibility.**

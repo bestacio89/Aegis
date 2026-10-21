@@ -237,7 +237,9 @@ public sealed class RuleEngineCore
                         ? RuleEvaluationStatus.Violated
                         : RuleEvaluationStatus.Passed,
                     Scope = rule.Scope.ToString(),
-                    Target = fact.Target,
+                    Target = isProjectFact
+                        ? fact.ProjectName ?? fact.Target
+                        : fact.Target,
                     Domain = domain,
                     ObservedValue = metricValue,
                     Threshold = threshold,
@@ -590,7 +592,9 @@ public sealed class RuleEngineCore
         {
             DetectedBy = fact.Source,
             Domain = layer,
-            Target = fact.Target,
+            Target = rule.Scope == RuleEvaluationScope.Project
+                ? fact.ProjectName ?? fact.Target
+                : fact.Target,
             AnalyzerVersion = context.DetectorVersion
         };
     }

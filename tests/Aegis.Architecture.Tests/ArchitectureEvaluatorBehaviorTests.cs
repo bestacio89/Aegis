@@ -330,6 +330,37 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         AssertAllMetricsAreFinite(results);
     }
 
+    [Fact]
+    public async Task ConfigurationEvaluator_counts_malformed_json_as_a_diagnostic()
+    {
+        using var project = new TemporaryProject();
+        project.Write("appsettings.json", """{"Logging": {"LogLevel": }""");
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "ConfigurationEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+
+        var fileResult = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("FileName") == "appsettings.json"
+                && result.Metrics.ContainsKey("SyntaxComplianceScore"));
+        var summary = Assert.Single(
+            results,
+            result => result.Metrics.ContainsKey("ConfigurationFileCount"));
+
+        Assert.Equal("Invalid", fileResult.Metadata["SyntaxValidation"]);
+        Assert.Contains(
+            fileResult.Metadata.Keys,
+            key => key.StartsWith("Finding.CFG-SYNTAX-001", StringComparison.Ordinal));
+        Assert.Equal(1, summary.Metrics["DiagnosticCount"]);
+        Assert.Equal("CompletedWithDiagnostics", summary.Metadata["AnalysisStatus"]);
+        Assert.Contains("appsettings.json", summary.Metadata["Diagnostics"]);
+    }
+
     private static ServiceProvider CreateProvider(
         Action<AegisArchitecturePolicy>? configure = null)
     {

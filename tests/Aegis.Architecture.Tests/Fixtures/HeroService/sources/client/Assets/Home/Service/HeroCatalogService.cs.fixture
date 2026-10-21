@@ -7,6 +7,11 @@ using UnityEngine;
 /// Source de vérité unique pour la liste des héros côté Home/Lobby.
 /// Évite de dupliquer l'appel GET /api/v1/heroes entre le carrousel du Home
 /// et l'écran Hero Collection : les deux s'abonnent à ce service.
+///
+/// Comportement :
+/// - Charge la liste une fois au démarrage (cache en mémoire).
+/// - Fallback MVP statique si le backend n'est pas joignable, pour garder
+///   le Home utilisable pendant le développement front-only.
 /// </summary>
 public class HeroCatalogService : MonoBehaviour
 {
@@ -69,6 +74,9 @@ public class HeroCatalogService : MonoBehaviour
 
     private static HeroListItemDto[] BuildFallbackCatalog()
     {
+        // MVP V1 : reflète temporairement la même liste statique que
+        // HeroSelectionPanelPresenter, avec affiliation mythologique pour
+        // que le carrousel et les filtres de pantheon aient de la donnée.
         return new[]
         {
             new HeroListItemDto
@@ -81,6 +89,54 @@ public class HeroCatalogService : MonoBehaviour
                     archetypeName = "Champion",
                     mythologyName = "Greek",
                     cultureName = "Hellenic"
+                }
+            },
+            new HeroListItemDto
+            {
+                id = "hero_mage",
+                name = "Mage",
+                heroClass = new HeroClassDto { id = "class_mage", name = "Mage" },
+                affiliation = new HeroAffiliationDto
+                {
+                    archetypeName = "Sorcerer",
+                    mythologyName = "Norse",
+                    cultureName = "Scandinavian"
+                }
+            },
+            new HeroListItemDto
+            {
+                id = "hero_archer",
+                name = "Archer",
+                heroClass = new HeroClassDto { id = "class_marksman", name = "Marksman" },
+                affiliation = new HeroAffiliationDto
+                {
+                    archetypeName = "Hunter",
+                    mythologyName = "Egyptian",
+                    cultureName = "Kemetic"
+                }
+            },
+            new HeroListItemDto
+            {
+                id = "hero_tank",
+                name = "Tank",
+                heroClass = new HeroClassDto { id = "class_tank", name = "Tank" },
+                affiliation = new HeroAffiliationDto
+                {
+                    archetypeName = "Guardian",
+                    mythologyName = "Mesopotamian",
+                    cultureName = "Sumerian"
+                }
+            },
+            new HeroListItemDto
+            {
+                id = "hero_assassin",
+                name = "Assassin",
+                heroClass = new HeroClassDto { id = "class_assassin", name = "Assassin" },
+                affiliation = new HeroAffiliationDto
+                {
+                    archetypeName = "Shadow",
+                    mythologyName = "Japanese",
+                    cultureName = "Shinto"
                 }
             }
         };

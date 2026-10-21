@@ -150,6 +150,26 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
 
                 result.WeightFactor = WeightFactor;
                 result.WasEnabled = true;
+                result.ProjectName ??= context.ProjectName;
+                result.Language ??= context.Language;
+
+                // Framework evidence is attached to each file fact independently.
+                // Do not copy a mixed repository's primary framework onto every
+                // file: Razor, Unity and backend files can coexist in one scan.
+                var evidencePath = result.Metadata?.GetValueOrDefault(FilePathMetadataKey)
+                    ?? result.File;
+                if (!string.IsNullOrWhiteSpace(evidencePath))
+                {
+                    var framework = ResolveFrameworkForFile(
+                        evidencePath,
+                        projectPath,
+                        context);
+                    if (!string.IsNullOrWhiteSpace(framework))
+                    {
+                        result.Metadata ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        result.Metadata["Framework"] = framework;
+                    }
+                }
 
                 // Infer file scope only when a real file-path metadata entry
                 // exists. Do not infer scope from Target: it may identify a
@@ -191,6 +211,85 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             return [];
 #endif
         }
+    }
+
+    private static string? ResolveFrameworkForFile(
+        string filePath,
+        string projectPath,
+        ProjectArchitectureContext context)
+    {
+        var extension = Path.GetExtension(filePath);
+        if (extension.Equals(".razor", StringComparison.OrdinalIgnoreCase))
+            return "Blazor";
+        if (extension.Equals(".cshtml", StringComparison.OrdinalIgnoreCase))
+            return "Razor";
+        if (extension.Equals(".tsx", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".jsx", StringComparison.OrdinalIgnoreCase))
+        {
+            return context.DetectedFrameworks.FirstOrDefault(framework =>
+                framework.Contains("React", StringComparison.OrdinalIgnoreCase));
+        }
+        if (extension.Equals(".ts", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".html", StringComparison.OrdinalIgnoreCase))
+        {
+            return context.DetectedFrameworks.FirstOrDefault(framework =>
+                framework.Contains("Angular", StringComparison.OrdinalIgnoreCase)
+                || framework.Contains("React", StringComparison.OrdinalIgnoreCase));
+        }
+
+        var normalized = filePath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        if (normalized.Contains($"{Path.DirectorySeparatorChar}Assets{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+            && context.DetectedFrameworks.Any(framework => framework.Equals("Unity", StringComparison.OrdinalIgnoreCase)))
+            return "Unity";
+
+        // Use the closest project file when possible; this is more precise than
+        // inheriting the framework selected for the repository root.
+        try
+        {
+            var directory = Directory.Exists(filePath)
+                ? filePath
+                : Path.GetDirectoryName(Path.GetFullPath(filePath));
+            var boundary = Path.GetFullPath(projectPath);
+            while (!string.IsNullOrWhiteSpace(directory))
+            {
+                var projectFile = Directory.EnumerateFiles(directory, "*.csproj", SearchOption.TopDirectoryOnly)
+                    .FirstOrDefault();
+                if (projectFile is not null)
+                {
+                    var document = System.Xml.Linq.XDocument.Load(projectFile);
+                    var sdk = document.Root?.Attribute("Sdk")?.Value ?? string.Empty;
+                    if (sdk.Contains("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase))
+                        return "ASP.NET Core";
+
+                    var packageNames = document.Descendants("PackageReference")
+                        .Select(reference => reference.Attribute("Include")?.Value
+                            ?? reference.Attribute("Update")?.Value ?? string.Empty)
+                        .ToArray();
+                    if (packageNames.Any(name => name.Contains("Blazor", StringComparison.OrdinalIgnoreCase)))
+                        return "Blazor";
+                    return ".NET";
+                }
+
+                if (string.Equals(directory.TrimEnd(Path.DirectorySeparatorChar), boundary.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                    break;
+
+                var parent = Directory.GetParent(directory)?.FullName;
+                if (parent is null || !parent.StartsWith(boundary, StringComparison.OrdinalIgnoreCase))
+                    break;
+                directory = parent;
+            }
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or System.Xml.XmlException
+            or ArgumentException
+            or NotSupportedException)
+        {
+            // Framework detection is best-effort; a read failure must not
+            // crash an otherwise valid evaluator run.
+        }
+
+        return context.Framework;
     }
 
     /// <summary>

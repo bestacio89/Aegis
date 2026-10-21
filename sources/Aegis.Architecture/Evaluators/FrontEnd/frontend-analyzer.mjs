@@ -71,6 +71,50 @@ function countNonBlankLines(source)
         .length;
 }
 
+function cyclomaticComplexity(node)
+{
+    let complexity = 1;
+
+    function visit(current)
+    {
+        if (
+            ts.isIfStatement(current) ||
+            ts.isConditionalExpression(current) ||
+            ts.isForStatement(current) ||
+            ts.isForInStatement(current) ||
+            ts.isForOfStatement(current) ||
+            ts.isWhileStatement(current) ||
+            ts.isDoStatement(current) ||
+            ts.isCatchClause(current)
+        )
+        {
+            complexity++;
+        }
+
+        if (ts.isCaseClause(current) && current.expression !== undefined)
+        {
+            complexity++;
+        }
+
+        if (
+            ts.isBinaryExpression(current) &&
+            [
+                ts.SyntaxKind.AmpersandAmpersandToken,
+                ts.SyntaxKind.BarBarToken,
+                ts.SyntaxKind.QuestionQuestionToken
+            ].includes(current.operatorToken.kind)
+        )
+        {
+            complexity++;
+        }
+
+        ts.forEachChild(current, visit);
+    }
+
+    visit(node);
+    return complexity;
+}
+
 function walk(directory, extensions, files = [])
 {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -454,6 +498,7 @@ function analyzeAngularSource(file, source, angularVersion)
                     sourceLineCount: countNonBlankLines(
                         node.getText(sourceFile)
                     ),
+                    cyclomaticComplexity: cyclomaticComplexity(node),
 
                     declarationCount: Array.isArray(declarations)
                         ? declarations.length

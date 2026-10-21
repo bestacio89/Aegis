@@ -330,8 +330,24 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                     extension,
                     StringComparison.OrdinalIgnoreCase)))
             .Where(file => !IsExcludedDir(file))
-            .Where(IsApplicationCode)
+            .Where(file => IsApplicationCode(file, projectPath))
             .ToList();
+    }
+
+    private static bool IsApplicationCode(string file, string projectPath)
+    {
+        // A discovered project is its own source boundary. Its files do not
+        // need to repeat repository-level directory names such as "back",
+        // "front", or "Assets" to be eligible for analysis.
+        if (Directory.EnumerateFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly).Any()
+            || File.Exists(Path.Combine(projectPath, "package.json"))
+            || File.Exists(Path.Combine(projectPath, "pom.xml"))
+            || Directory.Exists(Path.Combine(projectPath, "Assets")))
+        {
+            return true;
+        }
+
+        return IsApplicationCode(file);
     }
 
     /// <summary>

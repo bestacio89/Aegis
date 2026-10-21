@@ -162,6 +162,12 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 
             var assessment = AssessFile(file, content);
 
+            if (assessment.SyntaxValidation == SyntaxValidationStatus.Invalid)
+            {
+                diagnostics.Add(
+                    $"Configuration syntax validation failed for '{file}'.");
+            }
+
             fileResults.Add(CreateFileResult(file, assessment));
         }
 

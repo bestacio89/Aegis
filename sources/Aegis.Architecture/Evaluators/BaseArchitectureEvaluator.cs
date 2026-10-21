@@ -215,7 +215,7 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         }
     }
 
-    private static string? ResolveFrameworkForFile(
+    protected static string? ResolveFrameworkForFile(
         string filePath,
         string projectPath,
         ProjectArchitectureContext context)

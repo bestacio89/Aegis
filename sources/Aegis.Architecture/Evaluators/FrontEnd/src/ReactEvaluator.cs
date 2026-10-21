@@ -327,6 +327,11 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
                 AddMetric(result, "TypingScore", typingScore);
             }
 
+            if (TryComputeComplexityScore(file, out var complexityScore))
+            {
+                AddMetric(result, "ComplexityScore", complexityScore);
+            }
+
             if (TryGetNonNegativeInteger(
                     file,
                     "jsxElementCount",
@@ -720,6 +725,40 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
         score = (int)Math.Round(
             (hooks.GetArrayLength() - violations) * 100d / hooks.GetArrayLength(),
             MidpointRounding.AwayFromZero);
+        return true;
+    }
+
+    private static bool TryComputeComplexityScore(
+        JsonElement file,
+        out int score)
+    {
+        score = 0;
+
+        if (!TryGetProperty(file, "componentTyping", out var components)
+            || components.ValueKind != JsonValueKind.Array
+            || components.GetArrayLength() == 0)
+        {
+            return false;
+        }
+
+        var complexities = new List<int>();
+        foreach (var component in components.EnumerateArray())
+        {
+            if (component.ValueKind != JsonValueKind.Object
+                || !TryGetProperty(component, "cyclomaticComplexity", out var complexity)
+                || complexity.ValueKind != JsonValueKind.Number
+                || !complexity.TryGetInt32(out var value)
+                || value < 1)
+            {
+                return false;
+            }
+
+            complexities.Add(value);
+        }
+
+        // Score the worst component in the file so a complex component cannot
+        // be hidden by averaging it with trivial components.
+        score = Math.Max(0, 100 - ((complexities.Max() - 1) * 10));
         return true;
     }
 

@@ -20,7 +20,7 @@ internal static class ArchitectureDetector
         else if (hasEfCore && ctx.Layer == "Infrastructure") ctx.ArchitectureStyle = "Clean";
         else if (hasMassTr || hasKafka || hasRabbit || hasAzureSB || hasNServiceBus) ctx.ArchitectureStyle = "Hexagonal / Microservices";
         else if (ctx.IsMultiModule && ctx.Nature == "Service") ctx.ArchitectureStyle = "Modular Monolith";
-        else if (ctx.DomainType is "Backend" or "FullStack" && ctx.Layer == "Api") ctx.ArchitectureStyle = "MVC";
+        else if ((ctx.DomainType is "Backend" or "FullStack") && ctx.Layer == "Api") ctx.ArchitectureStyle = "MVC";
         else ctx.ArchitectureStyle = "Layered";
     }
 }

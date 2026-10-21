@@ -46,7 +46,7 @@ public sealed class AdditionalEvaluatorBehaviorTests
         Assert.Equal(
             summary.Metrics["ApiConsistencyIndex"],
             summary.Metrics["AverageApiConsistencyIndex"]);
-        Assert.Equal(bool.TrueString, summary.Metadata["AnalysisComplete"]);
+        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
         AssertAllMetricsAreFinite(results);
     }
 
@@ -220,7 +220,7 @@ public sealed class AdditionalEvaluatorBehaviorTests
         Assert.Equal(1, summary.Metrics["TotalCatchBlocks"]);
         Assert.Equal(1, summary.Metrics["SwallowedExceptions"]);
         Assert.Equal(0, summary.Metrics["ErrorHandlingCoverage"]);
-        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
+        Assert.Equal(bool.TrueString, summary.Metadata["AnalysisComplete"]);
     }
 
     [Fact]

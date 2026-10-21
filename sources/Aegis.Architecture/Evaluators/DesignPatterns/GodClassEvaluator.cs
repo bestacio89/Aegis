@@ -346,7 +346,7 @@ public sealed class GodClassEvaluator
     {
         var result = new ArchitectureEvaluatorResult(Name, className)
         {
-            Target = projectPath,
+            Target = file,
             Category = ArchitectureRuleCategory.DesignPatterns.ToString(),
             Layer = layer,
             Metrics = metrics

@@ -357,8 +357,18 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         using var project = new TemporaryProject();
         var methods = string.Join(
             Environment.NewLine,
-            Enumerable.Range(0, 14).Select(index =>
-                $"    public void Operation{index}() {{ }}"));
+            Enumerable.Range(0, 21).Select(index =>
+            {
+                var statements = string.Join(
+                    Environment.NewLine,
+                    Enumerable.Range(0, 30).Select(line =>
+                        $"        var value{index}_{line} = {line};"));
+
+                return $@"    public void Operation{index}()
+    {{
+{statements}
+    }}";
+            }));
 
         project.Write(
             "back/OrderManager.cs",
@@ -374,13 +384,73 @@ public sealed class DesignPatternEvaluatorBehaviorTests
             results,
             item => item.Metadata.GetValueOrDefault("ClassName") == "OrderManager");
 
-        Assert.True(result.Metrics["MethodCount"] >= 14);
+        Assert.True(result.Metrics["MethodCount"] >= 21);
         Assert.True(result.Metrics["PropertyCount"] >= 2);
-        Assert.True(result.Metrics["GodClassSeverity"] > 0.25);
+        Assert.True(result.Metrics["GodClassSeverity"] > 1.0);
         Assert.True(result.Metrics.ContainsKey("GodClassComplianceScore"));
         Assert.Contains(results, item =>
             item.Metadata.GetValueOrDefault("EvaluationScope") == "Project"
             && item.Metrics.ContainsKey("GodClassDensity"));
+    }
+
+    [Fact]
+    public async Task GodClassEvaluator_does_not_flag_data_heavy_type_without_method_bloat()
+    {
+        using var project = new TemporaryProject();
+        var entries = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 650).Select(index =>
+                $"        new SeedEntry({index}),"));
+
+        project.Write(
+            "back/HeroSeeder.cs",
+            $@"public sealed class HeroSeeder
+{{
+    public IEnumerable<SeedEntry> GetSeeds()
+    {{
+        return new SeedEntry[]
+        {{
+{entries}
+        }};
+    }}
+}}
+public sealed record SeedEntry(int Id);");
+
+        var results = await Evaluate(project, "GodClassEvaluator");
+        var result = Assert.Single(
+            results,
+            item => item.Metadata.GetValueOrDefault("ClassName") == "HeroSeeder");
+
+        Assert.True(result.Metrics["LineLimitRatio"] > 1);
+        Assert.True(result.Metrics["MethodLimitRatio"] < 1);
+        Assert.True(result.Metrics["GodClassSeverity"] < 1);
+    }
+
+    [Fact]
+    public async Task GodClassEvaluator_excludes_vendored_unity_examples_and_generated_files()
+    {
+        using var project = new TemporaryProject();
+        Directory.CreateDirectory(Path.Combine(project.Root, "Assets"));
+        Directory.CreateDirectory(Path.Combine(project.Root, "ProjectSettings"));
+
+        var largeClass = $@"public sealed class {nameof(VendoredExample)}
+{{
+{string.Join(Environment.NewLine, Enumerable.Range(0, 30).Select(index => $"    public void Operation{index}() {{ }}"))}
+}}";
+
+        project.Write("Assets/Scripts/FirstPartyService.cs", largeClass);
+        project.Write("Assets/TextMesh Pro/Examples & Extras/Scripts/VendoredExample.cs", largeClass);
+        project.Write("Assets/Scripts/GeneratedService.Designer.cs", largeClass);
+
+        var results = await Evaluate(project, "GodClassEvaluator");
+
+        Assert.Contains(results, item =>
+            item.Metadata.GetValueOrDefault("ClassName") == "VendoredExample"
+            && item.Metadata.GetValueOrDefault("FilePath")?.Contains("FirstPartyService.cs", StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(results, item =>
+            item.Metadata.GetValueOrDefault("FilePath")?.Contains("Examples & Extras", StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(results, item =>
+            item.Metadata.GetValueOrDefault("FilePath")?.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase) == true);
     }
 
     private static Task<ArchitectureEvaluatorResult[]> Evaluate(

@@ -229,6 +229,31 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
                 }
             };
 
+            if (metrics.CSharpSyntaxErrorCount > 0)
+            {
+                result.Metadata["AnalysisComplete"] = "false";
+                result.Metadata["AnalysisStatus"] = "Incomplete";
+                result.Metadata["AnalysisLimitations"] =
+                    "C# syntax errors prevent reliable score production; raw syntax and structural signals are retained.";
+                
+                // Scores derived from malformed syntax are not evidence of
+                // compliance or violation. Keep raw observations, but withhold
+                // the score contracts consumed by rules until parsing succeeds.
+                result.Metrics.Remove("ComplexityScore");
+                result.Metrics.Remove("CodeBehindScore");
+                result.Metrics.Remove("DependencyInjectionScore");
+                result.Metrics.Remove("DependencyScore");
+                result.Metrics.Remove("CompositionScore");
+                result.Metrics.Remove("LifecycleScore");
+                result.Metrics.Remove("EventHandlingScore");
+                result.Metrics.Remove("BlazorComplianceScore");
+            }
+            else
+            {
+                result.Metadata["AnalysisComplete"] = "true";
+                result.Metadata["AnalysisStatus"] = "Completed";
+            }
+
             results.Add(result);
         }
 
@@ -859,11 +884,15 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
         string projectPath)
     {
         var componentCount = results.Count;
-
-        var average = results.Average(result =>
-            result.Metrics.GetValueOrDefault(
-                "BlazorComplianceScore",
-                0.0));
+        var availableScores = results
+            .Where(result => result.Metrics.ContainsKey("BlazorComplianceScore"))
+            .Select(result => result.Metrics["BlazorComplianceScore"])
+            .Where(double.IsFinite)
+            .ToArray();
+        var incompleteCount = componentCount - availableScores.Length;
+        var average = availableScores.Length == 0
+            ? -1.0
+            : Math.Round(availableScores.Average(), 2);
 
         var summary = new ArchitectureEvaluatorResult(
             nameof(BlazorEvaluator),
@@ -874,6 +903,8 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
             Metrics =
             {
                 ["BlazorComponentCount"] = componentCount,
+                ["AnalyzedComponentCount"] = availableScores.Length,
+                ["IncompleteComponentCount"] = incompleteCount,
                 ["AverageComplianceScore"] = average,
                 ["BlazorHealthIndex"] = average
             },
@@ -883,7 +914,12 @@ public sealed class BlazorEvaluator : BaseArchitectureEvaluator
                 [EvaluationScopeMetadataKey] = ProjectScope,
                 ["Framework"] = "Blazor",
                 ["Language"] = "Razor",
-                ["ComponentCount"] = componentCount.ToString()
+                ["ComponentCount"] = componentCount.ToString(),
+                ["AnalysisComplete"] = (incompleteCount == 0).ToString().ToLowerInvariant(),
+                ["AnalysisStatus"] = incompleteCount == 0
+                    ? "Completed"
+                    : "CompletedWithDiagnostics",
+                ["IncompleteComponentCount"] = incompleteCount.ToString()
             }
         };
 

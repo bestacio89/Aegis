@@ -211,15 +211,22 @@ public sealed class AdditionalEvaluatorBehaviorTests
 
         var results = await Evaluate(project, "MaintainabilityEvaluator", "C#", "ASP.NET Core");
 
-        Assert.Contains(results, result =>
+        var fileResult = Assert.Single(results, result =>
             result.Metrics.ContainsKey("DecisionPointCount")
-            && result.Metrics.ContainsKey("CommentDensity"));
+            && result.Metrics.ContainsKey("CommentDensity")
+            && result.Metadata.GetValueOrDefault("EvaluationScope") == "File");
+        Assert.True(fileResult.Metrics.ContainsKey("MaintainabilityScore"));
+        Assert.Contains("Aegis heuristic", fileResult.Metadata["MaintainabilityMeasurement"]);
+        Assert.InRange(fileResult.Metrics["MaintainabilityScore"], 0, 100);
+
         var summary = Assert.Single(
             results,
             result => result.Metrics.ContainsKey("AnalyzedFiles"));
 
         Assert.True(summary.Metrics["AnalyzedFiles"] >= 1);
         Assert.True(summary.Metrics["TotalNonEmptyLines"] > 0);
+        Assert.True(summary.Metrics["AverageMaintainabilityScore"] >= 0);
+        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
         AssertAllMetricsAreFinite(results);
     }
 
@@ -256,6 +263,8 @@ public sealed class AdditionalEvaluatorBehaviorTests
         Assert.Equal(2, summary.Metrics["TotalRelations"]);
         Assert.Equal(0, summary.Metrics["RelationsMissingSourceLayer"]);
         Assert.Equal(0, summary.Metrics["RelationsMissingTargetLayer"]);
+        Assert.Equal(2d / 6d, summary.Metrics["DependencyGraphDensity"], precision: 5);
+        Assert.Equal("Measured", summary.Metadata["GraphDensityStatus"]);
         AssertAllMetricsAreFinite(results);
     }
 

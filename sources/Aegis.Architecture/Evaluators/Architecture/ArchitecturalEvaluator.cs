@@ -123,18 +123,18 @@ public sealed class ArchitecturalEvaluator :
             }
         }
 
-        // Aggregate metrics are emitted only when every supplied dependency
-        // could be classified. Partial data must not masquerade as a complete
-        // project-wide compliance measurement.
-        if (dependencies.Count > 0
-            && incompleteCount == 0
-            && classifiedCount == dependencies.Count)
+        // Always report project analysis coverage when there is evidence to
+        // summarize. Compliance metrics are emitted only for complete analysis;
+        // a partial dependency graph must not look like a clean project score.
+        if (dependencies.Count > 0)
         {
             results.Add(
                 CreateProjectSummary(
-                    dependencies.Count,
+                    dependencies,
+                    classifiedCount,
                     allowedCount,
-                    forbiddenCount));
+                    forbiddenCount,
+                    incompleteCount));
         }
 
         AegisDiagnostics.Report(
@@ -227,13 +227,15 @@ public sealed class ArchitecturalEvaluator :
     }
 
     private ArchitectureEvaluatorResult CreateProjectSummary(
-        int totalDependencies,
+        IReadOnlyCollection<ArchitectureDependencyContext> dependencies,
+        int classifiedDependencies,
         int allowedCount,
-        int forbiddenCount)
+        int forbiddenCount,
+        int incompleteCount)
     {
-        var compliance = totalDependencies == 0
-            ? 100.0
-            : allowedCount * 100.0 / totalDependencies;
+        var totalDependencies = dependencies.Count;
+        var complete = incompleteCount == 0
+            && classifiedDependencies == totalDependencies;
 
         var result = new ArchitectureEvaluatorResult(
             Name,
@@ -242,20 +244,66 @@ public sealed class ArchitecturalEvaluator :
             Category = nameof(ArchitectureRuleCategory.Architecture),
             Metrics = new Dictionary<string, double>
             {
-                ["TotalDependencyCount"] = totalDependencies,
-                ["AllowedDependencyCount"] = allowedCount,
-                ["ForbiddenReferenceCount"] = forbiddenCount,
-                ["LayerIsolationCompliance"] = compliance
+                ["ObservedDependencyCount"] = totalDependencies,
+                ["ClassifiedDependencyCount"] = classifiedDependencies,
+                ["IncompleteDependencyCount"] = incompleteCount
             },
             Metadata = new Dictionary<string, string>
             {
                 [EvaluationScopeMetadataKey] = ProjectScope,
                 ["MetricScope"] = ProjectScope,
-                ["PolicyClassificationComplete"] = "true",
+                ["AnalysisComplete"] = complete.ToString().ToLowerInvariant(),
+                ["AnalysisStatus"] = complete ? "Completed" : "Incomplete",
+                ["PolicyClassificationComplete"] = complete.ToString().ToLowerInvariant(),
                 ["Language"] = Context?.Language ?? "Unknown",
                 ["Framework"] = Context?.Framework ?? "Unknown"
             }
         };
+
+        if (complete)
+        {
+            var compliance = totalDependencies == 0
+                ? 100.0
+                : allowedCount * 100.0 / totalDependencies;
+
+            result.Metrics["TotalDependencyCount"] = totalDependencies;
+            result.Metrics["AllowedDependencyCount"] = allowedCount;
+            result.Metrics["ForbiddenReferenceCount"] = forbiddenCount;
+            result.Metrics["LayerIsolationCompliance"] = compliance;
+
+            // Infrastructure inversion is a distinct contract from generic
+            // layer isolation. Measure only when Domain has observed outgoing
+            // dependency evidence; an absent Domain edge set is not a 100 score.
+            var domainDependencies = dependencies
+                .Where(dependency => string.Equals(
+                    dependency.SourceLayer,
+                    "Domain",
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            if (domainDependencies.Length > 0)
+            {
+                var invertedDependencies = domainDependencies.Count(dependency =>
+                    string.Equals(
+                        dependency.TargetLayer,
+                        "Infrastructure",
+                        StringComparison.OrdinalIgnoreCase));
+
+                result.Metrics["InfrastructureInversionCompliance"] =
+                    100.0 * (domainDependencies.Length - invertedDependencies)
+                    / domainDependencies.Length;
+                result.Metrics["DomainDependencyCount"] = domainDependencies.Length;
+                result.Metrics["DomainToInfrastructureDependencyCount"] =
+                    invertedDependencies;
+                result.Metadata["InfrastructureInversionMeasurement"] =
+                    "Percentage of observed Domain-layer dependency relations that do not target Infrastructure. This is separate from generic layer isolation.";
+            }
+            else
+            {
+                result.Metadata["InfrastructureInversionStatus"] =
+                    "Unavailable: no Domain-layer outgoing dependency relations were observed.";
+            }
+        }
 
         return result;
     }

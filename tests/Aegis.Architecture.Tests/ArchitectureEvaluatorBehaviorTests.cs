@@ -84,6 +84,39 @@ public sealed class ArchitectureEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task ComplexityEvaluator_emits_compliant_methods_for_complete_coverage()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/SimpleFixture.cs", """
+            public sealed class SimpleFixture
+            {
+                public void Execute()
+                {
+                    var value = 1;
+                    _ = value;
+                }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "ComplexityEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+
+        var measurement = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("MethodName") == "Execute");
+
+        Assert.Equal(0, measurement.Metrics["ComplexityFinding"]);
+        Assert.True(measurement.Metrics.ContainsKey("EstimatedCyclomaticComplexity"));
+        Assert.Equal("true", measurement.Metadata["AnalysisComplete"]);
+        Assert.Equal("Completed", measurement.Metadata["AnalysisStatus"]);
+    }
+
+    [Fact]
     public async Task ErrorHandlingEvaluator_reports_empty_catches_and_a_project_summary()
     {
         using var project = new TemporaryProject();
@@ -120,6 +153,56 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.Equal(1, fileResult.Metrics["SwallowedExceptions"]);
         Assert.Equal(1, summary.Metrics["FilesAnalyzed"]);
         Assert.Equal(1, summary.Metrics["TotalCatchBlocks"]);
+    }
+
+    [Fact]
+    public async Task ArchitecturalEvaluator_measures_infrastructure_inversion_separately_from_layer_isolation()
+    {
+        using var project = new TemporaryProject();
+        var context = CreateContext(project);
+        context.Dependencies.AddRange(
+        [
+            new ArchitectureDependencyContext
+            {
+                File = "back/Domain/Order.cs",
+                Source = "Order",
+                Target = "OrderRepository",
+                SourceLayer = "Domain",
+                TargetLayer = "Infrastructure",
+                DependencyType = "Project"
+            },
+            new ArchitectureDependencyContext
+            {
+                File = "back/Domain/Order.cs",
+                Source = "Order",
+                Target = "OrderService",
+                SourceLayer = "Domain",
+                TargetLayer = "Application",
+                DependencyType = "Project"
+            }
+        ]);
+
+        using var provider = CreateProvider(policy =>
+        {
+            policy.Architecture.AllowedDependencies["Domain"] =
+                ["Infrastructure", "Application"];
+        });
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "ArchitecturalEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            context)).ToArray();
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+
+        Assert.Equal(100, summary.Metrics["LayerIsolationCompliance"]);
+        Assert.Equal(50, summary.Metrics["InfrastructureInversionCompliance"]);
+        Assert.Equal(2, summary.Metrics["DomainDependencyCount"]);
+        Assert.Equal(1, summary.Metrics["DomainToInfrastructureDependencyCount"]);
+        Assert.Contains("separate from generic layer isolation",
+            summary.Metadata["InfrastructureInversionMeasurement"]);
     }
 
     [Fact]
@@ -328,6 +411,37 @@ public sealed class ArchitectureEvaluatorBehaviorTests
                 key.StartsWith("Finding.CFG-SECRET-", StringComparison.Ordinal)
                 || key.StartsWith("Finding.CFG-DEPENDENCY-", StringComparison.Ordinal)));
         AssertAllMetricsAreFinite(results);
+    }
+
+    [Fact]
+    public async Task ConfigurationEvaluator_counts_malformed_json_as_a_diagnostic()
+    {
+        using var project = new TemporaryProject();
+        project.Write("appsettings.json", """{"Logging": {"LogLevel": }""");
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "ConfigurationEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+
+        var fileResult = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("FileName") == "appsettings.json"
+                && result.Metrics.ContainsKey("SyntaxComplianceScore"));
+        var summary = Assert.Single(
+            results,
+            result => result.Metrics.ContainsKey("ConfigurationFileCount"));
+
+        Assert.Equal("Invalid", fileResult.Metadata["SyntaxValidation"]);
+        Assert.Contains(
+            fileResult.Metadata.Keys,
+            key => key.StartsWith("Finding.CFG-SYNTAX-001", StringComparison.Ordinal));
+        Assert.Equal(1, summary.Metrics["DiagnosticCount"]);
+        Assert.Equal("CompletedWithDiagnostics", summary.Metadata["AnalysisStatus"]);
+        Assert.Contains("appsettings.json", summary.Metadata["Diagnostics"]);
     }
 
     private static ServiceProvider CreateProvider(

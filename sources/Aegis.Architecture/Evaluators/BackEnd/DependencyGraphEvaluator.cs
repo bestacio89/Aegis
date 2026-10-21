@@ -220,6 +220,58 @@ public sealed class DependencyGraphEvaluator
             "Layer-level summary derived from detected dependency relations.";
         result.Metadata["GraphHasRelations"] =
             (relations.Count > 0).ToString();
+        result.Metadata["AnalysisComplete"] =
+            (relations.Count > 0
+             && missingSourceLayerCount == 0
+             && missingTargetLayerCount == 0).ToString().ToLowerInvariant();
+
+        // Density is defined over the observed directed component graph:
+        // distinct non-self edges / all possible directed non-self edges.
+        // Do not emit a score for an empty or incomplete graph, because no
+        // observed relationships is not proof of a measured zero-density graph.
+        var hasCompleteComponentEdges = relations.Count > 0
+            && relations.All(relation =>
+                !string.IsNullOrWhiteSpace(relation.Source)
+                && !string.IsNullOrWhiteSpace(relation.Target));
+
+        if (hasCompleteComponentEdges)
+        {
+            var nodes = relations
+                .SelectMany(relation => new[] { relation.Source, relation.Target })
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (nodes.Length > 1)
+            {
+                var edges = relations
+                    .Where(relation => !string.Equals(
+                        relation.Source,
+                        relation.Target,
+                        StringComparison.OrdinalIgnoreCase))
+                    .Select(relation => (relation.Source, relation.Target))
+                    .Distinct(ComponentEdgeTupleComparer.Instance)
+                    .Count();
+
+                var possibleDirectedEdges = (double)nodes.Length * (nodes.Length - 1);
+                result.Metrics["DependencyGraphDensity"] =
+                    edges / possibleDirectedEdges;
+                result.Metadata["GraphNodeCount"] = nodes.Length.ToString();
+                result.Metadata["GraphEdgeCount"] = edges.ToString();
+                result.Metadata["GraphDensityDefinition"] =
+                    "Distinct observed directed non-self component edges divided by n*(n-1); measured over the discovered graph, not a claim that discovery is exhaustive.";
+                result.Metadata["GraphDensityStatus"] = "Measured";
+            }
+            else
+            {
+                result.Metadata["GraphDensityStatus"] =
+                    "Unavailable: fewer than two distinct graph nodes.";
+            }
+        }
+        else
+        {
+            result.Metadata["GraphDensityStatus"] =
+                "Unavailable: dependency relations are empty or missing source/target identities.";
+        }
 
         results.Add(result);
     }
@@ -266,6 +318,23 @@ public sealed class DependencyGraphEvaluator
         result.Metadata["EvaluationScope"] = ProjectScope;
 
         return result;
+    }
+
+    private sealed class ComponentEdgeTupleComparer
+        : IEqualityComparer<(string Source, string Target)>
+    {
+        public static ComponentEdgeTupleComparer Instance { get; } = new();
+
+        public bool Equals(
+            (string Source, string Target) x,
+            (string Source, string Target) y) =>
+            string.Equals(x.Source, y.Source, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(x.Target, y.Target, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string Source, string Target) edge) =>
+            HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(edge.Source),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(edge.Target));
     }
 
     private sealed class LayerEdgeTupleComparer

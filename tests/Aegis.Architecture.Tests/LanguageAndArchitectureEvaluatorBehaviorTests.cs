@@ -82,6 +82,41 @@ public sealed class LanguageAndArchitectureEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task BlazorEvaluator_withholds_rule_scores_when_component_code_has_syntax_errors()
+    {
+        using var project = new TemporaryProject();
+        project.Write("front/Orders.razor", """
+            <h1>Orders</h1>
+            @code {
+                private int GetCount( {
+                    return 1;
+                }
+            }
+            """);
+
+        var results = await Evaluate(project, "BlazorEvaluator", "Razor", "Blazor");
+        var component = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "File"
+                && result.Metadata.GetValueOrDefault("FileName") == "Orders.razor");
+
+        Assert.True(component.Metrics["CSharpSyntaxErrorCount"] > 0);
+        Assert.Equal("false", component.Metadata["AnalysisComplete"]);
+        Assert.Equal("Incomplete", component.Metadata["AnalysisStatus"]);
+        Assert.False(component.Metrics.ContainsKey("ComplexityScore"));
+        Assert.False(component.Metrics.ContainsKey("CodeBehindScore"));
+        Assert.False(component.Metrics.ContainsKey("DependencyInjectionScore"));
+
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+
+        Assert.Equal(1, summary.Metrics["IncompleteComponentCount"]);
+        Assert.Equal(-1, summary.Metrics["BlazorHealthIndex"]);
+        Assert.Equal("false", summary.Metadata["AnalysisComplete"]);
+    }
+
+    [Fact]
     public async Task RazorEvaluator_reports_view_model_injection_and_markup_signals()
     {
         using var project = new TemporaryProject();
@@ -133,6 +168,16 @@ public sealed class LanguageAndArchitectureEvaluatorBehaviorTests
         Assert.False(dependency.Metrics.ContainsKey("AllowedDependency"));
         Assert.False(dependency.Metrics.ContainsKey("DependencyViolation"));
         Assert.Equal("Unclassified", dependency.Metadata["PolicyDecision"]);
+
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+
+        Assert.Equal("Incomplete", summary.Metadata["AnalysisStatus"]);
+        Assert.Equal("false", summary.Metadata["AnalysisComplete"]);
+        Assert.Equal(1, summary.Metrics["IncompleteDependencyCount"]);
+        Assert.False(summary.Metrics.ContainsKey("LayerIsolationCompliance"));
+        Assert.False(summary.Metrics.ContainsKey("ForbiddenReferenceCount"));
     }
 
     private static async Task<ArchitectureEvaluatorResult[]> Evaluate(

@@ -34,13 +34,13 @@ public static class BackendRuleset
         {
             Id = "AEG-BACK-R2",
             Scope = RuleEvaluationScope.File,
-            Name = "Complexity Exceeds Recommended Limit",
+            Name = "Estimated Cyclomatic Complexity Too High",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
-            MetricKey = "CyclomaticComplexityIndex",
+            MetricKey = "EstimatedCyclomaticComplexity",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 10,
             Severity = ArchitectureRuleSeverity.Medium,
-            Recommendation = "Refactor long methods or introduce smaller helper functions."
+            Recommendation = "Review methods whose estimated cyclomatic complexity exceeds the threshold; the measurement is source-pattern heuristic, not compiler-backed."
         },
 
         // ==========================================================
@@ -82,13 +82,13 @@ public static class BackendRuleset
         {
             Id = "AEG-BACK-R5",
             Scope = RuleEvaluationScope.File,
-            Name = "Maintainability Index Too Low",
+            Name = "Maintainability Heuristic Score Too Low",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
-            MetricKey = "MaintainabilityIndex",
+            MetricKey = "MaintainabilityScore",
             Operator = ComparisonOperator.LessThan,
             Threshold = 70,
             Severity = ArchitectureRuleSeverity.Critical,
-            Recommendation = "Refactor for clarity, reduce file length, and improve comment density."
+            Recommendation = "Review the Aegis heuristic score and improve decision-point complexity, file size, or comment coverage; this is not a compiler-backed industry index."
         }
     };
 }

@@ -115,6 +115,33 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Equal(context.Modules.Count.ToString(), context.MetadataMap["DetectedModules"]);
     }
 
+    [Fact]
+    public void Detect_classifies_server_hosted_blazor_as_full_stack_not_backend_only()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var project = Path.Combine(directory.Path, "BlazorApp.csproj");
+        var component = Path.Combine(directory.Path, "Components", "Home.razor");
+        Directory.CreateDirectory(Path.GetDirectoryName(component)!);
+
+        File.WriteAllText(project, """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(component, """
+            @page "/"
+            <h1>Home</h1>
+            """);
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal("C#", context.Language);
+        Assert.Equal("Blazor", context.Framework);
+        Assert.Contains("Blazor", context.DetectedFrameworks);
+        Assert.Equal("FullStack", context.DomainType);
+    }
+
     private sealed class TemporaryDirectory : IDisposable
     {
         public string Path { get; } = System.IO.Path.Combine(

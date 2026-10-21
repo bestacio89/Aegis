@@ -15,6 +15,7 @@ internal static class NatureDetector
         else if (lib) ctx.Nature = "Library";
         else if (ctx.DomainType == "Backend") ctx.Nature = "Service";
         else if (ctx.DomainType == "Frontend") ctx.Nature = "FrontendApp";
+        else if (ctx.DomainType == "FullStack") ctx.Nature = "FullStackApp";
         else ctx.Nature = "Generic";
     }
 }

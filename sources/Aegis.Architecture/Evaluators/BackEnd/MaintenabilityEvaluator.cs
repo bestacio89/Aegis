@@ -101,6 +101,7 @@ public sealed class MaintainabilityEvaluator
         double totalCommentDensity = 0;
         double totalNonEmptyLines = 0;
         double totalCommentLines = 0;
+        double totalMaintainabilityScore = 0;
 
         foreach (var file in files)
         {
@@ -154,6 +155,7 @@ public sealed class MaintainabilityEvaluator
             totalCommentDensity += metrics.CommentDensity;
             totalNonEmptyLines += metrics.NonEmptyLineCount;
             totalCommentLines += metrics.CommentLineCount;
+            totalMaintainabilityScore += metrics.MaintainabilityScore;
 
             results.Add(CreateFileResult(file, metrics));
         }
@@ -168,7 +170,8 @@ public sealed class MaintainabilityEvaluator
                 totalDecisionPoints,
                 totalCommentDensity,
                 totalNonEmptyLines,
-                totalCommentLines));
+                totalCommentLines,
+                totalMaintainabilityScore));
 
         AegisDiagnostics.Report(
             Name,
@@ -196,6 +199,7 @@ public sealed class MaintainabilityEvaluator
         result.Metrics["LineCount"] = metrics.NonEmptyLineCount;
         result.Metrics["CommentCount"] = metrics.CommentLineCount;
         result.Metrics["CommentDensity"] = metrics.CommentDensity;
+        result.Metrics["MaintainabilityScore"] = metrics.MaintainabilityScore;
 
         result.Metadata["FilePath"] = file;
         result.Metadata["Language"] = Context?.Language ?? "Unknown";
@@ -208,6 +212,10 @@ public sealed class MaintainabilityEvaluator
 
         result.Metadata["CommentDensityMeasurement"] =
             "Percentage of non-empty physical lines containing comment text.";
+        result.Metadata["MaintainabilityMeasurement"] =
+            "Aegis heuristic (0-100): 100 minus weighted lexical decision points, excess lines beyond policy limit, and a bounded penalty for comment density below policy minimum. This is not a compiler-backed or industry-standard maintainability index.";
+        result.Metadata["AnalysisComplete"] = "true";
+        result.Metadata["AnalysisStatus"] = "Completed";
 
         return result;
     }
@@ -219,7 +227,8 @@ public sealed class MaintainabilityEvaluator
         double totalDecisionPoints,
         double totalCommentDensity,
         double totalNonEmptyLines,
-        double totalCommentLines)
+        double totalCommentLines,
+        double totalMaintainabilityScore)
     {
         var context = Context;
 
@@ -246,6 +255,10 @@ public sealed class MaintainabilityEvaluator
 
         summary.Metrics["TotalNonEmptyLines"] = totalNonEmptyLines;
         summary.Metrics["TotalCommentLines"] = totalCommentLines;
+        summary.Metrics["AverageMaintainabilityScore"] =
+            analyzedFiles > 0 && unreadableFiles == 0
+                ? Math.Round(totalMaintainabilityScore / analyzedFiles, 2)
+                : -1;
 
         // This is a weighted project-wide ratio, unlike the average of
         // per-file percentages, which gives tiny files equal influence.
@@ -266,13 +279,20 @@ public sealed class MaintainabilityEvaluator
         summary.Metadata["CommentDensityMeasurement"] =
             "Project-wide comment-line count divided by non-empty physical source lines.";
 
+        var analysisComplete = filesDiscovered > 0
+            && analyzedFiles == filesDiscovered
+            && unreadableFiles == 0;
         summary.Metadata["AnalysisComplete"] =
-            (analyzedFiles + unreadableFiles == filesDiscovered).ToString();
+            analysisComplete.ToString().ToLowerInvariant();
+        summary.Metadata["AnalysisStatus"] =
+            analysisComplete ? "Completed" : "Incomplete";
+        summary.Metadata["MaintainabilityMeasurement"] =
+            "Aegis heuristic; average is unavailable (-1) when any discovered file was unreadable.";
 
         return summary;
     }
 
-    private static MaintainabilityMetrics AnalyzeMaintainability(
+    private MaintainabilityMetrics AnalyzeMaintainability(
         string content,
         string? language)
     {
@@ -293,11 +313,27 @@ public sealed class MaintainabilityEvaluator
             sanitized,
             language);
 
+        var roundedCommentDensity = Math.Round(commentDensity, 2);
+        var complexityPenalty = decisionPointCount * Math.Max(0, _policy.ComplexityWeight);
+        var excessLines = Math.Max(0, nonEmptyLineCount - _policy.MaxLinesPerFile);
+        var linePenalty = excessLines * Math.Max(0, _policy.LineWeight);
+        var commentPenalty = _policy.RequireCommentDensityCheck
+            && roundedCommentDensity < _policy.MinCommentDensity
+                ? Math.Min(
+                    20.0,
+                    (_policy.MinCommentDensity - roundedCommentDensity) * 2.0)
+                : 0.0;
+        var score = Math.Clamp(
+            100.0 - complexityPenalty - linePenalty - commentPenalty,
+            0.0,
+            100.0);
+
         return new MaintainabilityMetrics(
             decisionPointCount,
             nonEmptyLineCount,
             commentLineCount,
-            Math.Round(commentDensity, 2));
+            roundedCommentDensity,
+            Math.Round(score, 2));
     }
 
     private static int CountDecisionPoints(
@@ -658,5 +694,6 @@ public sealed class MaintainabilityEvaluator
         int DecisionPointCount,
         int NonEmptyLineCount,
         int CommentLineCount,
-        double CommentDensity);
+        double CommentDensity,
+        double MaintainabilityScore);
 }

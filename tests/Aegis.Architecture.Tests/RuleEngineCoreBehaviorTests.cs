@@ -148,7 +148,7 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
     [Fact]
-    public void EvaluateDetailed_keeps_framework_rule_applicable_when_technology_is_unknown()
+    public void EvaluateDetailed_does_not_guess_frontend_applicability_without_fact_framework_evidence()
     {
         var rule = ArchitectureRuleRegistry.GetById("AEG-FRONT-R1");
         Assert.NotNull(rule);
@@ -161,10 +161,18 @@ public sealed class RuleEngineCoreBehaviorTests
 
         var outcome = CreateEngine().EvaluateDetailed(context, [fact]);
 
+        // Unknown technology is not proof that the rule is inapplicable, but
+        // a metric without file-level framework provenance is not enough to
+        // claim a pass or violation either.
         Assert.DoesNotContain(rule!.Id, outcome.Stats.RulesNotApplicable);
-        Assert.Contains(
+        Assert.Contains(rule.Id, outcome.Stats.RulesNotEvaluated);
+        Assert.DoesNotContain(
             outcome.Evaluations,
             evaluation => evaluation.RuleId == rule.Id);
+        Assert.Contains(
+            outcome.Stats.NotEvaluatedReasons,
+            pair => pair.Key == rule.Id
+                && pair.Value.Contains("framework applicability", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

@@ -136,10 +136,32 @@ internal static class ArchitectureRuleMetricContracts
         if (detectedFamilies.Length == 0)
             return true;
 
-        // The cross-framework rule applies when at least one supported frontend
-        // family is positively identified.
+        // R11 has no separate metric key, so it is only a fallback for Razor
+        // files, whose ruleset has no dedicated complexity rule. In a mixed
+        // repository it remains enabled when Razor is one of the detected
+        // families; per-file applicability below prevents cross-framework reuse.
         if (targetScope == FrontendScope.CrossFramework)
+        {
+            if (detectedFamilies.Contains(FrontendScope.Razor))
+                return true;
+
+            var onlyDedicatedFamilies = detectedFamilies.All(family =>
+                family is FrontendScope.Angular
+                    or FrontendScope.React
+                    or FrontendScope.Blazor);
+
+            if (onlyDedicatedFamilies)
+            {
+                reason =
+                    $"Rule '{rule.Id}' is not applicable because the detected " +
+                    "frontend families have dedicated complexity rules; the " +
+                    "shared ComplexityScore metric would duplicate their checks.";
+
+                return false;
+            }
+
             return true;
+        }
 
         var targetFamily = targetScope switch
         {
@@ -158,6 +180,64 @@ internal static class ArchitectureRuleMetricContracts
             $"Rule '{rule.Id}' targets frontend family '{targetFamily}', " +
             $"but the detected family/families are " +
             $"[{string.Join(", ", detectedFamilies)}].";
+
+        return false;
+    }
+
+    /// <summary>
+    /// Enforces frontend family applicability at the fact boundary. Project
+    /// context can describe a mixed repository, so it must not authorize a
+    /// React metric to satisfy a Blazor rule (or vice versa).
+    /// </summary>
+    public static bool TryGetFactApplicability(
+        ArchitectureRuleDefinition rule,
+        ArchitectureEvaluatorResult fact,
+        out string reason)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(fact);
+
+        reason = string.Empty;
+
+        if (!FrontendRuleScopes.TryGetValue(rule.Id, out var targetScope))
+            return true;
+
+        var framework = fact.Metadata?.GetValueOrDefault("Framework");
+
+        if (string.IsNullOrWhiteSpace(framework))
+        {
+            reason =
+                $"Rule '{rule.Id}' requires file-level frontend framework " +
+                "evidence, but the evaluator fact does not declare Framework metadata.";
+
+            return false;
+        }
+
+        var family = ResolveFrontendFamily(framework);
+
+        if (!family.HasValue)
+        {
+            reason =
+                $"Rule '{rule.Id}' cannot establish frontend applicability " +
+                $"from unrecognized framework metadata '{framework}'.";
+
+            return false;
+        }
+
+        var applies = targetScope switch
+        {
+            FrontendScope.CrossFramework => family.Value == FrontendScope.Razor,
+            _ => family.Value == targetScope
+        };
+
+        if (applies)
+            return true;
+
+        reason = targetScope == FrontendScope.CrossFramework
+            ? $"Rule '{rule.Id}' is a Razor fallback and does not apply to " +
+              $"file framework '{framework}'."
+            : $"Rule '{rule.Id}' targets frontend family '{targetScope}', " +
+              $"but this fact belongs to '{family.Value}'.";
 
         return false;
     }

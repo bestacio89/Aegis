@@ -24,7 +24,7 @@ internal static class FrameworkDetector
                     }
                 }
                 ctx.DetectedDependencies = deps.ToList();
-                DetectDotNetFramework(ctx, deps);
+                DetectDotNetFramework(ctx, deps, files);
                 break;
 
             case "Java":
@@ -39,13 +39,86 @@ internal static class FrameworkDetector
                 DetectNodeFramework(ctx, files, deps);
                 break;
         }
+
+        if (!string.IsNullOrWhiteSpace(ctx.Framework)
+            && !ctx.DetectedFrameworks.Contains(
+                ctx.Framework,
+                StringComparer.OrdinalIgnoreCase))
+        {
+            ctx.DetectedFrameworks.Add(ctx.Framework);
+        }
     }
 
-    private static void DetectDotNetFramework(ProjectArchitectureContext ctx, HashSet<string> deps)
+    private static void DetectDotNetFramework(
+        ProjectArchitectureContext ctx,
+        HashSet<string> deps,
+        IReadOnlyCollection<string> files)
     {
-        if (deps.Any(d => d.Contains("EntityFrameworkCore"))) ctx.Framework = ".NET (EF Core)";
-        else if (deps.Any(d => d.Contains("AspNetCore"))) ctx.Framework = "ASP.NET Core";
-        else ctx.Framework = ".NET";
+        // .razor files are a positive signal for Blazor components. The language
+        // remains C#, but project-domain classification must not infer backend
+        // solely from that language when the project is a Blazor UI.
+        var hasBlazorComponents = files.Any(file =>
+            Path.GetExtension(file).Equals(
+                ".razor",
+                StringComparison.OrdinalIgnoreCase));
+
+        if (hasBlazorComponents)
+        {
+            ctx.Framework = "Blazor";
+            if (!ctx.DetectedFrameworks.Contains(
+                    "Blazor",
+                    StringComparer.OrdinalIgnoreCase))
+            {
+                ctx.DetectedFrameworks.Add("Blazor");
+            }
+
+            return;
+        }
+
+        var hasWebSdk = files
+            .Where(file => file.EndsWith(
+                ".csproj",
+                StringComparison.OrdinalIgnoreCase))
+            .Any(projectFile =>
+            {
+                try
+                {
+                    var project = XDocument.Load(projectFile);
+                    var sdk = project.Root?.Attribute("Sdk")?.Value;
+                    return sdk?.Contains(
+                        "Microsoft.NET.Sdk.Web",
+                        StringComparison.OrdinalIgnoreCase) == true;
+                }
+                catch (System.Xml.XmlException)
+                {
+                    // Malformed project files are handled by configuration
+                    // diagnostics; framework detection should not crash scanning.
+                    return false;
+                }
+                catch (IOException)
+                {
+                    return false;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return false;
+                }
+            });
+
+        if (hasWebSdk || deps.Any(d =>
+                d.Contains("AspNetCore", StringComparison.OrdinalIgnoreCase)))
+        {
+            ctx.Framework = "ASP.NET Core";
+        }
+        else if (deps.Any(d =>
+                     d.Contains("EntityFrameworkCore", StringComparison.OrdinalIgnoreCase)))
+        {
+            ctx.Framework = ".NET (EF Core)";
+        }
+        else
+        {
+            ctx.Framework = ".NET";
+        }
     }
 
     private static void DetectJavaFramework(ProjectArchitectureContext ctx, List<string> files, HashSet<string> deps)

@@ -46,7 +46,7 @@ public sealed class AdditionalEvaluatorBehaviorTests
         Assert.Equal(
             summary.Metrics["ApiConsistencyIndex"],
             summary.Metrics["AverageApiConsistencyIndex"]);
-        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
+        Assert.Equal(bool.TrueString, summary.Metadata["AnalysisComplete"]);
         AssertAllMetricsAreFinite(results);
     }
 

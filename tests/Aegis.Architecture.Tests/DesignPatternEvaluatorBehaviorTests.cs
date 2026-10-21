@@ -207,6 +207,25 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
     }
 
+
+    [Fact]
+    public async Task AnemicDomainModelEvaluator_does_not_treat_stateless_types_as_candidates()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Domain/OrderEntity.cs", """
+            public sealed class OrderEntity
+            {
+                public void Validate() { }
+            }
+            """);
+
+        var results = await Evaluate(project, "AnemicDomainModelEvaluator");
+
+        Assert.DoesNotContain(
+            results,
+            result => result.Metrics.ContainsKey("AnemicDomainModelIndex"));
+    }
+
     [Fact]
     public async Task SingletonEvaluator_reports_static_instance_and_private_constructor_signals()
     {

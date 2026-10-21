@@ -1,8 +1,11 @@
 using Aegis.Architecture.Analysis;
 using Aegis.Architecture.Bootstrap;
+using Aegis.Architecture.RuleEngines;
+using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Aegis.Architecture.Tests;
@@ -60,6 +63,10 @@ public sealed class HeroServiceRegressionTests
             fact.Metadata.TryGetValue("FilePath", out var path)
             && path.EndsWith("Home.razor", StringComparison.OrdinalIgnoreCase)
             && fact.Metadata.GetValueOrDefault("Framework") == "Blazor");
+        Assert.Contains(blazorFacts, fact =>
+            fact.Metadata.TryGetValue("FilePath", out var path)
+            && path.EndsWith("Home.razor", StringComparison.OrdinalIgnoreCase)
+            && fact.Metrics.ContainsKey("ComplexityScore"));
 
         var unityContext = ProjectArchitectureContextDetector.Detect(unityPath);
         Assert.Contains("Unity", unityContext.DetectedFrameworks);
@@ -71,6 +78,32 @@ public sealed class HeroServiceRegressionTests
             fact.Metadata.TryGetValue("FilePath", out var path)
             && path.EndsWith("HeroCatalogService.cs", StringComparison.OrdinalIgnoreCase)
             && fact.Metadata.GetValueOrDefault("Framework") == "Unity");
+
+        // Validate the rule decision against individual source evidence. The
+        // Blazor complexity rule must evaluate the Razor fact, while Angular
+        // and Razor-MVC rules must not reuse its identically named metric.
+        var ruleEngine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+        var ruleOutcome = ruleEngine.EvaluateDetailed(
+            rootContext,
+            apiFacts.Concat(blazorFacts).Concat(unityFacts));
+
+        Assert.Single(ruleOutcome.Evaluations, evaluation =>
+            evaluation.RuleId == "AEG-FRONT-R8"
+            && evaluation.Target.EndsWith("Home.razor", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(ruleOutcome.Evaluations, evaluation =>
+            evaluation.RuleId == "AEG-FRONT-R2"
+            && evaluation.Target.EndsWith("Home.razor", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(ruleOutcome.Evaluations, evaluation =>
+            evaluation.RuleId == "AEG-FRONT-R11"
+            && evaluation.Target.EndsWith("Home.razor", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(ruleOutcome.Evaluations, evaluation =>
+            evaluation.RuleId == "AEG-FRONT-R8"
+            && evaluation.Target.EndsWith("HeroController.cs", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(ruleOutcome.Evaluations, evaluation =>
+            evaluation.RuleId == "AEG-FRONT-R8"
+            && evaluation.Target.EndsWith("HeroCatalogService.cs", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void PreserveRepositoryGraph(

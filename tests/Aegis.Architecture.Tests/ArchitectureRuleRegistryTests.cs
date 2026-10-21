@@ -37,6 +37,27 @@ public sealed class ArchitectureRuleRegistryTests
         });
     }
 
+    [Fact]
+    public void Facade_ratio_rule_uses_the_producers_ratio_scale_and_direction()
+    {
+        var rule = ArchitectureRuleRegistry.GetById("AEG-DES-FAC002");
+
+        Assert.NotNull(rule);
+        Assert.Equal("PublicSurfaceRatio", rule.MetricKey);
+        Assert.Equal(ComparisonOperator.GreaterThan, rule.Operator);
+        Assert.Equal(1.0, rule.Threshold);
+    }
+
+    [Fact]
+    public void Constant_naming_has_its_own_registered_rule()
+    {
+        var rule = ArchitectureRuleRegistry.GetById("AEG-NAM-R7");
+
+        Assert.NotNull(rule);
+        Assert.Equal("ConstantNamingCompliance", rule.MetricKey);
+        Assert.Equal(RuleEvaluationScope.File, rule.Scope);
+    }
+
     [Theory]
     [InlineData("AEG-ARCH-R1", "aeg-arch-r1")]
     [InlineData("AEG-NAM-R1", "aeg-nam-r1")]

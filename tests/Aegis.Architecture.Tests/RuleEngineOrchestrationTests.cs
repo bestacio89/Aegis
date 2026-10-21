@@ -55,6 +55,50 @@ public sealed class RuleEngineOrchestrationTests
         Assert.Equal(1, report.ChecksPerformed);
     }
 
+
+    [Fact]
+    public async Task RunAsync_executes_framework_specific_evaluators_only_for_matching_project_scopes()
+    {
+        using var directory = new TemporaryDirectory();
+        var backendPath = Path.Combine(directory.Path, "Backend");
+        var blazorPath = Path.Combine(directory.Path, "Blazor");
+        Directory.CreateDirectory(backendPath);
+        Directory.CreateDirectory(blazorPath);
+
+        File.WriteAllText(Path.Combine(backendPath, "Backend.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(backendPath, "Program.cs"), "public class Program { }");
+        File.WriteAllText(Path.Combine(blazorPath, "Blazor.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(blazorPath, "Program.cs"), "public class Program { }");
+        File.WriteAllText(Path.Combine(blazorPath, "Home.razor"), "@page \"/\"\n<h1>Home</h1>");
+
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(directory.Path);
+        var evaluatedPaths = new List<string>();
+        var evaluator = new FixtureEvaluator(
+            "BlazorOnlyEvaluator",
+            (path, _) =>
+            {
+                evaluatedPaths.Add(path);
+                return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>([]);
+            },
+            supportedLanguages: ["C#"],
+            supportedFrameworks: ["Blazor"]);
+
+        await CreateEngine([evaluator]).RunAsync(directory.Path, context);
+
+        Assert.Contains(evaluatedPaths, path =>
+            string.Equals(path, blazorPath, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(evaluatedPaths, path =>
+            string.Equals(path, backendPath, StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public async Task RunAsync_applies_path_filter_before_rule_evaluation()
     {
@@ -149,15 +193,19 @@ public sealed class RuleEngineOrchestrationTests
         public FixtureEvaluator(
             string name,
             Func<string, ProjectArchitectureContext,
-                Task<IEnumerable<ArchitectureEvaluatorResult>>> evaluate)
+                Task<IEnumerable<ArchitectureEvaluatorResult>>> evaluate,
+            string[]? supportedLanguages = null,
+            string[]? supportedFrameworks = null)
         {
             Name = name;
             _evaluate = evaluate;
+            SupportedLanguages = supportedLanguages ?? ["*"];
+            SupportedFrameworks = supportedFrameworks ?? ["*"];
         }
 
         public string Name { get; }
-        public string[] SupportedLanguages { get; } = ["*"];
-        public string[] SupportedFrameworks { get; } = ["*"];
+        public string[] SupportedLanguages { get; }
+        public string[] SupportedFrameworks { get; }
         public bool IsEnabled { get; set; } = true;
         public double WeightFactor { get; set; } = 1.0;
 

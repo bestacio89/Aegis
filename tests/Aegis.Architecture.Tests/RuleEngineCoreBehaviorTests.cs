@@ -205,7 +205,7 @@ public sealed class RuleEngineCoreBehaviorTests
             [rule.MetricKey.ToUpperInvariant()] = 1
         };
 
-        var fact = new ArchitectureEvaluatorResult("ArchitecturalEvaluator", "SampleProject")
+        var fact = new ArchitectureEvaluatorResult("CircularDependencyEvaluator", "SampleProject")
         {
             Category = "Architecture",
             Metrics = metrics,

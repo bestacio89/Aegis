@@ -30,7 +30,7 @@ public sealed class ConfigurationEvaluatorSyntaxRegressionTests
 
         Assert.Equal("Valid", file.Metadata["SyntaxValidation"]);
         Assert.DoesNotContain("CFG-SYNTAX-001", file.Metadata.Keys);
-        Assert.Equal(0, file.Metrics["SyntaxComplianceScore"]);
+        Assert.Equal(100, file.Metrics["SyntaxComplianceScore"]);
     }
 
     [Fact]
@@ -92,8 +92,8 @@ public sealed class ConfigurationEvaluatorSyntaxRegressionTests
         Assert.Equal("Invalid", invalidYaml.Metadata["SyntaxValidation"]);
         Assert.Contains("YAML syntax validation failed", invalidYaml.Metadata["SyntaxDiagnostic"]);
         Assert.Equal("Valid", validJson.Metadata["SyntaxValidation"]);
-        Assert.Equal(1, invalidJson.Metrics["SyntaxComplianceScore"]);
-        Assert.Equal(1, invalidYaml.Metrics["SyntaxComplianceScore"]);
+        Assert.Equal(0, invalidJson.Metrics["SyntaxComplianceScore"]);
+        Assert.Equal(0, invalidYaml.Metrics["SyntaxComplianceScore"]);
     }
 
     private static async Task<ArchitectureEvaluatorResult[]> EvaluateAsync(string projectPath)

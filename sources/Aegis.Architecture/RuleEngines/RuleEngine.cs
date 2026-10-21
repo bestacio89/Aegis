@@ -113,7 +113,7 @@ public sealed class RuleEngine
             var repositoryWide = RepositoryWideEvaluatorNames.Contains(evaluator.Name)
                 || (evaluator.SupportedLanguages.Contains("*", StringComparer.OrdinalIgnoreCase)
                     && (evaluator.SupportedFrameworks.Contains("*", StringComparer.OrdinalIgnoreCase)
-                        || evaluator.SupportedFrameworks.Contains("LanguageAgnostic", StringComparer.OrdinalIgnoreCase));
+                        || evaluator.SupportedFrameworks.Contains("LanguageAgnostic", StringComparer.OrdinalIgnoreCase)));
 
             if (repositoryWide)
             {

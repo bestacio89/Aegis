@@ -207,6 +207,38 @@ public sealed class RuleEngineCoreBehaviorTests
         Assert.Contains(rule.Id, outcome.Stats.RulesNotEvaluated);
     }
 
+
+    [Fact]
+    public void EvaluateDetailed_does_not_allow_an_unrelated_producer_to_satisfy_a_rule()
+    {
+        var rule = ArchitectureRuleRegistry.GetById("AEG-BACK-R2");
+        Assert.NotNull(rule);
+
+        var unrelatedFact = new ArchitectureEvaluatorResult("PerformanceEvaluator", "Widget.cs")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                [rule!.MetricKey] = 99
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "src/Widget.cs"
+            }
+        };
+
+        var outcome = CreateEngine().EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [unrelatedFact]);
+
+        Assert.DoesNotContain(outcome.Evaluations, evaluation => evaluation.RuleId == rule.Id);
+        Assert.DoesNotContain(outcome.Results, result => result.RuleId == rule.Id);
+        Assert.Contains(rule.Id, outcome.Stats.RulesNotEvaluated);
+        Assert.Contains(outcome.Stats.NotEvaluatedReasons, pair =>
+            pair.Key == rule.Id
+            && pair.Value.Contains("producer", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static ArchitectureEvaluatorResult FrontendFact(
         ArchitectureRuleDefinition rule,
         string target,
@@ -229,7 +261,7 @@ public sealed class RuleEngineCoreBehaviorTests
         new(NullLogger<RuleEngineCore>.Instance, new AegisArchitecturePolicy());
 
     private static ArchitectureEvaluatorResult ProjectFact(string target, double circularDependencyCount) =>
-        new("ArchitecturalEvaluator", target)
+        new("CircularDependencyEvaluator", target)
         {
             Category = "Architecture",
             Metrics = new Dictionary<string, double>

@@ -57,8 +57,10 @@ public static class DesignPatternRuleset
             Name = "Facade Public Surface Too Broad",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "PublicSurfaceRatio",
-            Operator = ComparisonOperator.LessThan,
-            Threshold = 80,
+            // Producer emits publicMethodCount / configured maximum (a ratio),
+            // not a percentage. Values above 1.0 exceed the configured limit.
+            Operator = ComparisonOperator.GreaterThan,
+            Threshold = 1.0,
             Severity = ArchitectureRuleSeverity.Medium,
             Recommendation = "Ensure the Facade properly hides subsystem complexity and external dependencies."
         },

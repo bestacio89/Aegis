@@ -44,6 +44,9 @@ The baseline inventory records the metric keys declared at the time of the HeroS
 - `AEG-BACK-R2`: changed from `CyclomaticComplexityIndex` to `EstimatedCyclomaticComplexity`. The current producer uses source-pattern heuristics, not compiler-backed cyclomatic complexity; it now emits a measurement for compliant and violating methods.
 - `AEG-BACK-R5`: changed from `MaintainabilityIndex` to `MaintainabilityScore`. The producer emits a documented Aegis heuristic based on lexical decision points, excess file length, and comment-density policy. It is explicitly not presented as a standard industry maintainability index.
 - `AEG-FRONT-R11`: remains a Razor fallback only where a dedicated framework-specific complexity rule does not apply. Shared metric names cannot be reused across framework facts.
+- `AEG-BACK-R3`: now emits `DependencyGraphDensity` from distinct observed directed component edges only when source/target identities are complete and at least two graph nodes exist. The metadata states that density is measured over the discovered graph, not an assertion that discovery is exhaustive.
+- `AEG-ARCH-R5`: now measures `InfrastructureInversionCompliance` independently from generic layer isolation, using observed Domain-layer outgoing dependency relations. No score is emitted when that denominator is absent.
+- Architectural dependency summaries now remain visible when classification is partial, but withhold project compliance metrics and expose incomplete counts/status rather than silently omitting the summary.
 
 These corrections intentionally supersede the original metric names in the baseline tables. They do not mark the remaining inventory complete.
 

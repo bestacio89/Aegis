@@ -12,6 +12,14 @@ internal static class LanguageAndBuildDetector
             ctx.Language = "C#";
             ctx.BuildSystem = ArchitectureBuildSystem.DotNet;
         }
+        else if (files.Any(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)))
+        {
+            // Unity and other source-only C# projects may not commit generated
+            // .csproj files. Detect the language from source files independently
+            // of whether a conventional .NET build manifest exists.
+            ctx.Language = "C#";
+            ctx.BuildSystem = ArchitectureBuildSystem.Unknown;
+        }
         else if (files.Any(f => f.EndsWith(".java") || f.Contains("pom.xml")))
         {
             ctx.Language = "Java";

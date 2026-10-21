@@ -270,3 +270,36 @@ The following 62 warnings were emitted by the scan. Their metric names and requi
 8. **Regression and release gates:** deterministic end-to-end report verification and CI artifacts.
 
 Keep each PR reviewable and based on `develop`. Do not merge a stage until tests pass and the HeroService baseline shows the expected coverage change with no unexplained metric or scope gaps. Update this backlog as stages complete; do not mark a rule complete merely because its warning disappeared.
+
+
+## Correctness overhaul: producer dispositions and regression evidence
+
+The correctness overhaul binds every registered rule to an explicit producer contract or an explicit unsupported disposition. A metric key by itself is not evidence that a rule's semantic requirement was measured.
+
+The current contract inventory has 49 producer-backed rules and 24 explicitly unsupported rules. Unsupported rules remain visible as unevaluated with a reason; they must not be satisfied by a similarly named metric from another evaluator.
+
+Explicitly unsupported until a semantically valid producer is implemented:
+
+- Architecture: `AEG-ARCH-R4`, `AEG-ARCH-R6`, `AEG-ARCH-R9`, `AEG-ARCH-R10`, `AEG-ARCH-R12`
+- Backend: `AEG-BACK-R1`
+- Dependencies: `AEG-DEPS-R1` through `AEG-DEPS-R4`
+- Design patterns: `AEG-DES-DEC002`, `AEG-DES-REPO002`, `AEG-DES-FACR002`, `AEG-DES-CMD002`, `AEG-DES-MEDI002`, `AEG-DES-OBS002`, `AEG-DES-SING002`, `AEG-DES-CIRC001`, `AEG-DES-OVER001`
+- Performance: `AEG-PERF-R3`, `AEG-PERF-R4`
+- Transactions: `AEG-TXN-R2` through `AEG-TXN-R4`
+
+These are not waived findings. Each disposition documents the missing evidence or semantic mismatch that must be resolved before the rule can become enforceable. In particular, package declarations do not prove freshness or usage, instantiation inside a factory is not itself a violation, and a heterogeneous set of security signals is not a calibrated compliance score.
+
+Implemented metric alignments include candidate-only builder scores and mutability signals, decorator/factory/command/mediator/strategy/observer/singleton metrics that match their actual evaluator output, a file-level god-class severity plus project-level god-class density, an anemic-domain index limited to state-bearing domain candidates, infrastructure/logging rule keys aligned with produced scores, and error-handling coverage emitted only when catch/except evidence exists.
+
+### HeroService regression snapshot
+
+The mixed-stack regression fixture is based on the following HeroService source revision:
+
+- Repository: `bestacio89/HeroService`
+- Ref: `Develop_Unity_V1`
+- Commit: `cc98b07576d60c27487742ebb9c488ec00029913`
+- Backend: `sources/back/HeroService.API`, including `Controllers/HeroController.cs`
+- Blazor admin: `sources/Front/HeroService.Admin`, including `Components/Pages/Home.razor`
+- Unity client: `sources/client`, including `Assets/Home/Service/HeroCatalogService.cs`, `Packages/manifest.json`, and `ProjectSettings/ProjectVersion.txt`
+
+The regression test copies these pinned source files into an isolated temporary repository and asserts project/module discovery plus file-level framework evidence for backend, Blazor, and Unity facts. It is deliberately evidence-oriented; aggregate violation counts are not an acceptance criterion.

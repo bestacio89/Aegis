@@ -83,6 +83,7 @@ internal static class ArchitectureRuleMetricContracts
 
                 ["AEG-PERF-R1"] = ["PerformanceEvaluator"],
                 ["AEG-PERF-R2"] = ["PerformanceEvaluator"],
+                ["AEG-PERF-R4"] = ["PerformanceEvaluator"],
 
                 ["AEG-TXN-R1"] = ["ArchitecturalTransactionEvaluator"],
             };
@@ -113,7 +114,6 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-DES-OBS002"] = "ObserverPatternEvaluator does not emit a file-scope observer coupling index.",
                 ["AEG-DES-SING002"] = "SingletonPatternEvaluator does not currently measure global-state usage.",
                 ["AEG-PERF-R3"] = "No runtime allocation profiler is integrated; static lexical analysis cannot claim a memory allocation rate.",
-                ["AEG-PERF-R4"] = "ArchitecturalPerformanceEvaluator does not emit a validated blocking-I/O count.",
                 ["AEG-TXN-R2"] = "ArchitecturalTransactionEvaluator does not emit a dedicated data-access hygiene index.",
                 ["AEG-TXN-R3"] = "ArchitecturalTransactionEvaluator does not measure connection-pool abuse.",
                 ["AEG-TXN-R4"] = "ArchitecturalTransactionEvaluator does not prove uncommitted transactions from its current static evidence."

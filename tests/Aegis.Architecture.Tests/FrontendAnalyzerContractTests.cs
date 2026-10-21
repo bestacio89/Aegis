@@ -92,7 +92,8 @@ public sealed class FrontendAnalyzerContractTests
                   filePath: "front/src/App.tsx",
                   sourceLineCount: 4,
                   components: ["App"],
-                  hooks: ["useState"],
+                  componentTyping: [{ name: "App", propsTyped: true }],
+                  hooks: [{ name: "useState", line: 2, conditionallyCalled: false }],
                   jsxElementCount: 3,
                   conditionalCount: 1,
                   syntaxDiagnostics: []
@@ -116,6 +117,8 @@ public sealed class FrontendAnalyzerContractTests
 
         Assert.Equal(1, component.Metrics["ComponentCount"]);
         Assert.Equal(1, component.Metrics["HookCount"]);
+        Assert.Equal(100, component.Metrics["HookDisciplineScore"]);
+        Assert.Equal(100, component.Metrics["TypingScore"]);
         Assert.Equal(3, component.Metrics["JsxElementCount"]);
         Assert.Equal(1, component.Metrics["ConditionalCount"]);
         Assert.Equal(0, component.Metrics["SyntaxDiagnosticCount"]);

@@ -68,7 +68,8 @@ public static class ProjectArchitectureContextDetector
 
 
         LayerDetector.Analyze(
-            ctx);
+            ctx,
+            files);
 
 
         DomainDetector.Analyze(

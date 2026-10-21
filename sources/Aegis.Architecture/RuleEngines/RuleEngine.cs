@@ -185,7 +185,10 @@ public sealed class RuleEngine
                         continue;
                     }
 
-                    if (pathFilter is not null && !pathFilter(result.Target))
+                    var evidencePath = result.Metadata?.GetValueOrDefault("FilePath")
+                        ?? result.File
+                        ?? result.Target;
+                    if (pathFilter is not null && !pathFilter(evidencePath))
                         continue;
 
                     result.ProjectName ??= evaluationContext.ProjectName;

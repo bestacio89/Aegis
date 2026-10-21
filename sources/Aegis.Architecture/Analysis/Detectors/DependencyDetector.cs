@@ -72,12 +72,6 @@ internal static class DependencyDetector
                     dependencies.Add(dependency);
 
 
-                    ctx.Dependencies.Add(
-                        CreateDependency(
-                            source: Path.GetFileNameWithoutExtension(file),
-                            target: dependency,
-                            type: "NuGet",
-                            file));
                 }
             }
             catch
@@ -133,12 +127,6 @@ internal static class DependencyDetector
                     dependencies.Add(dependency.Name);
 
 
-                    ctx.Dependencies.Add(
-                        CreateDependency(
-                            source: Path.GetFileNameWithoutExtension(packageFile),
-                            target: dependency.Name,
-                            type: "NPM",
-                            packageFile));
                 }
             }
         }
@@ -181,12 +169,6 @@ internal static class DependencyDetector
                     dependencies.Add(dependency);
 
 
-                    ctx.Dependencies.Add(
-                        CreateDependency(
-                            source: Path.GetFileNameWithoutExtension(file),
-                            target: dependency,
-                            type: "Maven",
-                            file));
                 }
             }
             catch
@@ -196,23 +178,4 @@ internal static class DependencyDetector
         }
     }
 
-
-
-    private static ArchitectureDependencyContext CreateDependency(
-        string source,
-        string target,
-        string type,
-        string file)
-    {
-        return new ArchitectureDependencyContext
-        {
-            Source = source,
-
-            Target = target,
-
-            DependencyType = type,
-
-            File = file
-        };
-    }
 }

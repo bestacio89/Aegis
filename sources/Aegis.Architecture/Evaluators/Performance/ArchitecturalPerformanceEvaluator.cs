@@ -69,9 +69,15 @@ public sealed class ArchitecturalPerformanceEvaluator
 
     private static readonly Regex BlockingRegex =
         new(
-            @"\b(Thread\.Sleep|Task\.Wait|\.Result|time\.sleep|join\(\))\b",
+            @"\b(?:Thread\.Sleep|Task\.Wait|[A-Za-z_][A-Za-z0-9_]*\.Wait|time\.sleep|Thread\.Join)\s*\(",
             RegexOptions.IgnoreCase |
             RegexOptions.Compiled);
+
+    // .Result also names ordinary status/result objects. Do not count an
+    // awaited result access as synchronous blocking.
+    private static readonly Regex SynchronousResultRegex = new(
+        @"(?m)^(?![^\r\n]*\bawait\b)[^\r\n]*\.Result\b",
+        RegexOptions.Compiled);
 
 
 
@@ -208,9 +214,9 @@ public sealed class ArchitecturalPerformanceEvaluator
         string file,
         string content)
     {
-        var score =
-            AnalyzePerformanceSignals(
-                content);
+        var language = DetectLanguage(file);
+        var sanitized = MaskNonCode(content);
+        var score = AnalyzePerformanceSignals(sanitized);
 
 
 
@@ -236,8 +242,9 @@ public sealed class ArchitecturalPerformanceEvaluator
                     score.IO * 100,
 
                 ["BlockingIOCount"] =
-                    BlockingRegex.Matches(content).Count +
-                    SyncIORegex.Matches(content).Count,
+                    BlockingRegex.Matches(sanitized).Count +
+                    SynchronousResultRegex.Matches(sanitized).Count +
+                    SyncIORegex.Matches(sanitized).Count,
 
                 ["PerformanceHealthIndex"] =
                     score.Health
@@ -252,7 +259,7 @@ public sealed class ArchitecturalPerformanceEvaluator
                     file,
 
                 ["Language"] =
-                    DetectLanguage(file),
+                    language,
 
                 ["Evaluator"] =
                     Name,

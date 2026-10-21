@@ -30,6 +30,22 @@ internal static class FileExclusions
             return true;
 
         var fileName = Path.GetFileName(path);
+        if (fileName.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+            && fileName.StartsWith("Assembly-CSharp", StringComparison.OrdinalIgnoreCase))
+        {
+            var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(path));
+            if (projectDirectory is not null
+                && Directory.Exists(Path.Combine(projectDirectory, "Assets"))
+                && (Directory.Exists(Path.Combine(projectDirectory, "ProjectSettings"))
+                    || Directory.Exists(Path.Combine(projectDirectory, "Packages"))))
+            {
+                // Unity generates these project files for IDE integration; the
+                // actual governance boundary is the Unity project, not each
+                // generated Assembly-CSharp project.
+                return true;
+            }
+        }
+
         if (fileName.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase)
             || fileName.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
             || fileName.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase)

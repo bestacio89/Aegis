@@ -365,20 +365,43 @@ public sealed class RuleEngineCore
                     out _,
                     out _));
 
+            var hasIncompleteScopedFacts = scopedFacts.Any(fact =>
+            {
+                var metadata = fact.Metadata;
+                if (metadata is null)
+                    return false;
+
+                if (string.Equals(
+                        metadata.GetValueOrDefault("AnalysisComplete"),
+                        "false",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                var status = metadata.GetValueOrDefault("AnalysisStatus");
+                return status is not null
+                    && (status.Equals("Incomplete", StringComparison.OrdinalIgnoreCase)
+                        || status.Equals("Partial", StringComparison.OrdinalIgnoreCase)
+                        || status.Equals("CompletedWithDiagnostics", StringComparison.OrdinalIgnoreCase));
+            });
+
             var scopeLabel = rule.Scope.ToString().ToLowerInvariant();
 
-            // Prefer a precise scope-mismatch explanation over the generic
-            // "no scoped facts" message. This makes a producer's contract
-            // mismatch actionable without allowing cross-scope evaluation.
+            // Prefer evidence-quality diagnostics over generic missing-metric
+            // messages. A partial summary explains why its project metric was
+            // deliberately withheld.
             notEvaluatedReasons[rule.Id] = hasMetricEvidence
                 ? $"Metric '{rule.MetricKey}' was emitted at {scopeLabel} scope, but no valid comparison completed. Check for non-finite observations or an invalid threshold."
                 : hasWrongScopeMetricEvidence
                     ? $"Metric '{rule.MetricKey}' was emitted, but only at the wrong scope for rule '{rule.Id}' (required: {scopeLabel})."
                     : hasInapplicableMetricEvidence
-                        ? $"Metric '{rule.MetricKey}' exists, but its fact-level framework metadata does not match rule '{rule.Id}'; the metric was not reused across frameworks."
-                        : scopedFacts.Count == 0
-                            ? $"No {scopeLabel}-scope evaluator facts were available for metric '{rule.MetricKey}'."
-                            : $"No {scopeLabel}-scope evaluator fact emitted declared metric '{rule.MetricKey}'.";
+                        ? $"Metric '{rule.MetricKey}' exists, but its fact-level framework applicability could not be established or does not match rule '{rule.Id}'; the metric was not reused across frameworks."
+                        : hasIncompleteScopedFacts
+                            ? $"A {scopeLabel}-scope evaluator fact reports incomplete analysis; metric '{rule.MetricKey}' was withheld rather than treating partial evidence as a pass or zero."
+                            : scopedFacts.Count == 0
+                                ? $"No {scopeLabel}-scope evaluator facts were available for metric '{rule.MetricKey}'."
+                                : $"No {scopeLabel}-scope evaluator fact emitted declared metric '{rule.MetricKey}'.";
         }
 
         var distinctPassedRules = evaluations

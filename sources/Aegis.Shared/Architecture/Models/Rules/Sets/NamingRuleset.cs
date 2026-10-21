@@ -99,7 +99,9 @@ public static class NamingRuleset
             MetricKey = "NamingComplianceScore",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = ArchitectureRuleSeverity.Critical,
+            // Naming style is maintainability guidance, not a critical
+            // architecture-boundary failure.
+            Severity = ArchitectureRuleSeverity.Low,
             Recommendation = "Improve global naming consistency across classes, methods, and variables for architectural clarity."
         }
     };

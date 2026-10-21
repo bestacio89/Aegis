@@ -377,14 +377,12 @@ public sealed class RazorEvaluator : BaseArchitectureEvaluator
     {
         var result = CreateResult(filePath);
 
-        result.Metrics[ComplexityScoreMetric] = 0;
-        result.Metrics[PresentationSeparationScoreMetric] = 0;
-        result.Metrics[ViewModelScoreMetric] = 0;
-        result.Metrics[DataIsolationScoreMetric] = 0;
-
+        // Failed analysis is not a measured zero. Withhold all rule-facing
+        // score metrics so a parser/engine failure cannot become a violation.
         result.Metadata["EvaluationScope"] = FileScope;
         result.Metadata["FilePath"] = filePath;
         result.Metadata["Framework"] = "Razor";
+        result.Metadata["AnalysisComplete"] = bool.FalseString;
         result.Metadata["AnalysisStatus"] = "Failed";
         result.Metadata["AnalysisErrorType"] = exception.GetType().Name;
         result.Metadata["AnalysisError"] = exception.Message;

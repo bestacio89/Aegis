@@ -379,7 +379,7 @@ public sealed class FacadePatternEvaluator
     {
         var result = new ArchitectureEvaluatorResult(Name, className)
         {
-            Target = projectPath,
+            Target = file,
             Category = ArchitectureRuleCategory.DesignPatterns.ToString(),
             Metrics = metrics
         };

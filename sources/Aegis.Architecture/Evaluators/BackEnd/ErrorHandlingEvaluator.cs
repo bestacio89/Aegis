@@ -797,7 +797,22 @@ public sealed class ErrorHandlingEvaluator
         summary.Metrics["GenericCatchBlocks"] = totalGenericCatchBlocks;
         summary.Metrics["SwallowedExceptions"] = totalSwallowedExceptions;
 
+        // Coverage is measured only when at least one catch/except clause was
+        // observed. An empty catch population is unknown, not 100% compliant.
+        if (totalCatchBlocks > 0)
+        {
+            summary.Metrics["ErrorHandlingCoverage"] = Math.Round(
+                Math.Clamp(
+                    1d - totalSwallowedExceptions / (double)totalCatchBlocks,
+                    0d,
+                    1d) * 100d,
+                2);
+        }
+
         summary.Metadata["EvaluationScope"] = ProjectScope;
+        summary.Metadata["AnalysisStatus"] = unreadableFiles == 0
+            ? "Completed"
+            : "Incomplete";
         summary.Metadata["MeasurementMethod"] =
             "Aggregated lexical analysis of supported source files.";
         summary.Metadata["SwallowedExceptionDefinition"] =

@@ -97,4 +97,58 @@ public sealed class FrontendRuleApplicabilityRegressionTests
 
         Assert.Contains("AEG-FRONT-R11", outcome.Stats.RulesNotApplicable);
     }
+    [Fact]
+    public void Mixed_frontend_project_does_not_cross_apply_blazor_rules_to_react_facts()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var blazorFact = new ArchitectureEvaluatorResult(
+            "BlazorEvaluator",
+            "Components/Orders.razor")
+        {
+            Category = "Frontend",
+            Metrics = new Dictionary<string, double> { ["ComplexityScore"] = 50 },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "Components/Orders.razor",
+                ["Framework"] = "Blazor",
+                ["Language"] = "Razor"
+            }
+        };
+
+        var reactFact = new ArchitectureEvaluatorResult(
+            "ReactEvaluator",
+            "src/Orders.tsx")
+        {
+            Category = "Frontend",
+            Metrics = new Dictionary<string, double> { ["ComplexityScore"] = 10 },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "src/Orders.tsx",
+                ["Framework"] = "React",
+                ["Language"] = "TypeScript"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext
+            {
+                Language = "C#",
+                Framework = "Blazor",
+                DetectedFrameworks = ["Blazor", "React"]
+            },
+            [blazorFact, reactFact]);
+
+        var blazorEvaluations = outcome.Evaluations
+            .Where(evaluation => evaluation.RuleId == "AEG-FRONT-R8")
+            .ToArray();
+
+        Assert.Single(blazorEvaluations);
+        Assert.Equal("Components/Orders.razor", blazorEvaluations[0].Target);
+    }
+
 }

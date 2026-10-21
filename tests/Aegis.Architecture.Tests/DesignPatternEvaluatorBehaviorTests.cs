@@ -433,7 +433,7 @@ public sealed record SeedEntry(int Id);");
         Directory.CreateDirectory(Path.Combine(project.Root, "Assets"));
         Directory.CreateDirectory(Path.Combine(project.Root, "ProjectSettings"));
 
-        var largeClass = $@"public sealed class {nameof(VendoredExample)}
+        var largeClass = $@"public sealed class ExampleService
 {{
 {string.Join(Environment.NewLine, Enumerable.Range(0, 30).Select(index => $"    public void Operation{index}() {{ }}"))}
 }}";
@@ -445,7 +445,7 @@ public sealed record SeedEntry(int Id);");
         var results = await Evaluate(project, "GodClassEvaluator");
 
         Assert.Contains(results, item =>
-            item.Metadata.GetValueOrDefault("ClassName") == "VendoredExample"
+            item.Metadata.GetValueOrDefault("ClassName") == "ExampleService"
             && item.Metadata.GetValueOrDefault("FilePath")?.Contains("FirstPartyService.cs", StringComparison.Ordinal) == true);
         Assert.DoesNotContain(results, item =>
             item.Metadata.GetValueOrDefault("FilePath")?.Contains("Examples & Extras", StringComparison.Ordinal) == true);

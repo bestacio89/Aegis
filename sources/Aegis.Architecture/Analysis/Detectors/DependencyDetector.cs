@@ -99,7 +99,11 @@ internal static class DependencyDetector
                 if (string.IsNullOrWhiteSpace(include))
                     continue;
 
-                var targetProject = Path.GetFullPath(Path.Combine(sourceRoot, include));
+                var normalizedInclude = include
+                    .Replace('\\', Path.DirectorySeparatorChar)
+                    .Replace('/', Path.DirectorySeparatorChar);
+                var targetProject = Path.GetFullPath(
+                    Path.Combine(sourceRoot, normalizedInclude));
                 var targetRoot = Path.GetDirectoryName(targetProject);
                 if (targetRoot is null)
                     continue;

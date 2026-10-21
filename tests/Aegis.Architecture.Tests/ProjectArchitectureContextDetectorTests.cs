@@ -116,7 +116,7 @@ public sealed class ProjectArchitectureContextDetectorTests
     }
 
     [Fact]
-    public void Detect_classifies_blazor_components_as_frontend_not_generic_dotnet_backend()
+    public void Detect_classifies_server_hosted_blazor_as_full_stack_not_backend_only()
     {
         using var directory = new TemporaryDirectory();
 
@@ -139,7 +139,7 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Equal("C#", context.Language);
         Assert.Equal("Blazor", context.Framework);
         Assert.Contains("Blazor", context.DetectedFrameworks);
-        Assert.Equal("Frontend", context.DomainType);
+        Assert.Equal("FullStack", context.DomainType);
     }
 
     private sealed class TemporaryDirectory : IDisposable

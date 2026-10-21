@@ -402,7 +402,7 @@ public sealed class GodClassEvaluator
         {
             summary.Metrics["GodClassDensity"] =
                 classMetrics.Count(metrics =>
-                    metrics.GetValueOrDefault("GodClassSeverity") > 0.25d)
+                    metrics.GetValueOrDefault("GodClassSeverity") > 1.0d)
                 / (double)classMetrics.Count;
         }
 

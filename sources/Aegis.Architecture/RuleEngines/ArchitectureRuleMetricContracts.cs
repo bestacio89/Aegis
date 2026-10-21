@@ -68,7 +68,7 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-FRONT-R8"] = ["BlazorEvaluator"],
                 ["AEG-FRONT-R9"] = ["BlazorEvaluator"],
                 ["AEG-FRONT-R10"] = ["BlazorEvaluator"],
-                ["AEG-FRONT-R11"] = ["RazorEvaluator"],
+                ["AEG-FRONT-R11"] = ["RazorEvaluator", "ReactEvaluator"],
 
                 ["AEG-INF-R1"] = ["ConfigurationEvaluator"],
                 ["AEG-INF-R2"] = ["LoggingEvaluator"],
@@ -256,13 +256,14 @@ internal static class ArchitectureRuleMetricContracts
         // families; per-file applicability below prevents cross-framework reuse.
         if (targetScope == FrontendScope.CrossFramework)
         {
-            if (detectedFamilies.Contains(FrontendScope.Razor))
+            if (detectedFamilies.Any(family =>
+                    family is FrontendScope.Razor or FrontendScope.React))
+            {
                 return true;
+            }
 
             var onlyDedicatedFamilies = detectedFamilies.All(family =>
-                family is FrontendScope.Angular
-                    or FrontendScope.React
-                    or FrontendScope.Blazor);
+                family is FrontendScope.Angular or FrontendScope.Blazor);
 
             if (onlyDedicatedFamilies)
             {
@@ -360,7 +361,7 @@ internal static class ArchitectureRuleMetricContracts
 
         var applies = targetScope switch
         {
-            FrontendScope.CrossFramework => family.Value == FrontendScope.Razor,
+            FrontendScope.CrossFramework => family.Value is FrontendScope.Razor or FrontendScope.React,
             _ => family.Value == targetScope
         };
 

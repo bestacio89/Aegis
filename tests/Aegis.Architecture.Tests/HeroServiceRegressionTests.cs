@@ -38,7 +38,8 @@ public sealed class HeroServiceRegressionTests
         services.AddAegisCore();
 
         using var provider = services.BuildServiceProvider(validateScopes: true);
-        var evaluators = provider.GetServices<IEvaluator>().ToArray();
+        using var scope = provider.CreateScope();
+        var evaluators = scope.ServiceProvider.GetServices<IEvaluator>().ToArray();
         var namingEvaluator = Assert.Single(evaluators, evaluator => evaluator.Name == "NamingEvaluator");
         var blazorEvaluator = Assert.Single(evaluators, evaluator => evaluator.Name == "BlazorEvaluator");
 

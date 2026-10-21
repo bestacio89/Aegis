@@ -385,16 +385,19 @@ public sealed class RuleEngineCore
             });
 
             var scopeLabel = rule.Scope.ToString().ToLowerInvariant();
+            var producerDisposition =
+                ArchitectureRuleMetricContracts.GetProducerContractDisposition(rule.Id);
 
-            // Prefer evidence-quality diagnostics over generic missing-metric
-            // messages. A partial summary explains why its project metric was
-            // deliberately withheld.
-            notEvaluatedReasons[rule.Id] = hasMetricEvidence
+            // Prefer explicit contract gaps and evidence-quality diagnostics
+            // over generic missing-metric messages.
+            notEvaluatedReasons[rule.Id] = producerDisposition is not null
+                ? producerDisposition
+                : hasMetricEvidence
                 ? $"Metric '{rule.MetricKey}' was emitted at {scopeLabel} scope, but no valid comparison completed. Check for non-finite observations or an invalid threshold."
                 : hasWrongScopeMetricEvidence
                     ? $"Metric '{rule.MetricKey}' was emitted, but only at the wrong scope for rule '{rule.Id}' (required: {scopeLabel})."
                     : hasInapplicableMetricEvidence
-                        ? $"Metric '{rule.MetricKey}' exists, but its fact-level framework applicability could not be established or does not match rule '{rule.Id}'; the metric was not reused across frameworks."
+                        ? $"Metric '{rule.MetricKey}' exists, but its producer contract or fact-level framework applicability does not match rule '{rule.Id}'; the metric was not reused."
                         : hasIncompleteScopedFacts
                             ? $"A {scopeLabel}-scope evaluator fact reports incomplete analysis; metric '{rule.MetricKey}' was withheld rather than treating partial evidence as a pass or zero."
                             : scopedFacts.Count == 0

@@ -230,6 +230,10 @@ public sealed class ArchitecturalPerformanceEvaluator
                 ["IOMaturityScore"] =
                     score.IO * 100,
 
+                ["BlockingIOCount"] =
+                    BlockingRegex.Matches(content).Count +
+                    SyncIORegex.Matches(content).Count,
+
                 ["PerformanceHealthIndex"] =
                     score.Health
             },

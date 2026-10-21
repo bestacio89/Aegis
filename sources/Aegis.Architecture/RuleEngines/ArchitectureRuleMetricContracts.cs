@@ -136,10 +136,34 @@ internal static class ArchitectureRuleMetricContracts
         if (detectedFamilies.Length == 0)
             return true;
 
-        // The cross-framework rule applies when at least one supported frontend
-        // family is positively identified.
+        // AEG-FRONT-R11 shares the legacy ComplexityScore key with
+        // framework-specific rules. Applying it to Angular, React, or Blazor
+        // duplicates a framework-specific measurement under a second rule with
+        // a different threshold. The project-level context cannot safely split
+        // mixed repositories by individual file, so do not run the generic rule
+        // when a framework with its own complexity rule is positively detected.
+        // Razor remains eligible because its ruleset has no dedicated complexity
+        // rule. Unknown technology remains unknown rather than being guessed.
         if (targetScope == FrontendScope.CrossFramework)
+        {
+            var hasDedicatedComplexityRule = detectedFamilies.Any(family =>
+                family is FrontendScope.Angular
+                    or FrontendScope.React
+                    or FrontendScope.Blazor);
+
+            if (hasDedicatedComplexityRule)
+            {
+                reason =
+                    $"Rule '{rule.Id}' is not applicable because the detected " +
+                    "frontend family has a dedicated complexity rule; applying " +
+                    "the shared ComplexityScore contract would duplicate a " +
+                    "measurement with a different threshold.";
+
+                return false;
+            }
+
             return true;
+        }
 
         var targetFamily = targetScope switch
         {

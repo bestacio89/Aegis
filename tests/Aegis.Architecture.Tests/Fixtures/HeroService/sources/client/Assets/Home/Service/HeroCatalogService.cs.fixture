@@ -1,0 +1,88 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using UnityEngine;
+
+/// <summary>
+/// Source de vérité unique pour la liste des héros côté Home/Lobby.
+/// Évite de dupliquer l'appel GET /api/v1/heroes entre le carrousel du Home
+/// et l'écran Hero Collection : les deux s'abonnent à ce service.
+/// </summary>
+public class HeroCatalogService : MonoBehaviour
+{
+    [Header("Backend")]
+    [Tooltip("Base URL du HeroService. Laisser vide pour rester en mode MVP local.")]
+    [SerializeField] private string heroServiceBaseUrl = string.Empty;
+
+    private HeroApiClient apiClient;
+    private HeroListItemDto[] cachedHeroes = Array.Empty<HeroListItemDto>();
+    private bool hasLoaded;
+
+    public IReadOnlyList<HeroListItemDto> CachedHeroes => cachedHeroes;
+    public bool HasLoaded => hasLoaded;
+
+    public event Action<HeroListItemDto[]> OnCatalogLoaded;
+
+    private void Awake()
+    {
+        if (!string.IsNullOrWhiteSpace(heroServiceBaseUrl))
+        {
+            apiClient = new HeroApiClient(heroServiceBaseUrl);
+        }
+    }
+
+    private async void Start()
+    {
+        await LoadCatalogAsync();
+    }
+
+    public async Task LoadCatalogAsync()
+    {
+        if (apiClient == null)
+        {
+            cachedHeroes = BuildFallbackCatalog();
+            hasLoaded = true;
+            Debug.Log("[HeroCatalogService] Aucune base URL configurée — catalogue MVP local utilisé.");
+            OnCatalogLoaded?.Invoke(cachedHeroes);
+            return;
+        }
+
+        try
+        {
+            cachedHeroes = await apiClient.GetHeroesAsync();
+
+            if (cachedHeroes == null || cachedHeroes.Length == 0)
+            {
+                Debug.LogWarning("[HeroCatalogService] Backend a retourné une liste vide, fallback MVP local.");
+                cachedHeroes = BuildFallbackCatalog();
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"[HeroCatalogService] Échec du chargement backend, fallback MVP local. {ex.Message}");
+            cachedHeroes = BuildFallbackCatalog();
+        }
+
+        hasLoaded = true;
+        OnCatalogLoaded?.Invoke(cachedHeroes);
+    }
+
+    private static HeroListItemDto[] BuildFallbackCatalog()
+    {
+        return new[]
+        {
+            new HeroListItemDto
+            {
+                id = "hero_warrior",
+                name = "Warrior",
+                heroClass = new HeroClassDto { id = "class_fighter", name = "Fighter" },
+                affiliation = new HeroAffiliationDto
+                {
+                    archetypeName = "Champion",
+                    mythologyName = "Greek",
+                    cultureName = "Hellenic"
+                }
+            }
+        };
+    }
+}

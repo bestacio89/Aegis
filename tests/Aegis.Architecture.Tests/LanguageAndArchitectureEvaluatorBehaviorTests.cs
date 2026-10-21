@@ -88,9 +88,8 @@ public sealed class LanguageAndArchitectureEvaluatorBehaviorTests
         project.Write("front/Orders.razor", """
             <h1>Orders</h1>
             @code {
-                private int GetCount()
-                {
-                    return ;
+                private int GetCount( {
+                    return 1;
                 }
             }
             """);

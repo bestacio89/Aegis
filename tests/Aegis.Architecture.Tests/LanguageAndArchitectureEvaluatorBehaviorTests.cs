@@ -169,6 +169,16 @@ public sealed class LanguageAndArchitectureEvaluatorBehaviorTests
         Assert.False(dependency.Metrics.ContainsKey("AllowedDependency"));
         Assert.False(dependency.Metrics.ContainsKey("DependencyViolation"));
         Assert.Equal("Unclassified", dependency.Metadata["PolicyDecision"]);
+
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+
+        Assert.Equal("Incomplete", summary.Metadata["AnalysisStatus"]);
+        Assert.Equal("false", summary.Metadata["AnalysisComplete"]);
+        Assert.Equal(1, summary.Metrics["IncompleteDependencyCount"]);
+        Assert.False(summary.Metrics.ContainsKey("LayerIsolationCompliance"));
+        Assert.False(summary.Metrics.ContainsKey("ForbiddenReferenceCount"));
     }
 
     private static async Task<ArchitectureEvaluatorResult[]> Evaluate(

@@ -6,12 +6,12 @@ namespace Aegis.Architecture.Evaluators.Naming.Policies;
 public sealed class CSharpNamingConventionPolicy : INamingConventionPolicy
 {
     public bool IsValidTypeName(string name)
-        => Regex.IsMatch(name, @"^[A-Z][a-zA-Z0-9]+$");
+        => Regex.IsMatch(name, @"^[A-Z][a-zA-Z0-9]*$");
 
 
     public bool IsValidInterfaceName(string name)
         => name.StartsWith("I") &&
-           Regex.IsMatch(name, @"^I[A-Z][a-zA-Z0-9]+$");
+           Regex.IsMatch(name, @"^I[A-Z][a-zA-Z0-9]*$");
 
 
     public bool IsValidMethodName(string name)

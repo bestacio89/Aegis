@@ -18,9 +18,20 @@ internal static class DomainDetector
                     "Blazor",
                     StringComparison.OrdinalIgnoreCase));
 
-        // Blazor is a UI framework built on C#, so language-only classification
-        // incorrectly labels every Blazor project as backend. Framework evidence
-        // takes precedence for the project's primary domain.
+        var hasBackendFramework = ctx.DetectedFrameworks.Any(framework =>
+            framework.Contains("ASP.NET Core", StringComparison.OrdinalIgnoreCase)
+            || framework.Contains("EntityFrameworkCore", StringComparison.OrdinalIgnoreCase)
+            || framework.Contains(".NET (EF Core)", StringComparison.OrdinalIgnoreCase));
+
+        // C# alone is not sufficient evidence for a backend classification:
+        // Blazor is a UI framework. If both Blazor and server framework evidence
+        // are present, preserve the mixed nature instead of hiding either side.
+        if (isBlazor && hasBackendFramework)
+        {
+            ctx.DomainType = "FullStack";
+            return;
+        }
+
         if (isBlazor)
         {
             ctx.DomainType = "Frontend";

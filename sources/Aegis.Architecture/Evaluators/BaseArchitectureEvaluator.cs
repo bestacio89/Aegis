@@ -220,6 +220,9 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         string projectPath,
         ProjectArchitectureContext context)
     {
+        if (filePath.EndsWith(".razor.cs", StringComparison.OrdinalIgnoreCase))
+            return "Blazor";
+
         var extension = Path.GetExtension(filePath);
         if (extension.Equals(".razor", StringComparison.OrdinalIgnoreCase))
             return "Blazor";

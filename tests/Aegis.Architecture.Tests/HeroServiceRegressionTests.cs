@@ -62,6 +62,8 @@ public sealed class HeroServiceRegressionTests
             && fact.Metadata.GetValueOrDefault("Framework") == "Blazor");
 
         var unityContext = ProjectArchitectureContextDetector.Detect(unityPath);
+        Assert.Contains("Unity", unityContext.DetectedFrameworks);
+        Assert.Equal("Unity", unityContext.Framework);
         PreserveRepositoryGraph(unityContext, rootContext);
         var unityFacts = (await namingEvaluator.EvaluateAsync(unityPath, unityContext)).ToArray();
 

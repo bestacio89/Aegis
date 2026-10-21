@@ -84,6 +84,39 @@ public sealed class ArchitectureEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task ComplexityEvaluator_emits_compliant_methods_for_complete_coverage()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/SimpleFixture.cs", """
+            public sealed class SimpleFixture
+            {
+                public void Execute()
+                {
+                    var value = 1;
+                    _ = value;
+                }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "ComplexityEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+
+        var measurement = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("MethodName") == "Execute");
+
+        Assert.Equal(0, measurement.Metrics["ComplexityFinding"]);
+        Assert.True(measurement.Metrics.ContainsKey("EstimatedCyclomaticComplexity"));
+        Assert.Equal("true", measurement.Metadata["AnalysisComplete"]);
+        Assert.Equal("Completed", measurement.Metadata["AnalysisStatus"]);
+    }
+
+    [Fact]
     public async Task ErrorHandlingEvaluator_reports_empty_catches_and_a_project_summary()
     {
         using var project = new TemporaryProject();

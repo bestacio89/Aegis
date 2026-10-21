@@ -69,6 +69,49 @@ public sealed class FrontendAnalyzerContractTests
     }
 
     [Fact]
+    public async Task AngularEvaluator_scores_noncompliant_selector_and_complex_component()
+    {
+        using var project = new TemporaryProject();
+        project.Write("src/orders.component.ts", "export class OrdersComponent {}");
+        var analyzerPath = project.Write(
+            "frontend-analyzer.mjs",
+            """
+            console.log(JSON.stringify({
+              status: "completed",
+              filesAnalyzed: 1,
+              files: [
+                {
+                  path: "src/orders.component.ts",
+                  components: [
+                    {
+                      name: "OrdersComponent",
+                      selector: "widget-root",
+                      standalone: true,
+                      cyclomaticComplexity: 8
+                    }
+                  ],
+                  modules: []
+                }
+              ]
+            }));
+            """);
+
+        using var environment = new FrontendAnalyzerEnvironment(analyzerPath);
+        var evaluator = new AngularEvaluator(
+            NullLogger<AngularEvaluator>.Instance,
+            Options.Create(new AegisArchitecturePolicy()));
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project, "TypeScript", "Angular"))).ToArray();
+        var component = Assert.Single(results, result =>
+            result.Metadata.GetValueOrDefault("EvaluationScope") == "File");
+
+        Assert.Equal(0, component.Metrics["SelectorScore"]);
+        Assert.Equal(30, component.Metrics["ComplexityScore"]);
+    }
+
+    [Fact]
     public async Task ReactEvaluator_maps_file_metrics_and_analyzer_metadata()
     {
         using var project = new TemporaryProject();

@@ -169,22 +169,34 @@ public sealed class ArchitecturalEvaluator :
         // Layer isolation governs dependencies across architectural roles.
         // Same-layer project references are not layer-boundary violations;
         // module cycles and intra-layer coupling are separate concerns.
+        var normalizedSourceLayer = NormalizePolicyLayerName(sourceLayer);
+        var normalizedTargetLayer = NormalizePolicyLayerName(targetLayer);
+
         if (string.Equals(
-                sourceLayer,
-                targetLayer,
+                normalizedSourceLayer,
+                normalizedTargetLayer,
                 StringComparison.OrdinalIgnoreCase))
         {
             return DependencyDecision.Allowed(
                 $"Both endpoints belong to the '{sourceLayer}' layer.");
         }
 
-        // Do not depend on the dictionary's configured key comparer.
+        // Prefer an exact configured role, then accept legacy aliases such as
+        // App/Application without making the layer detector emit ambiguous names.
         var policyEntry = _policy.AllowedDependencies
             .FirstOrDefault(entry =>
                 string.Equals(
                     entry.Key,
                     sourceLayer,
                     StringComparison.OrdinalIgnoreCase));
+
+        policyEntry = policyEntry.Key is null
+            ? _policy.AllowedDependencies.FirstOrDefault(entry =>
+                string.Equals(
+                    NormalizePolicyLayerName(entry.Key),
+                    normalizedSourceLayer,
+                    StringComparison.OrdinalIgnoreCase))
+            : policyEntry;
 
         if (policyEntry.Key is null || policyEntry.Value is null)
         {
@@ -193,9 +205,11 @@ public sealed class ArchitecturalEvaluator :
                 $"for source layer '{sourceLayer}'.");
         }
 
-        var allowed = policyEntry.Value.Contains(
-            targetLayer,
-            StringComparer.OrdinalIgnoreCase);
+        var allowed = policyEntry.Value.Any(target =>
+            string.Equals(
+                NormalizePolicyLayerName(target),
+                normalizedTargetLayer,
+                StringComparison.OrdinalIgnoreCase));
 
         return allowed
             ? DependencyDecision.Allowed(
@@ -203,6 +217,14 @@ public sealed class ArchitecturalEvaluator :
             : DependencyDecision.Forbidden(
                 $"Policy does not permit '{sourceLayer}' to depend on '{targetLayer}'.");
     }
+
+    private static string NormalizePolicyLayerName(string layer) =>
+        layer.Trim() switch
+        {
+            var value when string.Equals(value, "App", StringComparison.OrdinalIgnoreCase)
+                => "Application",
+            _ => layer.Trim()
+        };
 
     private ArchitectureEvaluatorResult CreateDependencyResult(
         ArchitectureDependencyContext dependency,

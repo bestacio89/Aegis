@@ -29,7 +29,12 @@ public sealed class FrontendAnalyzerContractTests
                 {
                   path: "front/src/app.component.ts",
                   components: [
-                    { name: "AppComponent", standalone: true }
+                    {
+                      name: "AppComponent",
+                      selector: "app-root",
+                      standalone: true,
+                      cyclomaticComplexity: 2
+                    }
                   ],
                   modules: []
                 }
@@ -52,6 +57,8 @@ public sealed class FrontendAnalyzerContractTests
 
         Assert.Equal(1, component.Metrics["AngularComponentCount"]);
         Assert.Equal(0, component.Metrics["AngularModuleCount"]);
+        Assert.Equal(100, component.Metrics["SelectorScore"]);
+        Assert.Equal(90, component.Metrics["ComplexityScore"]);
         Assert.Equal("AppComponent", component.Metadata["ComponentNames"]);
         Assert.Equal("1", component.Metadata["StandaloneComponentCount"]);
         Assert.Equal("False", component.Metadata["SemanticAnalysisPerformed"]);

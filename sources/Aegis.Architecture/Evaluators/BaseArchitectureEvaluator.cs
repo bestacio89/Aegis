@@ -148,6 +148,7 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                         $"Evaluator '{Name}' returned a null result.");
                 }
 
+                result.Source = Name;
                 result.WeightFactor = WeightFactor;
                 result.WasEnabled = true;
                 result.ProjectName ??= context.ProjectName;
@@ -168,6 +169,7 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                     {
                         result.Metadata ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                         result.Metadata["Framework"] = framework;
+                        result.Framework = framework;
                     }
                 }
 

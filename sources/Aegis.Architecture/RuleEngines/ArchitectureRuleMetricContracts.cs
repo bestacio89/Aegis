@@ -220,26 +220,6 @@ internal static class ArchitectureRuleMetricContracts
 
         reason = string.Empty;
 
-        if (UnsupportedRuleProducerContracts.TryGetValue(rule.Id, out var unsupportedReason))
-        {
-            reason = $"Rule '{rule.Id}' is explicitly unsupported: {unsupportedReason}";
-            return false;
-        }
-
-        if (!RuleProducerContracts.TryGetValue(rule.Id, out var allowedProducers))
-        {
-            reason = $"Rule '{rule.Id}' has no producer contract; metric evidence is not eligible.";
-            return false;
-        }
-
-        if (!allowedProducers.Contains(fact.Source, StringComparer.OrdinalIgnoreCase))
-        {
-            reason =
-                $"Rule '{rule.Id}' requires evidence from [{string.Join(", ", allowedProducers)}], " +
-                $"but fact producer '{fact.Source}' is not a declared producer for this rule.";
-            return false;
-        }
-
         if (!FrontendRuleScopes.TryGetValue(rule.Id, out var targetScope))
             return true;
 
@@ -335,6 +315,26 @@ internal static class ArchitectureRuleMetricContracts
         ArgumentNullException.ThrowIfNull(fact);
 
         reason = string.Empty;
+
+        if (UnsupportedRuleProducerContracts.TryGetValue(rule.Id, out var unsupportedReason))
+        {
+            reason = $"Rule '{rule.Id}' is explicitly unsupported: {unsupportedReason}";
+            return false;
+        }
+
+        if (!RuleProducerContracts.TryGetValue(rule.Id, out var allowedProducers))
+        {
+            reason = $"Rule '{rule.Id}' has no producer contract; metric evidence is not eligible.";
+            return false;
+        }
+
+        if (!allowedProducers.Contains(fact.Source, StringComparer.OrdinalIgnoreCase))
+        {
+            reason =
+                $"Rule '{rule.Id}' requires evidence from [{string.Join(", ", allowedProducers)}], " +
+                $"but fact producer '{fact.Source}' is not a declared producer for this rule.";
+            return false;
+        }
 
         if (!FrontendRuleScopes.TryGetValue(rule.Id, out var targetScope))
             return true;

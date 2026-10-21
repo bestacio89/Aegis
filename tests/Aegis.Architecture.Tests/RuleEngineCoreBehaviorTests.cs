@@ -176,6 +176,27 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
 
+
+    [Fact]
+    public void Every_registered_rule_has_an_explicit_producer_contract_or_unsupported_disposition()
+    {
+        var outcome = CreateEngine().EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            []);
+
+        Assert.Equal(73, ArchitectureRuleRegistry.All.Count);
+        Assert.Equal(73, outcome.Stats.NotEvaluatedReasons.Count);
+
+        foreach (var rule in ArchitectureRuleRegistry.All)
+        {
+            var reason = outcome.Stats.NotEvaluatedReasons[rule.Id];
+            Assert.DoesNotContain(
+                "No producer-to-rule contract is registered",
+                reason,
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     [Fact]
     public void EvaluateDetailed_reports_pattern_rules_without_producers_as_explicitly_unsupported()
     {

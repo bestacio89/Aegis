@@ -344,7 +344,6 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         out string? diagnostic)
     {
         diagnostic = null;
-    {
         var extension = Path.GetExtension(file);
 
         try

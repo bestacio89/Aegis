@@ -279,7 +279,8 @@ public sealed class MaintainabilityEvaluator
         summary.Metadata["CommentDensityMeasurement"] =
             "Project-wide comment-line count divided by non-empty physical source lines.";
 
-        var analysisComplete = analyzedFiles + unreadableFiles == filesDiscovered
+        var analysisComplete = filesDiscovered > 0
+            && analyzedFiles == filesDiscovered
             && unreadableFiles == 0;
         summary.Metadata["AnalysisComplete"] =
             analysisComplete.ToString().ToLowerInvariant();

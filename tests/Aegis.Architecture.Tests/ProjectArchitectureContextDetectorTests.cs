@@ -119,6 +119,41 @@ public sealed class ProjectArchitectureContextDetectorTests
     }
 
     [Fact]
+    public void Detect_maps_project_references_to_semantic_layer_edges()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var domainRoot = Path.Combine(directory.Path, "HeroService.Domain");
+        var applicationRoot = Path.Combine(directory.Path, "HeroService.Application");
+        Directory.CreateDirectory(domainRoot);
+        Directory.CreateDirectory(applicationRoot);
+
+        File.WriteAllText(
+            Path.Combine(domainRoot, "HeroService.Domain.csproj"),
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        File.WriteAllText(
+            Path.Combine(domainRoot, "Order.cs"),
+            "namespace HeroService.Domain; public sealed class Order { }");
+        var applicationProject = Path.Combine(applicationRoot, "HeroService.Application.csproj");
+        File.WriteAllText(
+            applicationProject,
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><ItemGroup><ProjectReference Include=\"..\\HeroService.Domain\\HeroService.Domain.csproj\" /></ItemGroup><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        File.WriteAllText(
+            Path.Combine(applicationRoot, "OrderHandler.cs"),
+            "namespace HeroService.Application; public sealed class OrderHandler { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        var dependency = Assert.Single(context.Dependencies);
+        Assert.Equal("HeroService.Application", dependency.Source);
+        Assert.Equal("HeroService.Domain", dependency.Target);
+        Assert.Equal("Application", dependency.SourceLayer);
+        Assert.Equal("Domain", dependency.TargetLayer);
+        Assert.Equal("ProjectReference", dependency.DependencyType);
+        Assert.Equal(applicationProject, dependency.File);
+    }
+
+    [Fact]
     public void Detect_excludes_unity_cache_vendored_examples_and_generated_source()
     {
         using var directory = new TemporaryDirectory();

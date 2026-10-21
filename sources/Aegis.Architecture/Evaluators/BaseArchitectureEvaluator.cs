@@ -240,9 +240,18 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         }
 
         var normalized = filePath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-        if (normalized.Contains($"{Path.DirectorySeparatorChar}Assets{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-            && context.DetectedFrameworks.Any(framework => framework.Equals("Unity", StringComparison.OrdinalIgnoreCase)))
+        if (normalized.Contains(
+                $"{Path.DirectorySeparatorChar}Assets{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase)
+            && Directory.Exists(Path.Combine(projectPath, "Assets"))
+            && (Directory.Exists(Path.Combine(projectPath, "ProjectSettings"))
+                || Directory.Exists(Path.Combine(projectPath, "Packages"))))
+        {
+            // Unity source provenance is determined by the project layout as
+            // well as the context detector, so file attribution remains correct
+            // even if one of the project-level framework signals is incomplete.
             return "Unity";
+        }
 
         // Use the closest project file when possible; this is more precise than
         // inheriting the framework selected for the repository root.

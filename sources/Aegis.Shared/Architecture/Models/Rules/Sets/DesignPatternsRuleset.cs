@@ -275,8 +275,10 @@ public static class DesignPatternRuleset
             Name = "God Class Detected",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "GodClassSeverity",
+            // The producer emits the lower of normalized line and method
+            // counts. A value above 1 means both configured limits are exceeded.
             Operator = ComparisonOperator.GreaterThan,
-            Threshold = 0.25,
+            Threshold = 1.0,
             Severity = ArchitectureRuleSeverity.Critical,
             Recommendation = "Split classes exceeding method/field thresholds. Apply SRP and DDD boundaries."
         },

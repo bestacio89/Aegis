@@ -250,10 +250,9 @@ internal static class ArchitectureRuleMetricContracts
         if (detectedFamilies.Length == 0)
             return true;
 
-        // R11 has no separate metric key, so it is only a fallback for Razor
-        // files, whose ruleset has no dedicated complexity rule. In a mixed
-        // repository it remains enabled when Razor is one of the detected
-        // families; per-file applicability below prevents cross-framework reuse.
+        // R11 is the shared complexity rule for React and Razor files, which
+        // have no dedicated complexity rule in this ruleset. Angular and Blazor
+        // use their dedicated rules; per-file applicability prevents metric reuse.
         if (targetScope == FrontendScope.CrossFramework)
         {
             if (detectedFamilies.Any(family =>

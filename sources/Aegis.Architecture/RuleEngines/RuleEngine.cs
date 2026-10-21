@@ -341,9 +341,19 @@ public sealed class RuleEngine
         {
             try
             {
-                scopes.Add(new AnalysisScope(
-                    path,
-                    ProjectArchitectureContextDetector.Detect(path)));
+                var moduleContext = ProjectArchitectureContextDetector.Detect(path);
+
+                // Keep technology applicability local to this project, while
+                // retaining the repository-wide graph and module inventory.
+                // Otherwise project-scoped evaluators lose cross-project
+                // references and misclassify layer relationships as absent.
+                moduleContext.Modules = rootContext.Modules;
+                moduleContext.Layers = rootContext.Layers;
+                moduleContext.Dependencies = rootContext.Dependencies;
+                moduleContext.Boundaries = rootContext.Boundaries;
+                moduleContext.PatternsDetected = rootContext.PatternsDetected;
+
+                scopes.Add(new AnalysisScope(path, moduleContext));
             }
             catch (Exception exception) when (exception is IOException
                 or UnauthorizedAccessException

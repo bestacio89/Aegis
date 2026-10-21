@@ -27,7 +27,8 @@ public sealed class AdditionalEvaluatorBehaviorTests
 
         var fileResult = Assert.Single(
             results,
-            result => result.Metrics.ContainsKey("ApiConsistencyIndex"));
+            result => result.Metadata.GetValueOrDefault("FileName") == "OrdersController.cs"
+                && result.Metrics.ContainsKey("ApiConsistencyIndex"));
 
         Assert.True(fileResult.Metrics["UppercaseRouteViolations"] >= 1);
         Assert.True(fileResult.Metrics["TrailingSlashViolations"] >= 1);

@@ -298,6 +298,15 @@ public sealed class BuilderPatternEvaluator
         result.Metrics["HasMutationSignals"] = hasMutationSignals ? 1 : 0;
         result.Metrics["HasReadonlySignals"] = hasReadonlySignals ? 1 : 0;
 
+        // Score only confidently identified builder candidates. Build() and
+        // fluent chaining are independently required signals; mutation without
+        // a fluent return is reported separately rather than treating every
+        // state mutation as a violation.
+        result.Metrics["BuilderPatternComplianceIndex"] =
+            (hasBuildMethod ? 50d : 0d) + (hasFluentReturns ? 50d : 0d);
+        result.Metrics["BuilderMutabilityViolationCount"] =
+            hasMutationSignals && !hasFluentReturns ? 1d : 0d;
+
         result.Metadata["FilePath"] = file;
         result.Metadata["BuilderClassName"] = className;
         result.Metadata["Language"] = context?.Language ?? "Unknown";

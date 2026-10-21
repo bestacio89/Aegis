@@ -99,6 +99,46 @@ public sealed class RuleEngineOrchestrationTests
             string.Equals(path, backendPath, StringComparison.OrdinalIgnoreCase));
     }
 
+
+    [Fact]
+    public async Task RunAsync_executes_graph_evaluators_once_at_repository_scope()
+    {
+        using var directory = new TemporaryDirectory();
+        var backendPath = Path.Combine(directory.Path, "Backend");
+        var frontendPath = Path.Combine(directory.Path, "Frontend");
+        Directory.CreateDirectory(backendPath);
+        Directory.CreateDirectory(frontendPath);
+
+        File.WriteAllText(Path.Combine(backendPath, "Backend.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(backendPath, "Program.cs"), "public class Program { }");
+        File.WriteAllText(Path.Combine(frontendPath, "Frontend.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(frontendPath, "Program.cs"), "public class FrontendProgram { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+        var evaluatedPaths = new List<string>();
+        var evaluator = new FixtureEvaluator(
+            "CircularDependencyEvaluator",
+            (path, _) =>
+            {
+                evaluatedPaths.Add(path);
+                return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>([]);
+            },
+            supportedLanguages: ["C#"],
+            supportedFrameworks: ["ASP.NET Core"]);
+
+        await CreateEngine([evaluator]).RunAsync(directory.Path, context);
+
+        Assert.Equal([directory.Path], evaluatedPaths);
+    }
+
     [Fact]
     public async Task RunAsync_applies_path_filter_before_rule_evaluation()
     {

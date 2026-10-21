@@ -34,13 +34,13 @@ public static class BackendRuleset
         {
             Id = "AEG-BACK-R2",
             Scope = RuleEvaluationScope.File,
-            Name = "Complexity Exceeds Recommended Limit",
+            Name = "Estimated Cyclomatic Complexity Too High",
             Category = nameof(ArchitectureRuleCategory.Maintainability),
-            MetricKey = "CyclomaticComplexityIndex",
+            MetricKey = "EstimatedCyclomaticComplexity",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 10,
             Severity = ArchitectureRuleSeverity.Medium,
-            Recommendation = "Refactor long methods or introduce smaller helper functions."
+            Recommendation = "Review methods whose estimated cyclomatic complexity exceeds the threshold; the measurement is source-pattern heuristic, not compiler-backed."
         },
 
         // ==========================================================

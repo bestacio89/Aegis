@@ -54,9 +54,9 @@ internal static class FrameworkDetector
         HashSet<string> deps,
         IReadOnlyCollection<string> files)
     {
-        // .razor files are a positive signal for Blazor components. The language
-        // remains C#, but project-domain classification must not infer backend
-        // solely from that language when the project is a Blazor UI.
+        // A .razor file is positive evidence of Blazor UI. Keep that signal
+        // alongside backend framework evidence instead of collapsing a mixed
+        // repository into one language-derived domain.
         var hasBlazorComponents = files.Any(file =>
             Path.GetExtension(file).Equals(
                 ".razor",
@@ -64,15 +64,7 @@ internal static class FrameworkDetector
 
         if (hasBlazorComponents)
         {
-            ctx.Framework = "Blazor";
-            if (!ctx.DetectedFrameworks.Contains(
-                    "Blazor",
-                    StringComparer.OrdinalIgnoreCase))
-            {
-                ctx.DetectedFrameworks.Add("Blazor");
-            }
-
-            return;
+            ctx.DetectedFrameworks.Add("Blazor");
         }
 
         var hasWebSdk = files
@@ -105,8 +97,24 @@ internal static class FrameworkDetector
                 }
             });
 
-        if (hasWebSdk || deps.Any(d =>
-                d.Contains("AspNetCore", StringComparison.OrdinalIgnoreCase)))
+        var hasAspNetCore = hasWebSdk || deps.Any(d =>
+            d.Contains("AspNetCore", StringComparison.OrdinalIgnoreCase));
+
+        if (hasAspNetCore
+            && !ctx.DetectedFrameworks.Contains(
+                "ASP.NET Core",
+                StringComparer.OrdinalIgnoreCase))
+        {
+            ctx.DetectedFrameworks.Add("ASP.NET Core");
+        }
+
+        if (hasBlazorComponents)
+        {
+            // Prefer Blazor as the primary UI framework while retaining ASP.NET
+            // Core as additional evidence when this is a server-hosted app.
+            ctx.Framework = "Blazor";
+        }
+        else if (hasAspNetCore)
         {
             ctx.Framework = "ASP.NET Core";
         }

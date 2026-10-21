@@ -76,7 +76,7 @@ public sealed class ArchitecturalPerformanceEvaluator
     // .Result also names ordinary status/result objects. Do not count an
     // awaited result access as synchronous blocking.
     private static readonly Regex SynchronousResultRegex = new(
-        @"(?m)^(?![^\r\n]*\bawait\b)[^\r\n]*\.Result\b",
+        @"(?m)^(?![^\r\n]*\bawait\b)[^\r\n]*\.Result\s*(?:;|,|\)|$)",
         RegexOptions.Compiled);
 
     private static readonly Regex NonCodeRegex = new(

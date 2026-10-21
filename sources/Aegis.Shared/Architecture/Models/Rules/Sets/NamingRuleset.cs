@@ -52,7 +52,7 @@ public static class NamingRuleset
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
             Severity = ArchitectureRuleSeverity.Medium,
-            Recommendation = "Use Pascal for method names (e.g., calculateTotal, getUserProfile)."
+            Recommendation = "Use the language-specific method casing convention (PascalCase for C#, camelCase for Java and JavaScript/TypeScript, and snake_case for Python)."
         },
 
         // ===============================================================
@@ -68,7 +68,7 @@ public static class NamingRuleset
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
             Severity = ArchitectureRuleSeverity.Medium,
-            Recommendation = "Use camelCase for variables and UPPER_CASE only for constants if explicitly allowed."
+            Recommendation = "Use language-specific variable and constant conventions; C# constants commonly use PascalCase, while UPPER_SNAKE_CASE is accepted where the language or team policy requires it."
         },
 
         // ===============================================================

@@ -11,21 +11,21 @@ namespace Aegis.Shared.Architecture.Models.Policies.Architecture
         /// </summary>
         public Dictionary<string, string[]> AllowedDependencies { get; set; } = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Api"] = ["App", "Domain", "Infrastructure", "Contracts"],
-            ["App"] = ["Domain", "Contracts"],
+            ["Api"] = ["Application", "Domain", "Infrastructure", "Contracts"],
+            ["Application"] = ["Domain", "Contracts"],
             ["Domain"] = [],
             ["Infrastructure"] = ["Domain", "App", "Contracts"],
             ["Contracts"] = [],
-            ["Presentation"] = ["App", "Contracts", "Client"],
-            ["Consumer"] = ["App", "Domain", "Infrastructure", "Contracts"],
+            ["Presentation"] = ["Application", "Contracts", "Client"],
+            ["Consumer"] = ["Application", "Domain", "Infrastructure", "Contracts"],
             ["Client"] = ["Contracts"],
-            ["Tests"] = ["Api", "App", "Domain", "Infrastructure", "Contracts", "Presentation", "Consumer", "Client", "Tests"]
+            ["Tests"] = ["Api", "Application", "Domain", "Infrastructure", "Contracts", "Presentation", "Consumer", "Client", "Tests"]
         };
 
         public Dictionary<string, string[]> LayerHints { get; set; } = new(StringComparer.OrdinalIgnoreCase)
         {
             ["Api"] = ["Api", "Controllers", "CompositionRoot"],
-            ["App"] = ["Application", "Services", "Handlers", "UseCases"],
+            ["Application"] = ["Application", "Services", "Handlers", "UseCases"],
             ["Domain"] = ["Domain", "Core", "Entities", "Models"],
             ["Infrastructure"] = ["Infrastructure", "Infra", "Data", "Persistence", "Repository"],
             ["Contracts"] = ["Contracts", "Abstractions", "Dtos", "Interfaces"],

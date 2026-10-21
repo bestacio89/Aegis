@@ -286,10 +286,11 @@ public sealed class GodClassEvaluator
 
                 var methodDensity = methods / (double)Math.Max(1, lines);
 
-                var severity = ComputeGodFactor(
-                    lineRatio,
-                    methodRatio,
-                    propertyRatio);
+                // A God Class signal should require both excessive size and
+                // excessive behavioral surface. A data-heavy seeder can be
+                // large without centralizing many responsibilities; property
+                // count alone is not evidence of a God Class.
+                var severity = ComputeGodFactor(lineRatio, methodRatio);
 
                 var metrics = new Dictionary<string, double>
                 {
@@ -639,13 +640,14 @@ public sealed class GodClassEvaluator
 
     private static double ComputeGodFactor(
         double lineRatio,
-        double methodRatio,
-        double propertyRatio)
+        double methodRatio)
     {
-        return Math.Min(
-            lineRatio * 0.4 +
-            methodRatio * 0.4 +
-            propertyRatio * 0.2,
-            2.0);
+        if (!double.IsFinite(lineRatio) || !double.IsFinite(methodRatio))
+            return 0;
+
+        // Ratios are measured against the configured limits. The minimum
+        // prevents a single oversized dimension from being treated as a
+        // God Class when the other dimension remains within its limit.
+        return Math.Max(0, Math.Min(lineRatio, methodRatio));
     }
 }

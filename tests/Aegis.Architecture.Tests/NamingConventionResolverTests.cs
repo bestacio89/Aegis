@@ -46,6 +46,9 @@ public sealed class NamingConventionResolverTests
         Assert.True(policy.IsValidMethodName("CalculateTotal"));
         Assert.True(policy.IsValidVariableName("orderTotal"));
         Assert.True(policy.IsValidConstantName("MAX_RETRIES"));
+        Assert.True(policy.IsValidConstantName("BurstDamageThreshold"));
+        Assert.True(policy.IsValidConstantName("Prefix"));
+        Assert.False(policy.IsValidConstantName("burstDamageThreshold"));
         Assert.True(policy.IsValidFileName("OrderService"));
         Assert.False(policy.IsValidFileName("order_service"));
     }

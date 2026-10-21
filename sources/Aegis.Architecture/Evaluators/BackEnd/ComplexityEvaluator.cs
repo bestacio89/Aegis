@@ -197,11 +197,14 @@ public sealed class ComplexityEvaluator
             }
         }
 
+        var findingCount = results.Count(result =>
+            result.Metrics.GetValueOrDefault("ComplexityFinding") > 0);
+
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Info,
             $"Complexity evaluation completed: {analyzedMethods} method(s) " +
-            $"analyzed, {results.Count} finding(s).");
+            $"measured, {findingCount} finding(s), {results.Count} measurement fact(s).");
 
         return results;
     }

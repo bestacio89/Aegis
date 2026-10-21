@@ -11,6 +11,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Controllers\NewFolder\**" />
+    <Content Remove="Controllers\NewFolder\**" />
+    <EmbeddedResource Remove="Controllers\NewFolder\**" />
+    <None Remove="Controllers\NewFolder\**" />
+    <PackageVersion Remove="Controllers\NewFolder\**" />
+  </ItemGroup>
+
+
+
+  <ItemGroup>
     <PackageReference Include="AspNetCoreRateLimit" />
     <PackageReference Include="Franz.Common.Hosting" />
     <PackageReference Include="Franz.Common.Http" />
@@ -33,4 +43,17 @@
     <ProjectReference Include="..\HeroService.Contracts\HeroService.Contracts.csproj" />
     <ProjectReference Include="..\HeroService.Persistence\HeroService.Persistence.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="logs\" />
+  </ItemGroup>
+
+  <Target Name="GenerateCSharpClient" AfterTargets="Build" Condition="Exists('Controllers\*.cs')">
+    <Exec Command="dotnet nswag run /variables:Configuration=$(Configuration) /variables:Platform=$(Platform) /variables:OutputPath=$(OutputPath) /variables:ProjectName=$(MSBuildProjectName) /variables:AssemblyName=$(AssemblyName) /variables:TargetFramework=$(TargetFramework) /variables:SwaggerFile=$(OutputPath)$(AssemblyName).xml /variables:CSharpClientOutput=..\Franz.ClientHTTP\Client\CSharp\$(MSBuildProjectName)Client.cs /variables:ClientNamespace=$(MSBuildProjectName).Client.CSharp /runtime:net10.0" />
+  </Target>
+
+  <Target Name="GenerateTypeScriptClient" AfterTargets="Build" Condition="Exists('Controllers\*.cs')">
+    <Exec Command="dotnet nswag run /variables:Configuration=$(Configuration) /variables:Platform=$(Platform) /variables:OutputPath=$(OutputPath) /variables:ProjectName=$(MSBuildProjectName) /variables:AssemblyName=$(AssemblyName) /variables:TargetFramework=$(TargetFramework) /variables:SwaggerFile=$(OutputPath)$(AssemblyName).xml /variables:TypeScriptClientOutput=..\Franz.ClientHTTP\Client\TypeScript\$(MSBuildProjectName)Client.ts /variables:ClientNamespace=$(MSBuildProjectName).Client.TypeScript /runtime:net10.0" />
+  </Target>
+
 </Project>

@@ -1,5 +1,6 @@
 ﻿
 using Aegis.Architecture.Aggregation;
+using Aegis.Architecture.Analysis;
 using Aegis.Architecture.Scoring;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -89,51 +90,66 @@ public sealed class RuleEngine
 
         var facts = new List<ArchitectureEvaluatorResult>();
         var diagnostics = new List<AnalysisDiagnostic>();
-        var applicable = new List<IEvaluator>();
+        var scopes = DiscoverProjectScopes(projectPath, context);
+        var executions = new List<(IEvaluator Evaluator, string Path, ProjectArchitectureContext Context)>();
 
         foreach (var evaluator in _evaluators)
         {
-            if (SupportsContext(evaluator, context))
+            // Evaluators that explicitly support every language and framework
+            // inspect repository-level configuration/manifests once. All
+            // technology-specific evaluators execute against detected project
+            // boundaries so one project's framework cannot suppress another.
+            var repositoryWide = evaluator.SupportedLanguages.Contains("*", StringComparer.OrdinalIgnoreCase)
+                && (evaluator.SupportedFrameworks.Contains("*", StringComparer.OrdinalIgnoreCase)
+                    || evaluator.SupportedFrameworks.Contains("LanguageAgnostic", StringComparer.OrdinalIgnoreCase));
+
+            if (repositoryWide)
             {
-                applicable.Add(evaluator);
+                if (SupportsContext(evaluator, context))
+                    executions.Add((evaluator, projectPath, context));
+                else
+                    LogUnsupported(evaluator, context);
                 continue;
             }
 
-            _logger.LogDebug(
-                "Evaluator {Evaluator} skipped. Context not supported: {Language}/{Framework}",
-                evaluator.Name,
-                context.Language,
-                context.Framework);
+            var matchedScope = false;
+            foreach (var scope in scopes)
+            {
+                if (!SupportsContext(evaluator, scope.Context))
+                    continue;
+
+                matchedScope = true;
+                executions.Add((evaluator, scope.Path, scope.Context));
+            }
+
+            if (!matchedScope)
+                LogUnsupported(evaluator, context);
         }
 
-        for (var i = 0; i < applicable.Count; i++)
+        for (var i = 0; i < executions.Count; i++)
         {
             token.ThrowIfCancellationRequested();
 
-            var evaluator = applicable[i];
-
-            var percent = applicable.Count == 0
+            var (evaluator, evaluationPath, evaluationContext) = executions[i];
+            var percent = executions.Count == 0
                 ? EvaluatorsEnd
-                : EvaluatorsStart +
-                  (EvaluatorsEnd - EvaluatorsStart) * i / applicable.Count;
+                : EvaluatorsStart + (EvaluatorsEnd - EvaluatorsStart) * i / executions.Count;
 
-            Report(
-                progress,
-                percent,
-                "Evaluating",
-                $"{evaluator.Name} ({i + 1}/{applicable.Count})");
+            Report(progress, percent, "Evaluating",
+                $"{evaluator.Name} [{evaluationContext.ProjectName}] ({i + 1}/{executions.Count})");
 
             _logger.LogInformation(
-                "Running evaluator: {Evaluator} ({Index}/{Total})",
+                "Running evaluator: {Evaluator} on project {Project} ({Index}/{Total})",
                 evaluator.Name,
+                evaluationContext.ProjectName,
                 i + 1,
-                applicable.Count);
+                executions.Count);
 
             try
             {
                 var results = await evaluator.EvaluateAsync(
-                    projectPath,
-                    context,
+                    evaluationPath,
+                    evaluationContext,
                     token);
 
                 if (results is null)
@@ -142,15 +158,14 @@ public sealed class RuleEngine
                     {
                         Code = "EvaluatorReturnedNull",
                         Component = evaluator.Name,
-                        Message =
-                            "The evaluator returned a null result collection.",
+                        Message = "The evaluator returned a null result collection.",
                         AffectsCoverage = true
                     });
 
                     _logger.LogWarning(
-                        "Evaluator {Evaluator} returned a null result collection.",
-                        evaluator.Name);
-
+                        "Evaluator {Evaluator} returned a null result collection for {Project}.",
+                        evaluator.Name,
+                        evaluationContext.ProjectName);
                     continue;
                 }
 
@@ -164,20 +179,16 @@ public sealed class RuleEngine
                         {
                             Code = "EvaluatorReturnedNullFact",
                             Component = evaluator.Name,
-                            Message =
-                                "The evaluator returned a null fact.",
+                            Message = "The evaluator returned a null fact.",
                             AffectsCoverage = true
                         });
-
                         continue;
                     }
 
-                    if (pathFilter is not null &&
-                        !pathFilter(result.Target))
-                    {
+                    if (pathFilter is not null && !pathFilter(result.Target))
                         continue;
-                    }
 
+                    result.ProjectName ??= evaluationContext.ProjectName;
                     facts.Add(result);
                 }
             }
@@ -191,16 +202,16 @@ public sealed class RuleEngine
                 {
                     Code = "EvaluatorFailed",
                     Component = evaluator.Name,
-                    Message =
-                        $"Evaluator '{evaluator.Name}' failed during analysis.",
+                    Message = $"Evaluator '{evaluator.Name}' failed during analysis of '{evaluationContext.ProjectName}'.",
                     ExceptionType = ex.GetType().FullName,
                     AffectsCoverage = true
                 });
 
                 _logger.LogError(
                     ex,
-                    "Evaluator {Evaluator} failed. The report will contain a coverage diagnostic.",
-                    evaluator.Name);
+                    "Evaluator {Evaluator} failed for project {Project}. The report will contain a coverage diagnostic.",
+                    evaluator.Name,
+                    evaluationContext.ProjectName);
             }
         }
 
@@ -290,6 +301,75 @@ public sealed class RuleEngine
             null);
 
         return report;
+    }
+
+    private sealed record AnalysisScope(string Path, ProjectArchitectureContext Context);
+
+    private IReadOnlyList<AnalysisScope> DiscoverProjectScopes(
+        string projectPath,
+        ProjectArchitectureContext rootContext)
+    {
+        var root = Path.GetFullPath(projectPath);
+        var modules = rootContext.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .Select(module => Path.GetFullPath(module.Path))
+            .Where(path => Directory.Exists(path)
+                && !string.Equals(path.TrimEnd(Path.DirectorySeparatorChar), root.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path.Length)
+            .ToList();
+
+        // A module nested inside another discovered module is not scanned twice.
+        var roots = new List<string>();
+        foreach (var path in modules)
+        {
+            if (roots.Any(parent => path.StartsWith(
+                    parent.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase)))
+                continue;
+            roots.Add(path);
+        }
+
+        if (roots.Count == 0)
+            return [new AnalysisScope(root, rootContext)];
+
+        var scopes = new List<AnalysisScope>();
+        foreach (var path in roots)
+        {
+            try
+            {
+                scopes.Add(new AnalysisScope(
+                    path,
+                    ProjectArchitectureContextDetector.Detect(path)));
+            }
+            catch (Exception exception) when (exception is IOException
+                or UnauthorizedAccessException
+                or ArgumentException
+                or NotSupportedException)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Could not detect project context for module {Path}; module-specific evaluators will not run.",
+                    path);
+            }
+        }
+
+        // Preserve root-level evaluation if module detection was incomplete.
+        return scopes.Count == 0
+            ? [new AnalysisScope(root, rootContext)]
+            : scopes;
+    }
+
+    private void LogUnsupported(
+        IEvaluator evaluator,
+        ProjectArchitectureContext context)
+    {
+        _logger.LogDebug(
+            "Evaluator {Evaluator} did not match any detected project scope. Root context: {Language}/{Framework}; detected frameworks: {Frameworks}",
+            evaluator.Name,
+            context.Language,
+            context.Framework,
+            string.Join(", ", context.DetectedFrameworks));
     }
 
     private static void Report(

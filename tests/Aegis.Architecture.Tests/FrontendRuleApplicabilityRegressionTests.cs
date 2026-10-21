@@ -57,6 +57,57 @@ public sealed class FrontendRuleApplicabilityRegressionTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+
+    [Fact]
+    public void Razor_view_facts_require_and_use_razor_framework_evidence()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var razorFact = new ArchitectureEvaluatorResult(
+            "RazorEvaluator",
+            "Views/Orders/Index.cshtml")
+        {
+            Category = "Frontend",
+            Metrics = new Dictionary<string, double>
+            {
+                ["PresentationSeparationScore"] = 80,
+                ["ViewModelScore"] = 90,
+                ["DataIsolationScore"] = 100
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "Views/Orders/Index.cshtml",
+                ["Framework"] = "Razor",
+                ["Language"] = "C#"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext
+            {
+                Language = "C#",
+                Framework = "ASP.NET Core",
+                DetectedFrameworks = ["ASP.NET Core"]
+            },
+            [razorFact]);
+
+        Assert.Contains(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == "AEG-FRONT-R5");
+
+        Assert.DoesNotContain(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == "AEG-FRONT-R8");
+
+        Assert.Contains(
+            outcome.Results,
+            result => result.RuleId == "AEG-FRONT-R5"
+                && result.Target == "Views/Orders/Index.cshtml");
+    }
+
     [Fact]
     public void React_complexity_is_not_evaluated_against_cross_framework_rule()
     {

@@ -342,6 +342,7 @@ public sealed class RazorEvaluator : BaseArchitectureEvaluator
 
         result.Metadata["EvaluationScope"] = FileScope;
         result.Metadata["FilePath"] = filePath;
+        result.Metadata["Framework"] = "Razor";
         result.Metadata["AnalysisMethod"] =
             "RazorProjectEngine + Roslyn generated-C# syntax";
         result.Metadata["SemanticCompilationPerformed"] = bool.FalseString;
@@ -383,6 +384,7 @@ public sealed class RazorEvaluator : BaseArchitectureEvaluator
 
         result.Metadata["EvaluationScope"] = FileScope;
         result.Metadata["FilePath"] = filePath;
+        result.Metadata["Framework"] = "Razor";
         result.Metadata["AnalysisStatus"] = "Failed";
         result.Metadata["AnalysisErrorType"] = exception.GetType().Name;
         result.Metadata["AnalysisError"] = exception.Message;
@@ -398,6 +400,7 @@ public sealed class RazorEvaluator : BaseArchitectureEvaluator
         var result = new ArchitectureEvaluatorResult(Name, projectPath);
 
         result.Metadata["EvaluationScope"] = ProjectScope;
+        result.Metadata["Framework"] = "Razor";
         result.Metadata["AnalysisMethod"] =
             "RazorProjectEngine + Roslyn generated-C# syntax";
         result.Metadata["SemanticCompilationPerformed"] = bool.FalseString;

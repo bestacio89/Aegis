@@ -70,7 +70,7 @@ public static class DesignPatternRuleset
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
             MetricKey = "InterfaceAdherence",
             Operator = ComparisonOperator.LessThan,
-            Threshold = 85,
+            Threshold = 0.85,
             Severity = ArchitectureRuleSeverity.Medium,
             Recommendation = "Define interfaces for repositories and separate persistence from domain logic."
         },

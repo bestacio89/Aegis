@@ -166,6 +166,18 @@ public sealed class ArchitecturalEvaluator :
         string sourceLayer,
         string targetLayer)
     {
+        // Layer isolation governs dependencies across architectural roles.
+        // Same-layer project references are not layer-boundary violations;
+        // module cycles and intra-layer coupling are separate concerns.
+        if (string.Equals(
+                sourceLayer,
+                targetLayer,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return DependencyDecision.Allowed(
+                $"Both endpoints belong to the '{sourceLayer}' layer.");
+        }
+
         // Do not depend on the dictionary's configured key comparer.
         var policyEntry = _policy.AllowedDependencies
             .FirstOrDefault(entry =>

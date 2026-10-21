@@ -55,7 +55,7 @@ function relativeFile(file)
 
 function readSource(file)
 {
-    return fs.readFileSync(file, "utf8").replace(/ ^\uFEFF/, "");
+    return fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "");
 }
 
 function countNonBlankLines(source)
@@ -66,7 +66,7 @@ function countNonBlankLines(source)
     }
 
     return source
-        .split(/\r\n |\n |\r /)
+        .split(/\r\n|\n|\r/)
         .filter(line => line.trim().length > 0)
         .length;
 }
@@ -142,7 +142,7 @@ function getPackageVersion(packageJson, packageName)
     // Extract the major version from ordinary semver declarations such as:
     // 21.0.0, ^21.0.0, ~21.0.0, >=21.0.0.
     const match = declaration.match(
-        / (?: ^| [^\d])(\d +)\.\d +\.\d + ($| [^\d]) /
+        /(?:^|[^\d])(\d+)\.\d+\.\d+($|[^\d])/
     );
 
     return match ? Number(match[1]) : null;
@@ -683,7 +683,7 @@ function analyzeReactSource(file, source)
         if (
             ts.isFunctionDeclaration(node) &&
             node.name &&
-            / ^ [A - Z] /.test(node.name.text)
+            /^[A-Z]/.test(node.name.text)
         )
         {
             components.push(node.name.text);
@@ -706,7 +706,7 @@ function analyzeReactSource(file, source)
         if (
             ts.isCallExpression(node) &&
             ts.isIdentifier(node.expression) &&
-            / ^use[A - Z0 - 9] /.test(node.expression.text)
+            /^use[A-Z0-9]/.test(node.expression.text)
         )
         {
             hooks.push({

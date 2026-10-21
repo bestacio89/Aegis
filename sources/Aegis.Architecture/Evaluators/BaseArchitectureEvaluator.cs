@@ -339,8 +339,42 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                     extension,
                     StringComparison.OrdinalIgnoreCase)))
             .Where(file => !IsExcludedDir(file))
+            .Where(IsGovernanceSource)
             .Where(file => IsApplicationCode(file, projectPath))
             .ToList();
+    }
+
+    private static bool IsGovernanceSource(string file)
+    {
+        var normalized = file.Replace(
+            Path.AltDirectorySeparatorChar,
+            Path.DirectorySeparatorChar);
+
+        var segments = normalized.Split(
+            Path.DirectorySeparatorChar,
+            StringSplitOptions.RemoveEmptyEntries);
+
+        // Treat vendored libraries and tutorial/sample trees as external code,
+        // not as first-party architectural obligations. A future policy option
+        // can opt these paths back in when a team intentionally governs them.
+        if (segments.Any(segment =>
+                segment.Equals("TextMesh Pro", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("TextMeshPro", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Third-Party", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("vendor", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("node_modules", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var name = Path.GetFileName(file);
+        return !name.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".AssemblyInfo.cs", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsApplicationCode(string file, string projectPath)

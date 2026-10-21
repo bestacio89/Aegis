@@ -344,7 +344,6 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
 
         var ignoredSegments = new[]
         {
-            $"{Path.DirectorySeparatorChar}client{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}Library{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}Temp{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}Logs{Path.DirectorySeparatorChar}",
@@ -366,9 +365,13 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             Path.DirectorySeparatorChar,
             StringSplitOptions.RemoveEmptyEntries);
 
+        // Preserve conventional backend/frontend roots and Unity source trees.
+        // Unity projects are often checked in under a folder named "client";
+        // that folder name alone is not evidence that source should be ignored.
         return pathParts.Any(part =>
             part.Equals("back", StringComparison.OrdinalIgnoreCase)
-            || part.Equals("front", StringComparison.OrdinalIgnoreCase));
+            || part.Equals("front", StringComparison.OrdinalIgnoreCase)
+            || part.Equals("Assets", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

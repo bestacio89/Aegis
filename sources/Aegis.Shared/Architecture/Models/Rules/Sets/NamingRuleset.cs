@@ -103,6 +103,18 @@ public static class NamingRuleset
             // architecture-boundary failure.
             Severity = ArchitectureRuleSeverity.Low,
             Recommendation = "Improve global naming consistency across classes, methods, and variables for architectural clarity."
+        },
+        new ArchitectureRuleDefinition
+        {
+            Id = "AEG-NAM-R7",
+            Scope = RuleEvaluationScope.File,
+            Name = "Constant Naming Style Non-Compliant",
+            Category = nameof(ArchitectureRuleCategory.Naming),
+            MetricKey = "ConstantNamingCompliance",
+            Operator = ComparisonOperator.LessThan,
+            Threshold = 90,
+            Severity = ArchitectureRuleSeverity.Low,
+            Recommendation = "Use language-specific constant naming conventions; C# constants commonly use PascalCase and uppercase snake case is supported where explicitly required."
         }
     };
 }

@@ -40,6 +40,7 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-ARCH-R8"] = ["GodClassEvaluator"],
                 ["AEG-ARCH-R9"] = ["ArchitecturalEvaluator"],
                 ["AEG-ARCH-R10"] = ["SecurityEvaluator"],
+                ["AEG-ARCH-R11"] = ["DocumentationEvaluator"],
                 ["AEG-ARCH-R12"] = ["NodeEvaluator"],
 
                 ["AEG-BACK-R1"] = ["CohesionEvaluator"],
@@ -110,6 +111,16 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-TXN-R4"] = ["ArchitecturalTransactionEvaluator"]
             };
 
+    private static readonly IReadOnlyDictionary<string, string>
+        UnsupportedRuleProducerContracts =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["AEG-DES-CIRC001"] =
+                    "No dedicated pattern-circular-reference producer exists yet; CircularDependencyEvaluator measures module dependency cycles and is not a semantic substitute.",
+                ["AEG-DES-OVER001"] =
+                    "No dedicated pattern-overuse producer exists yet; repeated pattern detections must not be treated as overuse without an explicit policy and denominator."
+            };
+
     private static readonly IReadOnlyDictionary<string, FrontendScope>
         FrontendRuleScopes =
             new Dictionary<string, FrontendScope>(
@@ -132,6 +143,17 @@ internal static class ArchitectureRuleMetricContracts
                 // Applies to supported frontend technologies generally.
                 ["AEG-FRONT-R11"] = FrontendScope.CrossFramework
             };
+
+    public static string? GetProducerContractDisposition(string ruleId)
+    {
+        if (RuleProducerContracts.ContainsKey(ruleId))
+            return null;
+
+        if (UnsupportedRuleProducerContracts.TryGetValue(ruleId, out var reason))
+            return reason;
+
+        return $"No producer-to-rule contract is registered for rule '{ruleId}'.";
+    }
 
     /// <summary>
     /// Resolves a rule's declared metric key.
@@ -198,8 +220,19 @@ internal static class ArchitectureRuleMetricContracts
 
         reason = string.Empty;
 
-        if (RuleProducerContracts.TryGetValue(rule.Id, out var allowedProducers)
-            && !allowedProducers.Contains(fact.Source, StringComparer.OrdinalIgnoreCase))
+        if (UnsupportedRuleProducerContracts.TryGetValue(rule.Id, out var unsupportedReason))
+        {
+            reason = $"Rule '{rule.Id}' is explicitly unsupported: {unsupportedReason}";
+            return false;
+        }
+
+        if (!RuleProducerContracts.TryGetValue(rule.Id, out var allowedProducers))
+        {
+            reason = $"Rule '{rule.Id}' has no producer contract; metric evidence is not eligible.";
+            return false;
+        }
+
+        if (!allowedProducers.Contains(fact.Source, StringComparer.OrdinalIgnoreCase))
         {
             reason =
                 $"Rule '{rule.Id}' requires evidence from [{string.Join(", ", allowedProducers)}], " +

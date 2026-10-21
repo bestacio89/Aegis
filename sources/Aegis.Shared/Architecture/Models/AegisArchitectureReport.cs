@@ -148,7 +148,10 @@ public sealed class AegisArchitectureReport
 
     // 🧾 Quick summary
     public string Summary =>
-        $"🧾 {ProjectName} ({Language}/{Framework}) — {TotalViolations} violations across {TotalFilesScanned} files. HealthIndex: {Metrics.ProjectHealthIndex:0.##}%";
+        $"🧾 {ProjectName} ({Language}/{Framework}) — {TotalViolations} violations across {TotalFilesScanned} files. " +
+        $"Assessed HealthIndex: {Metrics.ProjectHealthIndex:0.##}%; " +
+        $"RuleCoverage: {Metrics.RuleEvaluationCoverage:0.##}%; " +
+        $"AssessmentComplete: {Metrics.AssessmentComplete}.";
 
     // 🧩 Export-friendly DTO (AI / report writer)
     public object ToSummaryDto() => new

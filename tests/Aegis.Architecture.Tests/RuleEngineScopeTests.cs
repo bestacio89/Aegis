@@ -163,7 +163,7 @@ public sealed class RuleEngineScopeTests
             policy);
 
         var fact = new ArchitectureEvaluatorResult(
-            "ArchitecturalEvaluator",
+            "CircularDependencyEvaluator",
             "SampleProject")
         {
             Category = "Architecture",

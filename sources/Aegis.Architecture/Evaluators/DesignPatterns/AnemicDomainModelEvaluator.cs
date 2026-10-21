@@ -298,6 +298,8 @@ public sealed class AnemicDomainModelEvaluator
         result.Metrics["Constructors"] = constructorCount;
         result.Metrics["BehaviorRatio"] = behaviorRatio;
         result.Metrics["DomainBehaviorScore"] = behaviorScore;
+        result.Metrics["AnemicDomainModelIndex"] =
+            1d - Math.Clamp(behaviorScore / 100d, 0d, 1d);
 
         result.Metadata["FilePath"] = file;
         result.Metadata["ClassName"] = typeName;

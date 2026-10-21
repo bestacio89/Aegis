@@ -140,13 +140,7 @@ public sealed class AegisArchitectureAnalysisRunner
                 projectPath,
                 context,
                 token,
-                path =>
-                    !path.Contains(
-                        @"\client",
-                        StringComparison.OrdinalIgnoreCase)
-                    && !path.Contains(
-                        "/client",
-                        StringComparison.OrdinalIgnoreCase),
+                path => IsAnalysisPathAllowed(path),
                 progress).ConfigureAwait(false);
 
             token.ThrowIfCancellationRequested();
@@ -217,6 +211,30 @@ public sealed class AegisArchitectureAnalysisRunner
                 ErrorMessage = exception.Message
             };
         }
+    }
+
+    private static bool IsAnalysisPathAllowed(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        // Do not exclude a directory merely because it is named "client":
+        // Unity projects commonly live there, and frontend source is part of
+        // the intended analysis surface. Exclude generated/dependency folders
+        // by path segment instead.
+        var normalized = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        var excludedSegments = new[]
+        {
+            $"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}",
+            $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+            $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+            $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
+            $"{Path.DirectorySeparatorChar}Library{Path.DirectorySeparatorChar}",
+            $"{Path.DirectorySeparatorChar}Temp{Path.DirectorySeparatorChar}"
+        };
+
+        return !excludedSegments.Any(segment =>
+            normalized.Contains(segment, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void Report(

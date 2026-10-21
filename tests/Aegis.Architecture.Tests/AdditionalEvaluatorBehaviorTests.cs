@@ -263,6 +263,8 @@ public sealed class AdditionalEvaluatorBehaviorTests
         Assert.Equal(2, summary.Metrics["TotalRelations"]);
         Assert.Equal(0, summary.Metrics["RelationsMissingSourceLayer"]);
         Assert.Equal(0, summary.Metrics["RelationsMissingTargetLayer"]);
+        Assert.Equal(2d / 6d, summary.Metrics["DependencyGraphDensity"], precision: 5);
+        Assert.Equal("Measured", summary.Metadata["GraphDensityStatus"]);
         AssertAllMetricsAreFinite(results);
     }
 

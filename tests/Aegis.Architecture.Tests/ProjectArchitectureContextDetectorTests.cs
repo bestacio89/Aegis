@@ -119,6 +119,34 @@ public sealed class ProjectArchitectureContextDetectorTests
     }
 
     [Fact]
+    public void Detect_excludes_unity_cache_vendored_examples_and_generated_source()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var assets = Path.Combine(directory.Path, "Assets");
+        Directory.CreateDirectory(Path.Combine(assets, "Scripts"));
+        Directory.CreateDirectory(Path.Combine(assets, "TextMesh Pro", "Examples & Extras"));
+        Directory.CreateDirectory(Path.Combine(directory.Path, "ProjectSettings"));
+        Directory.CreateDirectory(Path.Combine(directory.Path, "Library", "PackageCache", "com.unity.sample"));
+
+        File.WriteAllText(Path.Combine(assets, "Game.asmdef"), """{"name":"Game"}""");
+        File.WriteAllText(Path.Combine(directory.Path, "ProjectSettings", "ProjectVersion.txt"), "m_EditorVersion: 6000.0.0f1");
+        File.WriteAllText(Path.Combine(assets, "Scripts", "GameController.cs"), "public sealed class GameController { }");
+        File.WriteAllText(Path.Combine(assets, "Scripts", "Generated.Designer.cs"), "public sealed class Generated { }");
+        File.WriteAllText(Path.Combine(assets, "TextMesh Pro", "Examples & Extras", "Example.cs"), "public sealed class Example { }");
+        File.WriteAllText(Path.Combine(directory.Path, "Library", "PackageCache", "com.unity.sample", "Vendor.cs"), "public sealed class Vendor { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal(3, context.FileCount);
+        Assert.Contains(context.Layers, layer => layer.Name == "Client");
+        Assert.DoesNotContain(context.Layers, layer => layer.Files.Any(file =>
+            file.Contains("PackageCache", StringComparison.OrdinalIgnoreCase)));
+        Assert.DoesNotContain(context.Layers, layer => layer.Files.Any(file =>
+            file.Contains("Examples & Extras", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
     public void Detect_classifies_server_hosted_blazor_as_full_stack_not_backend_only()
     {
         using var directory = new TemporaryDirectory();

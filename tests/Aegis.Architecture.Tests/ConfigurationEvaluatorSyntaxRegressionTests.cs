@@ -29,7 +29,7 @@ public sealed class ConfigurationEvaluatorSyntaxRegressionTests
             result.Metadata.GetValueOrDefault("FileName") == "appsettings.json");
 
         Assert.Equal("Valid", file.Metadata["SyntaxValidation"]);
-        Assert.DoesNotContain("CFG-SYNTAX-001", file.Metadata.Keys);
+        Assert.DoesNotContain(file.Metadata.Keys, key => key.StartsWith("Finding.CFG-SYNTAX-001", StringComparison.Ordinal));
         Assert.Equal(100, file.Metrics["SyntaxComplianceScore"]);
     }
 

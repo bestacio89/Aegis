@@ -369,7 +369,6 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                 || segment.Equals("vendor", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("node_modules", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("Library", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("PackageCache", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("Temp", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("Logs", StringComparison.OrdinalIgnoreCase)

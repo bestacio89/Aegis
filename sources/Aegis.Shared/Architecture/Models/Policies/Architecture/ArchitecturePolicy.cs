@@ -1,23 +1,38 @@
-﻿namespace Aegis.Shared.Architecture.Models.Policies.Architecture
+namespace Aegis.Shared.Architecture.Models.Policies.Architecture
 {
     public class ArchitecturePolicy
     {
         public bool EnforceLayerBoundaries { get; set; } = true;
 
+        /// <summary>
+        /// Default project-reference policy for a conventional layered/Clean
+        /// Architecture solution. Project roles are normalized by LayerDetector.
+        /// Teams can replace these defaults with their own governed boundaries.
+        /// </summary>
         public Dictionary<string, string[]> AllowedDependencies { get; set; } = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Api"] = new[] { "App", "Domain" },
-            ["App"] = new[] { "Domain" },
-            ["Domain"] = Array.Empty<string>(),
-            ["Infrastructure"] = new[] { "Domain" }
+            ["Api"] = ["App", "Domain", "Infrastructure", "Contracts"],
+            ["App"] = ["Domain", "Contracts"],
+            ["Domain"] = [],
+            ["Infrastructure"] = ["Domain", "App", "Contracts"],
+            ["Contracts"] = [],
+            ["Presentation"] = ["App", "Contracts", "Client"],
+            ["Consumer"] = ["App", "Domain", "Infrastructure", "Contracts"],
+            ["Client"] = ["Contracts"],
+            ["Tests"] = ["Api", "App", "Domain", "Infrastructure", "Contracts", "Presentation", "Consumer", "Client", "Tests"]
         };
 
         public Dictionary<string, string[]> LayerHints { get; set; } = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Api"] = new[] { "Api", "Presentation", "Controllers", "Ui" },
-            ["App"] = new[] { "Application", "Services", "Handlers" },
-            ["Domain"] = new[] { "Domain", "Core", "Entities", "Models" },
-            ["Infrastructure"] = new[] { "Infrastructure", "Infra", "Data", "Persistence" }
+            ["Api"] = ["Api", "Controllers", "CompositionRoot"],
+            ["App"] = ["Application", "Services", "Handlers", "UseCases"],
+            ["Domain"] = ["Domain", "Core", "Entities", "Models"],
+            ["Infrastructure"] = ["Infrastructure", "Infra", "Data", "Persistence", "Repository"],
+            ["Contracts"] = ["Contracts", "Abstractions", "Dtos", "Interfaces"],
+            ["Presentation"] = ["Admin", "Presentation", "Web", "Ui", "Front"],
+            ["Consumer"] = ["Consumer", "Worker", "Background", "Jobs"],
+            ["Client"] = ["Client", "ClientHttp", "Unity"],
+            ["Tests"] = ["Test", "Tests", "Testing"]
         };
 
         /// <summary>
@@ -33,7 +48,6 @@
             ["JavaScript"] = EnforcementMode.Advisory
         };
 
-        // 🧩 Nested Design Patterns Policy
         public DesignPatternPolicy DesignPatterns { get; set; } = new();
     }
 
@@ -43,7 +57,4 @@
         Advisory,
         Ignored
     }
-   
-
-
 }

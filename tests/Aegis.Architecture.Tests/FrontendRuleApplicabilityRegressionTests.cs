@@ -46,15 +46,13 @@ public sealed class FrontendRuleApplicabilityRegressionTests
             outcome.Evaluations,
             evaluation => evaluation.RuleId == "AEG-FRONT-R8");
 
-        Assert.Contains(
+        Assert.DoesNotContain(
             outcome.Evaluations,
-            evaluation => evaluation.RuleId == "AEG-FRONT-R11"
-                && evaluation.Target == "src/Orders.tsx");
+            evaluation => evaluation.RuleId == "AEG-FRONT-R11");
 
-        Assert.Contains(
+        Assert.DoesNotContain(
             outcome.Results,
-            result => result.RuleId == "AEG-FRONT-R11"
-                && result.Target == "src/Orders.tsx");
+            result => result.RuleId == "AEG-FRONT-R11");
         Assert.Contains(
             "dedicated complexity rule",
             outcome.Stats.NotApplicableReasons["AEG-FRONT-R11"],
@@ -177,11 +175,18 @@ public sealed class FrontendRuleApplicabilityRegressionTests
             },
             [fact]);
 
-        Assert.DoesNotContain(
+        Assert.Contains(
             outcome.Evaluations,
-            evaluation => evaluation.RuleId == "AEG-FRONT-R11");
+            evaluation => evaluation.RuleId == "AEG-FRONT-R11"
+                && evaluation.Target == "src/Orders.tsx"
+                && evaluation.Evaluator == "ReactEvaluator");
 
-        Assert.Contains("AEG-FRONT-R11", outcome.Stats.RulesNotApplicable);
+        Assert.Contains(
+            outcome.Results,
+            result => result.RuleId == "AEG-FRONT-R11"
+                && result.Target == "src/Orders.tsx");
+
+        Assert.DoesNotContain("AEG-FRONT-R11", outcome.Stats.RulesNotApplicable);
     }
     [Fact]
     public void Mixed_frontend_project_does_not_cross_apply_blazor_rules_to_react_facts()

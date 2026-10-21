@@ -928,7 +928,7 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
 
         var allowedPrefix = string.Join("|", prefixes);
         var simpleSelector = new Regex(
-            @"^(?:[a-z][a-z0-9]*(?:-[a-z0-9]+)*|\\[[A-Za-z][A-Za-z0-9]*\\])$",
+            @"^(?:[a-z][a-z0-9]*(?:-[a-z0-9]+)*|\[[A-Za-z][A-Za-z0-9]*\])$",
             RegexOptions.CultureInvariant,
             TimeSpan.FromMilliseconds(100));
         var elementSelector = new Regex(
@@ -936,7 +936,7 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
             RegexOptions.CultureInvariant,
             TimeSpan.FromMilliseconds(100));
         var attributeSelector = new Regex(
-            $@"^\\[(?:{allowedPrefix})[A-Z][A-Za-z0-9]*\\]$",
+            $@"^\[(?:{allowedPrefix})[A-Z][A-Za-z0-9]*\]$",
             RegexOptions.CultureInvariant,
             TimeSpan.FromMilliseconds(100));
 

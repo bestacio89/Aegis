@@ -234,9 +234,12 @@ public sealed class AnemicDomainModelEvaluator
 
                 var stateMemberCount = propertyCount + fieldCount;
 
-                var behaviorRatio = stateMemberCount == 0
-                    ? methodCount
-                    : (double)methodCount / stateMemberCount;
+                // A stateless type is not an anemic domain-model candidate.
+                // Without state there is no state-to-behavior imbalance to assess.
+                if (stateMemberCount == 0)
+                    continue;
+
+                var behaviorRatio = (double)methodCount / stateMemberCount;
 
                 var behaviorScore = CalculateBehaviorScore(
                     stateMemberCount,

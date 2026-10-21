@@ -985,8 +985,6 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                 segment.Equals("TextMesh Pro", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("TextMeshPro", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("Samples", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("Sample", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("Third-Party", StringComparison.OrdinalIgnoreCase)))

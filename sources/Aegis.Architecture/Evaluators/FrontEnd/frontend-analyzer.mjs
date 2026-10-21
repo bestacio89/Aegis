@@ -806,7 +806,8 @@ function analyzeReactSource(file, source)
             const hasPropTypes = source.includes(node.name.text + ".propTypes");
             componentTyping.push({
                 name: node.name.text,
-                propsTyped: !hasProps || node.parameters[0].type !== undefined || hasPropTypes
+                propsTyped: !hasProps || node.parameters[0].type !== undefined || hasPropTypes,
+                cyclomaticComplexity: cyclomaticComplexity(node)
             });
         }
 
@@ -827,7 +828,8 @@ function analyzeReactSource(file, source)
             const hasPropTypes = source.includes(node.name.text + ".propTypes");
             componentTyping.push({
                 name: node.name.text,
-                propsTyped: !hasProps || parameters[0].type !== undefined || hasPropTypes
+                propsTyped: !hasProps || parameters[0].type !== undefined || hasPropTypes,
+                cyclomaticComplexity: cyclomaticComplexity(node.initializer)
             });
         }
 

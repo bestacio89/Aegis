@@ -14,7 +14,7 @@ namespace Aegis.Shared.Architecture.Models.Policies.Architecture
             ["Api"] = ["Application", "Domain", "Infrastructure", "Contracts"],
             ["Application"] = ["Domain", "Contracts"],
             ["Domain"] = [],
-            ["Infrastructure"] = ["Domain", "App", "Contracts"],
+            ["Infrastructure"] = ["Domain", "Application", "Contracts"],
             ["Contracts"] = [],
             ["Presentation"] = ["Application", "Contracts", "Client"],
             ["Consumer"] = ["Application", "Domain", "Infrastructure", "Contracts"],

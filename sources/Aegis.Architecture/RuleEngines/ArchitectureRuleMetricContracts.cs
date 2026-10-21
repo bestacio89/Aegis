@@ -22,6 +22,94 @@ internal static class ArchitectureRuleMetricContracts
         CrossFramework
     }
 
+    // A metric name alone is not sufficient proof that a rule's producer
+    // measured the intended concept. These contracts bind rules to the evaluator
+    // families that own their evidence. Multiple producers are allowed only
+    // where they implement the same declared rule semantics.
+    private static readonly IReadOnlyDictionary<string, string[]>
+        RuleProducerContracts =
+            new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["AEG-ARCH-R1"] = ["CircularDependencyEvaluator"],
+                ["AEG-ARCH-R2"] = ["ArchitecturalEvaluator"],
+                ["AEG-ARCH-R3"] = ["ArchitecturalEvaluator"],
+                ["AEG-ARCH-R4"] = ["ArchitecturalEvaluator"],
+                ["AEG-ARCH-R5"] = ["ArchitecturalEvaluator"],
+                ["AEG-ARCH-R6"] = ["ArchitecturalEvaluator"],
+                ["AEG-ARCH-R7"] = ["ApiConsistencyEvaluator"],
+                ["AEG-ARCH-R8"] = ["GodClassEvaluator"],
+                ["AEG-ARCH-R9"] = ["ArchitecturalEvaluator"],
+                ["AEG-ARCH-R10"] = ["SecurityEvaluator"],
+                ["AEG-ARCH-R12"] = ["NodeEvaluator"],
+
+                ["AEG-BACK-R1"] = ["CohesionEvaluator"],
+                ["AEG-BACK-R2"] = ["ComplexityEvaluator"],
+                ["AEG-BACK-R3"] = ["DependencyGraphEvaluator"],
+                ["AEG-BACK-R4"] = ["ErrorHandlingEvaluator"],
+                ["AEG-BACK-R5"] = ["MaintainabilityEvaluator"],
+
+                ["AEG-DEPS-R1"] = ["PackageVersionEvaluator"],
+                ["AEG-DEPS-R2"] = ["PackageVersionEvaluator"],
+                ["AEG-DEPS-R3"] = ["UnusedReferenceEvaluator"],
+                ["AEG-DEPS-R4"] = ["PackageVersionEvaluator"],
+
+                ["AEG-DES-ADM001"] = ["AnemicDomainModelEvaluator"],
+                ["AEG-DES-BLD001"] = ["BuilderPatternEvaluator"],
+                ["AEG-DES-BLD002"] = ["BuilderPatternEvaluator"],
+                ["AEG-DES-CMD001"] = ["CommandPatternEvaluator"],
+                ["AEG-DES-CMD002"] = ["CommandPatternEvaluator"],
+                ["AEG-DES-DEC001"] = ["DecoratorPatternEvaluator"],
+                ["AEG-DES-DEC002"] = ["DecoratorPatternEvaluator"],
+                ["AEG-DES-FAC001"] = ["FacadePatternEvaluator"],
+                ["AEG-DES-FAC002"] = ["FacadePatternEvaluator"],
+                ["AEG-DES-FACR001"] = ["FactoryPatternEvaluator"],
+                ["AEG-DES-FACR002"] = ["FactoryPatternEvaluator"],
+                ["AEG-DES-GOD001"] = ["GodClassEvaluator"],
+                ["AEG-DES-MEDI001"] = ["MediatorPatternEvaluator"],
+                ["AEG-DES-MEDI002"] = ["MediatorPatternEvaluator"],
+                ["AEG-DES-OBS001"] = ["ObserverPatternEvaluator"],
+                ["AEG-DES-OBS002"] = ["ObserverPatternEvaluator"],
+                ["AEG-DES-REPO001"] = ["RepositoryPatternEvaluator"],
+                ["AEG-DES-REPO002"] = ["RepositoryPatternEvaluator"],
+                ["AEG-DES-SING001"] = ["SingletonPatternEvaluator"],
+                ["AEG-DES-SING002"] = ["SingletonPatternEvaluator"],
+                ["AEG-DES-STRAT001"] = ["StrategyPatternEvaluator"],
+                ["AEG-DES-STRAT002"] = ["StrategyPatternEvaluator"],
+
+                ["AEG-FRONT-R1"] = ["AngularEvaluator"],
+                ["AEG-FRONT-R2"] = ["AngularEvaluator"],
+                ["AEG-FRONT-R3"] = ["ReactEvaluator"],
+                ["AEG-FRONT-R4"] = ["ReactEvaluator"],
+                ["AEG-FRONT-R5"] = ["RazorEvaluator"],
+                ["AEG-FRONT-R6"] = ["RazorEvaluator"],
+                ["AEG-FRONT-R7"] = ["RazorEvaluator"],
+                ["AEG-FRONT-R8"] = ["BlazorEvaluator"],
+                ["AEG-FRONT-R9"] = ["BlazorEvaluator"],
+                ["AEG-FRONT-R10"] = ["BlazorEvaluator"],
+                ["AEG-FRONT-R11"] = ["RazorEvaluator"],
+
+                ["AEG-INF-R1"] = ["ConfigurationEvaluator"],
+                ["AEG-INF-R2"] = ["LoggingEvaluator"],
+                ["AEG-INF-R3"] = ["RepositoryEvaluator"],
+
+                ["AEG-NAM-R1"] = ["NamingEvaluator"],
+                ["AEG-NAM-R2"] = ["NamingEvaluator"],
+                ["AEG-NAM-R3"] = ["NamingEvaluator"],
+                ["AEG-NAM-R4"] = ["NamingEvaluator"],
+                ["AEG-NAM-R5"] = ["NamingEvaluator"],
+                ["AEG-NAM-R6"] = ["NamingEvaluator"],
+
+                ["AEG-PERF-R1"] = ["PerformanceEvaluator"],
+                ["AEG-PERF-R2"] = ["PerformanceEvaluator"],
+                ["AEG-PERF-R3"] = ["PerformanceEvaluator"],
+                ["AEG-PERF-R4"] = ["PerformanceEvaluator"],
+
+                ["AEG-TXN-R1"] = ["ArchitecturalTransactionEvaluator"],
+                ["AEG-TXN-R2"] = ["ArchitecturalTransactionEvaluator"],
+                ["AEG-TXN-R3"] = ["ArchitecturalTransactionEvaluator"],
+                ["AEG-TXN-R4"] = ["ArchitecturalTransactionEvaluator"]
+            };
+
     private static readonly IReadOnlyDictionary<string, FrontendScope>
         FrontendRuleScopes =
             new Dictionary<string, FrontendScope>(
@@ -109,6 +197,15 @@ internal static class ArchitectureRuleMetricContracts
         ArgumentNullException.ThrowIfNull(context);
 
         reason = string.Empty;
+
+        if (RuleProducerContracts.TryGetValue(rule.Id, out var allowedProducers)
+            && !allowedProducers.Contains(fact.Source, StringComparer.OrdinalIgnoreCase))
+        {
+            reason =
+                $"Rule '{rule.Id}' requires evidence from [{string.Join(", ", allowedProducers)}], " +
+                $"but fact producer '{fact.Source}' is not a declared producer for this rule.";
+            return false;
+        }
 
         if (!FrontendRuleScopes.TryGetValue(rule.Id, out var targetScope))
             return true;

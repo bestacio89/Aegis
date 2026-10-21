@@ -136,7 +136,7 @@ public sealed class RuleEngineOrchestrationTests
 
         await CreateEngine([evaluator]).RunAsync(directory.Path, context);
 
-        Assert.Equal([directory.Path], evaluatedPaths);
+        Assert.Equal(new[] { directory.Path }, evaluatedPaths);
     }
 
     [Fact]

@@ -80,7 +80,7 @@ public sealed class ArchitecturalPerformanceEvaluator
         RegexOptions.Compiled);
 
     private static readonly Regex NonCodeRegex = new(
-        """"(?s)(?:\x60(?:\\.|[^\x60\\])*\x60|@?"(?: ""|\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|//[^\r\n]*|/\*.*?\*/|\#[^\r\n]*)"""",
+        """"(?s)(?:\x60(?:\\.|[^\x60\\])*\x60|@?"(?:""|\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|//[^\r\n]*|/\*.*?\*/|\#[^\r\n]*)"""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
 

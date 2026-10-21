@@ -392,13 +392,18 @@ public sealed class GodClassEvaluator
                 ["UnreadableFiles"] = unreadableFiles,
                 ["ClassCount"] = classMetrics.Count,
                 ["AverageComplianceScore"] = averageCompliance,
-                ["AverageSeverity"] = averageSeverity,
-                ["GodClassDensity"] = classMetrics.Count == 0
-                    ? 0d
-                    : classMetrics.Count(metrics => metrics.GetValueOrDefault("GodClassSeverity") > 0.25d)
-                        / (double)classMetrics.Count
+                ["AverageSeverity"] = averageSeverity
             }
         };
+
+        // No analyzed classes means density is unknown, not zero.
+        if (classMetrics.Count > 0)
+        {
+            summary.Metrics["GodClassDensity"] =
+                classMetrics.Count(metrics =>
+                    metrics.GetValueOrDefault("GodClassSeverity") > 0.25d)
+                / (double)classMetrics.Count;
+        }
 
         summary.Metadata[EvaluationScopeMetadataKey] = ProjectScope;
         summary.Metadata["Evaluator"] = Name;

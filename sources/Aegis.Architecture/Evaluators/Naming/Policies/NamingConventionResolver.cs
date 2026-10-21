@@ -24,6 +24,13 @@ public sealed class NamingConventionResolver
 
             {
                 Language: "C#",
+                Framework: "Unity"
+            }
+                => new UnityNamingConventionPolicy(),
+
+
+            {
+                Language: "C#",
                 Framework: "Blazor"
             }
                 => new BlazorNamingConventionPolicy(),

@@ -232,21 +232,33 @@ public sealed class PdfReportExporter : IReportExporter
         section.AddParagraph(L(language, "Executive Summary", "Synthèse Exécutive")).Style = StyleNames.Heading1;
 
         var health = report.Metrics?.ProjectHealthIndex ?? 0;
+        var stats = report.EvaluationStats;
+        var coverage = stats?.EvaluationCoverage;
+        var coveragePercent = coverage.HasValue ? coverage.Value * 100.0 : 0.0;
+        var assessmentIncomplete = stats is null
+            || stats.RulesApplicable == 0
+            || coveragePercent < 95.0
+            || report.EvaluationsErrored > 0;
 
-        var status = health >= 80
-            ? L(language, "healthy", "saine")
-            : health >= 50
-                ? L(language, "at risk", "à risque")
-                : L(language, "critical", "critique");
+        var status = assessmentIncomplete
+            ? L(language, "incomplete", "incomplète")
+            : health >= 80
+                ? L(language, "healthy", "saine")
+                : health >= 50
+                    ? L(language, "at risk", "à risque")
+                    : L(language, "critical", "critique");
+
+        var coverageSummary = stats is null
+            ? L(language, "Rule-evaluation coverage is unavailable.", "La couverture d'évaluation des règles est indisponible.")
+            : L(
+                language,
+                $"Rule-evaluation coverage is {coveragePercent:0.0}% ({stats.RulesEvaluated}/{stats.RulesApplicable} applicable rules evaluated; {stats.RulesNotEvaluated.Count} not evaluated).",
+                $"La couverture d'évaluation des règles est de {coveragePercent:0.0} % ({stats.RulesEvaluated}/{stats.RulesApplicable} règles applicables évaluées ; {stats.RulesNotEvaluated.Count} non évaluées).");
 
         var narrative = L(
             language,
-            $"{report.ProjectName} was scanned across {report.TotalFilesScanned} files and evaluated against " +
-            $"{report.ComplianceScores.Count} rule categories. The overall architectural health is {status} " +
-            $"at {health:0.##}%, with {report.TotalViolations} findings identified across the scanned codebase.",
-            $"{report.ProjectName} a été analysé sur {report.TotalFilesScanned} fichiers et évalué selon " +
-            $"{report.ComplianceScores.Count} catégories de règles. La santé architecturale globale est {status} " +
-            $"à {health:0.##}%, avec {report.TotalViolations} constats identifiés dans le code analysé.");
+            $"{report.ProjectName} was scanned across {report.TotalFilesScanned} files. The assessed health score is {health:0.##}% and the overall assessment is {status}. {coverageSummary} {report.TotalViolations} findings were identified. Treat this score as provisional while rule coverage is incomplete.",
+            $"{report.ProjectName} a été analysé sur {report.TotalFilesScanned} fichiers. Le score de santé évalué est de {health:0.##} % et l'évaluation globale est {status}. {coverageSummary} {report.TotalViolations} constats ont été identifiés. Ce score reste provisoire tant que la couverture des règles est incomplète.");
 
         var p = section.AddParagraph(narrative);
         p.Format.SpaceAfter = 10;
@@ -266,6 +278,19 @@ public sealed class PdfReportExporter : IReportExporter
         AddRow(table, L(language, "Framework", "Framework"), context.Framework ?? "N/A");
         AddRow(table, L(language, "Architecture Style", "Style Architectural"), context.ArchitectureStyle ?? "N/A");
         AddRow(table, L(language, "Scan Date (UTC)", "Date d'Analyse (UTC)"), report.ScanDate.ToString("yyyy-MM-dd HH:mm"));
+
+        var stats = report.EvaluationStats;
+        if (stats is not null)
+        {
+            AddRow(table, L(language, "Rules Registered", "Règles Enregistrées"), stats.RulesRegistered.ToString());
+            AddRow(table, L(language, "Rules Applicable", "Règles Applicables"), stats.RulesApplicable.ToString());
+            AddRow(table, L(language, "Rules Evaluated", "Règles Évaluées"), stats.RulesEvaluated.ToString());
+            AddRow(table, L(language, "Rules Not Evaluated", "Règles Non Évaluées"), stats.RulesNotEvaluated.Count.ToString());
+            AddRow(table, L(language, "Rule Evaluation Coverage", "Couverture d'Évaluation des Règles"), $"{stats.EvaluationCoverage:P1}");
+            AddRow(table, L(language, "Checks Performed", "Vérifications Effectuées"), stats.ChecksPerformed.ToString());
+            AddRow(table, L(language, "Insufficient Evidence", "Preuves Insuffisantes"), stats.EvaluationsInsufficientEvidence.ToString());
+            AddRow(table, L(language, "Evaluation Errors", "Erreurs d'Évaluation"), stats.EvaluationsErrored.ToString());
+        }
     }
 
     /// <summary>

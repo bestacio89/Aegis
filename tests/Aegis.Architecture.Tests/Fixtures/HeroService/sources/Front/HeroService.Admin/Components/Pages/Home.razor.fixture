@@ -1,0 +1,45 @@
+﻿@page "/"
+@using MudBlazor
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Codex Hub</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large">
+    <MudPaper Class="pa-6 mb-6 codex-hero" Elevation="6">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h3" Class="codex-title">
+                Codex Management System
+            </MudText>
+            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">
+                Author heroes, abilities, balance data and world structures for procedural gameplay generation
+            </MudText>
+        </MudStack>
+    </MudPaper>
+
+    <MudText Typo="Typo.h5" Class="mb-3">Core Authoring Pipeline</MudText>
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-5 codex-card" Elevation="4">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.h6">Heroes</MudText>
+                    <MudText Typo="Typo.body2">
+                        Define identity, combat role, affiliations and progression vectors.
+                    </MudText>
+                    <MudDivider Class="my-2" />
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="@(() => Nav.NavigateTo("/admin/heroes"))">
+                            Manage
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined"
+                                   OnClick="@(() => Nav.NavigateTo("/admin/heroes/create"))">
+                            Create
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>

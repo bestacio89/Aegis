@@ -46,11 +46,15 @@ public sealed class FrontendRuleApplicabilityRegressionTests
             outcome.Evaluations,
             evaluation => evaluation.RuleId == "AEG-FRONT-R8");
 
-        Assert.DoesNotContain(
+        Assert.Contains(
             outcome.Evaluations,
-            evaluation => evaluation.RuleId == "AEG-FRONT-R11");
+            evaluation => evaluation.RuleId == "AEG-FRONT-R11"
+                && evaluation.Target == "src/Orders.tsx");
 
-        Assert.Contains("AEG-FRONT-R11", outcome.Stats.RulesNotApplicable);
+        Assert.Contains(
+            outcome.Results,
+            result => result.RuleId == "AEG-FRONT-R11"
+                && result.Target == "src/Orders.tsx");
         Assert.Contains(
             "dedicated complexity rule",
             outcome.Stats.NotApplicableReasons["AEG-FRONT-R11"],
@@ -140,7 +144,7 @@ public sealed class FrontendRuleApplicabilityRegressionTests
     }
 
     [Fact]
-    public void React_complexity_is_not_evaluated_against_cross_framework_rule()
+    public void React_complexity_uses_shared_rule_without_dedicated_rule()
     {
         var engine = new RuleEngineCore(
             NullLogger<RuleEngineCore>.Instance,

@@ -151,9 +151,9 @@ public sealed class ProjectArchitectureContextDetectorTests
 
         var webProject = Path.Combine(directory.Path, "Server", "Server.csproj");
         var component = Path.Combine(directory.Path, "Server", "Components", "Home.razor");
-        var unityAssembly = Path.Combine(directory.Path, "Assets", "Game", "Game.asmdef");
-        var unityVersion = Path.Combine(directory.Path, "ProjectSettings", "ProjectVersion.txt");
-        var unityManifest = Path.Combine(directory.Path, "Packages", "manifest.json");
+        var unityAssembly = Path.Combine(directory.Path, "UnityClient", "Assets", "Game", "Game.asmdef");
+        var unityVersion = Path.Combine(directory.Path, "UnityClient", "ProjectSettings", "ProjectVersion.txt");
+        var unityManifest = Path.Combine(directory.Path, "UnityClient", "Packages", "manifest.json");
 
         Directory.CreateDirectory(Path.GetDirectoryName(webProject)!);
         Directory.CreateDirectory(Path.GetDirectoryName(component)!);
@@ -179,6 +179,9 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Contains("Blazor", context.DetectedFrameworks);
         Assert.Contains("Unity", context.DetectedFrameworks);
         Assert.Equal("FullStack", context.DomainType);
+        Assert.Contains(context.Modules, module =>
+            module.Type == "Unity"
+            && string.Equals(module.Path, Path.Combine(directory.Path, "UnityClient"), StringComparison.OrdinalIgnoreCase));
     }
 
     private sealed class TemporaryDirectory : IDisposable

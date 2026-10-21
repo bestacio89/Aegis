@@ -138,8 +138,13 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
 
-        var files =
-            EnumerateSourceFiles(projectPath);
+        var files = ResolveSourceFiles(
+            projectPath,
+            ".cs",
+            ".java",
+            ".py",
+            ".ts",
+            ".js");
 
 
 
@@ -407,21 +412,6 @@ public sealed class ArchitecturalPerformanceEvaluator
                         BaseArchitectureEvaluator.ProjectScope
                 }
             });
-    }
-
-
-
-    private static List<string> EnumerateSourceFiles(
-        string projectPath)
-    {
-        return Directory
-            .EnumerateFiles(
-                projectPath,
-                "*.*",
-                SearchOption.AllDirectories)
-            .Where(IsSupportedFile)
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
     }
 
 

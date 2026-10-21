@@ -33,47 +33,28 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-ARCH-R1"] = ["CircularDependencyEvaluator"],
                 ["AEG-ARCH-R2"] = ["ArchitecturalEvaluator"],
                 ["AEG-ARCH-R3"] = ["ArchitecturalEvaluator"],
-                ["AEG-ARCH-R4"] = ["ArchitecturalEvaluator"],
                 ["AEG-ARCH-R5"] = ["ArchitecturalEvaluator"],
-                ["AEG-ARCH-R6"] = ["ArchitecturalEvaluator"],
                 ["AEG-ARCH-R7"] = ["ApiConsistencyEvaluator"],
                 ["AEG-ARCH-R8"] = ["GodClassEvaluator"],
-                ["AEG-ARCH-R9"] = ["ArchitecturalEvaluator"],
-                ["AEG-ARCH-R10"] = ["SecurityEvaluator"],
                 ["AEG-ARCH-R11"] = ["DocumentationEvaluator"],
-                ["AEG-ARCH-R12"] = ["NodeEvaluator"],
-
-                ["AEG-BACK-R1"] = ["CohesionEvaluator"],
                 ["AEG-BACK-R2"] = ["ComplexityEvaluator"],
                 ["AEG-BACK-R3"] = ["DependencyGraphEvaluator"],
                 ["AEG-BACK-R4"] = ["ErrorHandlingEvaluator"],
                 ["AEG-BACK-R5"] = ["MaintainabilityEvaluator"],
 
-                ["AEG-DEPS-R1"] = ["PackageVersionEvaluator"],
-                ["AEG-DEPS-R2"] = ["PackageVersionEvaluator"],
-                ["AEG-DEPS-R3"] = ["UnusedReferenceEvaluator"],
-                ["AEG-DEPS-R4"] = ["PackageVersionEvaluator"],
-
                 ["AEG-DES-ADM001"] = ["AnemicDomainModelEvaluator"],
                 ["AEG-DES-BLD001"] = ["BuilderPatternEvaluator"],
                 ["AEG-DES-BLD002"] = ["BuilderPatternEvaluator"],
                 ["AEG-DES-CMD001"] = ["CommandPatternEvaluator"],
-                ["AEG-DES-CMD002"] = ["CommandPatternEvaluator"],
                 ["AEG-DES-DEC001"] = ["DecoratorPatternEvaluator"],
-                ["AEG-DES-DEC002"] = ["DecoratorPatternEvaluator"],
                 ["AEG-DES-FAC001"] = ["FacadePatternEvaluator"],
                 ["AEG-DES-FAC002"] = ["FacadePatternEvaluator"],
                 ["AEG-DES-FACR001"] = ["FactoryPatternEvaluator"],
-                ["AEG-DES-FACR002"] = ["FactoryPatternEvaluator"],
                 ["AEG-DES-GOD001"] = ["GodClassEvaluator"],
                 ["AEG-DES-MEDI001"] = ["MediatorPatternEvaluator"],
-                ["AEG-DES-MEDI002"] = ["MediatorPatternEvaluator"],
                 ["AEG-DES-OBS001"] = ["ObserverPatternEvaluator"],
-                ["AEG-DES-OBS002"] = ["ObserverPatternEvaluator"],
                 ["AEG-DES-REPO001"] = ["RepositoryPatternEvaluator"],
-                ["AEG-DES-REPO002"] = ["RepositoryPatternEvaluator"],
                 ["AEG-DES-SING001"] = ["SingletonPatternEvaluator"],
-                ["AEG-DES-SING002"] = ["SingletonPatternEvaluator"],
                 ["AEG-DES-STRAT001"] = ["StrategyPatternEvaluator"],
                 ["AEG-DES-STRAT002"] = ["StrategyPatternEvaluator"],
 
@@ -102,13 +83,8 @@ internal static class ArchitectureRuleMetricContracts
 
                 ["AEG-PERF-R1"] = ["PerformanceEvaluator"],
                 ["AEG-PERF-R2"] = ["PerformanceEvaluator"],
-                ["AEG-PERF-R3"] = ["PerformanceEvaluator"],
-                ["AEG-PERF-R4"] = ["PerformanceEvaluator"],
 
                 ["AEG-TXN-R1"] = ["ArchitecturalTransactionEvaluator"],
-                ["AEG-TXN-R2"] = ["ArchitecturalTransactionEvaluator"],
-                ["AEG-TXN-R3"] = ["ArchitecturalTransactionEvaluator"],
-                ["AEG-TXN-R4"] = ["ArchitecturalTransactionEvaluator"]
             };
 
     private static readonly IReadOnlyDictionary<string, string>
@@ -118,7 +94,29 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-DES-CIRC001"] =
                     "No dedicated pattern-circular-reference producer exists yet; CircularDependencyEvaluator measures module dependency cycles and is not a semantic substitute.",
                 ["AEG-DES-OVER001"] =
-                    "No dedicated pattern-overuse producer exists yet; repeated pattern detections must not be treated as overuse without an explicit policy and denominator."
+                    "No dedicated pattern-overuse producer exists yet; repeated pattern detections must not be treated as overuse without an explicit policy and denominator.",
+                ["AEG-ARCH-R4"] = "The current architecture producer does not emit a validated cross-domain leakage metric; forbidden references and layer violations are not semantic substitutes.",
+                ["AEG-ARCH-R6"] = "No file-scope controller business-logic density producer is registered yet.",
+                ["AEG-ARCH-R9"] = "The current cohesion evaluator emits structural counts and ratios, not a validated layer-cohesion index.",
+                ["AEG-ARCH-R10"] = "The security evaluator emits evidence counts but no calibrated SecurityComplianceIndex; a score must not be invented from heterogeneous findings.",
+                ["AEG-ARCH-R12"] = "NodeEvaluator does not currently emit a file-scope NodeCouplingIndex.",
+                ["AEG-BACK-R1"] = "CohesionEvaluator emits member and method/field ratios, not a validated cohesion index.",
+                ["AEG-DEPS-R1"] = "PackageVersionEvaluator does not perform registry-backed outdated-version comparisons, so OutdatedPackageRatio is unavailable.",
+                ["AEG-DEPS-R2"] = "PackageVersionEvaluator does not produce a validated dependency-freshness metric.",
+                ["AEG-DEPS-R3"] = "UnusedReferenceEvaluator does not establish actual code usage; a manifest parse is not proof that a reference is unused.",
+                ["AEG-DEPS-R4"] = "PackageVersionEvaluator does not emit a comparable major-version drift metric.",
+                ["AEG-DES-DEC002"] = "DecoratorPatternEvaluator does not currently measure decorator self-reference; structural delegation signals are not a substitute.",
+                ["AEG-DES-REPO002"] = "RepositoryPatternEvaluator's persistence/transport indicators include legitimate repository behavior and do not prove prohibited external I/O.",
+                ["AEG-DES-FACR002"] = "FactoryPatternEvaluator measures instantiation inside factory candidates, where construction is expected; it does not measure direct construction outside a factory boundary.",
+                ["AEG-DES-CMD002"] = "CommandPatternEvaluator pairs command and handler names but does not measure handler overloads.",
+                ["AEG-DES-MEDI002"] = "MediatorPatternEvaluator does not resolve direct handler calls independently from service-like coupling signals.",
+                ["AEG-DES-OBS002"] = "ObserverPatternEvaluator does not emit a file-scope observer coupling index.",
+                ["AEG-DES-SING002"] = "SingletonPatternEvaluator does not currently measure global-state usage.",
+                ["AEG-PERF-R3"] = "No runtime allocation profiler is integrated; static lexical analysis cannot claim a memory allocation rate.",
+                ["AEG-PERF-R4"] = "ArchitecturalPerformanceEvaluator does not emit a validated blocking-I/O count.",
+                ["AEG-TXN-R2"] = "ArchitecturalTransactionEvaluator does not emit a dedicated data-access hygiene index.",
+                ["AEG-TXN-R3"] = "ArchitecturalTransactionEvaluator does not measure connection-pool abuse.",
+                ["AEG-TXN-R4"] = "ArchitecturalTransactionEvaluator does not prove uncommitted transactions from its current static evidence."
             };
 
     private static readonly IReadOnlyDictionary<string, FrontendScope>

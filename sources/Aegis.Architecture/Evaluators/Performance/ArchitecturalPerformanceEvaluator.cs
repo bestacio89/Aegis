@@ -250,7 +250,10 @@ public sealed class ArchitecturalPerformanceEvaluator
                     DetectLanguage(file),
 
                 ["Evaluator"] =
-                    Name
+                    Name,
+
+                ["EvaluationScope"] =
+                    BaseArchitectureEvaluator.FileScope
             }
         };
     }
@@ -398,7 +401,10 @@ public sealed class ArchitecturalPerformanceEvaluator
                 Metadata =
                 {
                     ["Evaluator"] =
-                        "PerformanceEvaluator"
+                        "PerformanceEvaluator",
+
+                    ["EvaluationScope"] =
+                        BaseArchitectureEvaluator.ProjectScope
                 }
             });
     }

@@ -460,6 +460,24 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             variableNames.Count +
             constantNames.Count;
 
+        result.Metrics["FileNamingCompliance"] = fileScore;
+        result.Metrics["DeclarationsAnalyzed"] = declarationCount;
+
+        // Partial syntax analysis can discover declarations while missing or
+        // misclassifying others. Never convert incomplete evidence into a score
+        // that can trigger a pass/fail rule.
+        if (!analysis.IsComplete)
+        {
+            result.Metrics["NamingEvidenceAvailable"] = 0;
+            result.Metadata["EvaluationStatus"] = analysis.Status.ToString();
+            result.Metadata["TypesDiscovered"] = typeNames.Count.ToString();
+            result.Metadata["InterfacesDiscovered"] = interfaceNames.Length.ToString();
+            result.Metadata["MethodsDiscovered"] = methodNames.Count.ToString();
+            result.Metadata["VariablesDiscovered"] = variableNames.Count.ToString();
+            result.Metadata["ConstantsDiscovered"] = constantNames.Count.ToString();
+            return result;
+        }
+
         var weightedScore = 0d;
         var activeWeight = 0d;
 
@@ -479,9 +497,6 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         // Emit declaration metrics only when that dimension has evidence.
         // Zero declarations is not a zero-compliance observation.
         if (typeNames.Count > 0)
-            // Emit declaration metrics only when that dimension has evidence.
-        // Zero declarations is not a zero-compliance observation.
-        if (typeNames.Count > 0)
             result.Metrics["TypeNamingCompliance"] = typeScore;
 
         if (interfaceNames.Length > 0)
@@ -496,8 +511,6 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         if (constantNames.Count > 0)
             result.Metrics["ConstantNamingCompliance"] = constantScore;
 
-        result.Metrics["FileNamingCompliance"] = fileScore;
-        result.Metrics["DeclarationsAnalyzed"] = declarationCount;
         result.Metrics["NamingEvidenceAvailable"] = declarationCount > 0 ? 1 : 0;
 
         if (declarationCount > 0)
@@ -505,7 +518,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
         result.Metadata["EvaluationStatus"] = declarationCount == 0
             ? "NoDeclarations"
-            : "Evaluated";
+            : analysis.Status.ToString();
 
         result.Metadata["TypesAnalyzed"] = typeNames.Count.ToString();
         result.Metadata["InterfacesAnalyzed"] = interfaceNames.Length.ToString();

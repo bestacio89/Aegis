@@ -12,6 +12,7 @@ public sealed class NamingConventionResolverTests
     [InlineData("TypeScript", "Angular", typeof(AngularNamingConventionPolicy))]
     [InlineData("TypeScript", "React", typeof(ReactNamingConventionPolicy))]
     [InlineData("C#", "Blazor", typeof(BlazorNamingConventionPolicy))]
+    [InlineData("C#", "Unity", typeof(UnityNamingConventionPolicy))]
     [InlineData("C#", "Razor", typeof(RazorNamingConventionPolicy))]
     [InlineData("C#", null, typeof(CSharpNamingConventionPolicy))]
     [InlineData("Java", null, typeof(JavaNamingConventionPolicy))]
@@ -41,6 +42,8 @@ public sealed class NamingConventionResolverTests
 
         Assert.True(policy.IsValidTypeName("OrderService"));
         Assert.False(policy.IsValidTypeName("order_service"));
+        Assert.True(policy.IsValidTypeName("A"));
+        Assert.True(policy.IsValidMethodName("A"));
         Assert.True(policy.IsValidInterfaceName("IOrderService"));
         Assert.False(policy.IsValidInterfaceName("OrderService"));
         Assert.True(policy.IsValidMethodName("CalculateTotal"));
@@ -51,6 +54,19 @@ public sealed class NamingConventionResolverTests
         Assert.False(policy.IsValidConstantName("burstDamageThreshold"));
         Assert.True(policy.IsValidFileName("OrderService"));
         Assert.False(policy.IsValidFileName("order_service"));
+    }
+
+    [Fact]
+    public void Unity_policy_accepts_common_unity_field_prefixes()
+    {
+        var policy = new UnityNamingConventionPolicy();
+
+        Assert.True(policy.IsValidVariableName("m_Text"));
+        Assert.True(policy.IsValidVariableName("_text"));
+        Assert.True(policy.IsValidVariableName("text"));
+        Assert.True(policy.IsValidTypeName("HeroController"));
+        Assert.True(policy.IsValidMethodName("Start"));
+        Assert.False(policy.IsValidVariableName("M_TEXT"));
     }
 
     [Fact]

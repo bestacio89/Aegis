@@ -100,6 +100,7 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Equal(".NET (EF Core)", context.Framework);
         Assert.Contains(context.DetectedDependencies, dependency =>
             dependency.Contains("EntityFrameworkCore", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(context.Dependencies);
         Assert.Equal(program, context.EntryPointFile);
         Assert.True(context.IsDockerized);
         Assert.True(context.UsesKubernetes);

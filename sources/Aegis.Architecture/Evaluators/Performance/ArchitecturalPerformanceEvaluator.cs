@@ -79,6 +79,10 @@ public sealed class ArchitecturalPerformanceEvaluator
         @"(?m)^(?![^\r\n]*\bawait\b)[^\r\n]*\.Result\b",
         RegexOptions.Compiled);
 
+    private static readonly Regex NonCodeRegex = new(
+        """"(?s)(?:\x60(?:\\.|[^\x60\\])*\x60|@?"(?: ""|\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|//[^\r\n]*|/\*.*?\*/|\#[^\r\n]*)"""",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
 
 
     private static readonly Regex SyncIORegex =
@@ -271,6 +275,23 @@ public sealed class ArchitecturalPerformanceEvaluator
     }
 
 
+
+    private static string MaskNonCode(string content)
+    {
+        return NonCodeRegex.Replace(content, match =>
+            string.Create(
+                match.Length,
+                match.Value,
+                static (span, value) =>
+                {
+                    for (var index = 0; index < value.Length; index++)
+                    {
+                        span[index] = value[index] is '\r' or '\n'
+                            ? value[index]
+                            : ' ';
+                    }
+                }));
+    }
 
     private PerformanceScore AnalyzePerformanceSignals(
         string content)

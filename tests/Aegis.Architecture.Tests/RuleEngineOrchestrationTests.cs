@@ -16,10 +16,10 @@ public sealed class RuleEngineOrchestrationTests
     {
         using var directory = new TemporaryDirectory();
         var successful = new FixtureEvaluator(
-            "HealthyEvaluator",
+            "CircularDependencyEvaluator",
             (_, _) => Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(
             [
-                new ArchitectureEvaluatorResult("HealthyEvaluator", "SampleProject")
+                new ArchitectureEvaluatorResult("CircularDependencyEvaluator", "SampleProject")
                 {
                     Category = "Architecture",
                     Metrics = new Dictionary<string, double>
@@ -46,7 +46,7 @@ public sealed class RuleEngineOrchestrationTests
                 Language = "C#"
             });
 
-        Assert.Contains(report.Facts, fact => fact.Source == "HealthyEvaluator");
+        Assert.Contains(report.Facts, fact => fact.Source == "CircularDependencyEvaluator");
         Assert.Contains(report.Diagnostics, diagnostic =>
             diagnostic.Code == "EvaluatorFailed"
             && diagnostic.Component == "FailingEvaluator"

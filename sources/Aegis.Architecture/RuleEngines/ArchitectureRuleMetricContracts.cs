@@ -240,12 +240,11 @@ internal static class ArchitectureRuleMetricContracts
             .Distinct()
             .ToArray();
 
-        // A root context with multiple discovered modules is not a complete
-        // framework inventory: language-specific project detectors run inside
-        // each module. Keep rules eligible at repository level and require the
-        // matching framework on each individual fact below.
-        if (context.IsMultiModule)
-            return true;
+        // The repository context aggregates framework evidence discovered
+        // from project scopes. In a multi-module repository, retain each
+        // detected family independently; do not make every frontend ruleset
+        // eligible merely because the repository contains multiple modules.
+        // Individual facts are still checked against their own framework below.
 
         // No recognized family means applicability remains unknown.
         if (detectedFamilies.Length == 0)

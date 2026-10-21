@@ -58,6 +58,91 @@ internal static class ModuleDetector
 
             ctx.Modules.Add(module);
         }
+
+        // Unity projects frequently have no committed .csproj file. Discover
+        // them from Unity's Assets + ProjectSettings/Packages layout so their
+        // scripts receive a project scope instead of being lost in a mixed scan.
+        var unityRoot = FindUnityProjectRoot(ctx.RootPath, files);
+        if (!string.IsNullOrWhiteSpace(unityRoot))
+        {
+            var existing = ctx.Modules.FirstOrDefault(module =>
+                string.Equals(
+                    Path.GetFullPath(module.Path),
+                    Path.GetFullPath(unityRoot),
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (existing is not null)
+            {
+                existing.Type = "Unity";
+            }
+            else
+            {
+                ctx.Modules.Add(new ProjectModuleContext
+                {
+                    Name = Path.GetFileName(
+                        unityRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+                    Path = unityRoot,
+                    Type = "Unity",
+                    Languages = files
+                        .Where(file => IsSameOrDescendantPath(file, unityRoot))
+                        .Select(GetLanguage)
+                        .Where(language => !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList()
+                });
+            }
+        }
+    }
+
+    private static string? FindUnityProjectRoot(
+        string rootPath,
+        IReadOnlyCollection<string> files)
+    {
+        var root = Path.GetFullPath(rootPath);
+        var markerFiles = files.Where(file =>
+            file.EndsWith(".asmdef", StringComparison.OrdinalIgnoreCase)
+            || (Path.GetFileName(file).Equals("ProjectVersion.txt", StringComparison.OrdinalIgnoreCase)
+                && file.Contains(
+                    $"{Path.DirectorySeparatorChar}ProjectSettings{Path.DirectorySeparatorChar}",
+                    StringComparison.OrdinalIgnoreCase)));
+
+        foreach (var marker in markerFiles)
+        {
+            var directory = Path.GetDirectoryName(Path.GetFullPath(marker));
+            while (!string.IsNullOrWhiteSpace(directory)
+                && IsSameOrDescendantPath(directory, root))
+            {
+                if (Directory.Exists(Path.Combine(directory, "Assets"))
+                    && (Directory.Exists(Path.Combine(directory, "ProjectSettings"))
+                        || Directory.Exists(Path.Combine(directory, "Packages"))))
+                {
+                    return directory;
+                }
+
+                if (string.Equals(
+                    directory.TrimEnd(Path.DirectorySeparatorChar),
+                    root.TrimEnd(Path.DirectorySeparatorChar),
+                    StringComparison.OrdinalIgnoreCase))
+                    break;
+
+                directory = Directory.GetParent(directory)?.FullName;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsSameOrDescendantPath(string path, string root)
+    {
+        var normalizedPath = Path.GetFullPath(path)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedRoot = Path.GetFullPath(root)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase)
+            || normalizedPath.StartsWith(
+                normalizedRoot + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
     }
 
 

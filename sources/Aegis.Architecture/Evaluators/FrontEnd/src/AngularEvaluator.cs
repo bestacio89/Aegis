@@ -926,21 +926,23 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
             return false;
         }
 
+        var allowedPrefix = string.Join("|", prefixes);
+        var simpleSelector = new Regex(
+            @"^(?:[a-z][a-z0-9]*(?:-[a-z0-9]+)*|\\[[A-Za-z][A-Za-z0-9]*\\])$",
+            RegexOptions.CultureInvariant,
+            TimeSpan.FromMilliseconds(100));
         var elementSelector = new Regex(
-            $@"^(?:{string.Join("|", prefixes)})-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+            $@"^(?:{allowedPrefix})-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
             RegexOptions.CultureInvariant,
             TimeSpan.FromMilliseconds(100));
         var attributeSelector = new Regex(
-            $@"^\\[(?:{string.Join("|", prefixes)})[A-Z][A-Za-z0-9]*\\]$",
+            $@"^\\[(?:{allowedPrefix})[A-Z][A-Za-z0-9]*\\]$",
             RegexOptions.CultureInvariant,
             TimeSpan.FromMilliseconds(100));
 
         // Avoid inventing a score for compound CSS selectors that this policy
         // does not explicitly understand. Such files remain unmeasured.
-        if (selectors.Any(selector =>
-                selector.Contains(',') ||
-                (!elementSelector.IsMatch(selector) &&
-                 !attributeSelector.IsMatch(selector))))
+        if (selectors.Any(selector => !simpleSelector.IsMatch(selector)))
         {
             return false;
         }

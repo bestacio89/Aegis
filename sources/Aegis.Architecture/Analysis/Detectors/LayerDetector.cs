@@ -69,6 +69,7 @@ internal static class LayerDetector
             "consumer" => "Consumer",
             "client" => "Client",
             "test" => "Tests",
+            "unity" => "Client",
             _ => $"Unclassified:{module.Name}"
         };
 
@@ -76,5 +77,5 @@ internal static class LayerDetector
         type is not null
         && type.Trim().ToLowerInvariant() is
             "api" or "application" or "domain" or "infrastructure"
-            or "contracts" or "presentation" or "consumer" or "client" or "test";
+            or "contracts" or "presentation" or "consumer" or "client" or "test" or "unity";
 }

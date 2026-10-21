@@ -20,7 +20,7 @@ internal static class ModuleDetector
             .Select(Path.GetDirectoryName)
             .Where(x => x != null)
             .Select(x => x!)
-            .Distinct()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
 
@@ -50,9 +50,10 @@ internal static class ModuleDetector
 
             module.Languages =
                 files
-                .Where(f => f.StartsWith(path))
+                .Where(file => IsSameOrDescendantPath(file, path))
                 .Select(GetLanguage)
-                .Distinct()
+                .Where(language => !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
 

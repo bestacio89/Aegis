@@ -402,6 +402,10 @@ public sealed class GodClassEvaluator
 
         summary.Metadata[EvaluationScopeMetadataKey] = ProjectScope;
         summary.Metadata["Evaluator"] = Name;
+        summary.Metadata["AnalysisComplete"] =
+            (analyzedFiles + unreadableFiles == discoveredFiles).ToString();
+        summary.Metadata["AnalysisStatus"] =
+            unreadableFiles == 0 ? "Completed" : "Incomplete";
         summary.Metadata["SemanticAnalysisPerformed"] = "false";
         summary.Metadata["StructuralAnalysisHeuristic"] = "true";
 

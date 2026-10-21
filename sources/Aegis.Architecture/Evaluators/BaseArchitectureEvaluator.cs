@@ -365,7 +365,18 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                 || segment.Equals("Third-Party", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("vendor", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("node_modules", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)))
+                || segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Library", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("PackageCache", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Temp", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Logs", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("obj", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("bin", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals(".git", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("TestResults", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("coverage", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("dist", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("build", StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }

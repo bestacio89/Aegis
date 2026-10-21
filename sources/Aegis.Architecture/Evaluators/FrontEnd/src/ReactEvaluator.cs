@@ -315,6 +315,16 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
             {
                 AddMetric(result, "HookCount", hookCount);
                 fileMetrics.HookCount = hookCount;
+
+                if (TryComputeHookDisciplineScore(file, out var hookDisciplineScore))
+                {
+                    AddMetric(result, "HookDisciplineScore", hookDisciplineScore);
+                }
+            }
+
+            if (TryComputeTypingScore(file, out var typingScore))
+            {
+                AddMetric(result, "TypingScore", typingScore);
             }
 
             if (TryGetNonNegativeInteger(
@@ -675,6 +685,85 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
             // normalized. This is evidence metadata, not a file-system write.
             return reportedPath;
         }
+    }
+
+    private static bool TryComputeHookDisciplineScore(
+        JsonElement file,
+        out int score)
+    {
+        score = 0;
+
+        if (!TryGetProperty(file, "hooks", out var hooks)
+            || hooks.ValueKind != JsonValueKind.Array
+            || hooks.GetArrayLength() == 0)
+        {
+            return false;
+        }
+
+        var violations = 0;
+        foreach (var hook in hooks.EnumerateArray())
+        {
+            if (hook.ValueKind != JsonValueKind.Object
+                || !TryGetProperty(hook, "conditionallyCalled", out var conditional)
+                || conditional.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            {
+                // Incomplete evidence must not become a pass or a violation.
+                return false;
+            }
+
+            if (conditional.GetBoolean())
+            {
+                violations++;
+            }
+        }
+
+        score = (int)Math.Round(
+            (hooks.GetArrayLength() - violations) * 100d / hooks.GetArrayLength(),
+            MidpointRounding.AwayFromZero);
+        return true;
+    }
+
+    private static bool TryComputeTypingScore(
+        JsonElement file,
+        out int score)
+    {
+        score = 0;
+
+        if (!TryGetProperty(file, "componentTyping", out var components)
+            || components.ValueKind != JsonValueKind.Array
+            || components.GetArrayLength() == 0)
+        {
+            return false;
+        }
+
+        var typedCount = 0;
+        var total = 0;
+
+        foreach (var component in components.EnumerateArray())
+        {
+            if (component.ValueKind != JsonValueKind.Object
+                || !TryGetProperty(component, "propsTyped", out var typed)
+                || typed.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            {
+                return false;
+            }
+
+            total++;
+            if (typed.GetBoolean())
+            {
+                typedCount++;
+            }
+        }
+
+        if (total == 0)
+        {
+            return false;
+        }
+
+        score = (int)Math.Round(
+            typedCount * 100d / total,
+            MidpointRounding.AwayFromZero);
+        return true;
     }
 
     private static bool TryGetProperty(

@@ -18,7 +18,7 @@ public sealed class RuleEngineScopeTests
             new AegisArchitecturePolicy());
 
         var projectFact = new ArchitectureEvaluatorResult(
-            "ArchitecturalEvaluator",
+            "CircularDependencyEvaluator",
             "SampleProject")
         {
             Category = "Architecture",
@@ -33,14 +33,29 @@ public sealed class RuleEngineScopeTests
         };
 
         var fileFact = new ArchitectureEvaluatorResult(
-            "NamingEvaluator",
+            "CircularDependencyEvaluator",
             "Widget.cs")
         {
             Category = "ArchitectureSummary",
             Metrics = new Dictionary<string, double>
             {
                 // A project metric on a file fact must not trigger a project rule.
-                ["CircularDependencyCount"] = 99,
+                ["CircularDependencyCount"] = 99
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "src/Widget.cs"
+            }
+        };
+
+        var namingFact = new ArchitectureEvaluatorResult(
+            "NamingEvaluator",
+            "Widget.cs")
+        {
+            Category = "Naming",
+            Metrics = new Dictionary<string, double>
+            {
                 ["TypeNamingCompliance"] = 20
             },
             Metadata = new Dictionary<string, string>
@@ -52,7 +67,7 @@ public sealed class RuleEngineScopeTests
 
         var outcome = engine.EvaluateDetailed(
             new ProjectArchitectureContext(),
-            [projectFact, fileFact]);
+            [projectFact, fileFact, namingFact]);
 
         Assert.Contains(
             outcome.Evaluations,
@@ -114,7 +129,7 @@ public sealed class RuleEngineScopeTests
             new AegisArchitecturePolicy());
 
         var fact = new ArchitectureEvaluatorResult(
-            "ArchitecturalEvaluator",
+            "CircularDependencyEvaluator",
             "SampleProject")
         {
             Category = "Architecture",

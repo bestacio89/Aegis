@@ -208,23 +208,48 @@ internal static class ModuleDetector
     /// </summary>
     private static string DetectModuleType(string path)
     {
-        var name = path.ToLowerInvariant();
+        var name = Path.GetFileName(
+            Path.TrimEndingDirectorySeparator(path)).ToLowerInvariant();
 
+        // Match architectural roles using project-name tokens rather than
+        // arbitrary substrings in the full path (for example, "capital" must
+        // not be mistaken for an API project).
+        if (name.Contains("test", StringComparison.Ordinal))
+            return "Test";
 
-        if (name.Contains("api"))
+        if (name.EndsWith(".api", StringComparison.Ordinal)
+            || name.EndsWith("api", StringComparison.Ordinal))
             return "Api";
 
-        if (name.Contains("application"))
+        if (name.Contains("application", StringComparison.Ordinal)
+            || name.EndsWith(".app", StringComparison.Ordinal))
             return "Application";
 
-        if (name.Contains("domain"))
+        if (name.Contains("domain", StringComparison.Ordinal)
+            || name.EndsWith(".core", StringComparison.Ordinal))
             return "Domain";
 
-        if (name.Contains("infra"))
+        if (name.Contains("infrastructure", StringComparison.Ordinal)
+            || name.Contains("persistence", StringComparison.Ordinal)
+            || name.Contains("database", StringComparison.Ordinal))
             return "Infrastructure";
 
-        if (name.Contains("test"))
-            return "Test";
+        if (name.Contains("contracts", StringComparison.Ordinal)
+            || name.Contains("abstractions", StringComparison.Ordinal))
+            return "Contracts";
+
+        if (name.Contains("consumer", StringComparison.Ordinal)
+            || name.Contains("worker", StringComparison.Ordinal)
+            || name.Contains("background", StringComparison.Ordinal))
+            return "Consumer";
+
+        if (name.Contains("admin", StringComparison.Ordinal)
+            || name.Contains("presentation", StringComparison.Ordinal)
+            || name.Contains("web", StringComparison.Ordinal))
+            return "Presentation";
+
+        if (name.Contains("client", StringComparison.Ordinal))
+            return "Client";
 
         return "Unknown";
     }

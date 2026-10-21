@@ -324,11 +324,12 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             }
 
             var language = DetectLanguage(file);
+            // Resolve framework from the file's own project and path. A mixed
+            // repository may contain ASP.NET, Blazor and Unity C# simultaneously.
+            var fileFramework = ResolveFrameworkForFile(file, projectPath, Context);
             var fileContext = new ProjectArchitectureContext(
                 language,
-                string.Equals(language, Context.Language, StringComparison.OrdinalIgnoreCase)
-                    ? Context.Framework
-                    : null,
+                fileFramework,
                 Context.Confidence);
 
             var convention = _resolver.Resolve(fileContext);
@@ -449,7 +450,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         var variableScore = ComputeScore(variableNames.Count, variableViolations);
         var constantScore = ComputeScore(constantNames.Count, constantViolations);
 
-        var fileScore = convention.IsValidFileName(Path.GetFileNameWithoutExtension(file))
+        var fileScore = convention.IsValidFileName(GetNamingFileStem(file))
             ? 100
             : 0;
 
@@ -589,7 +590,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             constantViolations);
 
         var fileScore = convention.IsValidFileName(
-            Path.GetFileNameWithoutExtension(file))
+            GetNamingFileStem(file))
             ? 100
             : 0;
 
@@ -940,7 +941,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             {
                 files.AddRange(
                     Directory.EnumerateFiles(current, "*")
-                        .Where(IsSupportedFile));
+                        .Where(IsSupportedFile)
+                        .Where(ShouldAnalyzeSourceFile));
             }
             catch (IOException)
             {
@@ -953,6 +955,48 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         }
 
         return files;
+    }
+
+    private static string GetNamingFileStem(string file)
+    {
+        var fileName = Path.GetFileName(file);
+
+        // Blazor code-behind files follow the component's name, not the
+        // artificial compound identifier "Component.razor".
+        if (fileName.EndsWith(".razor.cs", StringComparison.OrdinalIgnoreCase))
+            return fileName[..^".razor.cs".Length];
+
+        return Path.GetFileNameWithoutExtension(fileName);
+    }
+
+    private static bool ShouldAnalyzeSourceFile(string file)
+    {
+        var normalized = file.Replace(
+            Path.AltDirectorySeparatorChar,
+            Path.DirectorySeparatorChar);
+
+        var segments = normalized.Split(
+            Path.DirectorySeparatorChar,
+            StringSplitOptions.RemoveEmptyEntries);
+
+        // Generated artifacts and vendored/sample sources are not first-party
+        // naming-policy subjects by default.
+        if (segments.Any(segment =>
+                segment.Equals("TextMesh Pro", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("TextMeshPro", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Samples", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Sample", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Third-Party", StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        var name = Path.GetFileName(file);
+        return !name.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".AssemblyInfo.cs", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsSupportedFile(string file)

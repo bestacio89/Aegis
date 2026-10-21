@@ -175,6 +175,24 @@ public sealed class RuleEngineCoreBehaviorTests
                 && pair.Value.Contains("framework applicability", StringComparison.OrdinalIgnoreCase));
     }
 
+
+    [Fact]
+    public void EvaluateDetailed_reports_pattern_rules_without_producers_as_explicitly_unsupported()
+    {
+        var outcome = CreateEngine().EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            []);
+
+        Assert.Contains(
+            "no dedicated pattern-circular-reference producer",
+            outcome.Stats.NotEvaluatedReasons["AEG-DES-CIRC001"],
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "no dedicated pattern-overuse producer",
+            outcome.Stats.NotEvaluatedReasons["AEG-DES-OVER001"],
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void EvaluateDetailed_rejects_ambiguous_case_insensitive_metric_matches()
     {

@@ -125,6 +125,20 @@ public sealed class AegisArchitectureReport
         }
 
         Metrics.ProjectHealthIndex = Math.Round(Metrics.ProjectHealthIndex, 2);
+
+        var stats = EvaluationStats;
+        var coverage = stats is not null && stats.RulesApplicable > 0
+            ? Math.Clamp(stats.EvaluationCoverage, 0.0, 1.0)
+            : 0.0;
+
+        Metrics.RuleEvaluationCoverage = Math.Round(coverage * 100.0, 2);
+        Metrics.CoverageAdjustedHealthIndex = Math.Round(
+            Metrics.ProjectHealthIndex * coverage,
+            2);
+        Metrics.AssessmentComplete = stats is not null
+            && stats.RulesApplicable > 0
+            && coverage >= 0.95
+            && stats.EvaluationsErrored == 0;
     }
 
     private static ArchitectureRuleCategory ParseCategory(string category) =>

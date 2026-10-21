@@ -49,7 +49,11 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             "__pycache__",
             ".venv",
             "venv",
-            "TestResults"
+            "TestResults",
+            "PackageCache",
+            "Temp",
+            "Logs",
+            "Generated"
         };
 
     // Interfaces are scored separately and must not also inflate the type score.
@@ -912,7 +916,9 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                 var name = Path.GetFileName(
                     Path.TrimEndingDirectorySeparator(directory));
 
-                if (ExcludedDirectories.Contains(name))
+                if (ExcludedDirectories.Contains(name)
+                    || (name.Equals("Library", StringComparison.OrdinalIgnoreCase)
+                        && IsUnityLibraryDirectory(directory)))
                 {
                     continue;
                 }
@@ -955,6 +961,15 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         }
 
         return files;
+    }
+
+    private static bool IsUnityLibraryDirectory(string directory)
+    {
+        var root = Directory.GetParent(directory)?.FullName;
+        return root is not null
+            && Directory.Exists(Path.Combine(root, "Assets"))
+            && (Directory.Exists(Path.Combine(root, "ProjectSettings"))
+                || Directory.Exists(Path.Combine(root, "Packages")));
     }
 
     private static string GetNamingFileStem(string file)

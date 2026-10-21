@@ -156,6 +156,56 @@ public sealed class ArchitectureEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task ArchitecturalEvaluator_measures_infrastructure_inversion_separately_from_layer_isolation()
+    {
+        using var project = new TemporaryProject();
+        var context = CreateContext(project);
+        context.Dependencies.AddRange(
+        [
+            new ArchitectureDependencyContext
+            {
+                File = "back/Domain/Order.cs",
+                Source = "Order",
+                Target = "OrderRepository",
+                SourceLayer = "Domain",
+                TargetLayer = "Infrastructure",
+                DependencyType = "Project"
+            },
+            new ArchitectureDependencyContext
+            {
+                File = "back/Domain/Order.cs",
+                Source = "Order",
+                Target = "OrderService",
+                SourceLayer = "Domain",
+                TargetLayer = "Application",
+                DependencyType = "Project"
+            }
+        ]);
+
+        using var provider = CreateProvider(policy =>
+        {
+            policy.Architecture.AllowedDependencies["Domain"] =
+                ["Infrastructure", "Application"];
+        });
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "ArchitecturalEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            context)).ToArray();
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+
+        Assert.Equal(100, summary.Metrics["LayerIsolationCompliance"]);
+        Assert.Equal(50, summary.Metrics["InfrastructureInversionCompliance"]);
+        Assert.Equal(2, summary.Metrics["DomainDependencyCount"]);
+        Assert.Equal(1, summary.Metrics["DomainToInfrastructureDependencyCount"]);
+        Assert.Contains("separate from generic layer isolation",
+            summary.Metadata["InfrastructureInversionMeasurement"]);
+    }
+
+    [Fact]
     public async Task SecurityEvaluator_detects_a_hardcoded_password_and_preserves_evidence()
     {
         using var project = new TemporaryProject();

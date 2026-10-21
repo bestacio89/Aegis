@@ -163,13 +163,6 @@ public sealed class RuleEngineCore
                     continue;
                 }
 
-                // Scope is part of the rule contract. Do not let a known metric
-                // at another scope count as evidence for this rule.
-                if ((rule.Scope == RuleEvaluationScope.Project) != isProjectFact)
-                {
-                    continue;
-                }
-
                 var metricExists = ArchitectureRuleMetricContracts.TryResolveMetric(
                     rule,
                     fact.Metrics,
@@ -179,6 +172,13 @@ public sealed class RuleEngineCore
                 if (metricExists)
                 {
                     matchedAnyDeclaredMetric = true;
+                }
+
+                // Scope is part of the rule contract. Track metric evidence at
+                // an incompatible scope for diagnostics, but never evaluate it.
+                if ((rule.Scope == RuleEvaluationScope.Project) != isProjectFact)
+                {
+                    continue;
                 }
 
                 if (!metricExists)
@@ -332,7 +332,11 @@ public sealed class RuleEngineCore
                 .ToList();
 
             var hasMetricEvidence = scopedFacts.Any(fact =>
-                ArchitectureRuleMetricContracts.TryResolveMetric(
+                ArchitectureRuleMetricContracts.TryGetFactApplicability(
+                    rule,
+                    fact,
+                    out _)
+                && ArchitectureRuleMetricContracts.TryResolveMetric(
                     rule,
                     fact.Metrics,
                     out _,
@@ -340,6 +344,21 @@ public sealed class RuleEngineCore
 
             var hasWrongScopeMetricEvidence = eligibleFacts.Any(fact =>
                 IsProjectSummary(fact) != expectsProjectFacts
+                && ArchitectureRuleMetricContracts.TryGetFactApplicability(
+                    rule,
+                    fact,
+                    out _)
+                && ArchitectureRuleMetricContracts.TryResolveMetric(
+                    rule,
+                    fact.Metrics,
+                    out _,
+                    out _));
+
+            var hasInapplicableMetricEvidence = eligibleFacts.Any(fact =>
+                !ArchitectureRuleMetricContracts.TryGetFactApplicability(
+                    rule,
+                    fact,
+                    out _)
                 && ArchitectureRuleMetricContracts.TryResolveMetric(
                     rule,
                     fact.Metrics,
@@ -355,9 +374,11 @@ public sealed class RuleEngineCore
                 ? $"Metric '{rule.MetricKey}' was emitted at {scopeLabel} scope, but no valid comparison completed. Check for non-finite observations or an invalid threshold."
                 : hasWrongScopeMetricEvidence
                     ? $"Metric '{rule.MetricKey}' was emitted, but only at the wrong scope for rule '{rule.Id}' (required: {scopeLabel})."
-                    : scopedFacts.Count == 0
-                        ? $"No {scopeLabel}-scope evaluator facts were available for metric '{rule.MetricKey}'."
-                        : $"No {scopeLabel}-scope evaluator fact emitted declared metric '{rule.MetricKey}'.";
+                    : hasInapplicableMetricEvidence
+                        ? $"Metric '{rule.MetricKey}' exists, but its fact-level framework metadata does not match rule '{rule.Id}'; the metric was not reused across frameworks."
+                        : scopedFacts.Count == 0
+                            ? $"No {scopeLabel}-scope evaluator facts were available for metric '{rule.MetricKey}'."
+                            : $"No {scopeLabel}-scope evaluator fact emitted declared metric '{rule.MetricKey}'.";
         }
 
         var distinctPassedRules = evaluations

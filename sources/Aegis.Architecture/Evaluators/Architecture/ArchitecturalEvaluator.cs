@@ -123,18 +123,18 @@ public sealed class ArchitecturalEvaluator :
             }
         }
 
-        // Aggregate metrics are emitted only when every supplied dependency
-        // could be classified. Partial data must not masquerade as a complete
-        // project-wide compliance measurement.
-        if (dependencies.Count > 0
-            && incompleteCount == 0
-            && classifiedCount == dependencies.Count)
+        // Always report project analysis coverage when there is evidence to
+        // summarize. Compliance metrics are emitted only for complete analysis;
+        // a partial dependency graph must not look like a clean project score.
+        if (dependencies.Count > 0)
         {
             results.Add(
                 CreateProjectSummary(
                     dependencies.Count,
+                    classifiedCount,
                     allowedCount,
-                    forbiddenCount));
+                    forbiddenCount,
+                    incompleteCount));
         }
 
         AegisDiagnostics.Report(
@@ -228,12 +228,13 @@ public sealed class ArchitecturalEvaluator :
 
     private ArchitectureEvaluatorResult CreateProjectSummary(
         int totalDependencies,
+        int classifiedDependencies,
         int allowedCount,
-        int forbiddenCount)
+        int forbiddenCount,
+        int incompleteCount)
     {
-        var compliance = totalDependencies == 0
-            ? 100.0
-            : allowedCount * 100.0 / totalDependencies;
+        var complete = incompleteCount == 0
+            && classifiedDependencies == totalDependencies;
 
         var result = new ArchitectureEvaluatorResult(
             Name,
@@ -242,20 +243,33 @@ public sealed class ArchitecturalEvaluator :
             Category = nameof(ArchitectureRuleCategory.Architecture),
             Metrics = new Dictionary<string, double>
             {
-                ["TotalDependencyCount"] = totalDependencies,
-                ["AllowedDependencyCount"] = allowedCount,
-                ["ForbiddenReferenceCount"] = forbiddenCount,
-                ["LayerIsolationCompliance"] = compliance
+                ["ObservedDependencyCount"] = totalDependencies,
+                ["ClassifiedDependencyCount"] = classifiedDependencies,
+                ["IncompleteDependencyCount"] = incompleteCount
             },
             Metadata = new Dictionary<string, string>
             {
                 [EvaluationScopeMetadataKey] = ProjectScope,
                 ["MetricScope"] = ProjectScope,
-                ["PolicyClassificationComplete"] = "true",
+                ["AnalysisComplete"] = complete.ToString().ToLowerInvariant(),
+                ["AnalysisStatus"] = complete ? "Completed" : "Incomplete",
+                ["PolicyClassificationComplete"] = complete.ToString().ToLowerInvariant(),
                 ["Language"] = Context?.Language ?? "Unknown",
                 ["Framework"] = Context?.Framework ?? "Unknown"
             }
         };
+
+        if (complete)
+        {
+            var compliance = totalDependencies == 0
+                ? 100.0
+                : allowedCount * 100.0 / totalDependencies;
+
+            result.Metrics["TotalDependencyCount"] = totalDependencies;
+            result.Metrics["AllowedDependencyCount"] = allowedCount;
+            result.Metrics["ForbiddenReferenceCount"] = forbiddenCount;
+            result.Metrics["LayerIsolationCompliance"] = compliance;
+        }
 
         return result;
     }

@@ -109,6 +109,37 @@ public sealed class FrontendRuleApplicabilityRegressionTests
     }
 
     [Fact]
+    public void Missing_frontend_frameworks_are_not_applicable_in_a_multi_module_repository()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext
+            {
+                ProjectName = "MixedBackendBlazor",
+                Language = "C#",
+                Framework = "ASP.NET Core",
+                DetectedFrameworks = ["ASP.NET Core", "Blazor", ".NET"],
+                Modules =
+                [
+                    new ProjectModuleContext { Name = "Api", Path = "src/Api" },
+                    new ProjectModuleContext { Name = "Admin", Path = "src/Admin" }
+                ]
+            },
+            []);
+
+        Assert.Contains("AEG-FRONT-R1", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-FRONT-R2", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-FRONT-R3", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-FRONT-R4", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-FRONT-R5", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-FRONT-R6", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-FRONT-R7", outcome.Stats.RulesNotApplicable);
+    }
+
+    [Fact]
     public void React_complexity_is_not_evaluated_against_cross_framework_rule()
     {
         var engine = new RuleEngineCore(

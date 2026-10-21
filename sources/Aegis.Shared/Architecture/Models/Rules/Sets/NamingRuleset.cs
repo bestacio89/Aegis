@@ -68,7 +68,7 @@ public static class NamingRuleset
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
             Severity = ArchitectureRuleSeverity.Medium,
-            Recommendation = "Use language-specific variable and constant conventions; C# constants commonly use PascalCase, while UPPER_SNAKE_CASE is accepted where the language or team policy requires it."
+            Recommendation = "Use the language-specific local-variable, parameter, and field naming convention consistently."
         },
 
         // ===============================================================

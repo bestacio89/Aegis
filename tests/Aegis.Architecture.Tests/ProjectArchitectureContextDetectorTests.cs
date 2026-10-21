@@ -106,10 +106,12 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.True(context.UsesKubernetes);
         Assert.True(context.IsDeployable);
         Assert.Equal(2, context.Modules.Count);
+        Assert.Equal(2, context.Layers.Count);
         Assert.All(context.Modules, module =>
         {
-            Assert.NotEmpty(module.Layers);
-            Assert.Contains(module.Layers, layer => layer.Name == module.Name);
+            var layer = Assert.Single(module.Layers);
+            Assert.Contains(context.Layers, candidate => ReferenceEquals(candidate, layer));
+            Assert.NotEmpty(layer.Files);
         });
         Assert.Contains(context.PatternsDetected, pattern => pattern == "Repository Pattern");
         Assert.Contains(context.PatternsDetected, pattern => pattern == "Dependency Injection");

@@ -1,5 +1,4 @@
 ﻿using Aegis.Architecture.Analysis.Detectors;
-using Aegis.Architecture.Analysis.Detectors;
 using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Architecture.Analysis;

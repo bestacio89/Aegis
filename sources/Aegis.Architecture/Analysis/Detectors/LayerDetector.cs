@@ -61,7 +61,7 @@ internal static class LayerDetector
         module.Type?.Trim().ToLowerInvariant() switch
         {
             "api" => "Api",
-            "application" => "App",
+            "application" => "Application",
             "domain" => "Domain",
             "infrastructure" => "Infrastructure",
             "contracts" => "Contracts",

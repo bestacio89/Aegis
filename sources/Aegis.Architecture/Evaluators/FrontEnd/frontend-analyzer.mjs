@@ -718,7 +718,77 @@ function analyzeReactSource(file, source)
     const sourceFile = parseTypeScript(file, source, true);
 
     const components = [];
+    const componentTyping = [];
     const hooks = [];
+
+    function getFunctionName(node)
+    {
+        if (node.name && ts.isIdentifier(node.name))
+        {
+            return node.name.text;
+        }
+
+        const parent = node.parent;
+        if (parent && ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name))
+        {
+            return parent.name.text;
+        }
+
+        return null;
+    }
+
+    function isHookCallMisused(call)
+    {
+        let current = call.parent;
+        let functionBoundary = null;
+
+        while (current)
+        {
+            if (
+                ts.isIfStatement(current) ||
+                ts.isConditionalExpression(current) ||
+                ts.isSwitchStatement(current) ||
+                ts.isCaseClause(current) ||
+                ts.isForStatement(current) ||
+                ts.isForInStatement(current) ||
+                ts.isForOfStatement(current) ||
+                ts.isWhileStatement(current) ||
+                ts.isDoStatement(current) ||
+                ts.isCatchClause(current)
+            )
+            {
+                return true;
+            }
+
+            if (
+                ts.isBinaryExpression(current) &&
+                [
+                    ts.SyntaxKind.AmpersandAmpersandToken,
+                    ts.SyntaxKind.BarBarToken,
+                    ts.SyntaxKind.QuestionQuestionToken
+                ].includes(current.operatorToken.kind)
+            )
+            {
+                return true;
+            }
+
+            if (ts.isFunctionLike(current))
+            {
+                functionBoundary = current;
+                break;
+            }
+
+            current = current.parent;
+        }
+
+        if (!functionBoundary)
+        {
+            return true;
+        }
+
+        const name = getFunctionName(functionBoundary);
+        return !(name && (/^[A-Z]/.test(name) || /^use[A-Z0-9]/.test(name)));
+    }
 
     let jsxElementCount = 0;
     let conditionalCount = 0;
@@ -732,12 +802,18 @@ function analyzeReactSource(file, source)
         )
         {
             components.push(node.name.text);
+            const hasProps = node.parameters.length > 0;
+            const hasPropTypes = source.includes(node.name.text + ".propTypes");
+            componentTyping.push({
+                name: node.name.text,
+                propsTyped: !hasProps || node.parameters[0].type !== undefined || hasPropTypes
+            });
         }
 
         if (
             ts.isVariableDeclaration(node) &&
             ts.isIdentifier(node.name) &&
-            / ^ [A - Z] /.test(node.name.text) &&
+            /^[A-Z]/.test(node.name.text) &&
             node.initializer &&
             (
                 ts.isArrowFunction(node.initializer) ||
@@ -746,6 +822,13 @@ function analyzeReactSource(file, source)
         )
         {
             components.push(node.name.text);
+            const parameters = node.initializer.parameters;
+            const hasProps = parameters.length > 0;
+            const hasPropTypes = source.includes(node.name.text + ".propTypes");
+            componentTyping.push({
+                name: node.name.text,
+                propsTyped: !hasProps || parameters[0].type !== undefined || hasPropTypes
+            });
         }
 
         if (
@@ -755,10 +838,11 @@ function analyzeReactSource(file, source)
         )
         {
             hooks.push({
-            name: node.expression.text,
+                name: node.expression.text,
                 line: sourceFile.getLineAndCharacterOfPosition(
                     node.getStart(sourceFile)
-                ).line + 1
+                ).line + 1,
+                conditionallyCalled: isHookCallMisused(node)
             });
         }
 
@@ -789,6 +873,7 @@ function analyzeReactSource(file, source)
     filePath: relativeFile(file),
         sourceLineCount: countNonBlankLines(source),
         components: [...new Set(components)],
+        componentTyping,
         hooks,
         jsxElementCount,
         conditionalCount,

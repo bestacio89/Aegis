@@ -152,6 +152,24 @@ public sealed class RuleEngineCore
 
             foreach (var rule in applicableRules)
             {
+                // Frontend applicability must be checked per fact as well as
+                // per project. A repository may contain multiple UI frameworks,
+                // and a shared metric key must not cross-satisfy their rules.
+                if (!ArchitectureRuleMetricContracts.TryGetFactApplicability(
+                        rule,
+                        fact,
+                        out _))
+                {
+                    continue;
+                }
+
+                // Scope is part of the rule contract. Do not let a known metric
+                // at another scope count as evidence for this rule.
+                if ((rule.Scope == RuleEvaluationScope.Project) != isProjectFact)
+                {
+                    continue;
+                }
+
                 var metricExists = ArchitectureRuleMetricContracts.TryResolveMetric(
                     rule,
                     fact.Metrics,
@@ -161,13 +179,6 @@ public sealed class RuleEngineCore
                 if (metricExists)
                 {
                     matchedAnyDeclaredMetric = true;
-                }
-
-                // Scope is part of the rule contract. Track recognized metrics
-                // emitted at the wrong scope separately from unknown metrics.
-                if ((rule.Scope == RuleEvaluationScope.Project) != isProjectFact)
-                {
-                    continue;
                 }
 
                 if (!metricExists)

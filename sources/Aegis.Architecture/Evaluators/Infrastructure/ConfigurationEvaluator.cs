@@ -174,7 +174,8 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
             if (assessment.SyntaxValidation == SyntaxValidationStatus.Invalid)
             {
                 diagnostics.Add(
-                    $"Configuration syntax validation failed for '{file}'.");
+                    $"Configuration syntax validation failed for '{file}': " +
+                    (assessment.SyntaxDiagnostic ?? "No parser diagnostic was provided."));
             }
 
             fileResults.Add(CreateFileResult(file, assessment));

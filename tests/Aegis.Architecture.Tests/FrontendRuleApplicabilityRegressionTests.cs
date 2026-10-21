@@ -53,6 +53,8 @@ public sealed class FrontendRuleApplicabilityRegressionTests
         Assert.DoesNotContain(
             outcome.Results,
             result => result.RuleId == "AEG-FRONT-R11");
+
+        Assert.Contains("AEG-FRONT-R11", outcome.Stats.RulesNotApplicable);
         Assert.Contains(
             "dedicated complexity rule",
             outcome.Stats.NotApplicableReasons["AEG-FRONT-R11"],

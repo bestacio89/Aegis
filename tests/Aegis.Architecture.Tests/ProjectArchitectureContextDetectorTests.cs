@@ -137,8 +137,47 @@ public sealed class ProjectArchitectureContextDetectorTests
         var context = ProjectArchitectureContextDetector.Detect(directory.Path);
 
         Assert.Equal("C#", context.Language);
-        Assert.Equal("Blazor", context.Framework);
+        Assert.Equal("ASP.NET Core", context.Framework);
         Assert.Contains("Blazor", context.DetectedFrameworks);
+        Assert.Contains("ASP.NET Core", context.DetectedFrameworks);
+        Assert.Equal("FullStack", context.DomainType);
+    }
+
+ 
+    [Fact]
+    public void Detect_preserves_blazor_backend_and_unity_signals_in_a_mixed_repository()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var webProject = Path.Combine(directory.Path, "Server", "Server.csproj");
+        var component = Path.Combine(directory.Path, "Server", "Components", "Home.razor");
+        var unityAssembly = Path.Combine(directory.Path, "Assets", "Game", "Game.asmdef");
+        var unityVersion = Path.Combine(directory.Path, "ProjectSettings", "ProjectVersion.txt");
+        var unityManifest = Path.Combine(directory.Path, "Packages", "manifest.json");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(webProject)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(component)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(unityAssembly)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(unityVersion)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(unityManifest)!);
+
+        File.WriteAllText(webProject, """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(component, "@page \"/\"\n<h1>Home</h1>");
+        File.WriteAllText(unityAssembly, "{ \"name\": \"Game\" }");
+        File.WriteAllText(unityVersion, "m_EditorVersion: 6000.0.0f1");
+        File.WriteAllText(unityManifest, "{ \"dependencies\": { \"com.unity.inputsystem\": \"1.0.0\" } }");
+        File.WriteAllText(Path.Combine(directory.Path, "Server", "Program.cs"), "public class Program { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal("ASP.NET Core", context.Framework);
+        Assert.Contains("ASP.NET Core", context.DetectedFrameworks);
+        Assert.Contains("Blazor", context.DetectedFrameworks);
+        Assert.Contains("Unity", context.DetectedFrameworks);
         Assert.Equal("FullStack", context.DomainType);
     }
 

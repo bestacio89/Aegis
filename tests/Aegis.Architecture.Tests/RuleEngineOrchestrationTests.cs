@@ -1,4 +1,5 @@
 using Aegis.Architecture.Aggregation;
+using Aegis.Architecture.Analysis;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Architecture.Scoring;
 using Aegis.Shared.Architecture.Models;

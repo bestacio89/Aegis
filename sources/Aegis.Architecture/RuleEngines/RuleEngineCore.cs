@@ -327,13 +327,26 @@ public sealed class RuleEngineCore
                     out _,
                     out _));
 
+            var hasWrongScopeMetricEvidence = eligibleFacts.Any(fact =>
+                IsProjectSummary(fact) != expectsProjectFacts
+                && ArchitectureRuleMetricContracts.TryResolveMetric(
+                    rule,
+                    fact.Metrics,
+                    out _,
+                    out _));
+
             var scopeLabel = rule.Scope.ToString().ToLowerInvariant();
 
+            // Prefer a precise scope-mismatch explanation over the generic
+            // "no scoped facts" message. This makes a producer's contract
+            // mismatch actionable without allowing cross-scope evaluation.
             notEvaluatedReasons[rule.Id] = hasMetricEvidence
                 ? $"Metric '{rule.MetricKey}' was emitted at {scopeLabel} scope, but no valid comparison completed. Check for non-finite observations or an invalid threshold."
-                : scopedFacts.Count == 0
-                    ? $"No {scopeLabel}-scope evaluator facts were available for metric '{rule.MetricKey}'."
-                    : $"No {scopeLabel}-scope evaluator fact emitted declared metric '{rule.MetricKey}'.";
+                : hasWrongScopeMetricEvidence
+                    ? $"Metric '{rule.MetricKey}' was emitted, but only at the wrong scope for rule '{rule.Id}' (required: {scopeLabel})."
+                    : scopedFacts.Count == 0
+                        ? $"No {scopeLabel}-scope evaluator facts were available for metric '{rule.MetricKey}'."
+                        : $"No {scopeLabel}-scope evaluator fact emitted declared metric '{rule.MetricKey}'.";
         }
 
         var distinctPassedRules = evaluations

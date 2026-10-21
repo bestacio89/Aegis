@@ -40,5 +40,14 @@ public sealed class RuleMetricScopeDiagnosticTests
         Assert.DoesNotContain(
             outcome.Evaluations,
             evaluation => evaluation.RuleId == "AEG-ARCH-R1");
+
+        Assert.Contains(
+            "wrong scope",
+            outcome.Stats.NotEvaluatedReasons["AEG-ARCH-R1"],
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "required: project",
+            outcome.Stats.NotEvaluatedReasons["AEG-ARCH-R1"],
+            StringComparison.OrdinalIgnoreCase);
     }
 }

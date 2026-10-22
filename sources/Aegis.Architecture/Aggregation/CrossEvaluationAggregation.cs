@@ -337,40 +337,19 @@ public sealed class CrossEvaluatorAggregator
         }
 
 
-        var total =
-            rules.Count;
-
-        var compliant =
-            rules.Count(
-                x => x.IsCompliant);
-
-
+        // Legacy callers supply findings without the corresponding passing checks.
+        // Findings are useful evidence of problems, but they do not provide a denominator
+        // from which a compliance or health score can be calculated.
         return new ArchitectureDomainSummary
         {
             Domain = domain,
-
-            RulesEvaluated = total,
-
-            ChecksPerformed = total,
-            HasAssessmentEvidence = true,
-
-            Violations =
-                total - compliant,
-
-            WeightedScore =
-                _weightingEngine
-                    .ComputeWeightedCompliance(rules),
-
-            MaintainabilityIndex =
-                ((double)compliant / total)
-                *
-                _maintainabilityFactor,
-
-            HealthIndex =
-                rules.Average(
-                    x => x.ImpactScore)
-                *
-                _globalHealthWeight
+            RulesEvaluated = 0,
+            ChecksPerformed = 0,
+            HasAssessmentEvidence = false,
+            Violations = rules.Count,
+            WeightedScore = 0,
+            MaintainabilityIndex = 0,
+            HealthIndex = 0
         };
     }
 

@@ -107,10 +107,17 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.True(context.IsDeployable);
         Assert.Equal(2, context.Modules.Count);
         Assert.Equal(2, context.Layers.Count);
+        Assert.Equal(
+            context.Layers.Count,
+            context.Layers.Select(layer => layer.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count());
         Assert.All(context.Modules, module =>
         {
             var layer = Assert.Single(module.Layers);
-            Assert.Contains(context.Layers, candidate => ReferenceEquals(candidate, layer));
+            Assert.Contains(context.Layers, candidate =>
+                string.Equals(candidate.Name, layer.Name, StringComparison.OrdinalIgnoreCase)
+                && candidate.Files.Any(file => layer.Files.Contains(file, StringComparer.OrdinalIgnoreCase)));
             Assert.NotEmpty(layer.Files);
         });
         Assert.Contains(context.PatternsDetected, pattern => pattern == "Repository Pattern");

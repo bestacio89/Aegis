@@ -123,8 +123,10 @@ public sealed class AegisArchitectureReport
 
         if (assessedDomains.Count > 0)
         {
+            var totalChecks = assessedDomains.Sum(domain => (double)domain.ChecksPerformed);
             Metrics.ProjectHealthIndex = Math.Round(
-                assessedDomains.Average(domain => domain.HealthIndex * 100),
+                assessedDomains.Sum(domain => domain.HealthIndex * domain.ChecksPerformed)
+                    / totalChecks * 100.0,
                 2);
             Metrics.HasAssessmentEvidence = true;
         }

@@ -459,33 +459,30 @@ public sealed class CrossEvaluatorAggregator
 
 
 
+        var totalChecks = assessed.Sum(domain => (double)domain.ChecksPerformed);
+
         return new GlobalArchitectureMetrics
         {
-            ProjectHealthIndex =
-                Math.Round(
-                    assessed.Average(
-                        x => x.HealthIndex * 100),
-                    2),
+            // Weight aggregate scores by the number of completed checks in each domain.
+            // A tiny domain must not have the same influence as a domain with many checks.
+            ProjectHealthIndex = Math.Round(
+                assessed.Sum(domain => domain.HealthIndex * domain.ChecksPerformed)
+                    / totalChecks * 100.0,
+                2),
 
+            MaintainabilityIndex = Math.Round(
+                assessed.Sum(domain => domain.MaintainabilityIndex * domain.ChecksPerformed)
+                    / totalChecks * 100.0,
+                2),
 
-            MaintainabilityIndex =
-                Math.Round(
-                    assessed.Average(
-                        x => x.MaintainabilityIndex * 100),
-                    2),
+            WeightedCompliance = Math.Round(
+                assessed.Sum(domain => domain.WeightedScore * domain.ChecksPerformed)
+                    / totalChecks,
+                3),
 
-
-            WeightedCompliance =
-                Math.Round(
-                    assessed.Average(
-                        x => x.WeightedScore),
-                    3),
-
-
-            ResilienceIndex =
-                Math.Round(
-                    ComputeResilience(assessed),
-                    3),
+            ResilienceIndex = Math.Round(
+                ComputeResilience(assessed),
+                3),
 
             HasAssessmentEvidence = true
         };

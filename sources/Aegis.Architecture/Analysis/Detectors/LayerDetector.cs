@@ -41,19 +41,38 @@ internal static class LayerDetector
                 filesByModule[owner.Module].Add(file);
         }
 
+        var moduleLayers = new List<ProjectLayerContext>();
+
         foreach (var module in context.Modules)
         {
-            var layerName = ResolveLayerName(module);
             var layer = new ProjectLayerContext
             {
-                Name = layerName,
+                Name = ResolveLayerName(module),
                 Path = module.Path,
                 Files = filesByModule[module],
                 Confidence = IsKnownLayer(module.Type) ? 0.95 : 0.5
             };
 
             module.Layers.Add(layer);
-            context.Layers.Add(layer);
+            moduleLayers.Add(layer);
+        }
+
+        // A project/module is not itself an architectural layer. The top-level
+        // inventory contains distinct semantic roles, with their owned files
+        // aggregated, while each module retains its own path-specific layer view.
+        foreach (var group in moduleLayers.GroupBy(
+                     layer => layer.Name,
+                     StringComparer.OrdinalIgnoreCase))
+        {
+            context.Layers.Add(new ProjectLayerContext
+            {
+                Name = group.Key,
+                Path = context.RootPath,
+                Files = group.SelectMany(layer => layer.Files)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                Confidence = group.Min(layer => layer.Confidence)
+            });
         }
     }
 

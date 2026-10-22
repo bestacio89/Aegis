@@ -182,6 +182,22 @@ td {
                 report.TotalViolations.ToString());
 
             AddRow(html,
+                "Registered Rules",
+                report.EvaluationStats?.RulesRegistered.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Supported Applicable Rules",
+                report.EvaluationStats?.RulesApplicable.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Supported Rules Evaluated",
+                report.EvaluationStats?.RulesEvaluated.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Rules Not Evaluated",
+                report.EvaluationStats?.RulesNotEvaluated.Count.ToString() ?? "N/A");
+
+            AddRow(html,
                 "Assessed Health Index",
                 report.Metrics.HasAssessmentEvidence
                     ? $"{report.Metrics.ProjectHealthIndex:0.00}%"

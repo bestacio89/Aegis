@@ -232,6 +232,8 @@ public sealed class PdfReportExporter : IReportExporter
         section.AddParagraph(L(language, "Executive Summary", "Synthèse Exécutive")).Style = StyleNames.Heading1;
 
         var health = report.Metrics?.ProjectHealthIndex ?? 0;
+        var healthDisplay = report.Metrics?.HasAssessmentEvidence == true ? $"{health:0.##}%" : "N/A";
+        var coverageAdjustedDisplay = report.Metrics?.HasAssessmentEvidence == true ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A";
         var coverageAdjustedHealth = report.Metrics?.CoverageAdjustedHealthIndex ?? 0;
         var stats = report.EvaluationStats;
         var coveragePercent = stats is not null && stats.RulesApplicable > 0
@@ -259,8 +261,8 @@ public sealed class PdfReportExporter : IReportExporter
 
         var narrative = L(
             language,
-            $"{report.ProjectName} was scanned across {report.TotalFilesScanned} files. The assessed health score is {health:0.##}%, while the coverage-adjusted diagnostic is {coverageAdjustedHealth:0.##}%. The overall assessment is {status}. {coverageSummary} {report.TotalViolations} findings were identified. The coverage-adjusted value is a diagnostic, not a compliance score.",
-            $"{report.ProjectName} a été analysé sur {report.TotalFilesScanned} fichiers. Le score de santé évalué est de {health:0.##} %, tandis que l’indicateur ajusté à la couverture est de {coverageAdjustedHealth:0.##} %. L’évaluation globale est {status}. {coverageSummary} {report.TotalViolations} constats ont été identifiés. La valeur ajustée à la couverture est un indicateur diagnostique, pas un score de conformité.");
+            $"{report.ProjectName} was scanned across {report.TotalFilesScanned} files. The assessed health score is {healthDisplay}, while the coverage-adjusted diagnostic is {coverageAdjustedDisplay}. The overall assessment is {status}. {coverageSummary} {report.TotalViolations} findings were identified. The coverage-adjusted value is a diagnostic, not a compliance score.",
+            $"{report.ProjectName} a été analysé sur {report.TotalFilesScanned} fichiers. Le score de santé évalué est {healthDisplay}, tandis que l’indicateur ajusté à la couverture est {coverageAdjustedDisplay}. L’évaluation globale est {status}. {coverageSummary} {report.TotalViolations} constats ont été identifiés. La valeur ajustée à la couverture est un indicateur diagnostique, pas un score de conformité.");
 
         var p = section.AddParagraph(narrative);
         p.Format.SpaceAfter = 10;
@@ -289,8 +291,8 @@ public sealed class PdfReportExporter : IReportExporter
             AddRow(table, L(language, "Rules Evaluated", "Règles Évaluées"), stats.RulesEvaluated.ToString());
             AddRow(table, L(language, "Rules Not Evaluated", "Règles Non Évaluées"), stats.RulesNotEvaluated.Count.ToString());
             AddRow(table, L(language, "Rule Evaluation Coverage", "Couverture d'Évaluation des Règles"), $"{stats.EvaluationCoverage:P1}");
-            AddRow(table, L(language, "Assessed Health Index", "Indice de Santé Évalué"), $"{report.Metrics.ProjectHealthIndex:0.##}%");
-            AddRow(table, L(language, "Coverage-Adjusted Diagnostic", "Indicateur Ajusté à la Couverture"), $"{report.Metrics.CoverageAdjustedHealthIndex:0.##}%");
+            AddRow(table, L(language, "Assessed Health Index", "Indice de Santé Évalué"), report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.ProjectHealthIndex:0.##}%" : "N/A");
+            AddRow(table, L(language, "Coverage-Adjusted Diagnostic", "Indicateur Ajusté à la Couverture"), report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A");
             AddRow(table, L(language, "Assessment Complete", "Évaluation Complète"), report.Metrics.AssessmentComplete ? L(language, "Yes", "Oui") : L(language, "No", "Non"));
             AddRow(table, L(language, "Checks Performed", "Vérifications Effectuées"), stats.ChecksPerformed.ToString());
             AddRow(table, L(language, "Insufficient Evidence", "Preuves Insuffisantes"), stats.EvaluationsInsufficientEvidence.ToString());
@@ -435,11 +437,11 @@ public sealed class PdfReportExporter : IReportExporter
             row.Cells[1].AddParagraph(domain.RulesEvaluated.ToString());
             row.Cells[2].AddParagraph(domain.Violations.ToString());
 
-            var healthCell = row.Cells[3].AddParagraph($"{health:0.0}%");
+            var healthCell = row.Cells[3].AddParagraph(domain.ChecksPerformed > 0 ? $"{health:0.0}%" : "N/A");
             healthCell.Format.Font.Color = HealthColor(health);
             healthCell.Format.Font.Bold = true;
 
-            row.Cells[4].AddParagraph($"{compliance:0.0}%");
+            row.Cells[4].AddParagraph(domain.ChecksPerformed > 0 ? $"{compliance:0.0}%" : "N/A");
             alt = !alt;
         }
     }

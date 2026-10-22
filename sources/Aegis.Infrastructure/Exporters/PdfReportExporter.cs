@@ -1,5 +1,6 @@
 ﻿using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Rules;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.Logging;
 using MigraDoc.DocumentObjectModel;
@@ -372,24 +373,41 @@ public sealed class PdfReportExporter : IReportExporter
         header.Cells[1].AddParagraph(L(language, "Score", "Score"));
         header.Cells[2].AddParagraph(L(language, "Status", "Statut"));
 
+        var registeredCategories = ArchitectureRuleRegistry.All
+            .Select(rule => Enum.TryParse<ArchitectureRuleCategory>(
+                rule.Category,
+                true,
+                out var category)
+                ? category
+                : ArchitectureRuleCategory.General)
+            .Distinct()
+            .OrderBy(category => category.ToString())
+            .ToArray();
+
         bool alt = false;
-        foreach (var score in report.ComplianceScores.OrderByDescending(x => x.Value))
+        foreach (var category in registeredCategories)
         {
+            var hasScore = report.ComplianceScores.TryGetValue(category, out var score);
             var row = table.AddRow();
             ApplyRowStyle(row, false, alt);
-            row.Cells[0].AddParagraph(LocalizeCategory(score.Key.ToString(), language));
+            row.Cells[0].AddParagraph(LocalizeCategory(category.ToString(), language));
 
-            var scoreCell = row.Cells[1].AddParagraph($"{score.Value:0.00}%");
-            scoreCell.Format.Font.Color = HealthColor(score.Value);
-            scoreCell.Format.Font.Bold = true;
+            var scoreCell = row.Cells[1].AddParagraph(hasScore ? $"{score:0.00}%" : "N/A");
+            if (hasScore)
+            {
+                scoreCell.Format.Font.Color = HealthColor(score);
+                scoreCell.Format.Font.Bold = true;
+            }
 
-            var categoryStatus = !report.Metrics.AssessmentComplete
-                ? L(language, "PROVISIONAL", "PROVISOIRE")
-                : score.Value >= 80
-                    ? L(language, "PASSED", "CONFORME")
-                    : score.Value >= 50
-                        ? L(language, "WARNING", "ATTENTION")
-                        : L(language, "CRITICAL", "CRITIQUE");
+            var categoryStatus = !hasScore
+                ? L(language, "NOT ASSESSED", "NON ÉVALUÉ")
+                : !report.Metrics.AssessmentComplete
+                    ? L(language, "PROVISIONAL", "PROVISOIRE")
+                    : score >= 80
+                        ? L(language, "PASSED", "CONFORME")
+                        : score >= 50
+                            ? L(language, "WARNING", "ATTENTION")
+                            : L(language, "CRITICAL", "CRITIQUE");
             row.Cells[2].AddParagraph(categoryStatus);
             alt = !alt;
         }

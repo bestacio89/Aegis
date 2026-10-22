@@ -184,8 +184,8 @@ public sealed class RuleEngineCoreBehaviorTests
             new ProjectArchitectureContext(),
             []);
 
-        Assert.Equal(73, ArchitectureRuleRegistry.All.Count);
-        Assert.Equal(73, outcome.Stats.NotEvaluatedReasons.Count);
+        Assert.Equal(76, ArchitectureRuleRegistry.All.Count);
+        Assert.Equal(ArchitectureRuleRegistry.All.Count, outcome.Stats.NotEvaluatedReasons.Count);
 
         foreach (var rule in ArchitectureRuleRegistry.All)
         {

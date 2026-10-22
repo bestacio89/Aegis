@@ -453,6 +453,22 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         return files;
     }
 
+    private static bool IsTextMeshProExamplePath(string path)
+    {
+        var segments = path.Replace(
+                Path.AltDirectorySeparatorChar,
+                Path.DirectorySeparatorChar)
+            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+
+        var hasTextMeshProDirectory = segments.Any(segment =>
+            segment.Equals("TextMesh Pro", StringComparison.OrdinalIgnoreCase)
+            || segment.Equals("TextMeshPro", StringComparison.OrdinalIgnoreCase));
+        var hasExamplesDirectory = segments.Any(segment =>
+            segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase));
+
+        return hasTextMeshProDirectory && hasExamplesDirectory;
+    }
+
     private static bool IsGovernanceSource(string file)
     {
         var normalized = file.Replace(
@@ -466,11 +482,9 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         // Treat vendored libraries and tutorial/sample trees as external code,
         // not as first-party architectural obligations. A future policy option
         // can opt these paths back in when a team intentionally governs them.
-        if (segments.Any(segment =>
-                segment.Equals("TextMesh Pro", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("TextMeshPro", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase)
+        if (IsTextMeshProExamplePath(file)
+            || segments.Any(segment =>
+                segment.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("Third-Party", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("vendor", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("node_modules", StringComparison.OrdinalIgnoreCase)

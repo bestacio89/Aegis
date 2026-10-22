@@ -234,10 +234,9 @@ public sealed class PdfReportExporter : IReportExporter
         var health = report.Metrics?.ProjectHealthIndex ?? 0;
         var healthDisplay = report.Metrics?.HasAssessmentEvidence == true ? $"{health:0.##}%" : "N/A";
         var coverageAdjustedDisplay = report.Metrics?.HasAssessmentEvidence == true ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A";
-        var coverageAdjustedHealth = report.Metrics?.CoverageAdjustedHealthIndex ?? 0;
         var stats = report.EvaluationStats;
         var coveragePercent = stats is not null && stats.RulesApplicable > 0
-            ? (double)stats.RulesEvaluated / stats.RulesApplicable * 100.0
+            ? stats.EvaluationCoverage * 100.0
             : 0.0;
         var assessmentIncomplete = stats is null
             || stats.RulesApplicable == 0

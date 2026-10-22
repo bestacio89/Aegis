@@ -81,21 +81,32 @@ public sealed class RuleEngineCore
         var notApplicableReasons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        var unsupportedRuleReasons =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         var applicableRules = new List<ArchitectureRuleDefinition>();
 
         foreach (var rule in _rules)
         {
-            if (ArchitectureRuleMetricContracts.TryGetApplicability(
+            if (!ArchitectureRuleMetricContracts.TryGetApplicability(
                     rule,
                     context,
                     out var applicabilityReason))
             {
-                applicableRules.Add(rule);
-            }
-            else
-            {
                 notApplicableReasons[rule.Id] = applicabilityReason;
+                continue;
             }
+
+            var producerDisposition =
+                ArchitectureRuleMetricContracts.GetProducerContractDisposition(rule.Id);
+
+            if (producerDisposition is not null)
+            {
+                unsupportedRuleReasons[rule.Id] = producerDisposition;
+                continue;
+            }
+
+            applicableRules.Add(rule);
         }
 
         var rulesByDomain =
@@ -319,6 +330,12 @@ public sealed class RuleEngineCore
         var notEvaluatedReasons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        foreach (var (ruleId, reason) in unsupportedRuleReasons)
+        {
+            notEvaluatedReasons[ruleId] =
+                $"Rule '{ruleId}' is not evaluable because its producer contract is unsupported: {reason}";
+        }
+
         var eligibleFacts = factList
             .Where(fact => fact is not null)
             .ToList();
@@ -423,6 +440,8 @@ public sealed class RuleEngineCore
         {
             RulesRegistered = _rules.Count,
             RulesApplicable = applicableRules.Count,
+            RulesUnsupported = unsupportedRuleReasons.Count,
+            UnsupportedRuleReasons = unsupportedRuleReasons,
             RulesEvaluated = evaluatedRuleIds.Count,
             RulesPassed = distinctPassedRules,
             RulesViolated = distinctViolatedRules,

@@ -72,9 +72,12 @@ public sealed class MarkdownReportExporter : IReportExporter
 
             md.AppendLine("| Metric | Value |");
             md.AppendLine("|-------|------:|");
-            md.AppendLine($"| Files Scanned | {report.TotalFilesScanned} |");
+            md.AppendLine($"| Governed Files in Scope | {report.TotalFilesScanned} |");
             md.AppendLine($"| Total Violations | {report.TotalViolations} |");
-            md.AppendLine($"| Health Index | **{report.Metrics.ProjectHealthIndex:0.00}%** |");
+            md.AppendLine($"| Assessed Health Index | {(report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.ProjectHealthIndex:0.00}%" : "N/A")} |");
+            md.AppendLine($"| Coverage-Adjusted Diagnostic | {(report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.00}%" : "N/A")} |");
+            md.AppendLine($"| Rule Evaluation Coverage | {report.Metrics.RuleEvaluationCoverage:0.00}% |");
+            md.AppendLine($"| Assessment Complete | {(report.Metrics.AssessmentComplete ? "Yes" : "No")} |");
 
             md.AppendLine();
 

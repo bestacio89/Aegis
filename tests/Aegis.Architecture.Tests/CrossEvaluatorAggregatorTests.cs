@@ -125,8 +125,11 @@ public sealed class CrossEvaluatorAggregatorTests
 
         Assert.Empty(report.Results);
         Assert.Empty(report.Domains);
-        Assert.Equal(100, report.Metrics.ProjectHealthIndex);
-        Assert.Equal(1, report.Metrics.WeightedCompliance);
+        Assert.Equal(0, report.Metrics.ProjectHealthIndex);
+        Assert.Equal(0, report.Metrics.WeightedCompliance);
+        Assert.False(report.Metrics.HasAssessmentEvidence);
+        Assert.False(report.Metrics.AssessmentComplete);
+        Assert.Equal(0, report.Metrics.RuleEvaluationCoverage);
     }
 
     private static CrossEvaluatorAggregator CreateAggregator() =>

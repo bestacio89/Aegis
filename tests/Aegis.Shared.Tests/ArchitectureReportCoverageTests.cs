@@ -32,6 +32,7 @@ public sealed class ArchitectureReportCoverageTests
             report.Metrics.CoverageAdjustedHealthIndex);
         Assert.False(report.Metrics.AssessmentComplete);
         Assert.Equal(88.04, report.Metrics.ProjectHealthIndex);
+        Assert.True(report.Metrics.HasAssessmentEvidence);
     }
 
     [Fact]
@@ -58,9 +59,7 @@ public sealed class ArchitectureReportCoverageTests
         Assert.False(report.Metrics.HasAssessmentEvidence);
         Assert.False(report.Metrics.AssessmentComplete);
         Assert.Equal(0, report.Metrics.ProjectHealthIndex);
-        Assert.Equal("N/A", report.Summary.Contains("HealthIndex: N/A", StringComparison.Ordinal)
-            ? "N/A"
-            : "unexpected");
+        Assert.Contains("HealthIndex: N/A", report.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -108,5 +107,6 @@ public sealed class ArchitectureReportCoverageTests
         Assert.Equal(100, report.Metrics.RuleEvaluationCoverage);
         Assert.Equal(95, report.Metrics.CoverageAdjustedHealthIndex);
         Assert.True(report.Metrics.AssessmentComplete);
+        Assert.True(report.Metrics.HasAssessmentEvidence);
     }
 }

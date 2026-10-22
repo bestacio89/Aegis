@@ -356,7 +356,7 @@ internal static class ArchitectureRuleMetricContracts
         if (declarationCountKey is not null
             && fact.Metadata is not null
             && fact.Metadata.TryGetValue("EvaluationStatus", out var evaluationStatus)
-            && evaluationStatus is "Evaluated" or "NoDeclarations"
+            && (evaluationStatus is "Evaluated" or "NoDeclarations")
             && fact.Metadata.TryGetValue(declarationCountKey, out var countText)
             && int.TryParse(countText, out var declarationCount)
             && declarationCount == 0)

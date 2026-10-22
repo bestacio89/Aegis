@@ -82,6 +82,7 @@ public sealed class RuleEvaluationStats
         = new Dictionary<string, int>(
             StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Fraction of supported applicable rules with at least one completed evaluation.</summary>
     public double EvaluationCoverage =>
         RulesApplicable <= 0
             ? 0.0

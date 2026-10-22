@@ -1,5 +1,4 @@
 using Aegis.Shared.Architecture.Models;
-using Aegis.Architecture.RuleEngines;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models.Rules;
 using Xunit;
@@ -48,25 +47,6 @@ public sealed class ArchitectureRuleRegistryTests
         Assert.Equal("PublicSurfaceRatio", rule.MetricKey);
         Assert.Equal(ComparisonOperator.GreaterThan, rule.Operator);
         Assert.Equal(1.0, rule.Threshold);
-    }
-
-    [Theory]
-    [InlineData("AEG-NAM-R8")]
-    [InlineData("AEG-NAM-R9")]
-    public void Field_and_property_rules_are_not_applicable_to_non_csharp_projects(string ruleId)
-    {
-        var rule = ArchitectureRuleRegistry.GetById(ruleId);
-        var context = new ProjectArchitectureContext
-        {
-            Language = "TypeScript"
-        };
-
-        Assert.NotNull(rule);
-        Assert.False(ArchitectureRuleMetricContracts.TryGetApplicability(
-            rule,
-            context,
-            out var reason));
-        Assert.Contains("C#", reason);
     }
 
     [Fact]

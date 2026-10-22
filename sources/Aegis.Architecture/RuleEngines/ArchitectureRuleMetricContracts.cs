@@ -81,6 +81,8 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-NAM-R5"] = ["NamingEvaluator"],
                 ["AEG-NAM-R6"] = ["NamingEvaluator"],
                 ["AEG-NAM-R7"] = ["NamingEvaluator"],
+                ["AEG-NAM-R8"] = ["NamingEvaluator"],
+                ["AEG-NAM-R9"] = ["NamingEvaluator"],
 
                 ["AEG-PERF-R1"] = ["PerformanceEvaluator"],
                 ["AEG-PERF-R2"] = ["PerformanceEvaluator"],

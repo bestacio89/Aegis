@@ -115,6 +115,30 @@ public static class NamingRuleset
             Threshold = 90,
             Severity = ArchitectureRuleSeverity.Low,
             Recommendation = "Use language-specific constant naming conventions; C# constants commonly use PascalCase and uppercase snake case is supported where explicitly required."
+        },
+        new ArchitectureRuleDefinition
+        {
+            Id = "AEG-NAM-R8",
+            Scope = RuleEvaluationScope.File,
+            Name = "Field Naming Style Non-Compliant",
+            Category = nameof(ArchitectureRuleCategory.Naming),
+            MetricKey = "FieldNamingCompliance",
+            Operator = ComparisonOperator.LessThan,
+            Threshold = 90,
+            Severity = ArchitectureRuleSeverity.Low,
+            Recommendation = "Apply visibility- and framework-appropriate field naming conventions; keep private fields distinct from public fields and respect framework-specific prefixes."
+        },
+        new ArchitectureRuleDefinition
+        {
+            Id = "AEG-NAM-R9",
+            Scope = RuleEvaluationScope.File,
+            Name = "Property Naming Style Non-Compliant",
+            Category = nameof(ArchitectureRuleCategory.Naming),
+            MetricKey = "PropertyNamingCompliance",
+            Operator = ComparisonOperator.LessThan,
+            Threshold = 90,
+            Severity = ArchitectureRuleSeverity.Low,
+            Recommendation = "Use PascalCase for C# property names and preserve the language-specific convention for other supported languages."
         }
     };
 }

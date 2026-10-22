@@ -1,3 +1,4 @@
+using Aegis.Architecture.Analysis.Detectors;
 ﻿
 using System.Text.RegularExpressions;
 
@@ -954,6 +955,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                     Path.TrimEndingDirectorySeparator(directory));
 
                 if (ExcludedDirectories.Contains(name)
+                    || FileExclusions.IsExcluded(directory)
                     || IsTextMeshProExamplePath(directory)
                     || (name.Equals("Library", StringComparison.OrdinalIgnoreCase)
                         && IsUnityLibraryDirectory(directory)))
@@ -1040,6 +1042,9 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
     private static bool ShouldAnalyzeSourceFile(string file)
     {
+        if (FileExclusions.IsExcluded(file))
+            return false;
+
         var normalized = file.Replace(
             Path.AltDirectorySeparatorChar,
             Path.DirectorySeparatorChar);

@@ -165,6 +165,7 @@ public sealed class ProjectArchitectureContextDetectorTests
         Directory.CreateDirectory(Path.Combine(directory.Path, "Library", "PackageCache", "com.unity.sample"));
 
         File.WriteAllText(Path.Combine(assets, "Game.asmdef"), """{"name":"Game"}""");
+        File.WriteAllText(Path.Combine(directory.Path, "Assembly-CSharp-Editor.csproj"), "<Project />");
         File.WriteAllText(Path.Combine(directory.Path, "ProjectSettings", "ProjectVersion.txt"), "m_EditorVersion: 6000.0.0f1");
         File.WriteAllText(Path.Combine(assets, "Scripts", "GameController.cs"), "public sealed class GameController { }");
         File.WriteAllText(Path.Combine(assets, "Scripts", "Generated.Designer.cs"), "public sealed class Generated { }");

@@ -8,9 +8,34 @@ internal static class FileExclusions
             ".git", ".vs", ".idea", ".vscode",
             "bin", "obj", "node_modules", "dist", "build",
             "__pycache__", ".venv", "venv", "coverage", "TestResults",
-            "Temp", "Logs", "PackageCache", "Generated",
+            "Logs", "PackageCache", "Generated",
             "ThirdParty", "Third-Party", "vendor"
         };
+
+    private static bool IsUnityTempPath(string path)
+    {
+        var current = Directory.Exists(path)
+            ? Path.GetFullPath(path)
+            : Path.GetDirectoryName(Path.GetFullPath(path));
+
+        while (!string.IsNullOrWhiteSpace(current))
+        {
+            if (Path.GetFileName(current).Equals(
+                    "Temp",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var root = Directory.GetParent(current)?.FullName;
+                return root is not null
+                    && Directory.Exists(Path.Combine(root, "Assets"))
+                    && (Directory.Exists(Path.Combine(root, "ProjectSettings"))
+                        || Directory.Exists(Path.Combine(root, "Packages")));
+            }
+
+            current = Directory.GetParent(current)?.FullName;
+        }
+
+        return false;
+    }
 
     public static bool IsExcluded(string path)
     {
@@ -38,6 +63,9 @@ internal static class FileExclusions
             segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase));
 
         if (hasTextMeshProDirectory && hasExamplesDirectory)
+            return true;
+
+        if (IsUnityTempPath(path))
             return true;
 
         var fileName = Path.GetFileName(path);

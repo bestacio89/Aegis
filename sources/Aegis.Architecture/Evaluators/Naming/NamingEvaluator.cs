@@ -53,7 +53,12 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             "PackageCache",
             "Temp",
             "Logs",
-            "Generated"
+            "Generated",
+            "TextMesh Pro",
+            "TextMeshPro",
+            "Examples & Extras",
+            "ThirdParty",
+            "Third-Party"
         };
 
     // Interfaces are scored separately and must not also inflate the type score.

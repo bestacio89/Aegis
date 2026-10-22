@@ -276,7 +276,7 @@ Keep each PR reviewable and based on `develop`. Do not merge a stage until tests
 
 The correctness overhaul binds every registered rule to an explicit producer contract or an explicit unsupported disposition. A metric key by itself is not evidence that a rule's semantic requirement was measured.
 
-The current contract inventory has 52 producer-backed rules and 24 explicitly unsupported rules. Unsupported rules remain visible as unevaluated with a reason; they must not be satisfied by a similarly named metric from another evaluator.
+The current contract inventory has 53 producer-backed rules and 23 explicitly unsupported rules. Unsupported rules remain visible as unevaluated with a reason; they must not be satisfied by a similarly named metric from another evaluator.
 
 Explicitly unsupported until a semantically valid producer is implemented:
 

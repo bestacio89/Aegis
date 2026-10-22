@@ -438,11 +438,19 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
         var variableNames = declarations
             .Where(declaration => declaration.Kind is
-                NamingDeclarationKind.Field
-                or NamingDeclarationKind.LocalVariable
+                NamingDeclarationKind.LocalVariable
                 or NamingDeclarationKind.Parameter)
             .Select(declaration => declaration.Name)
             .ToList();
+
+        var fieldDeclarations = declarations
+            .Where(declaration => declaration.Kind == NamingDeclarationKind.Field)
+            .ToArray();
+
+        var propertyNames = declarations
+            .Where(declaration => declaration.Kind == NamingDeclarationKind.Property)
+            .Select(declaration => declaration.Name)
+            .ToArray();
 
         var constantNames = declarations
             .Where(declaration => declaration.Kind == NamingDeclarationKind.Constant)
@@ -453,12 +461,22 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         var interfaceViolations = interfaceNames.Count(name => !convention.IsValidInterfaceName(name));
         var methodViolations = methodNames.Count(name => !convention.IsValidMethodName(name));
         var variableViolations = variableNames.Count(name => !convention.IsValidVariableName(name));
+        var fieldViolations = fieldDeclarations.Count(declaration =>
+            convention is UnityNamingConventionPolicy
+                ? !convention.IsValidVariableName(declaration.Name)
+                    && !convention.IsValidTypeName(declaration.Name)
+                : declaration.IsPublic
+                    ? !convention.IsValidTypeName(declaration.Name)
+                    : !convention.IsValidVariableName(declaration.Name));
+        var propertyViolations = propertyNames.Count(name => !convention.IsValidTypeName(name));
         var constantViolations = constantNames.Count(name => !convention.IsValidConstantName(name));
 
         var typeScore = ComputeScore(typeNames.Count, typeViolations);
         var interfaceScore = ComputeScore(interfaceNames.Length, interfaceViolations);
         var methodScore = ComputeScore(methodNames.Count, methodViolations);
         var variableScore = ComputeScore(variableNames.Count, variableViolations);
+        var fieldScore = ComputeScore(fieldDeclarations.Length, fieldViolations);
+        var propertyScore = ComputeScore(propertyNames.Length, propertyViolations);
         var constantScore = ComputeScore(constantNames.Count, constantViolations);
 
         var fileScore = convention.IsValidFileName(GetNamingFileStem(file))
@@ -470,6 +488,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             interfaceNames.Length +
             methodNames.Count +
             variableNames.Count +
+            fieldDeclarations.Length +
+            propertyNames.Length +
             constantNames.Count;
 
         result.Metrics["FileNamingCompliance"] = fileScore;
@@ -493,14 +513,16 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         var weightedScore = 0d;
         var activeWeight = 0d;
 
-        AddDimension(typeNames.Count, typeScore, 0.30, ref weightedScore, ref activeWeight);
-        AddDimension(interfaceNames.Length, interfaceScore, 0.15, ref weightedScore, ref activeWeight);
+        AddDimension(typeNames.Count, typeScore, 0.25, ref weightedScore, ref activeWeight);
+        AddDimension(interfaceNames.Length, interfaceScore, 0.10, ref weightedScore, ref activeWeight);
         AddDimension(methodNames.Count, methodScore, 0.20, ref weightedScore, ref activeWeight);
         AddDimension(variableNames.Count, variableScore, 0.15, ref weightedScore, ref activeWeight);
-        AddDimension(constantNames.Count, constantScore, 0.10, ref weightedScore, ref activeWeight);
+        AddDimension(fieldDeclarations.Length, fieldScore, 0.10, ref weightedScore, ref activeWeight);
+        AddDimension(propertyNames.Length, propertyScore, 0.10, ref weightedScore, ref activeWeight);
+        AddDimension(constantNames.Count, constantScore, 0.05, ref weightedScore, ref activeWeight);
 
-        weightedScore += fileScore * 0.10;
-        activeWeight += 0.10;
+        weightedScore += fileScore * 0.05;
+        activeWeight += 0.05;
 
         var compliance = declarationCount == 0
             ? 0
@@ -520,6 +542,12 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         if (variableNames.Count > 0)
             result.Metrics["VariableNamingCompliance"] = variableScore;
 
+        if (fieldDeclarations.Length > 0)
+            result.Metrics["FieldNamingCompliance"] = fieldScore;
+
+        if (propertyNames.Length > 0)
+            result.Metrics["PropertyNamingCompliance"] = propertyScore;
+
         if (constantNames.Count > 0)
             result.Metrics["ConstantNamingCompliance"] = constantScore;
 
@@ -536,6 +564,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         result.Metadata["InterfacesAnalyzed"] = interfaceNames.Length.ToString();
         result.Metadata["MethodsAnalyzed"] = methodNames.Count.ToString();
         result.Metadata["VariablesAnalyzed"] = variableNames.Count.ToString();
+        result.Metadata["FieldsAnalyzed"] = fieldDeclarations.Length.ToString();
+        result.Metadata["PropertiesAnalyzed"] = propertyNames.Length.ToString();
         result.Metadata["ConstantsAnalyzed"] = constantNames.Count.ToString();
 
         return result;

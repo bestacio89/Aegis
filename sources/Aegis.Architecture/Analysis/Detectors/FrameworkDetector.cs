@@ -50,13 +50,24 @@ internal static class FrameworkDetector
                 break;
         }
 
-        if (!string.IsNullOrWhiteSpace(ctx.Framework)
-            && !ctx.DetectedFrameworks.Contains(
-                ctx.Framework,
-                StringComparer.OrdinalIgnoreCase))
+        // Discover frontend frameworks independently of the repository's primary
+        // language. A C# web API and an Angular/React client are separate technology
+        // signals in one repository; the primary backend identity must not suppress
+        // the client framework or its package inventory.
+        if (!string.Equals(
+                ctx.Language,
+                "TypeScript/JavaScript",
+                StringComparison.OrdinalIgnoreCase)
+            && files.Any(file => Path.GetFileName(file).Equals(
+                "package.json",
+                StringComparison.OrdinalIgnoreCase)))
         {
-            ctx.DetectedFrameworks.Add(ctx.Framework);
+            DetectNodeFramework(ctx, files, deps, preservePrimaryFramework: true);
+            ctx.DetectedDependencies = deps.ToList();
         }
+
+        if (!string.IsNullOrWhiteSpace(ctx.Framework))
+            AddFramework(ctx, ctx.Framework);
     }
 
     private static void DetectDotNetFramework(
@@ -169,21 +180,59 @@ internal static class FrameworkDetector
         else ctx.Framework = "Python Standard";
     }
 
-    private static void DetectNodeFramework(ProjectArchitectureContext ctx, List<string> files, HashSet<string> deps)
+    private static void DetectNodeFramework(
+        ProjectArchitectureContext ctx,
+        List<string> files,
+        HashSet<string> deps,
+        bool preservePrimaryFramework = false)
     {
-        foreach (var pkg in files.Where(f => f.EndsWith("package.json")))
+        foreach (var packageFile in files.Where(file =>
+                     Path.GetFileName(file).Equals(
+                         "package.json",
+                         StringComparison.OrdinalIgnoreCase)))
         {
-            var json = JsonNode.Parse(File.ReadAllText(pkg))?.AsObject();
-            foreach (var key in new[] { "dependencies", "devDependencies" })
-                if (json?[key] is JsonObject obj)
-                    foreach (var kv in obj)
-                        deps.Add(kv.Key);
+            try
+            {
+                var json = JsonNode.Parse(File.ReadAllText(packageFile))?.AsObject();
+                foreach (var key in new[] { "dependencies", "devDependencies", "peerDependencies" })
+                {
+                    if (json?[key] is not JsonObject dependencies)
+                        continue;
+
+                    foreach (var dependency in dependencies)
+                        deps.Add(dependency.Key);
+                }
+            }
+            catch (Exception exception) when (
+                exception is System.Text.Json.JsonException
+                    or IOException
+                    or UnauthorizedAccessException)
+            {
+                // A malformed package manifest is not evidence for a framework.
+                // Continue discovering other manifests in a mixed repository.
+            }
         }
 
-        if (deps.Contains("@angular/core")) ctx.Framework = "Angular";
-        else if (deps.Contains("react")) ctx.Framework = "React";
-        else if (deps.Contains("vue")) ctx.Framework = "Vue";
-        else if (deps.Contains("express")) ctx.Framework = "Express";
-        else ctx.Framework = "Node.js";
+        var detectedFrameworks = new List<string>();
+        if (deps.Contains("@angular/core"))
+            detectedFrameworks.Add("Angular");
+        if (deps.Contains("react"))
+            detectedFrameworks.Add("React");
+        if (deps.Contains("vue"))
+            detectedFrameworks.Add("Vue");
+        if (deps.Contains("express"))
+            detectedFrameworks.Add("Express");
+
+        if (detectedFrameworks.Count == 0)
+            detectedFrameworks.Add("Node.js");
+
+        foreach (var framework in detectedFrameworks)
+            AddFramework(ctx, framework);
+
+        // The primary framework is a summary, not a replacement for the full
+        // framework inventory. Preserve an already detected backend in mixed
+        // repositories while still exposing all client framework signals.
+        if (!preservePrimaryFramework)
+            ctx.Framework = detectedFrameworks[0];
     }
 }

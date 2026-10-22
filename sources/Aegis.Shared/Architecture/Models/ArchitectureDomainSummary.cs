@@ -13,4 +13,7 @@ public sealed class ArchitectureDomainSummary
 
     /// <summary>Rule-versus-measurement comparisons performed in this domain. 0 = not assessed.</summary>
     public int ChecksPerformed { get; set; }
+
+    /// <summary>False when the domain had no valid rule comparisons.</summary>
+    public bool HasAssessmentEvidence { get; set; }
 }

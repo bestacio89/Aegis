@@ -75,6 +75,10 @@ public sealed class MarkdownReportExporter : IReportExporter
             md.AppendLine("|-------|------:|");
             md.AppendLine($"| Governed Files in Scope | {report.TotalFilesScanned} |");
             md.AppendLine($"| Total Violations | {report.TotalViolations} |");
+            md.AppendLine($"| Registered Rules | {report.EvaluationStats?.RulesRegistered.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Supported Applicable Rules | {report.EvaluationStats?.RulesApplicable.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Supported Rules Evaluated | {report.EvaluationStats?.RulesEvaluated.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Rules Not Evaluated | {report.EvaluationStats?.RulesNotEvaluated.Count.ToString() ?? "N/A"} |");
             md.AppendLine($"| Assessed Health Index | {(report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.ProjectHealthIndex:0.00}%" : "N/A")} |");
             md.AppendLine($"| Coverage-Adjusted Diagnostic | {(report.Metrics.HasCoverageEvidence ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.00}%" : "N/A")} |");
             md.AppendLine($"| Rule Evaluation Coverage | {(report.Metrics.HasCoverageEvidence ? $"{report.Metrics.RuleEvaluationCoverage:0.00}%" : "N/A")} |");

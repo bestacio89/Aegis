@@ -1,3 +1,4 @@
+using Aegis.Architecture.Analysis.Detectors;
 ﻿
 using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Enums;
@@ -331,20 +332,79 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             return [];
         }
 
-        return Directory
-            .EnumerateFiles(
-                projectPath,
-                "*.*",
-                SearchOption.AllDirectories)
+        return EnumerateGovernedFiles(projectPath)
             .Where(file => extensions.Any(extension =>
                 !string.IsNullOrWhiteSpace(extension)
                 && file.EndsWith(
                     extension,
                     StringComparison.OrdinalIgnoreCase)))
-            .Where(file => !IsExcludedDir(file))
-            .Where(IsGovernanceSource)
             .Where(file => IsApplicationCode(file, projectPath))
             .ToList();
+    }
+
+    private static List<string> EnumerateGovernedFiles(string rootPath)
+    {
+        var files = new List<string>();
+        var pending = new Stack<string>();
+        pending.Push(Path.GetFullPath(rootPath));
+
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            if (FileExclusions.IsExcluded(directory) || IsExcludedDir(directory))
+                continue;
+
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(
+                             directory,
+                             "*",
+                             SearchOption.TopDirectoryOnly))
+                {
+                    if (!FileExclusions.IsExcluded(file)
+                        && !IsExcludedDir(file)
+                        && IsGovernanceSource(file))
+                    {
+                        files.Add(file);
+                    }
+                }
+
+                foreach (var child in Directory.EnumerateDirectories(
+                             directory,
+                             "*",
+                             SearchOption.TopDirectoryOnly))
+                {
+                    if (FileExclusions.IsExcluded(child) || IsExcludedDir(child))
+                        continue;
+
+                    try
+                    {
+                        if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
+                            continue;
+                    }
+                    catch (IOException)
+                    {
+                        continue;
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        continue;
+                    }
+
+                    pending.Push(child);
+                }
+            }
+            catch (IOException)
+            {
+                // Preserve evidence from readable siblings when a subtree is unavailable.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // An unreadable subtree is not treated as compliant evidence.
+            }
+        }
+
+        return files;
     }
 
     private static bool IsGovernanceSource(string file)

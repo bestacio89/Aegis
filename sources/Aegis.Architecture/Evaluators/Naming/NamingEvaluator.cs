@@ -54,9 +54,6 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             "Temp",
             "Logs",
             "Generated",
-            "TextMesh Pro",
-            "TextMeshPro",
-            "Examples & Extras",
             "ThirdParty",
             "Third-Party"
         };
@@ -957,6 +954,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                     Path.TrimEndingDirectorySeparator(directory));
 
                 if (ExcludedDirectories.Contains(name)
+                    || IsTextMeshProExamplePath(directory)
                     || (name.Equals("Library", StringComparison.OrdinalIgnoreCase)
                         && IsUnityLibraryDirectory(directory)))
                 {
@@ -1003,6 +1001,22 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         return files;
     }
 
+    private static bool IsTextMeshProExamplePath(string path)
+    {
+        var segments = path.Replace(
+                Path.AltDirectorySeparatorChar,
+                Path.DirectorySeparatorChar)
+            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+
+        var hasTextMeshProDirectory = segments.Any(segment =>
+            segment.Equals("TextMesh Pro", StringComparison.OrdinalIgnoreCase)
+            || segment.Equals("TextMeshPro", StringComparison.OrdinalIgnoreCase));
+        var hasExamplesDirectory = segments.Any(segment =>
+            segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase));
+
+        return hasTextMeshProDirectory && hasExamplesDirectory;
+    }
+
     private static bool IsUnityLibraryDirectory(string directory)
     {
         var root = Directory.GetParent(directory)?.FullName;
@@ -1034,15 +1048,14 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             Path.DirectorySeparatorChar,
             StringSplitOptions.RemoveEmptyEntries);
 
-        // Generated artifacts and vendored/sample sources are not first-party
-        // naming-policy subjects by default.
+        // Generated artifacts and conventional third-party folders are not
+        // first-party naming-policy subjects by default. TextMesh Pro examples
+        // are excluded only when both path segments identify the vendored sample.
         if (segments.Any(segment =>
-                segment.Equals("TextMesh Pro", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("TextMeshPro", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)
+                segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("Third-Party", StringComparison.OrdinalIgnoreCase)))
+                || segment.Equals("Third-Party", StringComparison.OrdinalIgnoreCase))
+            || IsTextMeshProExamplePath(file))
             return false;
 
         var name = Path.GetFileName(file);

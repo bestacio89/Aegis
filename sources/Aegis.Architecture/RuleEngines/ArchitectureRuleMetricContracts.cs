@@ -221,10 +221,9 @@ internal static class ArchitectureRuleMetricContracts
 
         reason = string.Empty;
 
-        if (IsCSharpOnlyNamingRule(rule.Id)
-            && !string.Equals(context.Language, "C#", StringComparison.OrdinalIgnoreCase))
+        if (IsCSharpOnlyNamingRule(rule.Id) && !HasCSharpEvidence(context))
         {
-            reason = $"Rule '{rule.Id}' applies only to C# field/property declarations.";
+            reason = $"Rule '{rule.Id}' applies only when the repository contains C# field/property declarations.";
             return false;
         }
 
@@ -411,6 +410,12 @@ internal static class ArchitectureRuleMetricContracts
 
         return false;
     }
+
+    private static bool HasCSharpEvidence(ProjectArchitectureContext context) =>
+        string.Equals(context.Language, "C#", StringComparison.OrdinalIgnoreCase)
+        || context.Modules.Any(module =>
+            module.Languages.Any(language =>
+                string.Equals(language, "C#", StringComparison.OrdinalIgnoreCase)));
 
     private static bool IsCSharpOnlyNamingRule(string ruleId) =>
         ruleId.Equals("AEG-NAM-R8", StringComparison.OrdinalIgnoreCase)

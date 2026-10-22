@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Rules;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.Logging;
 
@@ -93,15 +94,31 @@ public sealed class MarkdownReportExporter : IReportExporter
             md.AppendLine("| Category | Score | Status |");
             md.AppendLine("|----------|------:|--------|");
 
-            foreach (var kv in report.ComplianceScores.OrderBy(x => x.Key.ToString()))
+            var registeredCategories = ArchitectureRuleRegistry.All
+                .Select(rule => Enum.TryParse<ArchitectureRuleCategory>(
+                    rule.Category,
+                    true,
+                    out var category)
+                    ? category
+                    : ArchitectureRuleCategory.General)
+                .Distinct()
+                .OrderBy(category => category.ToString());
+
+            foreach (var category in registeredCategories)
             {
+                if (!report.ComplianceScores.TryGetValue(category, out var score))
+                {
+                    md.AppendLine($"| {category} | N/A | NOT ASSESSED |");
+                    continue;
+                }
+
                 string status =
-                    kv.Value >= 80 ? "✅ OK" :
-                    kv.Value >= 50 ? "⚠️ Warning" :
+                    score >= 80 ? "✅ OK" :
+                    score >= 50 ? "⚠️ Warning" :
                     "❌ Critical";
 
                 md.AppendLine(
-                    $"| {kv.Key} | {kv.Value:0.00}% | {status} |");
+                    $"| {category} | {score:0.00}% | {status} |");
             }
 
             md.AppendLine();

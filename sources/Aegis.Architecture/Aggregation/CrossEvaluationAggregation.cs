@@ -448,15 +448,17 @@ public sealed class CrossEvaluatorAggregator
         {
             return new GlobalArchitectureMetrics
             {
-                ProjectHealthIndex = 100,
-
-                WeightedCompliance = 1
+                ProjectHealthIndex = 0,
+                MaintainabilityIndex = 0,
+                ResilienceIndex = 0,
+                WeightedCompliance = 0,
+                HasAssessmentEvidence = false
             };
         }
 
 
-        // Domains in which nothing was checked say nothing about compliance, so they must not
-        // dilute (or inflate) the averages. Without statistics, every domain counts as before.
+        // An unassessed domain is not a clean domain. If no valid comparisons ran,
+        // return an explicitly unassessed score instead of averaging default 1.0 values.
         var assessed =
             list
                 .Where(x => x.ChecksPerformed > 0)
@@ -464,7 +466,14 @@ public sealed class CrossEvaluatorAggregator
 
         if (assessed.Count == 0)
         {
-            assessed = list;
+            return new GlobalArchitectureMetrics
+            {
+                ProjectHealthIndex = 0,
+                MaintainabilityIndex = 0,
+                ResilienceIndex = 0,
+                WeightedCompliance = 0,
+                HasAssessmentEvidence = false
+            };
         }
 
 
@@ -495,7 +504,9 @@ public sealed class CrossEvaluatorAggregator
             ResilienceIndex =
                 Math.Round(
                     ComputeResilience(assessed),
-                    3)
+                    3),
+
+            HasAssessmentEvidence = true
         };
     }
 

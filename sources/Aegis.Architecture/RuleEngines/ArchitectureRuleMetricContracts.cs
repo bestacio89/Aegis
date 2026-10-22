@@ -221,6 +221,13 @@ internal static class ArchitectureRuleMetricContracts
 
         reason = string.Empty;
 
+        if (IsCSharpOnlyNamingRule(rule.Id)
+            && !string.Equals(context.Language, "C#", StringComparison.OrdinalIgnoreCase))
+        {
+            reason = $"Rule '{rule.Id}' applies only to C# field/property declarations.";
+            return false;
+        }
+
         if (!FrontendRuleScopes.TryGetValue(rule.Id, out var targetScope))
             return true;
 
@@ -336,6 +343,18 @@ internal static class ArchitectureRuleMetricContracts
             return false;
         }
 
+        if (IsCSharpOnlyNamingRule(rule.Id))
+        {
+            var language = fact.Metadata?.GetValueOrDefault("Language");
+            if (!string.Equals(language, "C#", StringComparison.OrdinalIgnoreCase))
+            {
+                reason = $"Rule '{rule.Id}' applies only to C# field/property declarations.";
+                return false;
+            }
+
+            return true;
+        }
+
         if (!FrontendRuleScopes.TryGetValue(rule.Id, out var targetScope))
             return true;
 
@@ -378,6 +397,10 @@ internal static class ArchitectureRuleMetricContracts
 
         return false;
     }
+
+    private static bool IsCSharpOnlyNamingRule(string ruleId) =>
+        ruleId.Equals("AEG-NAM-R8", StringComparison.OrdinalIgnoreCase)
+        || ruleId.Equals("AEG-NAM-R9", StringComparison.OrdinalIgnoreCase);
 
     private static FrontendScope? ResolveFrontendFamily(string framework)
     {

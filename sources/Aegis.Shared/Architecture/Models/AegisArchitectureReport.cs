@@ -146,6 +146,7 @@ public sealed class AegisArchitectureReport
             ? Math.Clamp(stats.EvaluationCoverage, 0.0, 1.0)
             : 0.0;
 
+        Metrics.HasCoverageEvidence = stats is not null && stats.RulesApplicable > 0;
         Metrics.RuleEvaluationCoverage = Math.Round(coverage * 100.0, 2);
         Metrics.CoverageAdjustedHealthIndex = Math.Round(
             Metrics.ProjectHealthIndex * coverage,
@@ -167,8 +168,8 @@ public sealed class AegisArchitectureReport
     public string Summary =>
         $"🧾 {ProjectName} ({Language}/{Framework}) — {TotalViolations} violations across {TotalFilesScanned} governed files in scope. " +
         $"Assessed HealthIndex: {(Metrics.HasAssessmentEvidence ? $"{Metrics.ProjectHealthIndex:0.##}%" : "N/A")}; " +
-        $"CoverageAdjustedDiagnostic: {(Metrics.HasAssessmentEvidence ? $"{Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A")}; " +
-        $"RuleCoverage: {Metrics.RuleEvaluationCoverage:0.##}%; " +
+        $"CoverageAdjustedDiagnostic: {(Metrics.HasCoverageEvidence ? $"{Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A")}; " +
+        $"RuleCoverage: {(Metrics.HasCoverageEvidence ? $"{Metrics.RuleEvaluationCoverage:0.##}%" : "N/A")}; " +
         $"AssessmentComplete: {Metrics.AssessmentComplete}.";
 
     // 🧩 Export-friendly DTO (AI / report writer)

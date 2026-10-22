@@ -233,7 +233,7 @@ public sealed class PdfReportExporter : IReportExporter
 
         var health = report.Metrics?.ProjectHealthIndex ?? 0;
         var healthDisplay = report.Metrics?.HasAssessmentEvidence == true ? $"{health:0.##}%" : "N/A";
-        var coverageAdjustedDisplay = report.Metrics?.HasAssessmentEvidence == true ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A";
+        var coverageAdjustedDisplay = report.Metrics?.HasCoverageEvidence == true ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A";
         var stats = report.EvaluationStats;
         var coveragePercent = stats is not null && stats.RulesApplicable > 0
             ? stats.EvaluationCoverage * 100.0
@@ -294,9 +294,9 @@ public sealed class PdfReportExporter : IReportExporter
             AddRow(table, L(language, "Rules Not Evaluated", "Règles Non Évaluées"), stats.RulesNotEvaluated.Count.ToString());
             AddRow(table, L(language, "Supported Rules Not Evaluated", "Règles Prises en Charge Non Évaluées"), supportedRulesNotEvaluated.ToString());
             AddRow(table, L(language, "Unsupported Rules", "Règles Non Prises en Charge"), stats.RulesUnsupported.ToString());
-            AddRow(table, L(language, "Rule Evaluation Coverage", "Couverture d'Évaluation des Règles"), $"{stats.EvaluationCoverage:P1}");
+            AddRow(table, L(language, "Rule Evaluation Coverage", "Couverture d'Évaluation des Règles"), report.Metrics.HasCoverageEvidence ? $"{stats.EvaluationCoverage:P1}" : "N/A");
             AddRow(table, L(language, "Assessed Health Index", "Indice de Santé Évalué"), report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.ProjectHealthIndex:0.##}%" : "N/A");
-            AddRow(table, L(language, "Coverage-Adjusted Diagnostic", "Indicateur Ajusté à la Couverture"), report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A");
+            AddRow(table, L(language, "Coverage-Adjusted Diagnostic", "Indicateur Ajusté à la Couverture"), report.Metrics.HasCoverageEvidence ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A");
             AddRow(table, L(language, "Assessment Complete", "Évaluation Complète"), report.Metrics.AssessmentComplete ? L(language, "Yes", "Oui") : L(language, "No", "Non"));
             AddRow(table, L(language, "Checks Performed", "Vérifications Effectuées"), stats.ChecksPerformed.ToString());
             AddRow(table, L(language, "Insufficient Evidence", "Preuves Insuffisantes"), stats.EvaluationsInsufficientEvidence.ToString());

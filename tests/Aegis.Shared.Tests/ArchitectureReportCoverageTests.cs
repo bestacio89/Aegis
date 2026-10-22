@@ -61,6 +61,7 @@ public sealed class ArchitectureReportCoverageTests
         Assert.False(report.Metrics.AssessmentComplete);
         Assert.Equal(0, report.Metrics.ProjectHealthIndex);
         Assert.Contains("HealthIndex: N/A", report.Summary, StringComparison.Ordinal);
+        Assert.Contains("RuleCoverage: N/A", report.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -83,6 +84,8 @@ public sealed class ArchitectureReportCoverageTests
         Assert.Equal(50, report.ComplianceScores[ArchitectureRuleCategory.Architecture]);
         Assert.Equal(50, report.Metrics.ProjectHealthIndex);
         Assert.True(report.Metrics.HasAssessmentEvidence);
+        Assert.False(report.Metrics.HasCoverageEvidence);
+        Assert.Contains("CoverageAdjustedDiagnostic: N/A", report.Summary, StringComparison.Ordinal);
         Assert.False(report.Metrics.AssessmentComplete);
     }
 

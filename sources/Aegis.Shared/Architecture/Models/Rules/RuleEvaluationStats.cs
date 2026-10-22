@@ -10,6 +10,12 @@ public sealed class RuleEvaluationStats
 
     public int RulesApplicable { get; init; }
 
+    /// <summary>Rules whose declared metric semantics have no supported producer.</summary>
+    public int RulesUnsupported { get; init; }
+
+    public IReadOnlyDictionary<string, string> UnsupportedRuleReasons { get; init; }
+        = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Distinct applicable rules with at least one completed evaluation.
     /// A completed evaluation may pass or violate.

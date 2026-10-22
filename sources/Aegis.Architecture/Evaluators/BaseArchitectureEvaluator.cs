@@ -243,17 +243,11 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                 || framework.Contains("React", StringComparison.OrdinalIgnoreCase));
         }
 
-        var normalized = filePath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-        if (normalized.Contains(
-                $"{Path.DirectorySeparatorChar}Assets{Path.DirectorySeparatorChar}",
-                StringComparison.OrdinalIgnoreCase)
-            && Directory.Exists(Path.Combine(projectPath, "Assets"))
-            && (Directory.Exists(Path.Combine(projectPath, "ProjectSettings"))
-                || Directory.Exists(Path.Combine(projectPath, "Packages"))))
+        if (IsWithinUnityProject(filePath, projectPath))
         {
-            // Unity source provenance is determined by the project layout as
-            // well as the context detector, so file attribution remains correct
-            // even if one of the project-level framework signals is incomplete.
+            // A repository can contain Unity under a nested directory such as
+            // sources/client. Detect the nearest Unity root, not only Assets
+            // directly beneath the repository-level scan root.
             return "Unity";
         }
 
@@ -305,6 +299,58 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         }
 
         return context.Framework;
+    }
+
+    private static bool IsWithinUnityProject(string filePath, string projectPath)
+    {
+        try
+        {
+            var boundary = Path.GetFullPath(projectPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var directory = Path.GetDirectoryName(Path.GetFullPath(filePath));
+
+            while (!string.IsNullOrWhiteSpace(directory))
+            {
+                if (Path.GetFileName(directory).Equals(
+                        "Assets",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    var unityRoot = Directory.GetParent(directory)?.FullName;
+                    if (unityRoot is not null
+                        && Directory.Exists(Path.Combine(unityRoot, "Assets"))
+                        && (Directory.Exists(Path.Combine(unityRoot, "ProjectSettings"))
+                            || Directory.Exists(Path.Combine(unityRoot, "Packages"))))
+                    {
+                        return true;
+                    }
+                }
+
+                var normalizedDirectory = directory.TrimEnd(
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar);
+                if (string.Equals(normalizedDirectory, boundary, StringComparison.OrdinalIgnoreCase))
+                    break;
+
+                var parent = Directory.GetParent(directory)?.FullName;
+                if (parent is null
+                    || !parent.StartsWith(boundary + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                directory = parent;
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or ArgumentException
+                or NotSupportedException)
+        {
+            // Framework attribution is best-effort; failed probing is not a scan failure.
+        }
+
+        return false;
     }
 
     /// <summary>

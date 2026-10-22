@@ -227,6 +227,73 @@ public sealed class ProjectArchitectureContextDetectorTests
 
  
     [Fact]
+    public void Detect_discovers_frontend_manifests_without_overwriting_backend_identity()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var serverRoot = Path.Combine(directory.Path, "Server");
+        var clientRoot = Path.Combine(directory.Path, "Client");
+        var adminRoot = Path.Combine(clientRoot, "Admin");
+        Directory.CreateDirectory(serverRoot);
+        Directory.CreateDirectory(adminRoot);
+
+        File.WriteAllText(
+            Path.Combine(serverRoot, "Server.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
+              </ItemGroup>
+            </Project>
+            """);
+        File.WriteAllText(
+            Path.Combine(clientRoot, "package.json"),
+            """
+            {
+              "name": "client",
+              "dependencies": {
+                "@angular/core": "^20.0.0",
+                "rxjs": "^7.0.0"
+              }
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(adminRoot, "package.json"),
+            """
+            {
+              "name": "admin",
+              "devDependencies": {
+                "@angular/cli": "^20.0.0",
+                "typescript": "~5.0.0"
+              },
+              "peerDependencies": {
+                "shared-ui": "^1.0.0"
+              }
+            }
+            """);
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal("C#", context.Language);
+        Assert.Equal("ASP.NET Core", context.Framework);
+        Assert.Contains("ASP.NET Core", context.DetectedFrameworks);
+        Assert.Contains("Angular", context.DetectedFrameworks);
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("Microsoft.EntityFrameworkCore", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("@angular/core", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("rxjs", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("@angular/cli", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("typescript", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("shared-ui", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Detect_preserves_blazor_backend_and_unity_signals_in_a_mixed_repository()
     {
         using var directory = new TemporaryDirectory();

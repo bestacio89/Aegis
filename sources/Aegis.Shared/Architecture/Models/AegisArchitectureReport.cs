@@ -153,6 +153,7 @@ public sealed class AegisArchitectureReport
         Metrics.AssessmentComplete = Metrics.HasAssessmentEvidence
             && stats is not null
             && stats.RulesApplicable > 0
+            && stats.RulesUnsupported == 0
             && coverage >= 0.95
             && stats.EvaluationsErrored == 0;
     }

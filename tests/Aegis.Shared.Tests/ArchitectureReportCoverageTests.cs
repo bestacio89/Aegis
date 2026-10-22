@@ -109,5 +109,6 @@ public sealed class ArchitectureReportCoverageTests
         Assert.Equal(95, report.Metrics.CoverageAdjustedHealthIndex);
         Assert.True(report.Metrics.AssessmentComplete);
         Assert.True(report.Metrics.HasAssessmentEvidence);
+        Assert.True(report.Metrics.HasCoverageEvidence);
     }
 }

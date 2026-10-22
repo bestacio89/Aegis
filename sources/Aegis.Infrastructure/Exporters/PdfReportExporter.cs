@@ -374,11 +374,14 @@ public sealed class PdfReportExporter : IReportExporter
             scoreCell.Format.Font.Color = HealthColor(score.Value);
             scoreCell.Format.Font.Bold = true;
 
-            row.Cells[2].AddParagraph(score.Value >= 80
-                ? L(language, "PASSED", "CONFORME")
-                : score.Value >= 50
-                    ? L(language, "WARNING", "ATTENTION")
-                    : L(language, "CRITICAL", "CRITIQUE"));
+            var categoryStatus = !report.Metrics.AssessmentComplete
+                ? L(language, "PROVISIONAL", "PROVISOIRE")
+                : score.Value >= 80
+                    ? L(language, "PASSED", "CONFORME")
+                    : score.Value >= 50
+                        ? L(language, "WARNING", "ATTENTION")
+                        : L(language, "CRITICAL", "CRITIQUE");
+            row.Cells[2].AddParagraph(categoryStatus);
             alt = !alt;
         }
     }

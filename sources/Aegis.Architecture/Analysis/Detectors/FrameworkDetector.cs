@@ -201,7 +201,7 @@ internal static class FrameworkDetector
             try
             {
                 var json = JsonNode.Parse(File.ReadAllText(packageFile))?.AsObject();
-                foreach (var key in new[] { "dependencies", "devDependencies", "peerDependencies" })
+                foreach (var key in new[] { "dependencies", "devDependencies", "peerDependencies", "optionalDependencies" })
                 {
                     if (json?[key] is not JsonObject dependencies)
                         continue;
@@ -213,7 +213,8 @@ internal static class FrameworkDetector
             catch (Exception exception) when (
                 exception is System.Text.Json.JsonException
                     or IOException
-                    or UnauthorizedAccessException)
+                    or UnauthorizedAccessException
+                    or InvalidOperationException)
             {
                 // A malformed package manifest is not evidence for a framework.
                 // Continue discovering other manifests in a mixed repository.

@@ -173,7 +173,7 @@ td {
 """);
 
             AddRow(html,
-                "Files Scanned",
+                "Governed Files in Scope",
                 report.TotalFilesScanned.ToString());
 
             AddRow(html,
@@ -181,8 +181,24 @@ td {
                 report.TotalViolations.ToString());
 
             AddRow(html,
-                "Health Index",
-                $"{report.Metrics.ProjectHealthIndex:0.00}%");
+                "Assessed Health Index",
+                report.Metrics.HasAssessmentEvidence
+                    ? $"{report.Metrics.ProjectHealthIndex:0.00}%"
+                    : "N/A");
+
+            AddRow(html,
+                "Coverage-Adjusted Diagnostic",
+                report.Metrics.HasAssessmentEvidence
+                    ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.00}%"
+                    : "N/A");
+
+            AddRow(html,
+                "Rule Evaluation Coverage",
+                $"{report.Metrics.RuleEvaluationCoverage:0.00}%");
+
+            AddRow(html,
+                "Assessment Complete",
+                report.Metrics.AssessmentComplete ? "Yes" : "No");
 
             html.AppendLine("""
 </table>

@@ -241,10 +241,9 @@ public sealed class PdfReportExporter : IReportExporter
         var supportedRulesNotEvaluated = stats is null
             ? 0
             : Math.Max(0, stats.RulesNotEvaluated.Count - stats.RulesUnsupported);
-        var assessmentIncomplete = stats is null
-            || stats.RulesApplicable == 0
-            || coveragePercent < 95.0
-            || report.EvaluationsErrored > 0;
+        // Use the report's single source of truth: this includes unsupported
+        // rules as well as missing coverage and evaluation errors.
+        var assessmentIncomplete = !report.Metrics.AssessmentComplete;
 
         var status = assessmentIncomplete
             ? L(language, "incomplete", "incomplète")

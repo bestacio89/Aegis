@@ -66,7 +66,7 @@ public sealed class ArchitectureRuleRegistryTests
             rule,
             context,
             out var reason));
-        Assert.Contains("only to C#", reason, StringComparison.Ordinal);
+        Assert.Contains("only to C#", reason);
     }
 
     [Fact]

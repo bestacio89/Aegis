@@ -77,7 +77,7 @@ public sealed class RuleEvaluationStats
             StringComparer.OrdinalIgnoreCase);
 
     public double EvaluationCoverage =>
-        RulesApplicable == 0
-            ? 1.0
-            : (double)RulesEvaluated / RulesApplicable;
+        RulesApplicable <= 0
+            ? 0.0
+            : Math.Clamp((double)RulesEvaluated / RulesApplicable, 0.0, 1.0);
 }

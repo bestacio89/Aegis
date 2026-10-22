@@ -23,14 +23,7 @@ public static class ProjectArchitectureContextDetector
         };
 
 
-        var files =
-            Directory
-                .EnumerateFiles(
-                    rootPath,
-                    "*.*",
-                    SearchOption.AllDirectories)
-                .Where(f => !FileExclusions.IsExcluded(f))
-                .ToList();
+        var files = EnumerateGovernedFiles(rootPath);
 
 
 
@@ -148,6 +141,67 @@ public static class ProjectArchitectureContextDetector
     }
 
 
+
+    private static List<string> EnumerateGovernedFiles(string rootPath)
+    {
+        var files = new List<string>();
+        var pending = new Stack<string>();
+        pending.Push(Path.GetFullPath(rootPath));
+
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            if (FileExclusions.IsExcluded(directory))
+                continue;
+
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(
+                             directory,
+                             "*",
+                             SearchOption.TopDirectoryOnly))
+                {
+                    if (!FileExclusions.IsExcluded(file))
+                        files.Add(file);
+                }
+
+                foreach (var child in Directory.EnumerateDirectories(
+                             directory,
+                             "*",
+                             SearchOption.TopDirectoryOnly))
+                {
+                    if (FileExclusions.IsExcluded(child))
+                        continue;
+
+                    try
+                    {
+                        if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
+                            continue;
+                    }
+                    catch (IOException)
+                    {
+                        continue;
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        continue;
+                    }
+
+                    pending.Push(child);
+                }
+            }
+            catch (IOException)
+            {
+                // Continue scanning readable siblings rather than aborting the repository scan.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // An inaccessible subtree is excluded from evidence, not treated as clean.
+            }
+        }
+
+        return files;
+    }
 
     private static void PopulateContextMetadata(
         ProjectArchitectureContext ctx,

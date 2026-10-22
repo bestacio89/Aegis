@@ -650,15 +650,16 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         var weightedScore = 0d;
         var activeWeight = 0d;
 
-        AddDimension(typeNames.Count, typeScore, 0.30, ref weightedScore, ref activeWeight);
-        AddDimension(interfaceNames.Length, interfaceScore, 0.15, ref weightedScore, ref activeWeight);
+        AddDimension(typeNames.Count, typeScore, 0.25, ref weightedScore, ref activeWeight);
+        AddDimension(interfaceNames.Length, interfaceScore, 0.10, ref weightedScore, ref activeWeight);
         AddDimension(methodNames.Count, methodScore, 0.20, ref weightedScore, ref activeWeight);
         AddDimension(variableNames.Count, variableScore, 0.15, ref weightedScore, ref activeWeight);
-        AddDimension(constantNames.Count, constantScore, 0.10, ref weightedScore, ref activeWeight);
+        AddDimension(constantNames.Count, constantScore, 0.05, ref weightedScore, ref activeWeight);
 
-        // File naming is applicable to every discovered source file.
-        weightedScore += fileScore * 0.10;
-        activeWeight += 0.10;
+        // Field/property dimensions are emitted by the declaration-aware C#
+        // analyzer only; all languages share the same dimension weights.
+        weightedScore += fileScore * 0.05;
+        activeWeight += 0.05;
 
         var compliance = declarationCount == 0
             ? 0

@@ -13,6 +13,9 @@ public sealed class GlobalArchitectureMetrics
     /// <summary>Percentage of applicable registered rules that were evaluated.</summary>
     public double RuleEvaluationCoverage { get; set; }
 
+    /// <summary>True when a supported applicable-rule denominator is available.</summary>
+    public bool HasCoverageEvidence { get; set; }
+
     /// <summary>Observed health discounted by rule-evaluation coverage; a diagnostic, not a compliance score.</summary>
     public double CoverageAdjustedHealthIndex { get; set; }
 

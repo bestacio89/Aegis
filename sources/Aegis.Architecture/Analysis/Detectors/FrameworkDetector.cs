@@ -62,7 +62,14 @@ internal static class FrameworkDetector
                 "package.json",
                 StringComparison.OrdinalIgnoreCase)))
         {
-            DetectNodeFramework(ctx, files, deps, preservePrimaryFramework: true);
+            var nodeDependencies = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+            DetectNodeFramework(
+                ctx,
+                files,
+                nodeDependencies,
+                preservePrimaryFramework: true);
+            deps.UnionWith(nodeDependencies);
             ctx.DetectedDependencies = deps.ToList();
         }
 

@@ -232,6 +232,7 @@ public sealed class PdfReportExporter : IReportExporter
         section.AddParagraph(L(language, "Executive Summary", "Synthèse Exécutive")).Style = StyleNames.Heading1;
 
         var health = report.Metrics?.ProjectHealthIndex ?? 0;
+        var coverageAdjustedHealth = report.Metrics?.CoverageAdjustedHealthIndex ?? 0;
         var stats = report.EvaluationStats;
         var coveragePercent = stats is not null && stats.RulesApplicable > 0
             ? (double)stats.RulesEvaluated / stats.RulesApplicable * 100.0
@@ -258,8 +259,8 @@ public sealed class PdfReportExporter : IReportExporter
 
         var narrative = L(
             language,
-            $"{report.ProjectName} was scanned across {report.TotalFilesScanned} files. The assessed health score is {health:0.##}% and the overall assessment is {status}. {coverageSummary} {report.TotalViolations} findings were identified. Treat this score as provisional while rule coverage is incomplete.",
-            $"{report.ProjectName} a été analysé sur {report.TotalFilesScanned} fichiers. Le score de santé évalué est de {health:0.##} % et l'évaluation globale est {status}. {coverageSummary} {report.TotalViolations} constats ont été identifiés. Ce score reste provisoire tant que la couverture des règles est incomplète.");
+            $"{report.ProjectName} was scanned across {report.TotalFilesScanned} files. The assessed health score is {health:0.##}%, while the coverage-adjusted diagnostic is {coverageAdjustedHealth:0.##}%. The overall assessment is {status}. {coverageSummary} {report.TotalViolations} findings were identified. The coverage-adjusted value is a diagnostic, not a compliance score.",
+            $"{report.ProjectName} a été analysé sur {report.TotalFilesScanned} fichiers. Le score de santé évalué est de {health:0.##} %, tandis que l’indicateur ajusté à la couverture est de {coverageAdjustedHealth:0.##} %. L’évaluation globale est {status}. {coverageSummary} {report.TotalViolations} constats ont été identifiés. La valeur ajustée à la couverture est un indicateur diagnostique, pas un score de conformité.");
 
         var p = section.AddParagraph(narrative);
         p.Format.SpaceAfter = 10;
@@ -288,6 +289,9 @@ public sealed class PdfReportExporter : IReportExporter
             AddRow(table, L(language, "Rules Evaluated", "Règles Évaluées"), stats.RulesEvaluated.ToString());
             AddRow(table, L(language, "Rules Not Evaluated", "Règles Non Évaluées"), stats.RulesNotEvaluated.Count.ToString());
             AddRow(table, L(language, "Rule Evaluation Coverage", "Couverture d'Évaluation des Règles"), $"{stats.EvaluationCoverage:P1}");
+            AddRow(table, L(language, "Assessed Health Index", "Indice de Santé Évalué"), $"{report.Metrics.ProjectHealthIndex:0.##}%");
+            AddRow(table, L(language, "Coverage-Adjusted Diagnostic", "Indicateur Ajusté à la Couverture"), $"{report.Metrics.CoverageAdjustedHealthIndex:0.##}%");
+            AddRow(table, L(language, "Assessment Complete", "Évaluation Complète"), report.Metrics.AssessmentComplete ? L(language, "Yes", "Oui") : L(language, "No", "Non"));
             AddRow(table, L(language, "Checks Performed", "Vérifications Effectuées"), stats.ChecksPerformed.ToString());
             AddRow(table, L(language, "Insufficient Evidence", "Preuves Insuffisantes"), stats.EvaluationsInsufficientEvidence.ToString());
             AddRow(table, L(language, "Evaluation Errors", "Erreurs d'Évaluation"), stats.EvaluationsErrored.ToString());

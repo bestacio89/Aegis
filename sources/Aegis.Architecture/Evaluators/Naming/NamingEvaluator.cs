@@ -351,11 +351,11 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                     fileContext.Framework,
                     token).ConfigureAwait(false);
 
-                results.Add(EvaluateCSharpFile(file, analysis, convention));
+                results.Add(EvaluateCSharpFile(file, analysis, convention, fileContext.Framework));
             }
             else
             {
-                results.Add(EvaluateFile(file, content, convention));
+                results.Add(EvaluateFile(file, content, convention, fileContext.Framework));
             }
         }
 
@@ -386,7 +386,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
     private ArchitectureEvaluatorResult EvaluateCSharpFile(
         string file,
         NamingAnalysisResult analysis,
-        INamingConventionPolicy convention)
+        INamingConventionPolicy convention,
+        string? framework)
     {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(convention);
@@ -397,6 +398,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
         result.Metadata["FileName"] = Path.GetFileName(file);
         result.Metadata["Language"] = analysis.Language;
+        result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["AnalysisMethod"] = analysis.AnalyzerId;
         result.Metadata["AnalyzerId"] = analysis.AnalyzerId;
         result.Metadata["SourceLineCount"] = analysis.SourceLineCount.ToString();
@@ -542,7 +544,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
     private ArchitectureEvaluatorResult EvaluateFile(
         string file,
         string content,
-        INamingConventionPolicy convention)
+        INamingConventionPolicy convention,
+        string? framework)
     {
         var result = CreateResult(
             file,
@@ -552,6 +555,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
         result.Metadata["FileName"] = Path.GetFileName(file);
         result.Metadata["Language"] = language;
+        result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["AnalysisMethod"] = "LanguageAwareDeclarationHeuristics";
 
         var analysisContent = MaskNonCode(content);

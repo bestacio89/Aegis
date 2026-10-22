@@ -75,8 +75,8 @@ public sealed class MarkdownReportExporter : IReportExporter
             md.AppendLine($"| Governed Files in Scope | {report.TotalFilesScanned} |");
             md.AppendLine($"| Total Violations | {report.TotalViolations} |");
             md.AppendLine($"| Assessed Health Index | {(report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.ProjectHealthIndex:0.00}%" : "N/A")} |");
-            md.AppendLine($"| Coverage-Adjusted Diagnostic | {(report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.00}%" : "N/A")} |");
-            md.AppendLine($"| Rule Evaluation Coverage | {report.Metrics.RuleEvaluationCoverage:0.00}% |");
+            md.AppendLine($"| Coverage-Adjusted Diagnostic | {(report.Metrics.HasCoverageEvidence ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.00}%" : "N/A")} |");
+            md.AppendLine($"| Rule Evaluation Coverage | {(report.Metrics.HasCoverageEvidence ? $"{report.Metrics.RuleEvaluationCoverage:0.00}%" : "N/A")} |");
             md.AppendLine($"| Supported Rules Not Evaluated | {(report.EvaluationStats is null ? "N/A" : Math.Max(0, report.EvaluationStats.RulesNotEvaluated.Count - report.EvaluationStats.RulesUnsupported).ToString())} |");
             md.AppendLine($"| Unsupported Rules | {report.EvaluationStats?.RulesUnsupported.ToString() ?? "N/A"} |");
             md.AppendLine($"| Assessment Complete | {(report.Metrics.AssessmentComplete ? "Yes" : "No")} |");

@@ -453,6 +453,31 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         return files;
     }
 
+    private static bool IsUnityTempPath(string path)
+    {
+        var current = Directory.Exists(path)
+            ? Path.GetFullPath(path)
+            : Path.GetDirectoryName(Path.GetFullPath(path));
+
+        while (!string.IsNullOrWhiteSpace(current))
+        {
+            if (Path.GetFileName(current).Equals(
+                    "Temp",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var root = Directory.GetParent(current)?.FullName;
+                return root is not null
+                    && Directory.Exists(Path.Combine(root, "Assets"))
+                    && (Directory.Exists(Path.Combine(root, "ProjectSettings"))
+                        || Directory.Exists(Path.Combine(root, "Packages")));
+            }
+
+            current = Directory.GetParent(current)?.FullName;
+        }
+
+        return false;
+    }
+
     private static bool IsTextMeshProExamplePath(string path)
     {
         var segments = path.Replace(
@@ -483,6 +508,7 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         // not as first-party architectural obligations. A future policy option
         // can opt these paths back in when a team intentionally governs them.
         if (IsTextMeshProExamplePath(file)
+            || IsUnityTempPath(file)
             || segments.Any(segment =>
                 segment.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("Third-Party", StringComparison.OrdinalIgnoreCase)
@@ -490,7 +516,6 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                 || segment.Equals("node_modules", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("PackageCache", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("Temp", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("Logs", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("obj", StringComparison.OrdinalIgnoreCase)
                 || segment.Equals("bin", StringComparison.OrdinalIgnoreCase)

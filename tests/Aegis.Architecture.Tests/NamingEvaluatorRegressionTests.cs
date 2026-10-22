@@ -15,13 +15,16 @@ public sealed class NamingEvaluatorRegressionTests
         using var project = new TemporaryProject();
         var componentPath = project.Write(
             "Components/CreateSkill.razor.cs",
-            "namespace Fixture; public partial class CreateSkill { public void Save() { } }");
+            "namespace Fixture; public partial class CreateSkill { private int _count; public string DisplayName { get; set; } = string.Empty; public void Save() { } }");
         project.Write(
             "Components/Generated.Designer.cs",
             "public sealed class Generated { public void Bad_name() { } }");
         project.Write(
             "Assets/TextMesh Pro/Examples & Extras/Example.cs",
             "public sealed class Example { public void Bad_name() { } }");
+        var invalidPath = project.Write(
+            "Components/InvalidNamingFixture.cs",
+            "public sealed class InvalidNamingFixture { public int badField; public string displayName { get; set; } = string.Empty; }");
         var unityPath = project.Write(
             "sources/client/Assets/Scripts/UnityFieldFixture.cs",
             "public sealed class UnityFieldFixture { private int m_Text; public void Start() { } }");
@@ -57,7 +60,18 @@ public sealed class NamingEvaluatorRegressionTests
                 StringComparison.OrdinalIgnoreCase));
 
         Assert.Equal(100, component.Metrics["FileNamingCompliance"]);
+        Assert.Equal(100, component.Metrics["FieldNamingCompliance"]);
+        Assert.Equal(100, component.Metrics["PropertyNamingCompliance"]);
         Assert.Equal("Blazor", component.Metadata["Framework"]);
+
+        var invalid = Assert.Single(
+            results,
+            result => string.Equals(
+                result.Metadata.GetValueOrDefault("FilePath"),
+                invalidPath,
+                StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(0, invalid.Metrics["FieldNamingCompliance"]);
+        Assert.Equal(0, invalid.Metrics["PropertyNamingCompliance"]);
 
         var unity = Assert.Single(
             results,
@@ -66,7 +80,7 @@ public sealed class NamingEvaluatorRegressionTests
                 unityPath,
                 StringComparison.OrdinalIgnoreCase));
         Assert.Equal("Unity", unity.Metadata["Framework"]);
-        Assert.Equal(100, unity.Metrics["VariableNamingCompliance"]);
+        Assert.Equal(100, unity.Metrics["FieldNamingCompliance"]);
 
         Assert.DoesNotContain(results, result =>
             result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(

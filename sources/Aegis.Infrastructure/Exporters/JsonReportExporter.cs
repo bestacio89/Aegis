@@ -45,8 +45,14 @@ public sealed class JsonReportExporter : IReportExporter
                     report.Framework,
                     report.ScanDate,
                     report.TotalFilesScanned,
+                    GovernedFilesInScope = report.TotalFilesScanned,
                     report.TotalViolations,
-                    Health = report.Metrics.ProjectHealthIndex,
+                    Health = report.Metrics.HasAssessmentEvidence
+                        ? report.Metrics.ProjectHealthIndex
+                        : (double?)null,
+                    report.Metrics,
+                    report.EvaluationStats,
+                    report.Diagnostics,
                     report.ComplianceScores,
                     report.Summary
                 },

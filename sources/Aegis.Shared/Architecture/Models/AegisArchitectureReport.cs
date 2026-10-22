@@ -164,8 +164,9 @@ public sealed class AegisArchitectureReport
 
     // 🧾 Quick summary
     public string Summary =>
-        $"🧾 {ProjectName} ({Language}/{Framework}) — {TotalViolations} violations across {TotalFilesScanned} files. " +
-        $"Assessed HealthIndex: {Metrics.ProjectHealthIndex:0.##}%; " +
+        $"🧾 {ProjectName} ({Language}/{Framework}) — {TotalViolations} violations across {TotalFilesScanned} governed files in scope. " +
+        $"Assessed HealthIndex: {(Metrics.HasAssessmentEvidence ? $"{Metrics.ProjectHealthIndex:0.##}%" : "N/A")}; " +
+        $"CoverageAdjustedDiagnostic: {(Metrics.HasAssessmentEvidence ? $"{Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A")}; " +
         $"RuleCoverage: {Metrics.RuleEvaluationCoverage:0.##}%; " +
         $"AssessmentComplete: {Metrics.AssessmentComplete}.";
 
@@ -176,7 +177,7 @@ public sealed class AegisArchitectureReport
         Language,
         Framework,
         ScanDate,
-        Health = Metrics.ProjectHealthIndex,
+        Health = Metrics.HasAssessmentEvidence ? Metrics.ProjectHealthIndex : (double?)null,
         Metrics,
         Domains,
         TotalFiles = TotalFilesScanned,

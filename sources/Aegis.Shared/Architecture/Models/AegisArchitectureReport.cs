@@ -83,48 +83,63 @@ public sealed class AegisArchitectureReport
         }
         else
         {
-            var allCategories = ArchitectureRuleRegistry.All
-                .Select(r => ParseCategory(r.Category))
-                .Distinct()
+            // A findings-only collection has no denominator: absence of findings
+            // cannot establish that a rule passed. Rebuild scores only from completed
+            // pass/violation evaluations and leave unobserved categories absent.
+            var categoryByRuleId = ArchitectureRuleRegistry.All
+                .ToDictionary(
+                    rule => rule.Id,
+                    rule => ParseCategory(rule.Category),
+                    StringComparer.OrdinalIgnoreCase);
+
+            var completedEvaluations = Evaluations
+                .Where(evaluation =>
+                    (evaluation.Status == RuleEvaluationStatus.Passed
+                        || evaluation.Status == RuleEvaluationStatus.Violated)
+                    && categoryByRuleId.ContainsKey(evaluation.RuleId))
                 .ToList();
 
-            var grouped = Results
-                .GroupBy(r => r.Category)
-                .ToDictionary(g => g.Key, g => g.ToList());
-
-            foreach (var category in allCategories)
+            foreach (var group in completedEvaluations.GroupBy(
+                         evaluation => categoryByRuleId[evaluation.RuleId]))
             {
-                if (grouped.TryGetValue(category, out var categoryResults))
-                {
-                    var severityPenalty = categoryResults.Sum(r =>
-                        r.IsCompliant ? 0 : ((int)r.Severity + 1) * 10);
+                var completedCount = group.Count();
+                var passedCount = group.Count(
+                    evaluation => evaluation.Status == RuleEvaluationStatus.Passed);
 
-                    var score = Math.Max(0, 100 - severityPenalty / Math.Max(1, categoryResults.Count));
-                    ComplianceScores[category] = score;
-                }
-                else
+                if (completedCount > 0)
                 {
-                    // Rules exist for this category and none of them fired — genuinely clean.
-                    ComplianceScores[category] = 100;
+                    ComplianceScores[group.Key] = Math.Round(
+                        passedCount * 100.0 / completedCount,
+                        2);
                 }
             }
         }
 
-        // Compute domain health averages if available
-        if (Domains.Any())
-        {
-            // Domains in which nothing was checked must not dilute the health of the ones that were.
-            var assessed = Domains.Where(d => d.ChecksPerformed > 0).ToList();
-            var basis = assessed.Count > 0 ? assessed : Domains;
+        // Only domains with completed checks provide health evidence. Default score
+        // values on unassessed domains are not measurements and must not inflate health.
+        var assessedDomains = Domains
+            .Where(domain => domain.ChecksPerformed > 0)
+            .ToList();
 
-            Metrics.ProjectHealthIndex = basis.Average(d => d.HealthIndex * 100);
+        if (assessedDomains.Count > 0)
+        {
+            Metrics.ProjectHealthIndex = Math.Round(
+                assessedDomains.Average(domain => domain.HealthIndex * 100),
+                2);
+            Metrics.HasAssessmentEvidence = true;
+        }
+        else if (ComplianceScores.Count > 0)
+        {
+            Metrics.ProjectHealthIndex = Math.Round(
+                ComplianceScores.Values.Average(),
+                2);
+            Metrics.HasAssessmentEvidence = true;
         }
         else
         {
-            Metrics.ProjectHealthIndex = ComplianceScores.Values.DefaultIfEmpty(100).Average();
+            Metrics.ProjectHealthIndex = 0;
+            Metrics.HasAssessmentEvidence = false;
         }
-
-        Metrics.ProjectHealthIndex = Math.Round(Metrics.ProjectHealthIndex, 2);
 
         var stats = EvaluationStats;
         var coverage = stats is not null && stats.RulesApplicable > 0
@@ -135,7 +150,8 @@ public sealed class AegisArchitectureReport
         Metrics.CoverageAdjustedHealthIndex = Math.Round(
             Metrics.ProjectHealthIndex * coverage,
             2);
-        Metrics.AssessmentComplete = stats is not null
+        Metrics.AssessmentComplete = Metrics.HasAssessmentEvidence
+            && stats is not null
             && stats.RulesApplicable > 0
             && coverage >= 0.95
             && stats.EvaluationsErrored == 0;

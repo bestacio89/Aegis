@@ -261,8 +261,8 @@ public sealed class PdfReportExporter : IReportExporter
 
         var narrative = L(
             language,
-            $"{report.ProjectName} was scanned across {report.TotalFilesScanned} files. The assessed health score is {healthDisplay}, while the coverage-adjusted diagnostic is {coverageAdjustedDisplay}. The overall assessment is {status}. {coverageSummary} {report.TotalViolations} findings were identified. The coverage-adjusted value is a diagnostic, not a compliance score.",
-            $"{report.ProjectName} a été analysé sur {report.TotalFilesScanned} fichiers. Le score de santé évalué est {healthDisplay}, tandis que l’indicateur ajusté à la couverture est {coverageAdjustedDisplay}. L’évaluation globale est {status}. {coverageSummary} {report.TotalViolations} constats ont été identifiés. La valeur ajustée à la couverture est un indicateur diagnostique, pas un score de conformité.");
+            $"{report.ProjectName} has {report.TotalFilesScanned} governed files in scope. The assessed health score is {healthDisplay}, while the coverage-adjusted diagnostic is {coverageAdjustedDisplay}. The overall assessment is {status}. {coverageSummary} {report.TotalViolations} findings were identified. The coverage-adjusted value is a diagnostic, not a compliance score.",
+            $"{report.ProjectName} contient {report.TotalFilesScanned} fichiers dans le périmètre gouverné. Le score de santé évalué est {healthDisplay}, tandis que l’indicateur ajusté à la couverture est {coverageAdjustedDisplay}. L’évaluation globale est {status}. {coverageSummary} {report.TotalViolations} constats ont été identifiés. La valeur ajustée à la couverture est un indicateur diagnostique, pas un score de conformité.");
 
         var p = section.AddParagraph(narrative);
         p.Format.SpaceAfter = 10;
@@ -438,7 +438,8 @@ public sealed class PdfReportExporter : IReportExporter
             row.Cells[2].AddParagraph(domain.Violations.ToString());
 
             var healthCell = row.Cells[3].AddParagraph(domain.ChecksPerformed > 0 ? $"{health:0.0}%" : "N/A");
-            healthCell.Format.Font.Color = HealthColor(health);
+            if (domain.ChecksPerformed > 0)
+                healthCell.Format.Font.Color = HealthColor(health);
             healthCell.Format.Font.Bold = true;
 
             row.Cells[4].AddParagraph(domain.ChecksPerformed > 0 ? $"{compliance:0.0}%" : "N/A");

@@ -22,6 +22,11 @@ public sealed class NamingEvaluatorRegressionTests
         project.Write(
             "Assets/TextMesh Pro/Examples & Extras/Example.cs",
             "public sealed class Example { public void Bad_name() { } }");
+        var unityPath = project.Write(
+            "sources/client/Assets/Scripts/UnityFieldFixture.cs",
+            "public sealed class UnityFieldFixture { private int m_Text; public void Start() { } }");
+        project.Write("sources/client/Assets/Game.asmdef", """{"name":"Game"}""");
+        project.Write("sources/client/ProjectSettings/ProjectVersion.txt", "m_EditorVersion: 6000.0.0f1");
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -53,6 +58,16 @@ public sealed class NamingEvaluatorRegressionTests
 
         Assert.Equal(100, component.Metrics["FileNamingCompliance"]);
         Assert.Equal("Blazor", component.Metadata["Framework"]);
+
+        var unity = Assert.Single(
+            results,
+            result => string.Equals(
+                result.Metadata.GetValueOrDefault("FilePath"),
+                unityPath,
+                StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("Unity", unity.Metadata["Framework"]);
+        Assert.Equal(100, unity.Metrics["VariableNamingCompliance"]);
+
         Assert.DoesNotContain(results, result =>
             result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
                 "Generated.Designer.cs",

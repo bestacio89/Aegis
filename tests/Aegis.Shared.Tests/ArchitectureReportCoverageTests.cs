@@ -34,6 +34,19 @@ public sealed class ArchitectureReportCoverageTests
     }
 
     [Fact]
+    public void Zero_applicable_rules_do_not_report_full_evaluation_coverage()
+    {
+        var stats = new RuleEvaluationStats
+        {
+            RulesRegistered = 76,
+            RulesApplicable = 0,
+            RulesEvaluated = 0
+        };
+
+        Assert.Equal(0.0, stats.EvaluationCoverage);
+    }
+
+    [Fact]
     public void ComputeCompliance_marks_assessment_complete_only_at_sufficient_coverage()
     {
         var report = new AegisArchitectureReport

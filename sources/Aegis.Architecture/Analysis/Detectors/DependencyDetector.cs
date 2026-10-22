@@ -1,7 +1,6 @@
 ﻿using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Architecture.Analysis.Detectors;

@@ -238,6 +238,9 @@ public sealed class PdfReportExporter : IReportExporter
         var coveragePercent = stats is not null && stats.RulesApplicable > 0
             ? stats.EvaluationCoverage * 100.0
             : 0.0;
+        var supportedRulesNotEvaluated = stats is null
+            ? 0
+            : Math.Max(0, stats.RulesNotEvaluated.Count - stats.RulesUnsupported);
         var assessmentIncomplete = stats is null
             || stats.RulesApplicable == 0
             || coveragePercent < 95.0
@@ -255,8 +258,8 @@ public sealed class PdfReportExporter : IReportExporter
             ? L(language, "Rule-evaluation coverage is unavailable.", "La couverture d'évaluation des règles est indisponible.")
             : L(
                 language,
-                $"Rule-evaluation coverage is {coveragePercent:0.0}% ({stats.RulesEvaluated}/{stats.RulesApplicable} applicable rules evaluated; {stats.RulesNotEvaluated.Count} not evaluated).",
-                $"La couverture d'évaluation des règles est de {coveragePercent:0.0} % ({stats.RulesEvaluated}/{stats.RulesApplicable} règles applicables évaluées ; {stats.RulesNotEvaluated.Count} non évaluées).");
+                $"Rule-evaluation coverage is {coveragePercent:0.0}% ({stats.RulesEvaluated}/{stats.RulesApplicable} supported applicable rules evaluated; {supportedRulesNotEvaluated} supported rules not evaluated; {stats.RulesUnsupported} unsupported rules).",
+                $"La couverture d'évaluation des règles est de {coveragePercent:0.0} % ({stats.RulesEvaluated}/{stats.RulesApplicable} règles applicables prises en charge évaluées ; {supportedRulesNotEvaluated} règles prises en charge non évaluées ; {stats.RulesUnsupported} règles non prises en charge).");
 
         var narrative = L(
             language,
@@ -289,6 +292,8 @@ public sealed class PdfReportExporter : IReportExporter
             AddRow(table, L(language, "Rules Applicable", "Règles Applicables"), stats.RulesApplicable.ToString());
             AddRow(table, L(language, "Rules Evaluated", "Règles Évaluées"), stats.RulesEvaluated.ToString());
             AddRow(table, L(language, "Rules Not Evaluated", "Règles Non Évaluées"), stats.RulesNotEvaluated.Count.ToString());
+            AddRow(table, L(language, "Supported Rules Not Evaluated", "Règles Prises en Charge Non Évaluées"), supportedRulesNotEvaluated.ToString());
+            AddRow(table, L(language, "Unsupported Rules", "Règles Non Prises en Charge"), stats.RulesUnsupported.ToString());
             AddRow(table, L(language, "Rule Evaluation Coverage", "Couverture d'Évaluation des Règles"), $"{stats.EvaluationCoverage:P1}");
             AddRow(table, L(language, "Assessed Health Index", "Indice de Santé Évalué"), report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.ProjectHealthIndex:0.##}%" : "N/A");
             AddRow(table, L(language, "Coverage-Adjusted Diagnostic", "Indicateur Ajusté à la Couverture"), report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A");

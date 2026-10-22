@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document turns the HeroService scan into an implementation backlog for closing the gap between Aegis's 73 registered rules and the evaluator evidence currently available to the rule engine. It is the delivery plan for metric contracts, producers, applicability, reporting, and regression tests—not a claim that the listed capabilities already exist.
+This document turns the HeroService scan into an implementation backlog for closing the gap between Aegis's 76 registered rules and the evaluator evidence currently available to the rule engine. It is the delivery plan for metric contracts, producers, applicability, reporting, and regression tests—not a claim that the listed capabilities already exist.
 
 **Correctness is the acceptance criterion.** A rule must be evaluated only from evidence that matches its declared meaning, scope, unit, denominator, applicability, and completeness. Missing evidence must not be converted into a zero, a pass, or a fabricated violation.
 
@@ -168,7 +168,7 @@ The following 62 warnings were emitted by the scan. Their metric names and requi
 - [ ] Enumerate emitted metrics by evaluator and output scope, including project summaries and finding-only facts.
 - [ ] Identify collisions where one metric key is used by rules with different semantics, particularly shared keys such as `GodClassDensity` and `ComplexityScore`.
 - [ ] Distinguish no producer, wrong scope, no applicable evidence, unsupported input, partial analysis, invalid value, and disabled evaluator in report diagnostics.
-- [ ] Add tests that ensure all 73 rules have an explicit contract disposition and that the diagnostic counts reconcile.
+- [ ] Add tests that ensure all 76 rules have an explicit contract disposition and that the diagnostic counts reconcile.
 - [ ] Confirm that a disabled evaluator cannot silently leave a rule looking like a generic missing metric.
 
 **Exit gate:** every registered rule has an explicit producer or an explicit unsupported/not-applicable policy; every metric contract gap is accounted for by tests.
@@ -256,11 +256,11 @@ The following 62 warnings were emitted by the scan. Their metric names and requi
 - [ ] Publish rule coverage and missing/wrong-scope/inconclusive counts as CI artifacts.
 - [ ] Establish performance and coverage thresholds only after correctness baselines stabilize.
 
-**Final exit gate:** all 73 rules have an explicit, tested disposition; all enabled/applicable rules with supported complete evidence are evaluated; remaining rules have precise reasons and are not silently omitted.
+**Final exit gate:** all 76 rules have an explicit, tested disposition; all enabled/applicable rules with supported complete evidence are evaluated; remaining rules have precise reasons and are not silently omitted.
 
 ## Recommended PR sequence
 
-1. **Contract inventory and diagnostics:** executable 73-rule/metric-producer inventory, metric semantics, reporting separation, contract tests.
+1. **Contract inventory and diagnostics:** executable 76-rule/metric-producer inventory, metric semantics, reporting separation, contract tests.
 2. **Architecture/API:** complete architecture metrics, preserving the API consistency fix.
 3. **Backend:** cohesion, complexity, dependency graph density, error handling, maintainability.
 4. **Design patterns:** pattern-specific metrics and candidate/compliance semantics.
@@ -276,7 +276,7 @@ Keep each PR reviewable and based on `develop`. Do not merge a stage until tests
 
 The correctness overhaul binds every registered rule to an explicit producer contract or an explicit unsupported disposition. A metric key by itself is not evidence that a rule's semantic requirement was measured.
 
-The current contract inventory has 49 producer-backed rules and 24 explicitly unsupported rules. Unsupported rules remain visible as unevaluated with a reason; they must not be satisfied by a similarly named metric from another evaluator.
+The current contract inventory has 52 producer-backed rules and 24 explicitly unsupported rules. Unsupported rules remain visible as unevaluated with a reason; they must not be satisfied by a similarly named metric from another evaluator.
 
 Explicitly unsupported until a semantically valid producer is implemented:
 

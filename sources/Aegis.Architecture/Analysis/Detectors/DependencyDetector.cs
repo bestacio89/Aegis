@@ -17,25 +17,22 @@ internal static class DependencyDetector
             StringComparer.OrdinalIgnoreCase);
 
 
-        switch (ctx.BuildSystem)
-        {
-            case ArchitectureBuildSystem.DotNet:
-                AnalyzeDotNet(ctx, files, dependencies);
-                break;
+        // BuildSystem identifies the repository's primary build system, but a
+        // repository may contain several independently buildable applications.
+        // Inspect every supported manifest family rather than letting the first
+        // language detected suppress dependencies from sibling projects.
+        if (files.Any(file => file.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
+            AnalyzeDotNet(ctx, files, dependencies);
 
+        if (files.Any(file => Path.GetFileName(file).Equals(
+                "package.json",
+                StringComparison.OrdinalIgnoreCase)))
+            AnalyzeNode(ctx, files, dependencies);
 
-            case ArchitectureBuildSystem.Npm:
-            case ArchitectureBuildSystem.Yarn:
-            case ArchitectureBuildSystem.Pnpm:
-                AnalyzeNode(ctx, files, dependencies);
-                break;
-
-
-            case ArchitectureBuildSystem.Maven:
-            case ArchitectureBuildSystem.Gradle:
-                AnalyzeJava(ctx, files, dependencies);
-                break;
-        }
+        if (files.Any(file => Path.GetFileName(file).Equals(
+                "pom.xml",
+                StringComparison.OrdinalIgnoreCase)))
+            AnalyzeJava(ctx, files, dependencies);
 
 
         ctx.DetectedDependencies =
@@ -190,54 +187,45 @@ internal static class DependencyDetector
         List<string> files,
         HashSet<string> dependencies)
     {
-        var packageFile =
-            files.FirstOrDefault(
-                x => Path.GetFileName(x)
-                    .Equals(
-                        "package.json",
-                        StringComparison.OrdinalIgnoreCase));
-
-
-        if (packageFile is null)
-            return;
-
-
-        try
+        foreach (var packageFile in files.Where(file =>
+                     Path.GetFileName(file).Equals(
+                         "package.json",
+                         StringComparison.OrdinalIgnoreCase)))
         {
-            using var document =
-                JsonDocument.Parse(
-                    File.ReadAllText(packageFile));
-
-
-            foreach (var section in new[]
-                     {
-                         "dependencies",
-                         "devDependencies",
-                         "peerDependencies"
-                     })
+            try
             {
-                if (!document.RootElement.TryGetProperty(
-                        section,
-                        out var dependencyNode))
+                using var document = JsonDocument.Parse(File.ReadAllText(packageFile));
+
+                foreach (var section in new[]
+                         {
+                             "dependencies",
+                             "devDependencies",
+                             "peerDependencies",
+                             "optionalDependencies"
+                         })
                 {
-                    continue;
-                }
+                    if (!document.RootElement.TryGetProperty(
+                            section,
+                            out var dependencyNode)
+                        || dependencyNode.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
 
-
-                foreach (var dependency in dependencyNode.EnumerateObject())
-                {
-                    dependencies.Add(dependency.Name);
-
-
+                    foreach (var dependency in dependencyNode.EnumerateObject())
+                        dependencies.Add(dependency.Name);
                 }
             }
-        }
-        catch
-        {
-            // Invalid package.json should not break analysis
+            catch (Exception exception) when (
+                exception is JsonException
+                    or IOException
+                    or UnauthorizedAccessException)
+            {
+                // Invalid or unreadable manifests are not dependency evidence.
+                // Continue with sibling packages in the same repository.
+            }
         }
     }
-
 
 
     private static void AnalyzeJava(

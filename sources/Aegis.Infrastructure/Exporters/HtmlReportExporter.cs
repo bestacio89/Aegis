@@ -197,6 +197,16 @@ td {
                 $"{report.Metrics.RuleEvaluationCoverage:0.00}%");
 
             AddRow(html,
+                "Supported Rules Not Evaluated",
+                report.EvaluationStats is null
+                    ? "N/A"
+                    : Math.Max(0, report.EvaluationStats.RulesNotEvaluated.Count - report.EvaluationStats.RulesUnsupported).ToString());
+
+            AddRow(html,
+                "Unsupported Rules",
+                report.EvaluationStats?.RulesUnsupported.ToString() ?? "N/A");
+
+            AddRow(html,
                 "Assessment Complete",
                 report.Metrics.AssessmentComplete ? "Yes" : "No");
 

@@ -7,6 +7,9 @@ public sealed class GlobalArchitectureMetrics
     public double ResilienceIndex { get; set; }
     public double WeightedCompliance { get; set; }
 
+    /// <summary>True only when at least one valid rule comparison supports the health metrics.</summary>
+    public bool HasAssessmentEvidence { get; set; }
+
     /// <summary>Percentage of applicable registered rules that were evaluated.</summary>
     public double RuleEvaluationCoverage { get; set; }
 

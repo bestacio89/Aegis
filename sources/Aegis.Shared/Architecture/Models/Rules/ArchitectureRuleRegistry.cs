@@ -89,13 +89,16 @@ public static class ArchitectureRuleRegistry
             "AEG-INF-R2",
             "AEG-INF-R3",
 
-            // Naming: 6
+            // Naming: 9
             "AEG-NAM-R1",
             "AEG-NAM-R2",
             "AEG-NAM-R3",
             "AEG-NAM-R4",
             "AEG-NAM-R5",
             "AEG-NAM-R6",
+            "AEG-NAM-R7",
+            "AEG-NAM-R8",
+            "AEG-NAM-R9",
 
             // Performance: 4
             "AEG-PERF-R1",

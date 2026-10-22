@@ -188,13 +188,15 @@ td {
 
             AddRow(html,
                 "Coverage-Adjusted Diagnostic",
-                report.Metrics.HasAssessmentEvidence
+                report.Metrics.HasCoverageEvidence
                     ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.00}%"
                     : "N/A");
 
             AddRow(html,
                 "Rule Evaluation Coverage",
-                $"{report.Metrics.RuleEvaluationCoverage:0.00}%");
+                report.Metrics.HasCoverageEvidence
+                    ? $"{report.Metrics.RuleEvaluationCoverage:0.00}%"
+                    : "N/A");
 
             AddRow(html,
                 "Supported Rules Not Evaluated",

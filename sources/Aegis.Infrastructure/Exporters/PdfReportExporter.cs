@@ -253,8 +253,8 @@ public sealed class PdfReportExporter : IReportExporter
                     ? L(language, "at risk", "à risque")
                     : L(language, "critical", "critique");
 
-        var coverageSummary = stats is null
-            ? L(language, "Rule-evaluation coverage is unavailable.", "La couverture d'évaluation des règles est indisponible.")
+        var coverageSummary = stats is null || stats.RulesApplicable == 0
+            ? L(language, "Rule-evaluation coverage is unavailable because no supported applicable rules were available.", "La couverture d'évaluation des règles est indisponible car aucune règle applicable prise en charge n'était disponible.")
             : L(
                 language,
                 $"Rule-evaluation coverage is {coveragePercent:0.0}% ({stats.RulesEvaluated}/{stats.RulesApplicable} supported applicable rules evaluated; {supportedRulesNotEvaluated} supported rules not evaluated; {stats.RulesUnsupported} unsupported rules).",

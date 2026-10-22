@@ -15,7 +15,7 @@ public sealed class CSharpNamingConventionPolicy : INamingConventionPolicy
 
 
     public bool IsValidMethodName(string name)
-        => Regex.IsMatch(name, @"^[A-Z][a-zA-Z0-9]+$");
+        => Regex.IsMatch(name, @"^[A-Z][a-zA-Z0-9]*$");
 
 
     public bool IsValidVariableName(string name)

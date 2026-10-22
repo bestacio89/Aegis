@@ -351,9 +351,23 @@ internal static class ArchitectureRuleMetricContracts
                 reason = $"Rule '{rule.Id}' applies only to C# field/property declarations.";
                 return false;
             }
-
-            return true;
         }
+
+        var declarationCountKey = GetNamingDeclarationCountKey(rule.Id);
+        if (declarationCountKey is not null
+            && fact.Metadata is not null
+            && fact.Metadata.TryGetValue("EvaluationStatus", out var evaluationStatus)
+            && evaluationStatus is "Evaluated" or "NoDeclarations"
+            && fact.Metadata.TryGetValue(declarationCountKey, out var countText)
+            && int.TryParse(countText, out var declarationCount)
+            && declarationCount == 0)
+        {
+            reason = $"Rule '{rule.Id}' is not applicable because this file contains no declarations of the required kind.";
+            return false;
+        }
+
+        if (IsCSharpOnlyNamingRule(rule.Id))
+            return true;
 
         if (!FrontendRuleScopes.TryGetValue(rule.Id, out var targetScope))
             return true;
@@ -401,6 +415,15 @@ internal static class ArchitectureRuleMetricContracts
     private static bool IsCSharpOnlyNamingRule(string ruleId) =>
         ruleId.Equals("AEG-NAM-R8", StringComparison.OrdinalIgnoreCase)
         || ruleId.Equals("AEG-NAM-R9", StringComparison.OrdinalIgnoreCase);
+
+    private static string? GetNamingDeclarationCountKey(string ruleId) =>
+        ruleId.ToUpperInvariant() switch
+        {
+            "AEG-NAM-R7" => "ConstantsAnalyzed",
+            "AEG-NAM-R8" => "FieldsAnalyzed",
+            "AEG-NAM-R9" => "PropertiesAnalyzed",
+            _ => null
+        };
 
     private static FrontendScope? ResolveFrontendFamily(string framework)
     {

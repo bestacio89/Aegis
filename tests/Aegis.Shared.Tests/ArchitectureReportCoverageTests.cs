@@ -26,9 +26,9 @@ public sealed class ArchitectureReportCoverageTests
             [ArchitectureRuleCategory.Architecture] = 88.04
         });
 
-        Assert.Equal(39.73, report.Metrics.RuleEvaluationCoverage, 2);
+        Assert.Equal(Math.Round(29.0 / 76.0 * 100.0, 2), report.Metrics.RuleEvaluationCoverage, 2);
         Assert.Equal(
-            Math.Round(88.04 * 29.0 / 73.0, 2),
+            Math.Round(88.04 * 29.0 / 76.0, 2),
             report.Metrics.CoverageAdjustedHealthIndex);
         Assert.False(report.Metrics.AssessmentComplete);
         Assert.Equal(88.04, report.Metrics.ProjectHealthIndex);

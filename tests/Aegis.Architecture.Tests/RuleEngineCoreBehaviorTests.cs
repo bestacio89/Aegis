@@ -185,10 +185,16 @@ public sealed class RuleEngineCoreBehaviorTests
             []);
 
         Assert.Equal(76, ArchitectureRuleRegistry.All.Count);
-        Assert.Equal(ArchitectureRuleRegistry.All.Count, outcome.Stats.NotEvaluatedReasons.Count);
+        Assert.Equal(24, outcome.Stats.RulesUnsupported);
+        Assert.Equal(50, outcome.Stats.RulesApplicable);
+        Assert.Equal(74, outcome.Stats.NotEvaluatedReasons.Count);
+        Assert.Equal(2, outcome.Stats.RulesNotApplicable.Count);
 
         foreach (var rule in ArchitectureRuleRegistry.All)
         {
+            if (outcome.Stats.NotApplicableReasons.ContainsKey(rule.Id))
+                continue;
+
             var reason = outcome.Stats.NotEvaluatedReasons[rule.Id];
             Assert.DoesNotContain(
                 "No producer-to-rule contract is registered",

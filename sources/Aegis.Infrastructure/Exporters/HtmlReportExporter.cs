@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Rules;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.Logging;
 
@@ -235,22 +236,44 @@ td {
 """);
 
 
-            foreach (var score in report.ComplianceScores)
+            var registeredCategories = ArchitectureRuleRegistry.All
+                .Select(rule => Enum.TryParse<ArchitectureRuleCategory>(
+                    rule.Category,
+                    true,
+                    out var category)
+                    ? category
+                    : ArchitectureRuleCategory.General)
+                .Distinct()
+                .OrderBy(category => category.ToString());
+
+            foreach (var category in registeredCategories)
             {
+                if (!report.ComplianceScores.TryGetValue(category, out var score))
+                {
+                    html.AppendLine($"""
+<tr>
+<td>{category}</td>
+<td>N/A</td>
+<td>NOT ASSESSED</td>
+</tr>
+""");
+                    continue;
+                }
+
                 var css =
-                    score.Value >= 80 ? "good" :
-                    score.Value >= 50 ? "warning" :
+                    score >= 80 ? "good" :
+                    score >= 50 ? "warning" :
                     "bad";
 
                 var status =
-                    score.Value >= 80 ? "✅ OK" :
-                    score.Value >= 50 ? "⚠ Warning" :
+                    score >= 80 ? "✅ OK" :
+                    score >= 50 ? "⚠ Warning" :
                     "❌ Critical";
 
                 html.AppendLine($"""
 <tr>
-<td>{score.Key}</td>
-<td>{score.Value:0.00}%</td>
+<td>{category}</td>
+<td>{score:0.00}%</td>
 <td class="{css}">
 {status}
 </td>

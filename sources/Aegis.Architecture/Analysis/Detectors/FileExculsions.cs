@@ -9,7 +9,6 @@ internal static class FileExclusions
             "bin", "obj", "node_modules", "dist", "build",
             "__pycache__", ".venv", "venv", "coverage", "TestResults",
             "Temp", "Logs", "PackageCache", "Generated",
-            "TextMesh Pro", "TextMeshPro", "Examples & Extras",
             "ThirdParty", "Third-Party", "vendor"
         };
 
@@ -27,6 +26,18 @@ internal static class FileExclusions
             StringSplitOptions.RemoveEmptyEntries);
 
         if (segments.Any(ExcludedDirectories.Contains))
+            return true;
+
+        // Unity TextMesh Pro example projects are vendored samples, not application
+        // architecture. Exclude only that known combination rather than every
+        // first-party directory named "TextMeshPro" or "Examples & Extras".
+        var hasTextMeshProDirectory = segments.Any(segment =>
+            segment.Equals("TextMesh Pro", StringComparison.OrdinalIgnoreCase)
+            || segment.Equals("TextMeshPro", StringComparison.OrdinalIgnoreCase));
+        var hasExamplesDirectory = segments.Any(segment =>
+            segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase));
+
+        if (hasTextMeshProDirectory && hasExamplesDirectory)
             return true;
 
         var fileName = Path.GetFileName(path);

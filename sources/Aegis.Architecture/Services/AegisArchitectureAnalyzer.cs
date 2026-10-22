@@ -87,7 +87,9 @@ public sealed class AegisArchitectureAnalyzer
 
 
 
-        report.ComputeCompliance();
+        // RuleEngine aggregation already computed compliance from actual rule checks,
+        // including passing outcomes and coverage. Recomputing from findings alone here
+        // would discard those scores and treat categories without findings as passing.
 
 
 

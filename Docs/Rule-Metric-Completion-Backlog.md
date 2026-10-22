@@ -16,7 +16,7 @@ Captured from the user's local run on 2026-10-21:
 | Source files reported by NamingEvaluator | 7,176 |
 | Files processed by PerformanceEvaluator | 6,909 |
 | Facts generated | 8,675 |
-| Registered rules | 73 |
+| Registered rules | 76 |
 | Rules evaluated | 11 (15.1%) |
 | Rules not evaluated | 62 (84.9%) |
 | Rule checks | 32,770 |
@@ -284,7 +284,7 @@ Explicitly unsupported until a semantically valid producer is implemented:
 - Backend: `AEG-BACK-R1`
 - Dependencies: `AEG-DEPS-R1` through `AEG-DEPS-R4`
 - Design patterns: `AEG-DES-DEC002`, `AEG-DES-REPO002`, `AEG-DES-FACR002`, `AEG-DES-CMD002`, `AEG-DES-MEDI002`, `AEG-DES-OBS002`, `AEG-DES-SING002`, `AEG-DES-CIRC001`, `AEG-DES-OVER001`
-- Performance: `AEG-PERF-R3`, `AEG-PERF-R4`
+- Performance: `AEG-PERF-R3`
 - Transactions: `AEG-TXN-R2` through `AEG-TXN-R4`
 
 These are not waived findings. Each disposition documents the missing evidence or semantic mismatch that must be resolved before the rule can become enforceable. In particular, package declarations do not prove freshness or usage, instantiation inside a factory is not itself a violation, and a heterogeneous set of security signals is not a calibrated compliance score.

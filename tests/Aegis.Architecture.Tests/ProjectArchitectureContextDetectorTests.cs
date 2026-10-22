@@ -168,6 +168,8 @@ public sealed class ProjectArchitectureContextDetectorTests
         var assets = Path.Combine(directory.Path, "Assets");
         Directory.CreateDirectory(Path.Combine(assets, "Scripts"));
         Directory.CreateDirectory(Path.Combine(assets, "TextMesh Pro", "Examples & Extras"));
+        Directory.CreateDirectory(Path.Combine(assets, "Examples & Extras"));
+        Directory.CreateDirectory(Path.Combine(assets, "TextMeshPro", "Custom"));
         Directory.CreateDirectory(Path.Combine(directory.Path, "ProjectSettings"));
         Directory.CreateDirectory(Path.Combine(directory.Path, "Library", "PackageCache", "com.unity.sample"));
 
@@ -177,16 +179,22 @@ public sealed class ProjectArchitectureContextDetectorTests
         File.WriteAllText(Path.Combine(assets, "Scripts", "GameController.cs"), "public sealed class GameController { }");
         File.WriteAllText(Path.Combine(assets, "Scripts", "Generated.Designer.cs"), "public sealed class Generated { }");
         File.WriteAllText(Path.Combine(assets, "TextMesh Pro", "Examples & Extras", "Example.cs"), "public sealed class Example { }");
+        File.WriteAllText(Path.Combine(assets, "Examples & Extras", "GameOwnedExample.cs"), "public sealed class GameOwnedExample { }");
+        File.WriteAllText(Path.Combine(assets, "TextMeshPro", "Custom", "HudLabel.cs"), "public sealed class HudLabel { }");
         File.WriteAllText(Path.Combine(directory.Path, "Library", "PackageCache", "com.unity.sample", "Vendor.cs"), "public sealed class Vendor { }");
 
         var context = ProjectArchitectureContextDetector.Detect(directory.Path);
 
-        Assert.Equal(3, context.FileCount);
+        Assert.Equal(5, context.FileCount);
         Assert.Contains(context.Layers, layer => layer.Name == "Client");
         Assert.DoesNotContain(context.Layers, layer => layer.Files.Any(file =>
             file.Contains("PackageCache", StringComparison.OrdinalIgnoreCase)));
         Assert.DoesNotContain(context.Layers, layer => layer.Files.Any(file =>
-            file.Contains("Examples & Extras", StringComparison.OrdinalIgnoreCase)));
+            file.Contains(Path.Combine("TextMesh Pro", "Examples & Extras"), StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains(context.Layers, layer => layer.Files.Any(file =>
+            file.Contains("GameOwnedExample.cs", StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains(context.Layers, layer => layer.Files.Any(file =>
+            file.Contains("HudLabel.cs", StringComparison.OrdinalIgnoreCase)));
     }
 
     [Fact]

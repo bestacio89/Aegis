@@ -90,6 +90,40 @@ public sealed class ArchitectureReportCoverageTests
     }
 
     [Fact]
+    public void ComputeCompliance_weights_domain_health_by_completed_checks()
+    {
+        var report = new AegisArchitectureReport
+        {
+            EvaluationStats = new RuleEvaluationStats
+            {
+                RulesRegistered = 2,
+                RulesApplicable = 2,
+                RulesEvaluated = 2
+            }
+        };
+        report.Domains.Add(new ArchitectureDomainSummary
+        {
+            Domain = "Small",
+            ChecksPerformed = 1,
+            HasAssessmentEvidence = true,
+            HealthIndex = 0.2
+        });
+        report.Domains.Add(new ArchitectureDomainSummary
+        {
+            Domain = "Large",
+            ChecksPerformed = 9,
+            HasAssessmentEvidence = true,
+            HealthIndex = 0.8
+        });
+
+        report.ComputeCompliance(new Dictionary<ArchitectureRuleCategory, double>());
+
+        Assert.Equal(74, report.Metrics.ProjectHealthIndex);
+        Assert.True(report.Metrics.HasAssessmentEvidence);
+        Assert.True(report.Metrics.HasCoverageEvidence);
+    }
+
+    [Fact]
     public void ComputeCompliance_marks_assessment_complete_only_at_sufficient_coverage()
     {
         var report = new AegisArchitectureReport

@@ -115,8 +115,13 @@ public sealed class ArchitecturalTransactionEvaluator
 
 
 
-        var files =
-            GetSourceFiles(projectPath);
+        var files = ResolveSourceFiles(
+            projectPath,
+            ".cs",
+            ".java",
+            ".py",
+            ".ts",
+            ".js");
 
 
 
@@ -425,23 +430,6 @@ public sealed class ArchitecturalTransactionEvaluator
 
 
 
-    private static List<string> GetSourceFiles(
-        string projectPath)
-    {
-        return Directory
-            .EnumerateFiles(
-                projectPath,
-                "*.*",
-                SearchOption.AllDirectories)
-            .Where(IsSupportedFile)
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
-    }
-
-
-
-
-
     private static async Task<string?> TryReadFileAsync(
         string file,
         CancellationToken token)
@@ -456,30 +444,6 @@ public sealed class ArchitecturalTransactionEvaluator
         {
             return null;
         }
-    }
-
-
-
-
-
-    private static bool IsSupportedFile(
-        string file)
-    {
-        return
-            file.EndsWith(".cs",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".java",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".py",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".ts",
-                StringComparison.OrdinalIgnoreCase)
-            ||
-            file.EndsWith(".js",
-                StringComparison.OrdinalIgnoreCase);
     }
 
 

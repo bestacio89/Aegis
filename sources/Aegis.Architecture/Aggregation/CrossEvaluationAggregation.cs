@@ -283,13 +283,13 @@ public sealed class CrossEvaluatorAggregator
         // No checks in this domain = not assessed (reported through ChecksPerformed = 0).
         var score =
             checks == 0
-                ? 1.0
+                ? 0.0
                 : _weightingEngine.ComputeScore(violationWeight, checkWeight);
 
 
         var passRate =
             checks == 0
-                ? 1.0
+                ? 0.0
                 : Math.Clamp(1.0 - (double)violations / checks, 0, 1);
 
 
@@ -301,6 +301,8 @@ public sealed class CrossEvaluatorAggregator
                 stats.RulesEvaluatedByDomain.GetValueOrDefault(domain),
 
             ChecksPerformed = checks,
+
+            HasAssessmentEvidence = checks > 0,
 
             Violations = violations,
 
@@ -324,16 +326,13 @@ public sealed class CrossEvaluatorAggregator
             return new ArchitectureDomainSummary
             {
                 Domain = domain,
-
                 RulesEvaluated = 0,
-
+                ChecksPerformed = 0,
+                HasAssessmentEvidence = false,
                 Violations = 0,
-
-                WeightedScore = 1,
-
-                MaintainabilityIndex = 1 * _maintainabilityFactor,
-
-                HealthIndex = 1 * _globalHealthWeight
+                WeightedScore = 0,
+                MaintainabilityIndex = 0,
+                HealthIndex = 0
             };
         }
 
@@ -351,6 +350,9 @@ public sealed class CrossEvaluatorAggregator
             Domain = domain,
 
             RulesEvaluated = total,
+
+            ChecksPerformed = total,
+            HasAssessmentEvidence = true,
 
             Violations =
                 total - compliant,

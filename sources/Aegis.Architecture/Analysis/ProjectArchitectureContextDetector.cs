@@ -1,4 +1,6 @@
-﻿using Aegis.Architecture.Analysis.Detectors;
+﻿using System.Text.Json;
+
+using Aegis.Architecture.Analysis.Detectors;
 using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Architecture.Analysis;
@@ -23,7 +25,7 @@ public static class ProjectArchitectureContextDetector
         };
 
 
-        var files = EnumerateGovernedFiles(rootPath, ctx.DiscoveryDiagnostics);
+        var files = EnumerateGovernedFiles(rootPath, ctx.DiscoveryDiagnostics, ctx.ExcludedEntriesByReason);
 
 
 
@@ -144,7 +146,8 @@ public static class ProjectArchitectureContextDetector
 
     private static List<string> EnumerateGovernedFiles(
         string rootPath,
-        ICollection<AnalysisDiagnostic> diagnostics)
+        ICollection<AnalysisDiagnostic> diagnostics,
+        IDictionary<string, int> excludedEntriesByReason)
     {
         var files = new List<string>();
         var pending = new Stack<string>();
@@ -153,8 +156,12 @@ public static class ProjectArchitectureContextDetector
         while (pending.Count > 0)
         {
             var directory = pending.Pop();
-            if (FileExclusions.IsExcluded(directory))
+            var directoryExclusionReason = FileExclusions.GetExclusionReason(directory);
+            if (directoryExclusionReason is not null)
+            {
+                RecordExcludedEntry(excludedEntriesByReason, directoryExclusionReason);
                 continue;
+            }
 
             try
             {
@@ -163,8 +170,11 @@ public static class ProjectArchitectureContextDetector
                              "*",
                              SearchOption.TopDirectoryOnly))
                 {
-                    if (!FileExclusions.IsExcluded(file))
+                    var exclusionReason = FileExclusions.GetExclusionReason(file);
+                    if (exclusionReason is null)
                         files.Add(file);
+                    else
+                        RecordExcludedEntry(excludedEntriesByReason, exclusionReason);
                 }
 
                 foreach (var child in Directory.EnumerateDirectories(
@@ -172,8 +182,12 @@ public static class ProjectArchitectureContextDetector
                              "*",
                              SearchOption.TopDirectoryOnly))
                 {
-                    if (FileExclusions.IsExcluded(child))
+                    var exclusionReason = FileExclusions.GetExclusionReason(child);
+                    if (exclusionReason is not null)
+                    {
+                        RecordExcludedEntry(excludedEntriesByReason, exclusionReason);
                         continue;
+                    }
 
                     try
                     {
@@ -241,6 +255,14 @@ public static class ProjectArchitectureContextDetector
         return files;
     }
 
+    private static void RecordExcludedEntry(
+        IDictionary<string, int> excludedEntriesByReason,
+        string reason)
+    {
+        excludedEntriesByReason[reason] =
+            excludedEntriesByReason.GetValueOrDefault(reason) + 1;
+    }
+
     private static void PopulateContextMetadata(
         ProjectArchitectureContext ctx,
         List<string> files)
@@ -251,6 +273,12 @@ public static class ProjectArchitectureContextDetector
 
         ctx.MetadataMap["FileCount"] =
             ctx.FileCount.ToString();
+
+        ctx.MetadataMap["ExcludedPathEntryCount"] =
+            ctx.ExcludedEntriesByReason.Values.Sum().ToString();
+
+        ctx.MetadataMap["ExcludedEntriesByReason"] =
+            JsonSerializer.Serialize(ctx.ExcludedEntriesByReason);
 
 
         ctx.MetadataMap["DetectedDependencies"] =

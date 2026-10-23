@@ -1,6 +1,5 @@
 ﻿using Aegis.Wpf.models;
 using Aegis.Wpf.Models;
-using Aegis.Wpf.models;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 

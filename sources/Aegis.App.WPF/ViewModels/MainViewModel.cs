@@ -23,6 +23,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly SectionDashboardViewModel _sectionDashboard;
     private readonly LayerDashboardViewModel _layerDashboard;
     private readonly RuleDashboardViewModel _ruleDashboard;
+    private readonly FindingsLedgerViewModel _findingsLedger;
     private readonly ReportVisualizationViewModel _reportVisualization;
     private readonly SecurityWorkspaceViewModel _securityWorkspace;
     private readonly ConfigurationWorkspaceViewModel _configurationWorkspace;
@@ -53,6 +54,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _sectionDashboard = sectionDashboard;
         _layerDashboard = layerDashboard;
         _ruleDashboard = ruleDashboard;
+        _findingsLedger = new FindingsLedgerViewModel();
         _reportVisualization = reportVisualization;
         _securityWorkspace = securityWorkspace;
         _configurationWorkspace = configurationWorkspace;
@@ -62,6 +64,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             _sectionDashboard,
             _layerDashboard,
             _ruleDashboard,
+            _findingsLedger,
             _reportVisualization);
 
         SelectRepositoryCommand =
@@ -269,6 +272,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _layerDashboard.Update(report);
         _sectionDashboard.Update(report);
         _ruleDashboard.Update(report);
+        _findingsLedger.Update(report);
         _reportVisualization.Update(report, context);
     }
 

@@ -312,6 +312,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 ["FilesWithLoggingCalls"] = loggingFileCount,
                 ["FilesWithLoggingResults"] = results.Count,
                 ["UnreadableFiles"] = failedFileCount,
+                ["DiagnosticCount"] = failedFileCount,
                 ["AverageIntegrityScore"] = integrity,
                 ["LoggingIntegrityScore"] = integrity,
                 ["AverageStructuredLogging"] = structured,
@@ -328,6 +329,13 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 ["SupportedFrameworks"] = string.Join(
                     ", ",
                     SupportedFrameworks),
+                ["AnalysisComplete"] = (failedFileCount == 0).ToString(),
+                ["AnalysisStatus"] = failedFileCount == 0
+                    ? "Completed"
+                    : "CompletedWithDiagnostics",
+                ["Diagnostics"] = failedFileCount == 0
+                    ? string.Empty
+                    : $"Unable to read {failedFileCount} source file(s) during logging analysis.",
                 ["ScoringNote"] =
                     "Scores are heuristic indicators based on files containing recognized logging calls."
             }
@@ -349,7 +357,8 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 ["SourceFilesScanned"] = analyzedFileCount,
                 ["FilesWithLoggingCalls"] = loggingFileCount,
                 ["FilesWithLoggingResults"] = 0,
-                ["UnreadableFiles"] = failedFileCount
+                ["UnreadableFiles"] = failedFileCount,
+                ["DiagnosticCount"] = failedFileCount
             },
 
             Metadata =
@@ -362,6 +371,13 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                         : loggingFileCount == 0
                             ? "NoRecognizedLoggingCalls"
                             : "NoFilesEvaluated",
+                ["AnalysisComplete"] = (failedFileCount == 0).ToString(),
+                ["AnalysisStatus"] = failedFileCount == 0
+                    ? "Completed"
+                    : "CompletedWithDiagnostics",
+                ["Diagnostics"] = failedFileCount == 0
+                    ? string.Empty
+                    : $"Unable to read {failedFileCount} source file(s) during logging analysis.",
                 ["EvaluationScope"] = ProjectScope
             }
         };

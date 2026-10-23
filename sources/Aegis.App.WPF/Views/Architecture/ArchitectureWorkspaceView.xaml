@@ -8,21 +8,12 @@
     Foreground="{StaticResource Brush.TextPrimary}">
 
   <UserControl.Resources>
-    <DataTemplate DataType="{x:Type archivm:ArchitectureOverviewViewModel}">
-      <artchiviews:ArchitectureOverviewView />
-    </DataTemplate>
-    <DataTemplate DataType="{x:Type archivm:SectionDashboardViewModel}">
-      <artchiviews:SectionDashboardView />
-    </DataTemplate>
-    <DataTemplate DataType="{x:Type archivm:LayerDashboardViewModel}">
-      <artchiviews:LayerDashboardView />
-    </DataTemplate>
-    <DataTemplate DataType="{x:Type archivm:RuleDashboardViewModel}">
-      <artchiviews:RuleDashboardView />
-    </DataTemplate>
-    <DataTemplate DataType="{x:Type archivm:ReportVisualizationViewModel}">
-      <artchiviews:ReportVisualizationView />
-    </DataTemplate>
+    <DataTemplate DataType="{x:Type archivm:ArchitectureOverviewViewModel}"><artchiviews:ArchitectureOverviewView /></DataTemplate>
+    <DataTemplate DataType="{x:Type archivm:SectionDashboardViewModel}"><artchiviews:SectionDashboardView /></DataTemplate>
+    <DataTemplate DataType="{x:Type archivm:LayerDashboardViewModel}"><artchiviews:LayerDashboardView /></DataTemplate>
+    <DataTemplate DataType="{x:Type archivm:RuleDashboardViewModel}"><artchiviews:RuleDashboardView /></DataTemplate>
+    <DataTemplate DataType="{x:Type archivm:FindingsLedgerViewModel}"><artchiviews:FindingsLedgerView /></DataTemplate>
+    <DataTemplate DataType="{x:Type archivm:ReportVisualizationViewModel}"><artchiviews:ReportVisualizationView /></DataTemplate>
 
     <Style x:Key="ArchitectureTabItem" TargetType="TabItem">
       <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}"/>
@@ -48,9 +39,7 @@
               <Trigger Property="IsMouseOver" Value="True">
                 <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource Brush.Panel}"/>
               </Trigger>
-              <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Opacity" Value="0.5"/>
-              </Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
@@ -59,29 +48,21 @@
   </UserControl.Resources>
 
   <Grid Margin="24">
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/>
-      <RowDefinition Height="Auto"/>
-      <RowDefinition Height="*"/>
-    </Grid.RowDefinitions>
-
-    <Grid Grid.Row="0" Margin="0,0,0,18">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <Grid Grid.Row="0" Margin="0,0,0,14">
       <StackPanel>
-        <TextBlock Text="Architecture" FontSize="28" FontWeight="SemiBold"
+        <TextBlock Text="Architecture" FontSize="26" FontWeight="SemiBold"
                    Foreground="{StaticResource Brush.TextPrimary}"/>
-        <TextBlock Text="Understand system structure, assess architectural rules, and investigate evidence."
-                   Margin="0,6,0,0" Foreground="{StaticResource Brush.TextMuted}"
+        <TextBlock Text="Understand system structure, evaluate rules, and investigate evidence."
+                   Margin="0,5,0,0" Foreground="{StaticResource Brush.TextMuted}"
                    TextWrapping="Wrap"/>
       </StackPanel>
     </Grid>
-
-    <TabControl Grid.Row="1"
-                ItemsSource="{Binding Tabs}"
+    <TabControl Grid.Row="1" ItemsSource="{Binding Tabs}"
                 SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
                 ItemContainerStyle="{StaticResource ArchitectureTabItem}"
                 Background="Transparent" BorderThickness="0"
-                Foreground="{StaticResource Brush.TextPrimary}"
-                Padding="0" Margin="0,0,0,8">
+                Foreground="{StaticResource Brush.TextPrimary}" Padding="0" Margin="0,0,0,8">
       <TabControl.ItemTemplate>
         <DataTemplate>
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -90,14 +71,10 @@
           </StackPanel>
         </DataTemplate>
       </TabControl.ItemTemplate>
-      <TabControl.ContentTemplate>
-        <DataTemplate><Grid/></DataTemplate>
-      </TabControl.ContentTemplate>
+      <TabControl.ContentTemplate><DataTemplate><Grid/></DataTemplate></TabControl.ContentTemplate>
     </TabControl>
-
     <Border Grid.Row="2" Margin="0,4,0,0" Background="Transparent">
-      <ContentControl Content="{Binding ActiveContent}"
-                      HorizontalContentAlignment="Stretch"
+      <ContentControl Content="{Binding ActiveContent}" HorizontalContentAlignment="Stretch"
                       VerticalContentAlignment="Stretch"/>
     </Border>
   </Grid>

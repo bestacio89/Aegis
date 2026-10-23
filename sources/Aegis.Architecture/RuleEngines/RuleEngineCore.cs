@@ -106,6 +106,15 @@ public sealed class RuleEngineCore
                 continue;
             }
 
+            if (ArchitectureRuleMetricContracts.TryGetNoCandidateDisposition(
+                    rule.Id,
+                    factList.Where(fact => fact is not null).ToList(),
+                    out var noCandidateReason))
+            {
+                notApplicableReasons[rule.Id] = noCandidateReason;
+                continue;
+            }
+
             applicableRules.Add(rule);
         }
 

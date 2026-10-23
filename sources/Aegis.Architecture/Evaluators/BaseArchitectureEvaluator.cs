@@ -628,6 +628,11 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             Name,
             Path.GetFullPath(projectPath))
         {
+            ProjectName = Context?.ProjectName,
+            Language = Context?.Language,
+            Framework = Context?.Framework,
+            WeightFactor = WeightFactor,
+            WasEnabled = IsEnabled,
             Category = "EvaluatorStatus",
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {

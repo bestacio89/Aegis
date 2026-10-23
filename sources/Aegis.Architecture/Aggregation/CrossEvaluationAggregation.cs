@@ -504,7 +504,7 @@ public sealed class CrossEvaluatorAggregator
                 && stats.RulesApplicable + stats.RulesUnsupported > 0,
             CoverageAdjustedHealthIndex = 0,
             AssessmentComplete = stats is not null
-                && stats.RulesApplicable + stats.RulesUnsupported == 0
+                && stats.RulesApplicable + stats.RulesUnsupported > 0
                 && stats.RulesNotEvaluated.Count == 0
                 && stats.RulesUnsupported == 0
                 && stats.RulesWithErrors == 0

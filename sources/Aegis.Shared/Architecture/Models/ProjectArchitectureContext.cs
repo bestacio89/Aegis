@@ -145,6 +145,13 @@ public sealed class ProjectArchitectureContext
     public List<ArchitectureInferenceTrace> InferenceHistory { get; set; }
         = new();
 
+    /// <summary>
+    /// Discovery failures that prevented a subtree or file from being examined.
+    /// These diagnostics are coverage-affecting and must not be interpreted as
+    /// evidence that the excluded area is compliant.
+    /// </summary>
+    public List<AnalysisDiagnostic> DiscoveryDiagnostics { get; set; } = [];
+
 
 
     // ===============================================================

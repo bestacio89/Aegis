@@ -387,6 +387,7 @@ public sealed class FacadePatternEvaluator
         result.Metadata[FilePathMetadataKey] = file;
         result.Metadata[EvaluationScopeMetadataKey] = FileScope;
         result.Metadata["ClassName"] = className;
+        result.Metadata["MetricUnit.PublicSurfaceRatio"] = "RatioOfConfiguredMaximum";
         result.Metadata["Language"] = language;
         result.Metadata["Layer"] = ResolveLayer(file);
         result.Metadata["FacadeSuffixDetected"] = hasFacadeSuffix.ToString();

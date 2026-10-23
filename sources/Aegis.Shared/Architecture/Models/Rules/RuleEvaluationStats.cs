@@ -1,4 +1,4 @@
-﻿namespace Aegis.Shared.Architecture.Models;
+namespace Aegis.Shared.Architecture.Models;
 
 /// <summary>
 /// Counts and diagnostics describing what the rule engine actually assessed.
@@ -12,6 +12,12 @@ public sealed class RuleEvaluationStats
 
     /// <summary>Rules whose declared metric semantics have no supported producer.</summary>
     public int RulesUnsupported { get; init; }
+
+    /// <summary>
+    /// Measurements withheld because their producer unit or threshold scale
+    /// did not satisfy a verified metric contract.
+    /// </summary>
+    public int MetricContractFailures { get; init; }
 
     public IReadOnlyDictionary<string, string> UnsupportedRuleReasons { get; init; }
         = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

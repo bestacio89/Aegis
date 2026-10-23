@@ -1,4 +1,5 @@
 
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Rules;
 
@@ -290,6 +291,53 @@ internal static class ArchitectureRuleMetricContracts
 
         value = default;
         return false;
+    }
+
+    private sealed record MetricSemanticsContract(string MetricKey, string Unit, ComparisonOperator Operator, double MinimumValue, double MinimumThreshold, double? MaximumThreshold);
+
+    private static readonly IReadOnlyDictionary<string, MetricSemanticsContract> MetricSemanticsContracts =
+        new Dictionary<string, MetricSemanticsContract>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["AEG-DES-FAC002"] = new("PublicSurfaceRatio", "RatioOfConfiguredMaximum", ComparisonOperator.GreaterThan, 0.0, 0.0, 1.0),
+            ["AEG-DES-GOD001"] = new("GodClassSeverity", "MinimumOfLineAndMethodLimitRatios", ComparisonOperator.GreaterThan, 0.0, 1.0, null)
+        };
+
+    public static bool TryValidateMetricContract(ArchitectureRuleDefinition rule, ArchitectureEvaluatorResult fact, double value, double threshold, out string reason)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(fact);
+        reason = string.Empty;
+        if (!MetricSemanticsContracts.TryGetValue(rule.Id, out var contract)) return true;
+        if (!string.Equals(rule.MetricKey, contract.MetricKey, StringComparison.Ordinal))
+        {
+            reason = $"Rule '{rule.Id}' declares metric '{rule.MetricKey}', but its verified contract requires '{contract.MetricKey}'.";
+            return false;
+        }
+        if (rule.Operator != contract.Operator)
+        {
+            reason = $"Rule '{rule.Id}' must use comparison operator '{contract.Operator}' for metric '{contract.MetricKey}', but declared '{rule.Operator}'.";
+            return false;
+        }
+        var unitKey = $"MetricUnit.{contract.MetricKey}";
+        var actualUnit = fact.Metadata?.GetValueOrDefault(unitKey);
+        if (!string.Equals(actualUnit, contract.Unit, StringComparison.Ordinal))
+        {
+            reason = $"Rule '{rule.Id}' requires metric unit '{contract.Unit}' in metadata '{unitKey}', but the fact declared '{actualUnit ?? "missing"}'.";
+            return false;
+        }
+        if (!double.IsFinite(value) || value < contract.MinimumValue)
+        {
+            reason = $"Metric '{contract.MetricKey}' must be finite and at least {contract.MinimumValue}; observed value was {value}.";
+            return false;
+        }
+        if (!double.IsFinite(threshold) || threshold < contract.MinimumThreshold || (contract.MaximumThreshold.HasValue && threshold > contract.MaximumThreshold.Value))
+        {
+            reason = contract.MaximumThreshold.HasValue
+                ? $"Threshold {threshold} is outside the verified scale [{contract.MinimumThreshold}, {contract.MaximumThreshold.Value}] for metric '{contract.MetricKey}' ({contract.Unit})."
+                : $"Threshold {threshold} must be at least {contract.MinimumThreshold} for metric '{contract.MetricKey}' ({contract.Unit}).";
+            return false;
+        }
+        return true;
     }
 
     /// <summary>

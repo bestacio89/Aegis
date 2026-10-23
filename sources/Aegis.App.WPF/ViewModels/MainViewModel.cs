@@ -34,6 +34,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private string _repositoryPath = string.Empty;
     private double _analysisProgress;
+    private string _analysisStage = "Idle";
     private object? _activeWorkspaceViewModel;
     private string? _selectedWorkspace;
     private string _selectedExportFormat = "pdf";
@@ -124,6 +125,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get => _analysisProgress;
         set => SetField(ref _analysisProgress, value);
+    }
+
+    public string AnalysisStage
+    {
+        get => _analysisStage;
+        set => SetField(ref _analysisStage, value);
     }
 
     public object? ActiveWorkspaceViewModel
@@ -234,13 +241,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Logs.Add("[EXEC] Starting Aegis architecture analysis...");
 
             AnalysisProgress = 0;
+            AnalysisStage = "Preparing analysis";
+
+            // Progress<T> captures the WPF synchronization context, allowing the
+            // runner to report real pipeline progress without cross-thread UI updates.
+            var progress = new Progress<AnalysisProgressInfo>(update =>
+            {
+                AnalysisProgress = Math.Clamp(update.Percent, 0d, 100d);
+                AnalysisStage = string.IsNullOrWhiteSpace(update.Detail)
+                    ? update.Stage
+                    : $"{update.Stage}: {update.Detail}";
+            });
 
             var result = await _runner.RunSessionAsync(
                 RepositoryPath,
-                policyPath: null);
+                policyPath: null,
+                progress: progress);
 
             if (!result.Success)
             {
+                AnalysisStage = "Failed";
                 Logs.Add($"[ERROR] Analysis failed: {result.ErrorMessage}");
                 return;
             }
@@ -251,11 +271,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
             RefreshDashboards(_currentReport, _currentContext);
 
             AnalysisProgress = 100;
+            AnalysisStage = "Complete";
 
             Logs.Add("[SUCCESS] Analysis completed.");
         }
         catch (Exception ex)
         {
+            AnalysisStage = "Failed";
             Logs.Add($"[FATAL] {ex.Message}");
         }
         finally

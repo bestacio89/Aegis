@@ -286,16 +286,28 @@ public sealed class RuleEngine
         }
 
         var configurationDiagnosticCount = facts
-            .Where(fact => string.Equals(
-                fact.Source,
-                "ConfigurationEvaluator",
-                StringComparison.OrdinalIgnoreCase))
-            .Sum(fact => (int)Math.Max(
-                0,
-                fact.Metrics.GetValueOrDefault("DiagnosticCount")));
+            .Where(fact => fact is not null
+                && string.Equals(
+                    fact.Source,
+                    "ConfigurationEvaluator",
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    fact.Metadata?.GetValueOrDefault("EvaluationScope"),
+                    "Project",
+                    StringComparison.OrdinalIgnoreCase))
+            .Sum(fact =>
+            {
+                var count = fact.Metrics.GetValueOrDefault("DiagnosticCount");
+                return double.IsFinite(count)
+                    ? (int)Math.Max(0, Math.Round(count))
+                    : 0;
+            });
 
         var incompleteFactCount = facts.Count(fact =>
         {
+            if (fact is null)
+                return false;
+
             var metadata = fact.Metadata;
             if (metadata is null)
                 return false;

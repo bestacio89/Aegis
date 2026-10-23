@@ -28,6 +28,9 @@ public sealed class NamingEvaluatorRegressionTests
         var unityPath = project.Write(
             "sources/client/Assets/Scripts/UnityFieldFixture.cs",
             "public sealed class UnityFieldFixture { private int m_Text; public void Start() { } }");
+        var testPath = project.Write(
+            "Tests/WidgetTests.cs",
+            "public sealed class WidgetTests { public void Run() { } }");
         project.Write("sources/client/Assets/Game.asmdef", """{"name":"Game"}""");
         project.Write("sources/client/ProjectSettings/ProjectVersion.txt", "m_EditorVersion: 6000.0.0f1");
 
@@ -63,6 +66,7 @@ public sealed class NamingEvaluatorRegressionTests
         Assert.Equal(100, component.Metrics["FieldNamingCompliance"]);
         Assert.Equal(100, component.Metrics["PropertyNamingCompliance"]);
         Assert.Equal("Blazor", component.Metadata["Framework"]);
+        Assert.Equal("FirstParty", component.Metadata["SourceOwnership"]);
 
         var invalid = Assert.Single(
             results,
@@ -81,6 +85,15 @@ public sealed class NamingEvaluatorRegressionTests
                 StringComparison.OrdinalIgnoreCase));
         Assert.Equal("Unity", unity.Metadata["Framework"]);
         Assert.Equal(100, unity.Metrics["FieldNamingCompliance"]);
+        Assert.Equal("FirstParty", unity.Metadata["SourceOwnership"]);
+
+        var testFact = Assert.Single(
+            results,
+            result => string.Equals(
+                result.Metadata.GetValueOrDefault("FilePath"),
+                testPath,
+                StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("Test", testFact.Metadata["SourceOwnership"]);
 
         Assert.DoesNotContain(results, result =>
             result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(

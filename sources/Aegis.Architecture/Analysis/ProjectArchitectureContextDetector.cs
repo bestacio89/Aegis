@@ -23,7 +23,7 @@ public static class ProjectArchitectureContextDetector
         };
 
 
-        var files = EnumerateGovernedFiles(rootPath);
+        var files = EnumerateGovernedFiles(rootPath, ctx.DiscoveryDiagnostics);
 
 
 
@@ -142,7 +142,9 @@ public static class ProjectArchitectureContextDetector
 
 
 
-    private static List<string> EnumerateGovernedFiles(string rootPath)
+    private static List<string> EnumerateGovernedFiles(
+        string rootPath,
+        ICollection<AnalysisDiagnostic> diagnostics)
     {
         var files = new List<string>();
         var pending = new Stack<string>();
@@ -178,24 +180,60 @@ public static class ProjectArchitectureContextDetector
                         if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
                             continue;
                     }
-                    catch (IOException)
+                    catch (IOException exception)
                     {
+                        diagnostics.Add(new AnalysisDiagnostic
+                        {
+                            Code = "DirectoryMetadataUnavailable",
+                            Component = nameof(ProjectArchitectureContextDetector),
+                            Message = $"Unable to inspect directory metadata: {exception.Message}",
+                            Target = child,
+                            ExceptionType = exception.GetType().Name,
+                            AffectsCoverage = true
+                        });
                         continue;
                     }
-                    catch (UnauthorizedAccessException)
+                    catch (UnauthorizedAccessException exception)
                     {
+                        diagnostics.Add(new AnalysisDiagnostic
+                        {
+                            Code = "DirectoryMetadataAccessDenied",
+                            Component = nameof(ProjectArchitectureContextDetector),
+                            Message = "Access to directory metadata was denied; the path was skipped.",
+                            Target = child,
+                            ExceptionType = exception.GetType().Name,
+                            AffectsCoverage = true
+                        });
                         continue;
                     }
 
                     pending.Push(child);
                 }
             }
-            catch (IOException)
+            catch (IOException exception)
             {
+                diagnostics.Add(new AnalysisDiagnostic
+                {
+                    Code = "DirectoryDiscoveryFailed",
+                    Component = nameof(ProjectArchitectureContextDetector),
+                    Message = $"Unable to enumerate entries in directory: {exception.Message}",
+                    Target = directory,
+                    ExceptionType = exception.GetType().Name,
+                    AffectsCoverage = true
+                });
                 // Continue scanning readable siblings rather than aborting the repository scan.
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException exception)
             {
+                diagnostics.Add(new AnalysisDiagnostic
+                {
+                    Code = "DirectoryAccessDenied",
+                    Component = nameof(ProjectArchitectureContextDetector),
+                    Message = "Access to a directory was denied; files under that path were not assessed.",
+                    Target = directory,
+                    ExceptionType = exception.GetType().Name,
+                    AffectsCoverage = true
+                });
                 // An inaccessible subtree is excluded from evidence, not treated as clean.
             }
         }

@@ -189,8 +189,10 @@ internal static class ModuleDetector
             try
             {
                 var document = XDocument.Load(projectFile);
-                var artifactId = document
-                    .Descendants()
+                // Read the module's direct artifactId, not the parent POM's
+                // artifactId, which appears earlier in common Maven documents.
+                var artifactId = document.Root?
+                    .Elements()
                     .FirstOrDefault(element =>
                         element.Name.LocalName.Equals("artifactId", StringComparison.OrdinalIgnoreCase))
                     ?.Value;

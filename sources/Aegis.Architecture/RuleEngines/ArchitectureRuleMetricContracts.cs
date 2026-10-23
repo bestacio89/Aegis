@@ -209,6 +209,28 @@ internal static class ArchitectureRuleMetricContracts
         if (summaries.Count == 0)
             return false;
 
+        var rule = ArchitectureRuleRegistry.All.FirstOrDefault(candidate =>
+            string.Equals(
+                candidate.Id,
+                ruleId,
+                StringComparison.OrdinalIgnoreCase));
+
+        // A file-level candidate fact contradicts a zero-candidate summary.
+        // Preserve the rule as inconclusive rather than hiding the inconsistency.
+        if (rule is not null && facts.Any(fact =>
+                string.Equals(
+                    fact.Source,
+                    contract.Producer,
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    fact.Metadata?.GetValueOrDefault("EvaluationScope"),
+                    "File",
+                    StringComparison.OrdinalIgnoreCase)
+                && TryResolveMetric(rule, fact.Metrics, out _, out _)))
+        {
+            return false;
+        }
+
         foreach (var summary in summaries)
         {
             if (!TryGetMetric(summary.Metrics, contract.CandidateMetric, out var candidates)

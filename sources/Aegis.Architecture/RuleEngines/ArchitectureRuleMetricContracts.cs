@@ -1,4 +1,5 @@
 
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Rules;
 
@@ -159,6 +160,7 @@ internal static class ArchitectureRuleMetricContracts
     private sealed record MetricSemanticsContract(
         string MetricKey,
         string Unit,
+        ComparisonOperator Operator,
         double MinimumValue,
         double MinimumThreshold,
         double? MaximumThreshold);
@@ -173,12 +175,14 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-DES-FAC002"] = new(
                     "PublicSurfaceRatio",
                     "RatioOfConfiguredMaximum",
+                    ComparisonOperator.GreaterThan,
                     0.0,
                     0.0,
                     1.0),
                 ["AEG-DES-GOD001"] = new(
                     "GodClassSeverity",
                     "MinimumOfLineAndMethodLimitRatios",
+                    ComparisonOperator.GreaterThan,
                     0.0,
                     1.0,
                     null)
@@ -205,6 +209,12 @@ internal static class ArchitectureRuleMetricContracts
         if (!string.Equals(rule.MetricKey, contract.MetricKey, StringComparison.Ordinal))
         {
             reason = $"Rule '{rule.Id}' declares metric '{rule.MetricKey}', but its verified contract requires '{contract.MetricKey}'.";
+            return false;
+        }
+
+        if (rule.Operator != contract.Operator)
+        {
+            reason = $"Rule '{rule.Id}' must use comparison operator '{contract.Operator}' for metric '{contract.MetricKey}', but declared '{rule.Operator}'.";
             return false;
         }
 

@@ -1,8 +1,6 @@
 ﻿
 using System.Text.RegularExpressions;
 
-using Aegis.Architecture.Analysis.Detectors;
-
 using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -16,6 +14,25 @@ namespace Aegis.Architecture.Evaluators.Infrastructure;
 public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 {
     private readonly LoggingPolicy _policy;
+
+    private static readonly HashSet<string> ExcludedDirectories =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".git",
+            ".vs",
+            ".idea",
+            "bin",
+            "obj",
+            "node_modules",
+            "dist",
+            "build",
+            "coverage",
+            "vendor",
+            "packages",
+            "__pycache__",
+            ".venv",
+            "venv"
+        };
 
     private static readonly Regex LoggingCallRx = new(
         """
@@ -140,7 +157,17 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             return results;
         }
 
-        var sourceFiles = EnumerateSourceFiles(projectPath, token);
+        var sourceFiles = ResolveSourceFiles(
+                projectPath,
+                ".cs",
+                ".java",
+                ".py",
+                ".ts",
+                ".tsx",
+                ".js",
+                ".jsx")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         var analyzedFileCount = 0;
         var loggingFileCount = 0;
@@ -552,88 +579,6 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
         return values.Length == 0
             ? 0
             : Math.Round(values.Average(), 2);
-    }
-
-    private static List<string> EnumerateSourceFiles(
-        string projectPath,
-        CancellationToken token)
-    {
-        var files = new List<string>();
-        var pendingDirectories = new Stack<string>();
-
-        pendingDirectories.Push(Path.GetFullPath(projectPath));
-
-        while (pendingDirectories.Count > 0)
-        {
-            token.ThrowIfCancellationRequested();
-
-            var currentDirectory = pendingDirectories.Pop();
-            if (FileExclusions.IsExcluded(currentDirectory))
-                continue;
-
-            IEnumerable<string> childDirectories;
-
-            try
-            {
-                childDirectories = Directory.EnumerateDirectories(
-                    currentDirectory).ToArray();
-            }
-            catch (UnauthorizedAccessException)
-            {
-                continue;
-            }
-            catch (IOException)
-            {
-                continue;
-            }
-
-            foreach (var directory in childDirectories)
-            {
-                token.ThrowIfCancellationRequested();
-
-                if (FileExclusions.IsExcluded(directory))
-                    continue;
-
-                pendingDirectories.Push(directory);
-            }
-
-            IEnumerable<string> currentFiles;
-
-            try
-            {
-                currentFiles = Directory.EnumerateFiles(
-                    currentDirectory).ToArray();
-            }
-            catch (UnauthorizedAccessException)
-            {
-                continue;
-            }
-            catch (IOException)
-            {
-                continue;
-            }
-
-            files.AddRange(currentFiles
-                .Where(IsSupportedSourceFile)
-                .Where(file => !FileExclusions.IsExcluded(file)));
-        }
-
-        return files;
-    }
-
-    private static bool IsSupportedSourceFile(string file)
-    {
-        return Path.GetExtension(file).ToLowerInvariant() switch
-        {
-            ".cs" => true,
-            ".java" => true,
-            ".py" => true,
-            ".ts" => true,
-            ".tsx" => true,
-            ".js" => true,
-            ".jsx" => true,
-            _ => false
-        };
     }
 
     private static string DetectLanguage(string path)

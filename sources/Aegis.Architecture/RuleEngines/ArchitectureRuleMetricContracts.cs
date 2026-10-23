@@ -1,4 +1,5 @@
 
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Rules;
 
@@ -91,6 +92,16 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-TXN-R1"] = ["ArchitecturalTransactionEvaluator"],
             };
 
+    private static readonly IReadOnlyDictionary<string, (string Producer, string CandidateMetric, string UnreadableMetric, string DiscoveredMetric)>
+        CandidateApplicabilityContracts =
+            new Dictionary<string, (string, string, string, string)>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["AEG-DES-BLD001"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-BLD002"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-CMD001"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-DEC001"] = ("DecoratorPatternEvaluator", "DecoratorCandidateCount", "UnreadableFiles", "DiscoveredFiles")
+            };
+
     private static readonly IReadOnlyDictionary<string, string>
         UnsupportedRuleProducerContracts =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -154,6 +165,179 @@ internal static class ArchitectureRuleMetricContracts
             return reason;
 
         return $"No producer-to-rule contract is registered for rule '{ruleId}'.";
+    }
+
+    public static bool IsDeclaredProducer(string ruleId, string producerName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ruleId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(producerName);
+
+        return RuleProducerContracts.TryGetValue(ruleId, out var producers)
+            && producers.Contains(producerName, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Marks candidate-dependent pattern rules not applicable only when every
+    /// relevant project summary proves that the candidate population is empty
+    /// and source analysis was complete enough to support that conclusion.
+    /// </summary>
+    public static bool TryGetNoCandidateDisposition(
+        string ruleId,
+        IReadOnlyCollection<ArchitectureEvaluatorResult> facts,
+        out string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ruleId);
+        ArgumentNullException.ThrowIfNull(facts);
+
+        reason = string.Empty;
+
+        if (!CandidateApplicabilityContracts.TryGetValue(ruleId, out var contract))
+            return false;
+
+        var summaries = facts
+            .Where(fact =>
+                string.Equals(
+                    fact.Source,
+                    contract.Producer,
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    fact.Metadata?.GetValueOrDefault("EvaluationScope"),
+                    "Project",
+                    StringComparison.OrdinalIgnoreCase)
+                && TryGetMetric(fact.Metrics, contract.CandidateMetric, out _))
+            .ToList();
+
+        if (summaries.Count == 0)
+            return false;
+
+        var rule = ArchitectureRuleRegistry.All.FirstOrDefault(candidate =>
+            string.Equals(
+                candidate.Id,
+                ruleId,
+                StringComparison.OrdinalIgnoreCase));
+
+        // A file-level candidate fact contradicts a zero-candidate summary.
+        // Preserve the rule as inconclusive rather than hiding the inconsistency.
+        if (rule is not null && facts.Any(fact =>
+                string.Equals(
+                    fact.Source,
+                    contract.Producer,
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    fact.Metadata?.GetValueOrDefault("EvaluationScope"),
+                    "File",
+                    StringComparison.OrdinalIgnoreCase)
+                && TryResolveMetric(rule, fact.Metrics, out _, out _)))
+        {
+            return false;
+        }
+
+        foreach (var summary in summaries)
+        {
+            if (!TryGetMetric(summary.Metrics, contract.CandidateMetric, out var candidates)
+                || candidates > 0
+                || !TryGetMetric(summary.Metrics, contract.UnreadableMetric, out var unreadable)
+                || unreadable > 0
+                || !TryGetMetric(summary.Metrics, contract.DiscoveredMetric, out var discovered)
+                || !double.IsFinite(candidates)
+                || !double.IsFinite(unreadable)
+                || !double.IsFinite(discovered))
+            {
+                return false;
+            }
+
+            var status = summary.Metadata?.GetValueOrDefault("AnalysisStatus");
+            if (string.Equals(
+                    summary.Metadata?.GetValueOrDefault("AnalysisComplete"),
+                    "false",
+                    StringComparison.OrdinalIgnoreCase)
+                || status is not null
+                    && (status.Equals("Incomplete", StringComparison.OrdinalIgnoreCase)
+                        || status.Equals("Partial", StringComparison.OrdinalIgnoreCase)
+                        || status.Equals("CompletedWithDiagnostics", StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+        }
+
+        reason =
+            $"Rule '{ruleId}' is not applicable because {contract.Producer} " +
+            $"found no applicable candidates in {summaries.Count} fully readable project scope(s).";
+
+        return true;
+    }
+
+    private static bool TryGetMetric(
+        IReadOnlyDictionary<string, double> metrics,
+        string metricName,
+        out double value)
+    {
+        if (metrics.TryGetValue(metricName, out value))
+            return true;
+
+        var matches = metrics
+            .Where(pair => string.Equals(
+                pair.Key,
+                metricName,
+                StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
+
+        if (matches.Length == 1)
+        {
+            value = matches[0].Value;
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
+    private sealed record MetricSemanticsContract(string MetricKey, string Unit, ComparisonOperator Operator, double MinimumValue, double MinimumThreshold, double? MaximumThreshold);
+
+    private static readonly IReadOnlyDictionary<string, MetricSemanticsContract> MetricSemanticsContracts =
+        new Dictionary<string, MetricSemanticsContract>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["AEG-DES-FAC002"] = new("PublicSurfaceRatio", "RatioOfConfiguredMaximum", ComparisonOperator.GreaterThan, 0.0, 0.0, 1.0),
+            ["AEG-DES-GOD001"] = new("GodClassSeverity", "MinimumOfLineAndMethodLimitRatios", ComparisonOperator.GreaterThan, 0.0, 1.0, null)
+        };
+
+    public static bool TryValidateMetricContract(ArchitectureRuleDefinition rule, ArchitectureEvaluatorResult fact, double value, double threshold, out string reason)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(fact);
+        reason = string.Empty;
+        if (!MetricSemanticsContracts.TryGetValue(rule.Id, out var contract)) return true;
+        if (!string.Equals(rule.MetricKey, contract.MetricKey, StringComparison.Ordinal))
+        {
+            reason = $"Rule '{rule.Id}' declares metric '{rule.MetricKey}', but its verified contract requires '{contract.MetricKey}'.";
+            return false;
+        }
+        if (rule.Operator != contract.Operator)
+        {
+            reason = $"Rule '{rule.Id}' must use comparison operator '{contract.Operator}' for metric '{contract.MetricKey}', but declared '{rule.Operator}'.";
+            return false;
+        }
+        var unitKey = $"MetricUnit.{contract.MetricKey}";
+        var actualUnit = fact.Metadata?.GetValueOrDefault(unitKey);
+        if (!string.Equals(actualUnit, contract.Unit, StringComparison.Ordinal))
+        {
+            reason = $"Rule '{rule.Id}' requires metric unit '{contract.Unit}' in metadata '{unitKey}', but the fact declared '{actualUnit ?? "missing"}'.";
+            return false;
+        }
+        if (!double.IsFinite(value) || value < contract.MinimumValue)
+        {
+            reason = $"Metric '{contract.MetricKey}' must be finite and at least {contract.MinimumValue}; observed value was {value}.";
+            return false;
+        }
+        if (!double.IsFinite(threshold) || threshold < contract.MinimumThreshold || (contract.MaximumThreshold.HasValue && threshold > contract.MaximumThreshold.Value))
+        {
+            reason = contract.MaximumThreshold.HasValue
+                ? $"Threshold {threshold} is outside the verified scale [{contract.MinimumThreshold}, {contract.MaximumThreshold.Value}] for metric '{contract.MetricKey}' ({contract.Unit})."
+                : $"Threshold {threshold} must be at least {contract.MinimumThreshold} for metric '{contract.MetricKey}' ({contract.Unit}).";
+            return false;
+        }
+        return true;
     }
 
     /// <summary>

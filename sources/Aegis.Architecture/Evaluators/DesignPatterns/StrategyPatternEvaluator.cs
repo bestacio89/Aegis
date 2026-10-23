@@ -124,7 +124,13 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
                 "{Evaluator} disabled by policy.",
                 Name);
 
-            return results;
+            return
+            [
+                CreateExecutionStatusFact(
+                    projectPath,
+                    "DisabledByPolicy",
+                    "StrategyPatternEvaluator is disabled by the active policy.")
+            ];
         }
 
         var files = ResolveSourceFiles(

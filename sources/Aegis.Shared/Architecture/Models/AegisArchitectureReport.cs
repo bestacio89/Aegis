@@ -144,21 +144,27 @@ public sealed class AegisArchitectureReport
         }
 
         var stats = EvaluationStats;
-        var coverage = stats is not null && stats.RulesApplicable > 0
-            ? Math.Clamp(stats.EvaluationCoverage, 0.0, 1.0)
+        var applicableRuleCount = stats is null
+            ? 0
+            : stats.RulesApplicable + stats.RulesUnsupported;
+        var coverage = stats is not null && applicableRuleCount > 0
+            ? Math.Clamp(stats.EvaluationCoverage / 100.0, 0.0, 1.0)
             : 0.0;
 
-        Metrics.HasCoverageEvidence = stats is not null && stats.RulesApplicable > 0;
+        Metrics.HasCoverageEvidence = stats is not null && applicableRuleCount > 0;
         Metrics.RuleEvaluationCoverage = Math.Round(coverage * 100.0, 2);
         Metrics.CoverageAdjustedHealthIndex = Math.Round(
             Metrics.ProjectHealthIndex * coverage,
             2);
         Metrics.AssessmentComplete = Metrics.HasAssessmentEvidence
             && stats is not null
-            && stats.RulesApplicable > 0
+            && applicableRuleCount > 0
             && stats.RulesUnsupported == 0
-            && coverage >= 0.95
-            && stats.EvaluationsErrored == 0;
+            && stats.RulesNotEvaluated.Count == 0
+            && stats.RulesWithErrors == 0
+            && stats.EvaluationsInsufficientEvidence == 0
+            && stats.EvaluationsErrored == 0
+            && coverage >= 1.0;
     }
 
     private static ArchitectureRuleCategory ParseCategory(string category) =>

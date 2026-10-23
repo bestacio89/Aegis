@@ -118,6 +118,21 @@ public sealed partial class ReportVisualizationViewModel
                 report.TotalFilesScanned.ToString(),
                 "Files evaluated during analysis"));
 
+        var contextFact = report.Facts.FirstOrDefault(fact =>
+            string.Equals(
+                fact.Source,
+                "ProjectContextFact",
+                StringComparison.OrdinalIgnoreCase));
+
+        SummaryItems.Add(
+            new(
+                "Excluded path entries",
+                contextFact is null
+                    ? "n/a"
+                    : contextFact.Metrics.GetValueOrDefault("ExcludedPathEntryCount").ToString("N0"),
+                contextFact?.Metadata.GetValueOrDefault("ExcludedEntriesByReason")
+                    ?? "Exclusion summary unavailable. Excluded directory roots are counted once; descendant file totals are not expanded."));
+
 
 
         SummaryItems.Add(

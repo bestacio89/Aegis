@@ -37,10 +37,18 @@ internal static class FileExclusions
         return false;
     }
 
-    public static bool IsExcluded(string path)
+    public static bool IsExcluded(string path) =>
+        GetExclusionReason(path) is not null;
+
+    /// <summary>
+    /// Returns the exclusion category for an excluded path. Directory exclusions
+    /// identify the excluded subtree root; they do not claim to count every file
+    /// below that root.
+    /// </summary>
+    public static string? GetExclusionReason(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
-            return true;
+            return "InvalidPath";
 
         var normalized = path.Replace(
             Path.AltDirectorySeparatorChar,
@@ -50,8 +58,20 @@ internal static class FileExclusions
             Path.DirectorySeparatorChar,
             StringSplitOptions.RemoveEmptyEntries);
 
-        if (segments.Any(ExcludedDirectories.Contains))
-            return true;
+        var excludedSegment = segments.FirstOrDefault(ExcludedDirectories.Contains);
+        if (excludedSegment is not null)
+        {
+            return excludedSegment.ToLowerInvariant() switch
+            {
+                "generated" => "GeneratedCode",
+                "thirdparty" or "third-party" or "vendor" => "VendoredCode",
+                ".git" or ".vs" or ".idea" or ".vscode" or "bin" or "obj"
+                    or "node_modules" or "dist" or "build" or "__pycache__"
+                    or ".venv" or "venv" or "coverage" or "testresults"
+                    or "logs" or "packagecache" or ".nuget" => "BuildOrDependencyCache",
+                _ => "ExcludedDirectory"
+            };
+        }
 
         // Unity TextMesh Pro example projects are vendored samples, not application
         // architecture. Exclude only that known combination rather than every
@@ -63,10 +83,10 @@ internal static class FileExclusions
             segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase));
 
         if (hasTextMeshProDirectory && hasExamplesDirectory)
-            return true;
+            return "VendoredExample";
 
         if (IsUnityTempPath(path))
-            return true;
+            return "UnityGeneratedCache";
 
         var fileName = Path.GetFileName(path);
         if (fileName.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
@@ -78,10 +98,7 @@ internal static class FileExclusions
                 && (Directory.Exists(Path.Combine(projectDirectory, "ProjectSettings"))
                     || Directory.Exists(Path.Combine(projectDirectory, "Packages"))))
             {
-                // Unity generates these project files for IDE integration; the
-                // actual governance boundary is the Unity project, not each
-                // generated Assembly-CSharp project.
-                return true;
+                return "UnityGeneratedProjectFile";
             }
         }
 
@@ -90,7 +107,7 @@ internal static class FileExclusions
             || fileName.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase)
             || fileName.EndsWith(".AssemblyInfo.cs", StringComparison.OrdinalIgnoreCase))
         {
-            return true;
+            return "GeneratedFile";
         }
 
         // Unity's Library directory is generated cache, but a directory named
@@ -112,13 +129,13 @@ internal static class FileExclusions
                     && (Directory.Exists(Path.Combine(unityRoot, "ProjectSettings"))
                         || Directory.Exists(Path.Combine(unityRoot, "Packages"))))
                 {
-                    return true;
+                    return "UnityGeneratedCache";
                 }
             }
 
             directory = Directory.GetParent(directory)?.FullName;
         }
 
-        return false;
+        return null;
     }
 }

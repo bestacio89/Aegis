@@ -69,16 +69,20 @@ public sealed class BaseArchitectureEvaluatorContractTests
     }
 
     [Fact]
-    public async Task EvaluateAsync_returns_no_results_when_disabled()
+    public async Task EvaluateAsync_reports_disabled_status_without_emitting_measurements()
     {
         using var directory = new TemporaryDirectory();
         var evaluator = new FixtureEvaluator { IsEnabled = false };
 
-        var results = await evaluator.EvaluateAsync(
+        var result = Assert.Single(await evaluator.EvaluateAsync(
             directory.Path,
-            new ProjectArchitectureContext());
+            new ProjectArchitectureContext()));
 
-        Assert.Empty(results);
+        Assert.Equal("EvaluatorStatus", result.Category);
+        Assert.Equal("DisabledByPolicy", result.Metadata["EvaluatorExecutionStatus"]);
+        Assert.Equal("DisabledByPolicy", result.Metadata["AnalysisStatus"]);
+        Assert.Equal("Project", result.Metadata["EvaluationScope"]);
+        Assert.Empty(result.Metrics);
     }
 
     [Fact]

@@ -52,7 +52,6 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             "venv",
             "TestResults",
             "PackageCache",
-            "Temp",
             "Logs",
             "Generated",
             "ThirdParty",
@@ -957,6 +956,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                 if (ExcludedDirectories.Contains(name)
                     || FileExclusions.IsExcluded(directory)
                     || IsTextMeshProExamplePath(directory)
+                    || (name.Equals("Temp", StringComparison.OrdinalIgnoreCase)
+                        && IsUnityTempDirectory(directory))
                     || (name.Equals("Library", StringComparison.OrdinalIgnoreCase)
                         && IsUnityLibraryDirectory(directory)))
                 {
@@ -1020,6 +1021,15 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
     }
 
     private static bool IsUnityLibraryDirectory(string directory)
+    {
+        var root = Directory.GetParent(directory)?.FullName;
+        return root is not null
+            && Directory.Exists(Path.Combine(root, "Assets"))
+            && (Directory.Exists(Path.Combine(root, "ProjectSettings"))
+                || Directory.Exists(Path.Combine(root, "Packages")));
+    }
+
+    private static bool IsUnityTempDirectory(string directory)
     {
         var root = Directory.GetParent(directory)?.FullName;
         return root is not null

@@ -168,6 +168,12 @@ public sealed partial class ReportVisualizationViewModel
 
             SummaryItems.Add(
                 new(
+                    "Metric contract failures",
+                    report.EvaluationStats.MetricContractFailures.ToString(),
+                    "Measurements withheld because their units or threshold scales violate a verified contract"));
+
+            SummaryItems.Add(
+                new(
                     "Rule evaluation coverage",
                     report.Metrics.HasCoverageEvidence
                         ? $"{report.Metrics.RuleEvaluationCoverage:0.##}%"

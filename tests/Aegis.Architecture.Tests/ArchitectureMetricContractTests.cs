@@ -1,4 +1,5 @@
 using Aegis.Architecture.RuleEngines;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,6 +9,63 @@ namespace Aegis.Architecture.Tests;
 
 public sealed class ArchitectureMetricContractTests
 {
+    [Fact]
+    public void RuleEngine_evaluates_verified_metric_units_at_their_declared_thresholds()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext
+            {
+                ProjectName = "Sample",
+                RootPath = Path.GetTempPath(),
+                Language = "C#",
+                Framework = "ASP.NET"
+            },
+            [
+                new ArchitectureEvaluatorResult("FacadePatternEvaluator", "SampleFacade")
+                {
+                    Target = Path.Combine(Path.GetTempPath(), "SampleFacade.cs"),
+                    Category = "DesignPatterns",
+                    Metrics = new Dictionary<string, double>
+                    {
+                        ["PublicSurfaceRatio"] = 1.5
+                    },
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["EvaluationScope"] = "File",
+                        ["FilePath"] = Path.Combine(Path.GetTempPath(), "SampleFacade.cs"),
+                        ["MetricUnit.PublicSurfaceRatio"] = "RatioOfConfiguredMaximum"
+                    }
+                },
+                new ArchitectureEvaluatorResult("GodClassEvaluator", "LargeService")
+                {
+                    Target = Path.Combine(Path.GetTempPath(), "LargeService.cs"),
+                    Category = "DesignPatterns",
+                    Metrics = new Dictionary<string, double>
+                    {
+                        ["GodClassSeverity"] = 2.0
+                    },
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["EvaluationScope"] = "File",
+                        ["FilePath"] = Path.Combine(Path.GetTempPath(), "LargeService.cs"),
+                        ["MetricUnit.GodClassSeverity"] = "MinimumOfLineAndMethodLimitRatios"
+                    }
+                }
+            ]);
+
+        Assert.Contains(outcome.Evaluations, evaluation =>
+            evaluation.RuleId == "AEG-DES-FAC002"
+            && evaluation.Status == RuleEvaluationStatus.Violated);
+        Assert.Contains(outcome.Evaluations, evaluation =>
+            evaluation.RuleId == "AEG-DES-GOD001"
+            && evaluation.Status == RuleEvaluationStatus.Violated);
+        Assert.Equal(0, outcome.Stats.MetricContractFailures);
+    }
+
     [Fact]
     public void RuleEngine_withholds_public_surface_ratio_when_threshold_uses_percentage_scale()
     {

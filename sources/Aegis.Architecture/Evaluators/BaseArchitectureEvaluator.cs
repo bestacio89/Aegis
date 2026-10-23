@@ -124,7 +124,13 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                 DiagnosticLevel.Info,
                 $"Evaluator disabled by policy: {Name}");
 
-            return [];
+            return
+            [
+                CreateExecutionStatusFact(
+                    projectPath,
+                    "DisabledByPolicy",
+                    $"Evaluator '{Name}' is disabled by the active policy.")
+            ];
         }
 
         try
@@ -604,6 +610,37 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
     /// Creates a file-level evaluator fact using the filename as Target and
     /// the original path in metadata for layer resolution and diagnostics.
     /// </summary>
+    /// <summary>
+    /// Creates an explicit project-scope execution status when an evaluator
+    /// cannot analyze a scope. Status facts explain missing evidence; they are
+    /// never measurements and must not satisfy rule metrics.
+    /// </summary>
+    protected ArchitectureEvaluatorResult CreateExecutionStatusFact(
+        string projectPath,
+        string status,
+        string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(status);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+        return new ArchitectureEvaluatorResult(
+            Name,
+            Path.GetFullPath(projectPath))
+        {
+            Category = "EvaluatorStatus",
+            Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [EvaluationScopeMetadataKey] = ProjectScope,
+                ["EvaluatorExecutionStatus"] = status,
+                ["AnalysisStatus"] = status,
+                ["AnalysisComplete"] = "false",
+                ["StatusReason"] = reason,
+                ["ProjectPath"] = Path.GetFullPath(projectPath)
+            }
+        };
+    }
+
     protected ArchitectureEvaluatorResult CreateResult(
         string file,
         string? category = null)

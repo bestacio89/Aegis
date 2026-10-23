@@ -57,15 +57,16 @@ public sealed class RuleEvaluationStats
     public int FactsWithoutMatchingScopedMetrics { get; init; }
 
     /// <summary>
-    /// Evaluator facts whose metric keys are known, but only match rules at a
-    /// different scope than the fact's declared scope.
+    /// Facts whose metric keys match a rule that is applicable to the fact,
+    /// but the rule's required scope differs from the fact's declared scope.
     /// </summary>
     public int FactsWithMetricsAtWrongScope { get; init; }
 
     /// <summary>
     /// Facts that emitted at least one metric key known to the rule registry,
-    /// but for which no enabled rule could consume that metric because its
-    /// producer contract, applicability, or scope did not permit evaluation.
+    /// but for which no rule could consume the metric because its producer
+    /// contract or fact-level applicability did not permit evaluation.
+    /// Wrong-scope evidence is tracked separately.
     /// </summary>
     public int FactsWithKnownMetricsWithoutEligibleRule { get; init; }
 

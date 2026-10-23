@@ -177,4 +177,43 @@ public sealed class RuleMetricScopeDiagnosticTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+
+    [Fact]
+    public void Pattern_rules_are_not_applicable_when_complete_summaries_find_no_candidates()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var summary = new ArchitectureEvaluatorResult(
+            "BuilderPatternEvaluator",
+            "BuilderPatternSummary")
+        {
+            Category = "DesignPatternSummary",
+            Metrics = new Dictionary<string, double>
+            {
+                ["BuilderCandidateCount"] = 0,
+                ["DiscoveredFileCount"] = 12,
+                ["AnalyzedFileCount"] = 12,
+                ["UnreadableFileCount"] = 0
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [summary]);
+
+        Assert.Contains("AEG-DES-BLD001", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-DES-BLD002", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-DES-BLD001", outcome.Stats.RulesNotEvaluated);
+        Assert.Contains(
+            "no applicable candidates",
+            outcome.Stats.NotApplicableReasons["AEG-DES-BLD001"],
+            StringComparison.OrdinalIgnoreCase);
+    }
+
 }

@@ -22,7 +22,7 @@ public static class FileDiscoveryService
 
         var normalizedExtensions = extensions
             .Where(extension => !string.IsNullOrWhiteSpace(extension))
-            .Select(extension => extension.StartsWith('.', StringComparison.Ordinal)
+            .Select(extension => extension.StartsWith(".", StringComparison.Ordinal)
                 ? extension
                 : $".{extension}")
             .ToHashSet(StringComparer.OrdinalIgnoreCase);

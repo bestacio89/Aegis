@@ -479,7 +479,7 @@ public sealed class CrossEvaluatorAggregator
             CoverageAdjustedHealthIndex = Math.Round(
                 assessed.Sum(domain => domain.HealthIndex * domain.ChecksPerformed)
                     / totalChecks * 100.0
-                    * (stats?.EvaluationCoverage ?? 0),
+                    * ((stats?.EvaluationCoverage ?? 0) / 100.0),
                 2),
             AssessmentComplete = stats is not null
                 && stats.RulesUnsupported == 0

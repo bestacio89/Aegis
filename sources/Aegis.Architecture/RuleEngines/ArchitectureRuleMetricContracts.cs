@@ -156,6 +156,15 @@ internal static class ArchitectureRuleMetricContracts
         return $"No producer-to-rule contract is registered for rule '{ruleId}'.";
     }
 
+    public static bool IsDeclaredProducer(string ruleId, string producerName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ruleId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(producerName);
+
+        return RuleProducerContracts.TryGetValue(ruleId, out var producers)
+            && producers.Contains(producerName, StringComparer.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// Resolves a rule's declared metric key.
     ///

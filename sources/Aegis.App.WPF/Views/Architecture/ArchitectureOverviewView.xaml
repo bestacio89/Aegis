@@ -44,7 +44,7 @@
                        Foreground="{StaticResource Brush.StatusCritical}"/></StackPanel>
         </Border>
         <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="94">
-          <StackPanel><TextBlock Text="RULES EVALUATED" Style="{StaticResource Text.Eyebrow}"/>
+          <StackPanel><TextBlock Text="EVALUATED / APPLICABLE" Style="{StaticResource Text.Eyebrow}"/>
             <TextBlock Text="{Binding RulesEvaluated}" Style="{StaticResource Text.KpiValue}"/></StackPanel>
         </Border>
         <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="94">

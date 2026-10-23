@@ -24,6 +24,22 @@ public sealed class ProjectArchitectureContextDetectorTests
     }
 
     [Fact]
+    public void Detect_reports_an_unavailable_root_as_incomplete_discovery()
+    {
+        var missingRoot = Path.Combine(
+            Path.GetTempPath(),
+            $"AegisMissingRoot_{Guid.NewGuid():N}");
+
+        var context = ProjectArchitectureContextDetector.Detect(missingRoot);
+
+        var diagnostic = Assert.Single(context.DiscoveryDiagnostics);
+        Assert.Equal("DirectoryDiscoveryFailed", diagnostic.Code);
+        Assert.Equal("ProjectArchitectureContextDetector", diagnostic.Component);
+        Assert.Equal(missingRoot, diagnostic.Target);
+        Assert.True(diagnostic.AffectsCoverage);
+    }
+
+    [Fact]
     public void Detect_counts_project_files_but_excludes_generated_output()
     {
         using var directory = new TemporaryDirectory();

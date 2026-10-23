@@ -203,6 +203,36 @@ public sealed class RuleEngine
                     if (pathFilter is not null && !pathFilter(evidencePath))
                         continue;
 
+                    // Evaluators may complete their own analysis while encountering
+                    // malformed or unreadable inputs. Preserve those diagnostics in
+                    // the report; log output alone is not part of the audit evidence.
+                    if (string.Equals(
+                            result.Metadata?.GetValueOrDefault("AnalysisStatus"),
+                            "CompletedWithDiagnostics",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        var reportedDiagnostics = result.Metadata
+                            .GetValueOrDefault("Diagnostics");
+
+                        if (!string.IsNullOrWhiteSpace(reportedDiagnostics))
+                        {
+                            foreach (var message in reportedDiagnostics
+                                         .Split(
+                                             [Environment.NewLine],
+                                             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                            {
+                                diagnostics.Add(new AnalysisDiagnostic
+                                {
+                                    Code = "EvaluatorReportedDiagnostic",
+                                    Component = evaluator.Name,
+                                    Message = message,
+                                    Target = result.Target,
+                                    AffectsCoverage = true
+                                });
+                            }
+                        }
+                    }
+
                     result.Source = evaluator.Name;
                     result.ProjectName ??= evaluationContext.ProjectName;
                     facts.Add(result);

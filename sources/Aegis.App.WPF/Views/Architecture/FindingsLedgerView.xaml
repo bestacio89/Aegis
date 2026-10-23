@@ -35,7 +35,7 @@
             <TextBlock Text="VISIBLE / TOTAL" Style="{StaticResource Text.Eyebrow}"/>
             <TextBlock Text="{Binding FilteredFindings, StringFormat={}{0:N0}}"
                        Style="{StaticResource Text.KpiValue}" FontSize="22"/>
-            <TextBlock Text="{Binding TotalFindings, StringFormat=of {0:N0} findings}"
+            <TextBlock Text="{Binding TotalFindings, StringFormat='of {0:N0} findings'}"
                        Foreground="{StaticResource Brush.TextMuted}" FontSize="11"/>
           </StackPanel>
         </Border>

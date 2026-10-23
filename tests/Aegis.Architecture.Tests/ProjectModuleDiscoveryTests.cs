@@ -23,7 +23,7 @@ public sealed class ProjectModuleDiscoveryTests
         var module = Assert.Single(context.Modules, item =>
             item.Path.EndsWith("client-app", StringComparison.OrdinalIgnoreCase));
         Assert.Equal("@sample/client-app", module.Name);
-        Assert.NotEqual("package", module.Name, ignoreCase: true);
+        Assert.NotEqual("package", module.Name);
         Assert.Contains(context.Layers, layer =>
             layer.Name.Equals("Client", StringComparison.OrdinalIgnoreCase));
     }
@@ -47,7 +47,7 @@ public sealed class ProjectModuleDiscoveryTests
         var module = Assert.Single(context.Modules, item =>
             item.Path.EndsWith("sample-api", StringComparison.OrdinalIgnoreCase));
         Assert.Equal("sample-api", module.Name);
-        Assert.NotEqual("pom", module.Name, ignoreCase: true);
+        Assert.NotEqual("pom", module.Name);
         Assert.Contains(context.Layers, layer =>
             layer.Name.Equals("Api", StringComparison.OrdinalIgnoreCase));
     }

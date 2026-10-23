@@ -90,4 +90,39 @@ public sealed class RuleMetricScopeDiagnosticTests
             evaluation => evaluation.RuleId == "AEG-ARCH-R2");
     }
 
+
+    [Fact]
+    public void Registered_but_unsupported_metric_is_not_reported_as_unknown()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var fact = new ArchitectureEvaluatorResult(
+            "SecurityEvaluator",
+            "SecuritySummary")
+        {
+            Category = "ArchitectureSummary",
+            Metrics = new Dictionary<string, double>
+            {
+                ["SecurityComplianceIndex"] = 72
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [fact]);
+
+        Assert.Equal(0, outcome.Stats.FactsWithoutMatchingScopedMetrics);
+        Assert.Equal(1, outcome.Stats.FactsWithKnownMetricsWithoutEligibleRule);
+        Assert.Equal(0, outcome.Stats.FactsWithMetricsAtWrongScope);
+        Assert.Contains(
+            "AEG-ARCH-R10",
+            outcome.Stats.RulesNotEvaluated);
+    }
+
 }

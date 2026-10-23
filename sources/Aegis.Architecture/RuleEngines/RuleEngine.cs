@@ -203,6 +203,16 @@ public sealed class RuleEngine
                     if (pathFilter is not null && !pathFilter(evidencePath))
                         continue;
 
+                    // Evaluators may complete their own analysis while encountering
+                    // malformed or unreadable inputs. Preserve those diagnostics in
+                    // the report; log output alone is not part of the audit evidence.
+                    AppendEvaluatorDiagnostics(
+                        diagnostics,
+                        evaluator.Name,
+                        result);
+
+
+
                     result.Source = evaluator.Name;
                     result.ProjectName ??= evaluationContext.ProjectName;
                     facts.Add(result);
@@ -285,14 +295,59 @@ public sealed class RuleEngine
             report.Diagnostics.Add(diagnostic);
         }
 
+        var configurationDiagnosticCount = facts
+            .Where(fact => fact is not null
+                && string.Equals(
+                    fact.Source,
+                    "ConfigurationEvaluator",
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    fact.Metadata?.GetValueOrDefault("EvaluationScope"),
+                    "Project",
+                    StringComparison.OrdinalIgnoreCase))
+            .Sum(fact =>
+            {
+                var count = fact.Metrics.GetValueOrDefault("DiagnosticCount");
+                return double.IsFinite(count)
+                    ? (int)Math.Max(0, Math.Round(count))
+                    : 0;
+            });
+
+        var incompleteFactCount = facts.Count(fact =>
+        {
+            if (fact is null)
+                return false;
+
+            var metadata = fact.Metadata;
+            if (metadata is null)
+                return false;
+
+            if (string.Equals(
+                    metadata.GetValueOrDefault("AnalysisComplete"),
+                    "false",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var status = metadata.GetValueOrDefault("AnalysisStatus");
+            return status is not null
+                && (status.Equals("Incomplete", StringComparison.OrdinalIgnoreCase)
+                    || status.Equals("Partial", StringComparison.OrdinalIgnoreCase)
+                    || status.Equals("CompletedWithDiagnostics", StringComparison.OrdinalIgnoreCase));
+        });
+
         _logger.LogInformation(
             "Aegis scan completed. Violations={Violations}, Checks={Checks}, " +
-            "RulesEvaluated={Evaluated}/{Registered}, Diagnostics={Diagnostics}",
+            "RulesEvaluated={Evaluated}/{Registered}, PipelineDiagnostics={PipelineDiagnostics}, " +
+            "ConfigurationDiagnostics={ConfigurationDiagnostics}, IncompleteFacts={IncompleteFacts}",
             report.TotalViolations,
             outcome.Stats.ChecksPerformed,
             outcome.Stats.RulesEvaluated,
             outcome.Stats.RulesRegistered,
-            diagnostics.Count);
+            diagnostics.Count,
+            configurationDiagnosticCount,
+            incompleteFactCount);
 
         if (outcome.Stats.ChecksPerformed == 0)
         {
@@ -317,6 +372,73 @@ public sealed class RuleEngine
             null);
 
         return report;
+    }
+
+    private static void AppendEvaluatorDiagnostics(
+        ICollection<AnalysisDiagnostic> diagnostics,
+        string evaluatorName,
+        ArchitectureEvaluatorResult result)
+    {
+        var metadata = result.Metadata;
+        if (metadata is null)
+            return;
+
+        var status = metadata.GetValueOrDefault("AnalysisStatus");
+        var detailText = metadata.GetValueOrDefault("Diagnostics");
+        var messages = string.IsNullOrWhiteSpace(detailText)
+            ? Array.Empty<string>()
+            : detailText.Split(
+                    ['\r', '\n'],
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+        var reportedCount = result.Metrics.TryGetValue("DiagnosticCount", out var count)
+            && double.IsFinite(count)
+            && count > 0
+            ? (int)Math.Ceiling(count)
+            : 0;
+
+        var hasPartialStatus = string.Equals(
+                status,
+                "CompletedWithDiagnostics",
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "Partial", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "Incomplete", StringComparison.OrdinalIgnoreCase);
+
+        if (!hasPartialStatus && reportedCount == 0 && messages.Length == 0)
+            return;
+
+        foreach (var message in messages)
+        {
+            diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = "EvaluatorReportedDiagnostic",
+                Component = evaluatorName,
+                Message = message,
+                Target = result.Target,
+                AffectsCoverage = true
+            });
+        }
+
+        // Some evaluators cap serialized detail to keep reports bounded. Preserve
+        // the declared count as evidence so truncation cannot make coverage look clean.
+        var omittedCount = Math.Max(0, reportedCount - messages.Length);
+        if (omittedCount > 0 || (hasPartialStatus && messages.Length == 0 && reportedCount == 0))
+        {
+            diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = omittedCount > 0
+                    ? "EvaluatorDiagnosticDetailsTruncated"
+                    : "EvaluatorPartialAnalysis",
+                Component = evaluatorName,
+                Message = omittedCount > 0
+                    ? $"The evaluator reported {reportedCount} diagnostics but serialized only {messages.Length} detail message(s); {omittedCount} diagnostic detail(s) are unavailable."
+                    : $"The evaluator reported analysis status '{status}' but did not provide diagnostic details or a diagnostic count.",
+                Target = result.Target,
+                AffectsCoverage = true
+            });
+        }
     }
 
     private sealed record AnalysisScope(string Path, ProjectArchitectureContext Context);

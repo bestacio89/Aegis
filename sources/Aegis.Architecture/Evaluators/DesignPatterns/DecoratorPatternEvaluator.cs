@@ -500,9 +500,14 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         result.Metrics["StructuralComplianceScore"] =
             analysis.StructuralComplianceScore;
 
-        // An overall decorator score is meaningful only when naming intent
-        // makes the naming dimension applicable. Otherwise expose structural
-        // evidence without asserting full pattern compliance.
+        // Delegation compliance is independent of naming intent. Keep it
+        // separate from the legacy composite score, which includes naming.
+        result.Metrics["DecoratorDelegationComplianceScore"] =
+            analysis.StructuralComplianceScore;
+
+        // The legacy composite score is emitted only when naming intent makes
+        // that dimension applicable; the rule engine uses the delegation-only
+        // metric for AEG-DES-DEC001.
         if (analysis.HasDecoratorSuffix)
         {
             result.Metrics["DecoratorComplianceScore"] =

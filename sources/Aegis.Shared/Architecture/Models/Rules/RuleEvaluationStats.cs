@@ -1,4 +1,4 @@
-﻿namespace Aegis.Shared.Architecture.Models;
+namespace Aegis.Shared.Architecture.Models;
 
 /// <summary>
 /// Counts and diagnostics describing what the rule engine actually assessed.
@@ -56,16 +56,27 @@ public sealed class RuleEvaluationStats
     public int ChecksPerformed { get; init; }
 
     /// <summary>
-    /// Evaluator facts that contain no metric key declared by any applicable rule.
-    /// This is a metric-production gap, not an evaluator execution failure.
+    /// Facts that emitted one or more metrics, but none of those keys matches a
+    /// registered rule's declared metric. This may include informational summary
+    /// metrics and is not, by itself, proof of an unknown metric or producer defect.
+    /// Facts with no metrics are not counted.
     /// </summary>
     public int FactsWithoutMatchingScopedMetrics { get; init; }
 
     /// <summary>
-    /// Evaluator facts whose metric keys are known, but only match rules at a
-    /// different scope than the fact's declared scope.
+    /// Facts whose metric keys match a rule that is applicable to the fact,
+    /// but the rule's required scope differs from the fact's declared scope.
     /// </summary>
     public int FactsWithMetricsAtWrongScope { get; init; }
+
+    /// <summary>
+    /// Facts that emitted at least one metric key known to the rule registry,
+    /// but for which no rule could consume the metric because its producer
+    /// contract or fact-level applicability did not permit evaluation.
+    /// Wrong-scope evidence is tracked separately.
+    /// </summary>
+    public int FactsWithKnownMetricsWithoutEligibleRule { get; init; }
+
 
     public IReadOnlyList<string> RulesNotEvaluated { get; init; }
         = Array.Empty<string>();

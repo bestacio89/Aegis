@@ -1,6 +1,7 @@
 using Aegis.Architecture.RuleEngines;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Rules;
 using Aegis.Shared.Architecture.Models.Policies;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;

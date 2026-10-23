@@ -9,19 +9,19 @@ public sealed class ProjectModuleDiscoveryTests
     public void Detect_uses_package_manifest_name_instead_of_generic_package_filename()
     {
         using var project = new TemporaryProject();
-        project.Write("client-app/package.json", """
+        project.Write("apps/ui/package.json", """
             {
               "name": "@sample/client-app",
               "private": true,
               "scripts": { "build": "tsc" }
             }
             """);
-        project.Write("client-app/src/index.ts", "export const ready = true;");
+        project.Write("apps/ui/src/index.ts", "export const ready = true;");
 
         var context = ProjectArchitectureContextDetector.Detect(project.Root);
 
         var module = Assert.Single(context.Modules, item =>
-            item.Path.EndsWith("client-app", StringComparison.OrdinalIgnoreCase));
+            item.Path.EndsWith("ui", StringComparison.OrdinalIgnoreCase));
         Assert.Equal("@sample/client-app", module.Name);
         Assert.NotEqual("package", module.Name);
         Assert.Contains(context.Layers, layer =>
@@ -32,7 +32,7 @@ public sealed class ProjectModuleDiscoveryTests
     public void Detect_uses_maven_artifact_id_instead_of_generic_pom_filename()
     {
         using var project = new TemporaryProject();
-        project.Write("sample-api/pom.xml", """
+        project.Write("modules/java-service/pom.xml", """
             <project xmlns="http://maven.apache.org/POM/4.0.0">
               <modelVersion>4.0.0</modelVersion>
               <groupId>org.sample</groupId>
@@ -40,12 +40,12 @@ public sealed class ProjectModuleDiscoveryTests
               <version>1.0.0</version>
             </project>
             """);
-        project.Write("sample-api/src/main/java/org/sample/App.java", "class App {}");
+        project.Write("modules/java-service/src/main/java/org/sample/App.java", "class App {}");
 
         var context = ProjectArchitectureContextDetector.Detect(project.Root);
 
         var module = Assert.Single(context.Modules, item =>
-            item.Path.EndsWith("sample-api", StringComparison.OrdinalIgnoreCase));
+            item.Path.EndsWith("java-service", StringComparison.OrdinalIgnoreCase));
         Assert.Equal("sample-api", module.Name);
         Assert.NotEqual("pom", module.Name);
         Assert.Contains(context.Layers, layer =>

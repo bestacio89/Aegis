@@ -134,7 +134,7 @@
         <StackPanel>
           <TextBlock Text="INTERPRETATION" Style="{StaticResource Text.Eyebrow}"
                      Foreground="{StaticResource Brush.AccentStructural}"/>
-          <TextBlock Text="{Binding MostAffectedCategory, StringFormat=Most affected category: {0}}"
+          <TextBlock Text="{Binding MostAffectedCategory, StringFormat='Most affected category: {0}'}"
                      FontSize="14" FontWeight="SemiBold" Margin="0,6,0,0"/>
           <TextBlock Text="A low finding count does not establish compliance when applicable rules were not evaluated. Check evaluation coverage and diagnostics in Overview before treating these aggregates as a verdict."
                      Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap"

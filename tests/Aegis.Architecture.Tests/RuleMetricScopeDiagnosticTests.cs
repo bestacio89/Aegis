@@ -125,4 +125,42 @@ public sealed class RuleMetricScopeDiagnosticTests
             outcome.Stats.RulesNotEvaluated);
     }
 
+
+    [Fact]
+    public void Disabled_rule_producer_is_reported_as_disabled_not_missing_metric()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var status = new ArchitectureEvaluatorResult(
+            "StrategyPatternEvaluator",
+            "StrategyProject")
+        {
+            Category = "EvaluatorStatus",
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project",
+                ["EvaluatorExecutionStatus"] = "DisabledByPolicy",
+                ["AnalysisStatus"] = "DisabledByPolicy",
+                ["AnalysisComplete"] = "false",
+                ["StatusReason"] = "Strategy analysis is disabled by policy."
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [status]);
+
+        Assert.Contains("AEG-DES-STRAT001", outcome.Stats.RulesNotEvaluated);
+        Assert.Contains(
+            "disabled by policy",
+            outcome.Stats.NotEvaluatedReasons["AEG-DES-STRAT001"],
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "no file-scope evaluator fact",
+            outcome.Stats.NotEvaluatedReasons["AEG-DES-STRAT001"],
+            StringComparison.OrdinalIgnoreCase);
+    }
+
 }

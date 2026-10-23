@@ -634,7 +634,6 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                 [EvaluationScopeMetadataKey] = ProjectScope,
                 ["EvaluatorExecutionStatus"] = status,
                 ["AnalysisStatus"] = status,
-                ["AnalysisComplete"] = "false",
                 ["StatusReason"] = reason,
                 ["ProjectPath"] = Path.GetFullPath(projectPath)
             }

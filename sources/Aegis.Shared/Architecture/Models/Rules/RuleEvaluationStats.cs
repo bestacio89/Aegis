@@ -61,6 +61,14 @@ public sealed class RuleEvaluationStats
     /// </summary>
     public int FactsWithMetricsAtWrongScope { get; init; }
 
+    /// <summary>
+    /// Facts that emitted at least one metric key known to the rule registry,
+    /// but for which no enabled rule could consume that metric because its
+    /// producer contract, applicability, or scope did not permit evaluation.
+    /// </summary>
+    public int FactsWithKnownMetricsWithoutEligibleRule { get; init; }
+
+
     public IReadOnlyList<string> RulesNotEvaluated { get; init; }
         = Array.Empty<string>();
 

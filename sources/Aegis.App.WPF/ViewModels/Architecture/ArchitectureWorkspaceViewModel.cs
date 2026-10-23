@@ -12,6 +12,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
     private readonly SectionDashboardViewModel _sections;
     private readonly LayerDashboardViewModel _layers;
     private readonly RuleDashboardViewModel _rules;
+    private readonly FindingsLedgerViewModel _findings;
     private readonly ReportVisualizationViewModel _reports;
     private ArchitectureTab? _selectedTab;
 
@@ -20,12 +21,14 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         SectionDashboardViewModel sections,
         LayerDashboardViewModel layers,
         RuleDashboardViewModel rules,
+        FindingsLedgerViewModel findings,
         ReportVisualizationViewModel reports)
     {
         _overview = overview;
         _sections = sections;
         _layers = layers;
         _rules = rules;
+        _findings = findings;
         _reports = reports;
 
         Tabs =
@@ -33,7 +36,8 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
             new ArchitectureTab("Overview", "◈", _overview),
             new ArchitectureTab("Sections", "▦", _sections),
             new ArchitectureTab("Layers", "◫", _layers),
-            new ArchitectureTab("Rules & Findings", "☷", _rules),
+            new ArchitectureTab("Rules & Metrics", "◎", _rules),
+            new ArchitectureTab("Findings", "⚑", _findings),
             new ArchitectureTab("Reports", "▤", _reports)
         ];
 
@@ -64,7 +68,9 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         var tab = Tabs.FirstOrDefault(candidate =>
             string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase)
             || (name.Equals("Rules", StringComparison.OrdinalIgnoreCase)
-                && candidate.Name.Equals("Rules & Findings", StringComparison.OrdinalIgnoreCase)));
+                && candidate.Name.Equals("Rules & Metrics", StringComparison.OrdinalIgnoreCase))
+            || (name.Equals("Rules & Findings", StringComparison.OrdinalIgnoreCase)
+                && candidate.Name.Equals("Rules & Metrics", StringComparison.OrdinalIgnoreCase)));
 
         if (tab is not null)
             SelectedTab = tab;

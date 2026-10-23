@@ -41,6 +41,56 @@ internal static class FileExclusions
         GetExclusionReason(path) is not null;
 
     /// <summary>
+    /// Classifies source ownership independently from whether a path is excluded.
+    /// This metadata describes the default ownership inference; it is not proof
+    /// of legal ownership and must remain overrideable by an explicit policy.
+    /// </summary>
+    public static string ClassifySourceOwnership(string path)
+    {
+        var reason = GetExclusionReason(path);
+        if (reason is "GeneratedCode" or "GeneratedFile"
+            or "UnityGeneratedCache" or "UnityGeneratedProjectFile")
+            return "Generated";
+
+        if (reason is "VendoredCode" or "VendoredExample")
+            return "Vendored";
+
+        if (reason == "BuildOrDependencyCache")
+            return "DependencyOrBuildCache";
+
+        var normalized = path.Replace(
+            Path.AltDirectorySeparatorChar,
+            Path.DirectorySeparatorChar);
+        var segments = normalized.Split(
+            Path.DirectorySeparatorChar,
+            StringSplitOptions.RemoveEmptyEntries);
+
+        if (segments.Any(segment =>
+                segment.Equals("test", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("tests", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("testdata", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("test-data", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("spec", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("specs", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Test";
+        }
+
+        if (segments.Any(segment =>
+                segment.Equals("example", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("examples", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("sample", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("samples", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("benchmark", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("benchmarks", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Example";
+        }
+
+        return "FirstParty";
+    }
+
+    /// <summary>
     /// Returns the exclusion category for an excluded path. Directory exclusions
     /// identify the excluded subtree root; they do not claim to count every file
     /// below that root.

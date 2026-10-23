@@ -194,7 +194,7 @@ public static class DesignPatternRuleset
             Scope = RuleEvaluationScope.File,
             Name = "Strategy Pattern Conditional Selection",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
-            MetricKey = "ConditionalViolationCount",
+            MetricKey = "ConditionalDispatchSignalCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
             Severity = ArchitectureRuleSeverity.Medium,

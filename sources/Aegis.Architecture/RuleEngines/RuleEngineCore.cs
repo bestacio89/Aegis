@@ -503,9 +503,21 @@ public sealed class RuleEngineCore
             RulesEvaluated = evaluatedRuleIds.Count,
             RulesPassed = distinctPassedRules,
             RulesViolated = distinctViolatedRules,
-            EvaluationsPassed = checksPassed,
-            EvaluationsViolated = checksViolated,
-            EvaluationsNotEvaluated = notEvaluatedReasons.Count,
+            RulesWithErrors = evaluations
+                .Where(evaluation => evaluation.Status == RuleEvaluationStatus.Error)
+                .Select(evaluation => evaluation.RuleId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
+            EvaluationsPassed = evaluations.Count(
+                evaluation => evaluation.Status == RuleEvaluationStatus.Passed),
+            EvaluationsViolated = evaluations.Count(
+                evaluation => evaluation.Status == RuleEvaluationStatus.Violated),
+            EvaluationsNotEvaluated = evaluations.Count(
+                evaluation => evaluation.Status == RuleEvaluationStatus.NotEvaluated),
+            EvaluationsInsufficientEvidence = evaluations.Count(
+                evaluation => evaluation.Status == RuleEvaluationStatus.InsufficientEvidence),
+            EvaluationsErrored = evaluations.Count(
+                evaluation => evaluation.Status == RuleEvaluationStatus.Error),
             ChecksPerformed = totalChecks,
             ChecksPassed = checksPassed,
             ChecksViolated = checksViolated,

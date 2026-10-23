@@ -90,4 +90,221 @@ public sealed class RuleMetricScopeDiagnosticTests
             evaluation => evaluation.RuleId == "AEG-ARCH-R2");
     }
 
+
+    [Fact]
+    public void Registered_but_unsupported_metric_is_not_reported_as_unknown()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var fact = new ArchitectureEvaluatorResult(
+            "SecurityEvaluator",
+            "SecuritySummary")
+        {
+            Category = "ArchitectureSummary",
+            Metrics = new Dictionary<string, double>
+            {
+                ["SecurityComplianceIndex"] = 72
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project"
+            }
+        };
+
+        var unknownFact = new ArchitectureEvaluatorResult(
+            "FixtureEvaluator",
+            "UnknownMetricFixture")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                ["UnregisteredFixtureMetric"] = 1
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "src/UnknownMetricFixture.cs"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [fact, unknownFact]);
+
+        Assert.Equal(1, outcome.Stats.FactsWithoutMatchingScopedMetrics);
+        Assert.Equal(1, outcome.Stats.FactsWithKnownMetricsWithoutEligibleRule);
+        Assert.Equal(0, outcome.Stats.FactsWithMetricsAtWrongScope);
+        Assert.Contains(
+            "AEG-ARCH-R10",
+            outcome.Stats.RulesNotEvaluated);
+    }
+
+
+
+    [Fact]
+    public void File_candidate_evidence_overrides_a_contradictory_zero_candidate_summary()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var summary = new ArchitectureEvaluatorResult(
+            "BuilderPatternEvaluator",
+            "BuilderPatternSummary")
+        {
+            Category = "DesignPatternSummary",
+            Metrics = new Dictionary<string, double>
+            {
+                ["BuilderCandidateCount"] = 0,
+                ["DiscoveredFileCount"] = 12,
+                ["AnalyzedFileCount"] = 12,
+                ["UnreadableFileCount"] = 0
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project"
+            }
+        };
+
+        var candidate = new ArchitectureEvaluatorResult(
+            "BuilderPatternEvaluator",
+            "BuilderFixture.cs")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                ["BuilderPatternComplianceIndex"] = 100,
+                ["BuilderMutabilityViolationCount"] = 0
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "src/BuilderFixture.cs",
+                ["BuilderClassName"] = "BuilderFixture"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [summary, candidate]);
+
+        Assert.DoesNotContain("AEG-DES-BLD001", outcome.Stats.RulesNotApplicable);
+        Assert.Contains(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == "AEG-DES-BLD001");
+    }
+
+    [Fact]
+    public void Disabled_rule_producer_is_reported_as_disabled_not_missing_metric()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var status = new ArchitectureEvaluatorResult(
+            "StrategyPatternEvaluator",
+            "StrategyProject")
+        {
+            Category = "EvaluatorStatus",
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project",
+                ["EvaluatorExecutionStatus"] = "DisabledByPolicy",
+                ["AnalysisStatus"] = "DisabledByPolicy",
+                ["StatusReason"] = "Strategy analysis is disabled by policy."
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [status]);
+
+        Assert.Contains("AEG-DES-STRAT001", outcome.Stats.RulesNotEvaluated);
+        Assert.Contains(
+            "disabled by policy",
+            outcome.Stats.NotEvaluatedReasons["AEG-DES-STRAT001"],
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "no file-scope evaluator fact",
+            outcome.Stats.NotEvaluatedReasons["AEG-DES-STRAT001"],
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+
+
+    [Fact]
+    public void Repository_leak_risk_cannot_satisfy_observer_unsubscribe_rule()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var repositoryFact = new ArchitectureEvaluatorResult(
+            "RepositoryPatternEvaluator",
+            "OrderRepository.cs")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                ["LeakRisk"] = 1
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "src/OrderRepository.cs",
+                ["Language"] = "C#"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [repositoryFact]);
+
+        Assert.DoesNotContain(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == "AEG-DES-OBS001");
+        Assert.Contains("AEG-DES-OBS001", outcome.Stats.RulesNotEvaluated);
+        Assert.Contains(
+            "ObserverUnsubscribeMissingCount",
+            outcome.Stats.NotEvaluatedReasons["AEG-DES-OBS001"],
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Pattern_rules_are_not_applicable_when_complete_summaries_find_no_candidates()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var summary = new ArchitectureEvaluatorResult(
+            "BuilderPatternEvaluator",
+            "BuilderPatternSummary")
+        {
+            Category = "DesignPatternSummary",
+            Metrics = new Dictionary<string, double>
+            {
+                ["BuilderCandidateCount"] = 0,
+                ["DiscoveredFileCount"] = 12,
+                ["AnalyzedFileCount"] = 12,
+                ["UnreadableFileCount"] = 0
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [summary]);
+
+        Assert.Contains("AEG-DES-BLD001", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-DES-BLD002", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-DES-BLD001", outcome.Stats.RulesNotEvaluated);
+        Assert.Contains(
+            "no applicable candidates",
+            outcome.Stats.NotApplicableReasons["AEG-DES-BLD001"],
+            StringComparison.OrdinalIgnoreCase);
+    }
+
 }

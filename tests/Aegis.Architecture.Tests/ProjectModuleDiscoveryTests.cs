@@ -35,6 +35,11 @@ public sealed class ProjectModuleDiscoveryTests
         project.Write("modules/java-service/pom.xml", """
             <project xmlns="http://maven.apache.org/POM/4.0.0">
               <modelVersion>4.0.0</modelVersion>
+              <parent>
+                <groupId>org.sample</groupId>
+                <artifactId>sample-parent</artifactId>
+                <version>1.0.0</version>
+              </parent>
               <groupId>org.sample</groupId>
               <artifactId>sample-api</artifactId>
               <version>1.0.0</version>

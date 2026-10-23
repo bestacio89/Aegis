@@ -145,7 +145,7 @@ public sealed class RuleEngineOrchestrationTests
             diagnostic.Code == "EvaluatorReportedDiagnostic"));
         var truncated = Assert.Single(report.Diagnostics, diagnostic =>
             diagnostic.Code == "EvaluatorDiagnosticDetailsTruncated");
-        Assert.Contains("reported 3 diagnostics", truncated.Message, StringComparison.Ordinal);
+        Assert.Contains("reported 3 diagnostics", truncated.Message);
         Assert.True(truncated.AffectsCoverage);
     }
 

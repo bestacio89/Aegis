@@ -71,8 +71,10 @@
         <Border Grid.Column="2" Style="{StaticResource Card.Structural}">
           <StackPanel><TextBlock Text="FILES SCANNED" Style="{StaticResource Text.Eyebrow}"/>
             <TextBlock Text="{Binding FilesScanned}" Style="{StaticResource Text.KpiValue}"/>
-            <TextBlock Text="{Binding ExcludedPaths, StringFormat={}Excluded path entries: {0}}"
-                       Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap" Margin="0,6,0,0"/></StackPanel>
+            <TextBlock Text="Excluded path entries" Foreground="{StaticResource Brush.TextMuted}"
+                       TextWrapping="Wrap" Margin="0,6,0,0"/>
+            <TextBlock Text="{Binding ExcludedPaths}" Foreground="{StaticResource Brush.TextMuted}"
+                       TextWrapping="Wrap"/></StackPanel>
         </Border>
       </Grid>
 

@@ -91,6 +91,16 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-TXN-R1"] = ["ArchitecturalTransactionEvaluator"],
             };
 
+    private static readonly IReadOnlyDictionary<string, (string Producer, string CandidateMetric, string UnreadableMetric, string DiscoveredMetric)>
+        CandidateApplicabilityContracts =
+            new Dictionary<string, (string, string, string, string)>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["AEG-DES-BLD001"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-BLD002"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-CMD001"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-DEC001"] = ("DecoratorPatternEvaluator", "DecoratorNamingApplicableCount", "UnreadableFiles", "DiscoveredFiles")
+            };
+
     private static readonly IReadOnlyDictionary<string, string>
         UnsupportedRuleProducerContracts =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -163,6 +173,101 @@ internal static class ArchitectureRuleMetricContracts
 
         return RuleProducerContracts.TryGetValue(ruleId, out var producers)
             && producers.Contains(producerName, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Marks candidate-dependent pattern rules not applicable only when every
+    /// relevant project summary proves that the candidate population is empty
+    /// and source analysis was complete enough to support that conclusion.
+    /// </summary>
+    public static bool TryGetNoCandidateDisposition(
+        string ruleId,
+        IReadOnlyCollection<ArchitectureEvaluatorResult> facts,
+        out string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ruleId);
+        ArgumentNullException.ThrowIfNull(facts);
+
+        reason = string.Empty;
+
+        if (!CandidateApplicabilityContracts.TryGetValue(ruleId, out var contract))
+            return false;
+
+        var summaries = facts
+            .Where(fact =>
+                string.Equals(
+                    fact.Source,
+                    contract.Producer,
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    fact.Metadata?.GetValueOrDefault("EvaluationScope"),
+                    "Project",
+                    StringComparison.OrdinalIgnoreCase)
+                && TryGetMetric(fact.Metrics, contract.CandidateMetric, out _))
+            .ToList();
+
+        if (summaries.Count == 0)
+            return false;
+
+        foreach (var summary in summaries)
+        {
+            if (!TryGetMetric(summary.Metrics, contract.CandidateMetric, out var candidates)
+                || candidates > 0
+                || !TryGetMetric(summary.Metrics, contract.UnreadableMetric, out var unreadable)
+                || unreadable > 0
+                || !TryGetMetric(summary.Metrics, contract.DiscoveredMetric, out var discovered)
+                || !double.IsFinite(candidates)
+                || !double.IsFinite(unreadable)
+                || !double.IsFinite(discovered))
+            {
+                return false;
+            }
+
+            var status = summary.Metadata?.GetValueOrDefault("AnalysisStatus");
+            if (string.Equals(
+                    summary.Metadata?.GetValueOrDefault("AnalysisComplete"),
+                    "false",
+                    StringComparison.OrdinalIgnoreCase)
+                || status is not null
+                    && (status.Equals("Incomplete", StringComparison.OrdinalIgnoreCase)
+                        || status.Equals("Partial", StringComparison.OrdinalIgnoreCase)
+                        || status.Equals("CompletedWithDiagnostics", StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+        }
+
+        reason =
+            $"Rule '{ruleId}' is not applicable because {contract.Producer} " +
+            $"found no applicable candidates in {summaries.Count} fully readable project scope(s).";
+
+        return true;
+    }
+
+    private static bool TryGetMetric(
+        IReadOnlyDictionary<string, double> metrics,
+        string metricName,
+        out double value)
+    {
+        if (metrics.TryGetValue(metricName, out value))
+            return true;
+
+        var matches = metrics
+            .Where(pair => string.Equals(
+                pair.Key,
+                metricName,
+                StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
+
+        if (matches.Length == 1)
+        {
+            value = matches[0].Value;
+            return true;
+        }
+
+        value = default;
+        return false;
     }
 
     /// <summary>

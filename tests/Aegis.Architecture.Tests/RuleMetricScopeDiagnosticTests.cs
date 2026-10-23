@@ -158,7 +158,6 @@ public sealed class RuleMetricScopeDiagnosticTests
                 ["EvaluationScope"] = "Project",
                 ["EvaluatorExecutionStatus"] = "DisabledByPolicy",
                 ["AnalysisStatus"] = "DisabledByPolicy",
-                ["AnalysisComplete"] = "false",
                 ["StatusReason"] = "Strategy analysis is disabled by policy."
             }
         };

@@ -273,7 +273,7 @@ public sealed partial class ReportVisualizationViewModel
 
         var assessmentQualifier = stats is null || report.Metrics.AssessmentComplete
             ? string.Empty
-            : $" Assessment is incomplete: {report.Metrics.RuleEvaluationCoverage * 100:0.##}% rule coverage; the health index is provisional.";
+            : $" Assessment is incomplete: {report.Metrics.RuleEvaluationCoverage:0.##}% rule coverage; the health index is provisional.";
 
 
         if (report.TotalViolations == 0)

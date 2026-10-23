@@ -20,7 +20,7 @@ public static class DesignPatternRuleset
             Scope = RuleEvaluationScope.File,
             Name = "Decorator Delegation Compliance Low",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
-            MetricKey = "DecoratorComplianceScore",
+            MetricKey = "DecoratorDelegationComplianceScore",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
             Severity = ArchitectureRuleSeverity.Medium,

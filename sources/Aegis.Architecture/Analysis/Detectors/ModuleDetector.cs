@@ -1,4 +1,7 @@
-﻿using Aegis.Shared.Architecture.Models;
+﻿using System.Text.Json;
+using System.Xml.Linq;
+
+using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Architecture.Analysis.Detectors;
 
@@ -37,12 +40,10 @@ internal static class ModuleDetector
 
             var module = new ProjectModuleContext
             {
-                // Real project/module name taken from the actual project file
-                // (e.g. "Aegis.Architecture" from "Aegis.Architecture.csproj"), not a folder-name guess.
-                // Folder names and project names can diverge, and this is the name that
-                // actually identifies the module to anything consuming this context —
-                // including the layer detector, which now uses this name directly.
-                Name = Path.GetFileNameWithoutExtension(projectFile),
+                // Project files and package manifests use different identity fields.
+                // Path.GetFileNameWithoutExtension("package.json") and ("pom.xml")
+                // produce generic names, not the actual module identity.
+                Name = ResolveModuleName(projectFile, path),
                 Path = path,
                 Type = DetectModuleType(path)
             };
@@ -146,6 +147,74 @@ internal static class ModuleDetector
                 StringComparison.OrdinalIgnoreCase);
     }
 
+
+    private static string ResolveModuleName(string projectFile, string modulePath)
+    {
+        var fileName = Path.GetFileName(projectFile);
+        var directoryName = Path.GetFileName(
+            Path.TrimEndingDirectorySeparator(modulePath));
+
+        if (fileName.Equals("package.json", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(projectFile));
+                if (document.RootElement.ValueKind == JsonValueKind.Object
+                    && document.RootElement.TryGetProperty("name", out var name)
+                    && name.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(name.GetString()))
+                {
+                    return name.GetString()!.Trim();
+                }
+            }
+            catch (JsonException)
+            {
+                // Keep discovery resilient; the manifest evaluator reports malformed JSON.
+            }
+            catch (IOException)
+            {
+                // The unreadable manifest remains a discovery limitation, not a fake module name.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // The unreadable manifest remains a discovery limitation, not a fake module name.
+            }
+
+            return directoryName;
+        }
+
+        if (fileName.Equals("pom.xml", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var document = XDocument.Load(projectFile);
+                var artifactId = document
+                    .Descendants()
+                    .FirstOrDefault(element =>
+                        element.Name.LocalName.Equals("artifactId", StringComparison.OrdinalIgnoreCase))
+                    ?.Value;
+
+                if (!string.IsNullOrWhiteSpace(artifactId))
+                    return artifactId.Trim();
+            }
+            catch (System.Xml.XmlException)
+            {
+                // Keep discovery resilient; configuration diagnostics own parse failures.
+            }
+            catch (IOException)
+            {
+                // The unreadable manifest remains a discovery limitation.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // The unreadable manifest remains a discovery limitation.
+            }
+
+            return directoryName;
+        }
+
+        return Path.GetFileNameWithoutExtension(projectFile);
+    }
 
     /// <summary>
     /// Returns the first recognized project/manifest file in the given directory, or null

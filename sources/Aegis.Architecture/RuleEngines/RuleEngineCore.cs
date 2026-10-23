@@ -551,7 +551,7 @@ public sealed class RuleEngineCore
             "{ProjectSummaries} project summaries processed; " +
             "{NonFiniteSkipped} non-finite metrics skipped; " +
             "{InvalidThresholds} invalid thresholds skipped; " +
-            "{FactsWithoutMetrics} facts emitted only undeclared metric keys; " +
+            "{FactsWithoutMetrics} facts had no metric key declared by a rule; " +
             "{KnownButIneligible} facts emitted registered metrics with no eligible rule; " +
             "{WrongScopeFacts} facts had applicable metrics only at the wrong scope.",
             factList.Count,

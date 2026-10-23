@@ -98,7 +98,7 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-DES-BLD001"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
                 ["AEG-DES-BLD002"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
                 ["AEG-DES-CMD001"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "DiscoveredFileCount"),
-                ["AEG-DES-DEC001"] = ("DecoratorPatternEvaluator", "DecoratorNamingApplicableCount", "UnreadableFiles", "DiscoveredFiles")
+                ["AEG-DES-DEC001"] = ("DecoratorPatternEvaluator", "DecoratorCandidateCount", "UnreadableFiles", "DiscoveredFiles")
             };
 
     private static readonly IReadOnlyDictionary<string, string>

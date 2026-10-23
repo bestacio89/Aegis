@@ -38,14 +38,15 @@ internal static class ModuleDetector
             }
 
 
+            var moduleName = ResolveModuleName(projectFile, path);
             var module = new ProjectModuleContext
             {
                 // Project files and package manifests use different identity fields.
                 // Path.GetFileNameWithoutExtension("package.json") and ("pom.xml")
                 // produce generic names, not the actual module identity.
-                Name = ResolveModuleName(projectFile, path),
+                Name = moduleName,
                 Path = path,
-                Type = DetectModuleType(path, ResolveModuleName(projectFile, path))
+                Type = DetectModuleType(path, moduleName)
             };
 
 

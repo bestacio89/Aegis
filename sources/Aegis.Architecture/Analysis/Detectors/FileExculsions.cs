@@ -9,7 +9,7 @@ internal static class FileExclusions
             "bin", "obj", "node_modules", "dist", "build",
             "__pycache__", ".venv", "venv", "coverage", "TestResults",
             "Logs", "PackageCache", "Generated",
-            "ThirdParty", "Third-Party", "vendor"
+            "ThirdParty", "Third-Party", "vendor", ".nuget"
         };
 
     private static bool IsUnityTempPath(string path)

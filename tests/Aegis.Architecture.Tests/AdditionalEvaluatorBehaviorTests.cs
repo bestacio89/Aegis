@@ -188,6 +188,41 @@ public sealed class AdditionalEvaluatorBehaviorTests
         AssertAllMetricsAreFinite(results);
     }
 
+
+    [Fact]
+    public async Task ErrorHandlingEvaluator_emits_coverage_only_when_catch_evidence_exists()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/OrderService.cs", """
+            public sealed class OrderService
+            {
+                public void Execute()
+                {
+                    try
+                    {
+                        Run();
+                    }
+                    catch (System.Exception)
+                    {
+                    }
+                }
+
+                private void Run() { }
+            }
+            """);
+
+        var results = await Evaluate(project, "ErrorHandlingEvaluator", "C#", "ASP.NET Core");
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project"
+                && result.Metrics.ContainsKey("ErrorHandlingCoverage"));
+
+        Assert.Equal(1, summary.Metrics["TotalCatchBlocks"]);
+        Assert.Equal(1, summary.Metrics["SwallowedExceptions"]);
+        Assert.Equal(0, summary.Metrics["ErrorHandlingCoverage"]);
+        Assert.Equal(bool.TrueString, summary.Metadata["AnalysisComplete"]);
+    }
+
     [Fact]
     public async Task MaintainabilityEvaluator_reports_file_and_project_measurements()
     {

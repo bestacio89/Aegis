@@ -305,7 +305,45 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.True(fileResult.Metrics["AlgorithmicEfficiencyScore"] < 100);
         Assert.True(fileResult.Metrics["ConcurrencyScore"] < 100);
         Assert.True(fileResult.Metrics["IOMaturityScore"] < 100);
+        Assert.Equal(2, fileResult.Metrics["BlockingIOCount"]);
+        Assert.Equal("File", fileResult.Metadata["EvaluationScope"]);
         AssertAllMetricsAreFinite(results);
+    }
+
+    [Fact]
+    public async Task PerformanceEvaluator_ignores_async_result_status_and_non_code_text()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/PerformanceFalsePositive.cs", """
+            public sealed class PerformanceFalsePositive
+            {
+                public async System.Threading.Tasks.Task Execute(Dialog dialog, Request req)
+                {
+                    var result = await dialog.Result;
+                    if (req.result != UnityWebRequest.Result.Success)
+                    {
+                        System.Console.WriteLine("Thread.Sleep(100); File.ReadAllText(path);");
+                    }
+
+                    // Thread.Sleep(100); File.ReadAllText(path); Task.Wait();
+                }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(project.Root, CreateContext(project))).ToArray();
+        var fileResult = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "PerformanceFalsePositive.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal(0, fileResult.Metrics["BlockingIOCount"]);
+        Assert.Equal(100, fileResult.Metrics["ConcurrencyScore"]);
+        Assert.Equal(100, fileResult.Metrics["IOMaturityScore"]);
     }
 
     [Fact]

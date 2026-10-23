@@ -10,6 +10,12 @@ public sealed class RuleEvaluationStats
 
     public int RulesApplicable { get; init; }
 
+    /// <summary>Rules whose declared metric semantics have no supported producer.</summary>
+    public int RulesUnsupported { get; init; }
+
+    public IReadOnlyDictionary<string, string> UnsupportedRuleReasons { get; init; }
+        = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Distinct applicable rules with at least one completed evaluation.
     /// A completed evaluation may pass or violate.
@@ -76,8 +82,9 @@ public sealed class RuleEvaluationStats
         = new Dictionary<string, int>(
             StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Fraction of supported applicable rules with at least one completed evaluation.</summary>
     public double EvaluationCoverage =>
-        RulesApplicable == 0
-            ? 1.0
-            : (double)RulesEvaluated / RulesApplicable;
+        RulesApplicable <= 0
+            ? 0.0
+            : Math.Clamp((double)RulesEvaluated / RulesApplicable, 0.0, 1.0);
 }

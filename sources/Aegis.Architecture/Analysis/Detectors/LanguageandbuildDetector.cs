@@ -7,10 +7,21 @@ internal static class LanguageAndBuildDetector
 {
     public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
     {
-        if (files.Any(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx")))
+        // A solution file alone is not proof of a conventional .NET project:
+        // Unity commonly generates IDE solution files around its own source tree.
+        // A real project manifest is the stronger build-system signal.
+        if (files.Any(f => f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
         {
             ctx.Language = "C#";
             ctx.BuildSystem = ArchitectureBuildSystem.DotNet;
+        }
+        else if (files.Any(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)))
+        {
+            // Unity and other source-only C# projects may not commit generated
+            // .csproj files. Detect the language from source files independently
+            // of whether a conventional .NET build manifest exists.
+            ctx.Language = "C#";
+            ctx.BuildSystem = ArchitectureBuildSystem.Unknown;
         }
         else if (files.Any(f => f.EndsWith(".java") || f.Contains("pom.xml")))
         {

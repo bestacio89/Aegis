@@ -55,7 +55,7 @@ function relativeFile(file)
 
 function readSource(file)
 {
-    return fs.readFileSync(file, "utf8").replace(/ ^\uFEFF/, "");
+    return fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "");
 }
 
 function countNonBlankLines(source)
@@ -66,9 +66,53 @@ function countNonBlankLines(source)
     }
 
     return source
-        .split(/\r\n |\n |\r /)
+        .split(/\r\n|\n|\r/)
         .filter(line => line.trim().length > 0)
         .length;
+}
+
+function cyclomaticComplexity(node)
+{
+    let complexity = 1;
+
+    function visit(current)
+    {
+        if (
+            ts.isIfStatement(current) ||
+            ts.isConditionalExpression(current) ||
+            ts.isForStatement(current) ||
+            ts.isForInStatement(current) ||
+            ts.isForOfStatement(current) ||
+            ts.isWhileStatement(current) ||
+            ts.isDoStatement(current) ||
+            ts.isCatchClause(current)
+        )
+        {
+            complexity++;
+        }
+
+        if (ts.isCaseClause(current) && current.expression !== undefined)
+        {
+            complexity++;
+        }
+
+        if (
+            ts.isBinaryExpression(current) &&
+            [
+                ts.SyntaxKind.AmpersandAmpersandToken,
+                ts.SyntaxKind.BarBarToken,
+                ts.SyntaxKind.QuestionQuestionToken
+            ].includes(current.operatorToken.kind)
+        )
+        {
+            complexity++;
+        }
+
+        ts.forEachChild(current, visit);
+    }
+
+    visit(node);
+    return complexity;
 }
 
 function walk(directory, extensions, files = [])
@@ -142,7 +186,7 @@ function getPackageVersion(packageJson, packageName)
     // Extract the major version from ordinary semver declarations such as:
     // 21.0.0, ^21.0.0, ~21.0.0, >=21.0.0.
     const match = declaration.match(
-        / (?: ^| [^\d])(\d +)\.\d +\.\d + ($| [^\d]) /
+        /(?:^|[^\d])(\d+)\.\d+\.\d+($|[^\d])/
     );
 
     return match ? Number(match[1]) : null;
@@ -454,6 +498,7 @@ function analyzeAngularSource(file, source, angularVersion)
                     sourceLineCount: countNonBlankLines(
                         node.getText(sourceFile)
                     ),
+                    cyclomaticComplexity: cyclomaticComplexity(node),
 
                     declarationCount: Array.isArray(declarations)
                         ? declarations.length
@@ -673,7 +718,77 @@ function analyzeReactSource(file, source)
     const sourceFile = parseTypeScript(file, source, true);
 
     const components = [];
+    const componentTyping = [];
     const hooks = [];
+
+    function getFunctionName(node)
+    {
+        if (node.name && ts.isIdentifier(node.name))
+        {
+            return node.name.text;
+        }
+
+        const parent = node.parent;
+        if (parent && ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name))
+        {
+            return parent.name.text;
+        }
+
+        return null;
+    }
+
+    function isHookCallMisused(call)
+    {
+        let current = call.parent;
+        let functionBoundary = null;
+
+        while (current)
+        {
+            if (
+                ts.isIfStatement(current) ||
+                ts.isConditionalExpression(current) ||
+                ts.isSwitchStatement(current) ||
+                ts.isCaseClause(current) ||
+                ts.isForStatement(current) ||
+                ts.isForInStatement(current) ||
+                ts.isForOfStatement(current) ||
+                ts.isWhileStatement(current) ||
+                ts.isDoStatement(current) ||
+                ts.isCatchClause(current)
+            )
+            {
+                return true;
+            }
+
+            if (
+                ts.isBinaryExpression(current) &&
+                [
+                    ts.SyntaxKind.AmpersandAmpersandToken,
+                    ts.SyntaxKind.BarBarToken,
+                    ts.SyntaxKind.QuestionQuestionToken
+                ].includes(current.operatorToken.kind)
+            )
+            {
+                return true;
+            }
+
+            if (ts.isFunctionLike(current))
+            {
+                functionBoundary = current;
+                break;
+            }
+
+            current = current.parent;
+        }
+
+        if (!functionBoundary)
+        {
+            return true;
+        }
+
+        const name = getFunctionName(functionBoundary);
+        return !(name && (/^[A-Z]/.test(name) || /^use[A-Z0-9]/.test(name)));
+    }
 
     let jsxElementCount = 0;
     let conditionalCount = 0;
@@ -683,16 +798,23 @@ function analyzeReactSource(file, source)
         if (
             ts.isFunctionDeclaration(node) &&
             node.name &&
-            / ^ [A - Z] /.test(node.name.text)
+            /^[A-Z]/.test(node.name.text)
         )
         {
             components.push(node.name.text);
+            const hasProps = node.parameters.length > 0;
+            const hasPropTypes = source.includes(node.name.text + ".propTypes");
+            componentTyping.push({
+                name: node.name.text,
+                propsTyped: !hasProps || node.parameters[0].type !== undefined || hasPropTypes,
+                cyclomaticComplexity: cyclomaticComplexity(node)
+            });
         }
 
         if (
             ts.isVariableDeclaration(node) &&
             ts.isIdentifier(node.name) &&
-            / ^ [A - Z] /.test(node.name.text) &&
+            /^[A-Z]/.test(node.name.text) &&
             node.initializer &&
             (
                 ts.isArrowFunction(node.initializer) ||
@@ -701,19 +823,28 @@ function analyzeReactSource(file, source)
         )
         {
             components.push(node.name.text);
+            const parameters = node.initializer.parameters;
+            const hasProps = parameters.length > 0;
+            const hasPropTypes = source.includes(node.name.text + ".propTypes");
+            componentTyping.push({
+                name: node.name.text,
+                propsTyped: !hasProps || parameters[0].type !== undefined || hasPropTypes,
+                cyclomaticComplexity: cyclomaticComplexity(node.initializer)
+            });
         }
 
         if (
             ts.isCallExpression(node) &&
             ts.isIdentifier(node.expression) &&
-            / ^use[A - Z0 - 9] /.test(node.expression.text)
+            /^use[A-Z0-9]/.test(node.expression.text)
         )
         {
             hooks.push({
-            name: node.expression.text,
+                name: node.expression.text,
                 line: sourceFile.getLineAndCharacterOfPosition(
                     node.getStart(sourceFile)
-                ).line + 1
+                ).line + 1,
+                conditionallyCalled: isHookCallMisused(node)
             });
         }
 
@@ -744,6 +875,7 @@ function analyzeReactSource(file, source)
     filePath: relativeFile(file),
         sourceLineCount: countNonBlankLines(source),
         components: [...new Set(components)],
+        componentTyping,
         hooks,
         jsxElementCount,
         conditionalCount,

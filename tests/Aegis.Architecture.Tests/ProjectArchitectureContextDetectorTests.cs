@@ -100,19 +100,101 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Equal(".NET (EF Core)", context.Framework);
         Assert.Contains(context.DetectedDependencies, dependency =>
             dependency.Contains("EntityFrameworkCore", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(context.Dependencies);
         Assert.Equal(program, context.EntryPointFile);
         Assert.True(context.IsDockerized);
         Assert.True(context.UsesKubernetes);
         Assert.True(context.IsDeployable);
         Assert.Equal(2, context.Modules.Count);
+        Assert.Equal(2, context.Layers.Count);
+        Assert.Equal(
+            context.Layers.Count,
+            context.Layers.Select(layer => layer.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count());
         Assert.All(context.Modules, module =>
         {
-            Assert.NotEmpty(module.Layers);
-            Assert.Contains(module.Layers, layer => layer.Name == module.Name);
+            var layer = Assert.Single(module.Layers);
+            Assert.Contains(context.Layers, candidate =>
+                string.Equals(candidate.Name, layer.Name, StringComparison.OrdinalIgnoreCase)
+                && candidate.Files.Any(file => layer.Files.Contains(file, StringComparer.OrdinalIgnoreCase)));
+            Assert.NotEmpty(layer.Files);
         });
         Assert.Contains(context.PatternsDetected, pattern => pattern == "Repository Pattern");
         Assert.Contains(context.PatternsDetected, pattern => pattern == "Dependency Injection");
         Assert.Equal(context.Modules.Count.ToString(), context.MetadataMap["DetectedModules"]);
+    }
+
+    [Fact]
+    public void Detect_maps_project_references_to_semantic_layer_edges()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var domainRoot = Path.Combine(directory.Path, "HeroService.Domain");
+        var applicationRoot = Path.Combine(directory.Path, "HeroService.Application");
+        Directory.CreateDirectory(domainRoot);
+        Directory.CreateDirectory(applicationRoot);
+
+        File.WriteAllText(
+            Path.Combine(domainRoot, "HeroService.Domain.csproj"),
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        File.WriteAllText(
+            Path.Combine(domainRoot, "Order.cs"),
+            "namespace HeroService.Domain; public sealed class Order { }");
+        var applicationProject = Path.Combine(applicationRoot, "HeroService.Application.csproj");
+        File.WriteAllText(
+            applicationProject,
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><ItemGroup><ProjectReference Include=\"..\\HeroService.Domain\\HeroService.Domain.csproj\" /></ItemGroup><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        File.WriteAllText(
+            Path.Combine(applicationRoot, "OrderHandler.cs"),
+            "namespace HeroService.Application; public sealed class OrderHandler { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        var dependency = Assert.Single(context.Dependencies);
+        Assert.Equal("HeroService.Application", dependency.Source);
+        Assert.Equal("HeroService.Domain", dependency.Target);
+        Assert.Equal("Application", dependency.SourceLayer);
+        Assert.Equal("Domain", dependency.TargetLayer);
+        Assert.Equal("ProjectReference", dependency.DependencyType);
+        Assert.Equal(applicationProject, dependency.File);
+    }
+
+    [Fact]
+    public void Detect_excludes_unity_cache_vendored_examples_and_generated_source()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var assets = Path.Combine(directory.Path, "Assets");
+        Directory.CreateDirectory(Path.Combine(assets, "Scripts"));
+        Directory.CreateDirectory(Path.Combine(assets, "TextMesh Pro", "Examples & Extras"));
+        Directory.CreateDirectory(Path.Combine(assets, "Examples & Extras"));
+        Directory.CreateDirectory(Path.Combine(assets, "TextMeshPro", "Custom"));
+        Directory.CreateDirectory(Path.Combine(directory.Path, "ProjectSettings"));
+        Directory.CreateDirectory(Path.Combine(directory.Path, "Library", "PackageCache", "com.unity.sample"));
+
+        File.WriteAllText(Path.Combine(assets, "Game.asmdef"), """{"name":"Game"}""");
+        File.WriteAllText(Path.Combine(directory.Path, "Assembly-CSharp-Editor.csproj"), "<Project />");
+        File.WriteAllText(Path.Combine(directory.Path, "ProjectSettings", "ProjectVersion.txt"), "m_EditorVersion: 6000.0.0f1");
+        File.WriteAllText(Path.Combine(assets, "Scripts", "GameController.cs"), "public sealed class GameController { }");
+        File.WriteAllText(Path.Combine(assets, "Scripts", "Generated.Designer.cs"), "public sealed class Generated { }");
+        File.WriteAllText(Path.Combine(assets, "TextMesh Pro", "Examples & Extras", "Example.cs"), "public sealed class Example { }");
+        File.WriteAllText(Path.Combine(assets, "Examples & Extras", "GameOwnedExample.cs"), "public sealed class GameOwnedExample { }");
+        File.WriteAllText(Path.Combine(assets, "TextMeshPro", "Custom", "HudLabel.cs"), "public sealed class HudLabel { }");
+        File.WriteAllText(Path.Combine(directory.Path, "Library", "PackageCache", "com.unity.sample", "Vendor.cs"), "public sealed class Vendor { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal(5, context.FileCount);
+        Assert.Contains(context.Layers, layer => layer.Name == "Client");
+        Assert.DoesNotContain(context.Layers, layer => layer.Files.Any(file =>
+            file.Contains("PackageCache", StringComparison.OrdinalIgnoreCase)));
+        Assert.DoesNotContain(context.Layers, layer => layer.Files.Any(file =>
+            file.Contains(Path.Combine("TextMesh Pro", "Examples & Extras"), StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains(context.Layers, layer => layer.Files.Any(file =>
+            file.Contains("GameOwnedExample.cs", StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains(context.Layers, layer => layer.Files.Any(file =>
+            file.Contains("HudLabel.cs", StringComparison.OrdinalIgnoreCase)));
     }
 
     [Fact]
@@ -137,9 +219,118 @@ public sealed class ProjectArchitectureContextDetectorTests
         var context = ProjectArchitectureContextDetector.Detect(directory.Path);
 
         Assert.Equal("C#", context.Language);
-        Assert.Equal("Blazor", context.Framework);
+        Assert.Equal("ASP.NET Core", context.Framework);
         Assert.Contains("Blazor", context.DetectedFrameworks);
+        Assert.Contains("ASP.NET Core", context.DetectedFrameworks);
         Assert.Equal("FullStack", context.DomainType);
+    }
+
+ 
+    [Fact]
+    public void Detect_discovers_frontend_manifests_without_overwriting_backend_identity()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var serverRoot = Path.Combine(directory.Path, "Server");
+        var clientRoot = Path.Combine(directory.Path, "Client");
+        var adminRoot = Path.Combine(clientRoot, "Admin");
+        Directory.CreateDirectory(serverRoot);
+        Directory.CreateDirectory(adminRoot);
+
+        File.WriteAllText(
+            Path.Combine(serverRoot, "Server.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
+              </ItemGroup>
+            </Project>
+            """);
+        File.WriteAllText(
+            Path.Combine(clientRoot, "package.json"),
+            """
+            {
+              "name": "client",
+              "dependencies": {
+                "@angular/core": "^20.0.0",
+                "rxjs": "^7.0.0"
+              }
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(adminRoot, "package.json"),
+            """
+            {
+              "name": "admin",
+              "devDependencies": {
+                "@angular/cli": "^20.0.0",
+                "typescript": "~5.0.0"
+              },
+              "peerDependencies": {
+                "shared-ui": "^1.0.0"
+              }
+            }
+            """);
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal("C#", context.Language);
+        Assert.Equal("ASP.NET Core", context.Framework);
+        Assert.Contains("ASP.NET Core", context.DetectedFrameworks);
+        Assert.Contains("Angular", context.DetectedFrameworks);
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("Microsoft.EntityFrameworkCore", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("@angular/core", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("rxjs", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("@angular/cli", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("typescript", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(context.DetectedDependencies, dependency =>
+            dependency.Equals("shared-ui", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Detect_preserves_blazor_backend_and_unity_signals_in_a_mixed_repository()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var webProject = Path.Combine(directory.Path, "Server", "Server.csproj");
+        var component = Path.Combine(directory.Path, "Server", "Components", "Home.razor");
+        var unityAssembly = Path.Combine(directory.Path, "UnityClient", "Assets", "Game", "Game.asmdef");
+        var unityVersion = Path.Combine(directory.Path, "UnityClient", "ProjectSettings", "ProjectVersion.txt");
+        var unityManifest = Path.Combine(directory.Path, "UnityClient", "Packages", "manifest.json");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(webProject)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(component)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(unityAssembly)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(unityVersion)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(unityManifest)!);
+
+        File.WriteAllText(webProject, """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(component, "@page \"/\"\n<h1>Home</h1>");
+        File.WriteAllText(unityAssembly, "{ \"name\": \"Game\" }");
+        File.WriteAllText(unityVersion, "m_EditorVersion: 6000.0.0f1");
+        File.WriteAllText(unityManifest, "{ \"dependencies\": { \"com.unity.inputsystem\": \"1.0.0\" } }");
+        File.WriteAllText(Path.Combine(directory.Path, "Server", "Program.cs"), "public class Program { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal("ASP.NET Core", context.Framework);
+        Assert.Contains("ASP.NET Core", context.DetectedFrameworks);
+        Assert.Contains("Blazor", context.DetectedFrameworks);
+        Assert.Contains("Unity", context.DetectedFrameworks);
+        Assert.Equal("FullStack", context.DomainType);
+        Assert.Contains(context.Modules, module =>
+            module.Type == "Unity"
+            && string.Equals(module.Path, Path.Combine(directory.Path, "UnityClient"), StringComparison.OrdinalIgnoreCase));
     }
 
     private sealed class TemporaryDirectory : IDisposable

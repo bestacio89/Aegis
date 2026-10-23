@@ -113,9 +113,14 @@ public sealed class CrossEvaluatorAggregatorTests
 
         Assert.Contains(report.Domains, domain =>
             domain.Domain == "Application" && domain.ChecksPerformed == 1);
-        Assert.Contains(report.Domains, domain =>
-            domain.Domain == "Domain" && domain.ChecksPerformed == 0);
+        var unassessedDomain = Assert.Single(
+            report.Domains,
+            domain => domain.Domain == "Domain");
+        Assert.Equal(0, unassessedDomain.ChecksPerformed);
+        Assert.False(unassessedDomain.HasAssessmentEvidence);
+        Assert.Equal(0, unassessedDomain.HealthIndex);
         Assert.Equal(100, report.Metrics.ProjectHealthIndex);
+        Assert.True(report.Metrics.HasAssessmentEvidence);
     }
 
     [Fact]
@@ -125,8 +130,11 @@ public sealed class CrossEvaluatorAggregatorTests
 
         Assert.Empty(report.Results);
         Assert.Empty(report.Domains);
-        Assert.Equal(100, report.Metrics.ProjectHealthIndex);
-        Assert.Equal(1, report.Metrics.WeightedCompliance);
+        Assert.Equal(0, report.Metrics.ProjectHealthIndex);
+        Assert.Equal(0, report.Metrics.WeightedCompliance);
+        Assert.False(report.Metrics.HasAssessmentEvidence);
+        Assert.False(report.Metrics.AssessmentComplete);
+        Assert.Equal(0, report.Metrics.RuleEvaluationCoverage);
     }
 
     private static CrossEvaluatorAggregator CreateAggregator() =>

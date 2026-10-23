@@ -28,7 +28,7 @@ public sealed class BlazorNamingConventionPolicy
 
     public bool IsValidConstantName(string name)
         => Regex.IsMatch(name,
-            @"^[A-Z][A-Z0-9_]*$");
+            @"^(?:[A-Z][a-zA-Z0-9]*|[A-Z][A-Z0-9_]+)$");
 
 
     public bool IsValidFileName(string name)

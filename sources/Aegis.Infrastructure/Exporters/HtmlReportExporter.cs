@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Rules;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.Logging;
 
@@ -173,7 +174,7 @@ td {
 """);
 
             AddRow(html,
-                "Files Scanned",
+                "Governed Files in Scope",
                 report.TotalFilesScanned.ToString());
 
             AddRow(html,
@@ -181,8 +182,52 @@ td {
                 report.TotalViolations.ToString());
 
             AddRow(html,
-                "Health Index",
-                $"{report.Metrics.ProjectHealthIndex:0.00}%");
+                "Registered Rules",
+                report.EvaluationStats?.RulesRegistered.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Supported Applicable Rules",
+                report.EvaluationStats?.RulesApplicable.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Supported Rules Evaluated",
+                report.EvaluationStats?.RulesEvaluated.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Rules Not Evaluated",
+                report.EvaluationStats?.RulesNotEvaluated.Count.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Assessed Health Index",
+                report.Metrics.HasAssessmentEvidence
+                    ? $"{report.Metrics.ProjectHealthIndex:0.00}%"
+                    : "N/A");
+
+            AddRow(html,
+                "Coverage-Adjusted Diagnostic",
+                report.Metrics.HasCoverageEvidence
+                    ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.00}%"
+                    : "N/A");
+
+            AddRow(html,
+                "Rule Evaluation Coverage",
+                report.Metrics.HasCoverageEvidence
+                    ? $"{report.Metrics.RuleEvaluationCoverage:0.00}%"
+                    : "N/A");
+
+            AddRow(html,
+                "Supported Rules Not Evaluated",
+                report.EvaluationStats is null
+                    ? "N/A"
+                    : Math.Max(0, report.EvaluationStats.RulesNotEvaluated.Count - report.EvaluationStats.RulesUnsupported).ToString());
+
+            AddRow(html,
+                "Unsupported Rules",
+                report.EvaluationStats?.RulesUnsupported.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Assessment Complete",
+                report.Metrics.AssessmentComplete ? "Yes" : "No");
 
             html.AppendLine("""
 </table>
@@ -207,22 +252,44 @@ td {
 """);
 
 
-            foreach (var score in report.ComplianceScores)
+            var registeredCategories = ArchitectureRuleRegistry.All
+                .Select(rule => Enum.TryParse<ArchitectureRuleCategory>(
+                    rule.Category,
+                    true,
+                    out var category)
+                    ? category
+                    : ArchitectureRuleCategory.General)
+                .Distinct()
+                .OrderBy(category => category.ToString());
+
+            foreach (var category in registeredCategories)
             {
+                if (!report.ComplianceScores.TryGetValue(category, out var score))
+                {
+                    html.AppendLine($"""
+<tr>
+<td>{category}</td>
+<td>N/A</td>
+<td>NOT ASSESSED</td>
+</tr>
+""");
+                    continue;
+                }
+
                 var css =
-                    score.Value >= 80 ? "good" :
-                    score.Value >= 50 ? "warning" :
+                    score >= 80 ? "good" :
+                    score >= 50 ? "warning" :
                     "bad";
 
                 var status =
-                    score.Value >= 80 ? "✅ OK" :
-                    score.Value >= 50 ? "⚠ Warning" :
+                    score >= 80 ? "✅ OK" :
+                    score >= 50 ? "⚠ Warning" :
                     "❌ Critical";
 
                 html.AppendLine($"""
 <tr>
-<td>{score.Key}</td>
-<td>{score.Value:0.00}%</td>
+<td>{category}</td>
+<td>{score:0.00}%</td>
 <td class="{css}">
 {status}
 </td>

@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Rules;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.Logging;
 
@@ -72,9 +73,18 @@ public sealed class MarkdownReportExporter : IReportExporter
 
             md.AppendLine("| Metric | Value |");
             md.AppendLine("|-------|------:|");
-            md.AppendLine($"| Files Scanned | {report.TotalFilesScanned} |");
+            md.AppendLine($"| Governed Files in Scope | {report.TotalFilesScanned} |");
             md.AppendLine($"| Total Violations | {report.TotalViolations} |");
-            md.AppendLine($"| Health Index | **{report.Metrics.ProjectHealthIndex:0.00}%** |");
+            md.AppendLine($"| Registered Rules | {report.EvaluationStats?.RulesRegistered.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Supported Applicable Rules | {report.EvaluationStats?.RulesApplicable.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Supported Rules Evaluated | {report.EvaluationStats?.RulesEvaluated.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Rules Not Evaluated | {report.EvaluationStats?.RulesNotEvaluated.Count.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Assessed Health Index | {(report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.ProjectHealthIndex:0.00}%" : "N/A")} |");
+            md.AppendLine($"| Coverage-Adjusted Diagnostic | {(report.Metrics.HasCoverageEvidence ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.00}%" : "N/A")} |");
+            md.AppendLine($"| Rule Evaluation Coverage | {(report.Metrics.HasCoverageEvidence ? $"{report.Metrics.RuleEvaluationCoverage:0.00}%" : "N/A")} |");
+            md.AppendLine($"| Supported Rules Not Evaluated | {(report.EvaluationStats is null ? "N/A" : Math.Max(0, report.EvaluationStats.RulesNotEvaluated.Count - report.EvaluationStats.RulesUnsupported).ToString())} |");
+            md.AppendLine($"| Unsupported Rules | {report.EvaluationStats?.RulesUnsupported.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Assessment Complete | {(report.Metrics.AssessmentComplete ? "Yes" : "No")} |");
 
             md.AppendLine();
 
@@ -88,15 +98,31 @@ public sealed class MarkdownReportExporter : IReportExporter
             md.AppendLine("| Category | Score | Status |");
             md.AppendLine("|----------|------:|--------|");
 
-            foreach (var kv in report.ComplianceScores.OrderBy(x => x.Key.ToString()))
+            var registeredCategories = ArchitectureRuleRegistry.All
+                .Select(rule => Enum.TryParse<ArchitectureRuleCategory>(
+                    rule.Category,
+                    true,
+                    out var category)
+                    ? category
+                    : ArchitectureRuleCategory.General)
+                .Distinct()
+                .OrderBy(category => category.ToString());
+
+            foreach (var category in registeredCategories)
             {
+                if (!report.ComplianceScores.TryGetValue(category, out var score))
+                {
+                    md.AppendLine($"| {category} | N/A | NOT ASSESSED |");
+                    continue;
+                }
+
                 string status =
-                    kv.Value >= 80 ? "✅ OK" :
-                    kv.Value >= 50 ? "⚠️ Warning" :
+                    score >= 80 ? "✅ OK" :
+                    score >= 50 ? "⚠️ Warning" :
                     "❌ Critical";
 
                 md.AppendLine(
-                    $"| {kv.Key} | {kv.Value:0.00}% | {status} |");
+                    $"| {category} | {score:0.00}% | {status} |");
             }
 
             md.AppendLine();

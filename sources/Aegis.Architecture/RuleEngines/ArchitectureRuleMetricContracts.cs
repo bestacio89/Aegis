@@ -22,6 +22,106 @@ internal static class ArchitectureRuleMetricContracts
         CrossFramework
     }
 
+    // A metric name alone is not sufficient proof that a rule's producer
+    // measured the intended concept. These contracts bind rules to the evaluator
+    // families that own their evidence. Multiple producers are allowed only
+    // where they implement the same declared rule semantics.
+    private static readonly IReadOnlyDictionary<string, string[]>
+        RuleProducerContracts =
+            new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["AEG-ARCH-R1"] = ["CircularDependencyEvaluator"],
+                ["AEG-ARCH-R2"] = ["ArchitecturalEvaluator"],
+                ["AEG-ARCH-R3"] = ["ArchitecturalEvaluator"],
+                ["AEG-ARCH-R5"] = ["ArchitecturalEvaluator"],
+                ["AEG-ARCH-R7"] = ["ApiConsistencyEvaluator"],
+                ["AEG-ARCH-R8"] = ["GodClassEvaluator"],
+                ["AEG-ARCH-R11"] = ["DocumentationEvaluator"],
+                ["AEG-BACK-R2"] = ["ComplexityEvaluator"],
+                ["AEG-BACK-R3"] = ["DependencyGraphEvaluator"],
+                ["AEG-BACK-R4"] = ["ErrorHandlingEvaluator"],
+                ["AEG-BACK-R5"] = ["MaintainabilityEvaluator"],
+
+                ["AEG-DES-ADM001"] = ["AnemicDomainModelEvaluator"],
+                ["AEG-DES-BLD001"] = ["BuilderPatternEvaluator"],
+                ["AEG-DES-BLD002"] = ["BuilderPatternEvaluator"],
+                ["AEG-DES-CMD001"] = ["CommandPatternEvaluator"],
+                ["AEG-DES-DEC001"] = ["DecoratorPatternEvaluator"],
+                ["AEG-DES-FAC001"] = ["FacadePatternEvaluator"],
+                ["AEG-DES-FAC002"] = ["FacadePatternEvaluator"],
+                ["AEG-DES-FACR001"] = ["FactoryPatternEvaluator"],
+                ["AEG-DES-GOD001"] = ["GodClassEvaluator"],
+                ["AEG-DES-MEDI001"] = ["MediatorPatternEvaluator"],
+                ["AEG-DES-OBS001"] = ["ObserverPatternEvaluator"],
+                ["AEG-DES-REPO001"] = ["RepositoryPatternEvaluator"],
+                ["AEG-DES-SING001"] = ["SingletonPatternEvaluator"],
+                ["AEG-DES-STRAT001"] = ["StrategyPatternEvaluator"],
+                ["AEG-DES-STRAT002"] = ["StrategyPatternEvaluator"],
+
+                ["AEG-FRONT-R1"] = ["AngularEvaluator"],
+                ["AEG-FRONT-R2"] = ["AngularEvaluator"],
+                ["AEG-FRONT-R3"] = ["ReactEvaluator"],
+                ["AEG-FRONT-R4"] = ["ReactEvaluator"],
+                ["AEG-FRONT-R5"] = ["RazorEvaluator"],
+                ["AEG-FRONT-R6"] = ["RazorEvaluator"],
+                ["AEG-FRONT-R7"] = ["RazorEvaluator"],
+                ["AEG-FRONT-R8"] = ["BlazorEvaluator"],
+                ["AEG-FRONT-R9"] = ["BlazorEvaluator"],
+                ["AEG-FRONT-R10"] = ["BlazorEvaluator"],
+                ["AEG-FRONT-R11"] = ["RazorEvaluator", "ReactEvaluator"],
+
+                ["AEG-INF-R1"] = ["ConfigurationEvaluator"],
+                ["AEG-INF-R2"] = ["LoggingEvaluator"],
+                ["AEG-INF-R3"] = ["RepositoryEvaluator"],
+
+                ["AEG-NAM-R1"] = ["NamingEvaluator"],
+                ["AEG-NAM-R2"] = ["NamingEvaluator"],
+                ["AEG-NAM-R3"] = ["NamingEvaluator"],
+                ["AEG-NAM-R4"] = ["NamingEvaluator"],
+                ["AEG-NAM-R5"] = ["NamingEvaluator"],
+                ["AEG-NAM-R6"] = ["NamingEvaluator"],
+                ["AEG-NAM-R7"] = ["NamingEvaluator"],
+                ["AEG-NAM-R8"] = ["NamingEvaluator"],
+                ["AEG-NAM-R9"] = ["NamingEvaluator"],
+
+                ["AEG-PERF-R1"] = ["PerformanceEvaluator"],
+                ["AEG-PERF-R2"] = ["PerformanceEvaluator"],
+                ["AEG-PERF-R4"] = ["PerformanceEvaluator"],
+
+                ["AEG-TXN-R1"] = ["ArchitecturalTransactionEvaluator"],
+            };
+
+    private static readonly IReadOnlyDictionary<string, string>
+        UnsupportedRuleProducerContracts =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["AEG-DES-CIRC001"] =
+                    "No dedicated pattern-circular-reference producer exists yet; CircularDependencyEvaluator measures module dependency cycles and is not a semantic substitute.",
+                ["AEG-DES-OVER001"] =
+                    "No dedicated pattern-overuse producer exists yet; repeated pattern detections must not be treated as overuse without an explicit policy and denominator.",
+                ["AEG-ARCH-R4"] = "The current architecture producer does not emit a validated cross-domain leakage metric; forbidden references and layer violations are not semantic substitutes.",
+                ["AEG-ARCH-R6"] = "No file-scope controller business-logic density producer is registered yet.",
+                ["AEG-ARCH-R9"] = "The current cohesion evaluator emits structural counts and ratios, not a validated layer-cohesion index.",
+                ["AEG-ARCH-R10"] = "The security evaluator emits evidence counts but no calibrated SecurityComplianceIndex; a score must not be invented from heterogeneous findings.",
+                ["AEG-ARCH-R12"] = "NodeEvaluator does not currently emit a file-scope NodeCouplingIndex.",
+                ["AEG-BACK-R1"] = "CohesionEvaluator emits member and method/field ratios, not a validated cohesion index.",
+                ["AEG-DEPS-R1"] = "PackageVersionEvaluator does not perform registry-backed outdated-version comparisons, so OutdatedPackageRatio is unavailable.",
+                ["AEG-DEPS-R2"] = "PackageVersionEvaluator does not produce a validated dependency-freshness metric.",
+                ["AEG-DEPS-R3"] = "UnusedReferenceEvaluator does not establish actual code usage; a manifest parse is not proof that a reference is unused.",
+                ["AEG-DEPS-R4"] = "PackageVersionEvaluator does not emit a comparable major-version drift metric.",
+                ["AEG-DES-DEC002"] = "DecoratorPatternEvaluator does not currently measure decorator self-reference; structural delegation signals are not a substitute.",
+                ["AEG-DES-REPO002"] = "RepositoryPatternEvaluator's persistence/transport indicators include legitimate repository behavior and do not prove prohibited external I/O.",
+                ["AEG-DES-FACR002"] = "FactoryPatternEvaluator measures instantiation inside factory candidates, where construction is expected; it does not measure direct construction outside a factory boundary.",
+                ["AEG-DES-CMD002"] = "CommandPatternEvaluator pairs command and handler names but does not measure handler overloads.",
+                ["AEG-DES-MEDI002"] = "MediatorPatternEvaluator does not resolve direct handler calls independently from service-like coupling signals.",
+                ["AEG-DES-OBS002"] = "ObserverPatternEvaluator does not emit a file-scope observer coupling index.",
+                ["AEG-DES-SING002"] = "SingletonPatternEvaluator does not currently measure global-state usage.",
+                ["AEG-PERF-R3"] = "No runtime allocation profiler is integrated; static lexical analysis cannot claim a memory allocation rate.",
+                ["AEG-TXN-R2"] = "ArchitecturalTransactionEvaluator does not emit a dedicated data-access hygiene index.",
+                ["AEG-TXN-R3"] = "ArchitecturalTransactionEvaluator does not measure connection-pool abuse.",
+                ["AEG-TXN-R4"] = "ArchitecturalTransactionEvaluator does not prove uncommitted transactions from its current static evidence."
+            };
+
     private static readonly IReadOnlyDictionary<string, FrontendScope>
         FrontendRuleScopes =
             new Dictionary<string, FrontendScope>(
@@ -44,6 +144,17 @@ internal static class ArchitectureRuleMetricContracts
                 // Applies to supported frontend technologies generally.
                 ["AEG-FRONT-R11"] = FrontendScope.CrossFramework
             };
+
+    public static string? GetProducerContractDisposition(string ruleId)
+    {
+        if (RuleProducerContracts.ContainsKey(ruleId))
+            return null;
+
+        if (UnsupportedRuleProducerContracts.TryGetValue(ruleId, out var reason))
+            return reason;
+
+        return $"No producer-to-rule contract is registered for rule '{ruleId}'.";
+    }
 
     /// <summary>
     /// Resolves a rule's declared metric key.
@@ -110,6 +221,12 @@ internal static class ArchitectureRuleMetricContracts
 
         reason = string.Empty;
 
+        if (IsCSharpOnlyNamingRule(rule.Id) && !HasCSharpEvidence(context))
+        {
+            reason = $"Rule '{rule.Id}' applies only when the repository contains C# field/property declarations.";
+            return false;
+        }
+
         if (!FrontendRuleScopes.TryGetValue(rule.Id, out var targetScope))
             return true;
 
@@ -132,23 +249,29 @@ internal static class ArchitectureRuleMetricContracts
             .Distinct()
             .ToArray();
 
+        // The repository context aggregates framework evidence discovered
+        // from project scopes. In a multi-module repository, retain each
+        // detected family independently; do not make every frontend ruleset
+        // eligible merely because the repository contains multiple modules.
+        // Individual facts are still checked against their own framework below.
+
         // No recognized family means applicability remains unknown.
         if (detectedFamilies.Length == 0)
             return true;
 
-        // R11 has no separate metric key, so it is only a fallback for Razor
-        // files, whose ruleset has no dedicated complexity rule. In a mixed
-        // repository it remains enabled when Razor is one of the detected
-        // families; per-file applicability below prevents cross-framework reuse.
+        // R11 is the shared complexity rule for React and Razor files, which
+        // have no dedicated complexity rule in this ruleset. Angular and Blazor
+        // use their dedicated rules; per-file applicability prevents metric reuse.
         if (targetScope == FrontendScope.CrossFramework)
         {
-            if (detectedFamilies.Contains(FrontendScope.Razor))
+            if (detectedFamilies.Any(family =>
+                    family is FrontendScope.Razor or FrontendScope.React))
+            {
                 return true;
+            }
 
             var onlyDedicatedFamilies = detectedFamilies.All(family =>
-                family is FrontendScope.Angular
-                    or FrontendScope.React
-                    or FrontendScope.Blazor);
+                family is FrontendScope.Angular or FrontendScope.Blazor);
 
             if (onlyDedicatedFamilies)
             {
@@ -199,6 +322,52 @@ internal static class ArchitectureRuleMetricContracts
 
         reason = string.Empty;
 
+        if (UnsupportedRuleProducerContracts.TryGetValue(rule.Id, out var unsupportedReason))
+        {
+            reason = $"Rule '{rule.Id}' is explicitly unsupported: {unsupportedReason}";
+            return false;
+        }
+
+        if (!RuleProducerContracts.TryGetValue(rule.Id, out var allowedProducers))
+        {
+            reason = $"Rule '{rule.Id}' has no producer contract; metric evidence is not eligible.";
+            return false;
+        }
+
+        if (!allowedProducers.Contains(fact.Source, StringComparer.OrdinalIgnoreCase))
+        {
+            reason =
+                $"Rule '{rule.Id}' requires evidence from [{string.Join(", ", allowedProducers)}], " +
+                $"but fact producer '{fact.Source}' is not a declared producer for this rule.";
+            return false;
+        }
+
+        if (IsCSharpOnlyNamingRule(rule.Id))
+        {
+            var language = fact.Metadata?.GetValueOrDefault("Language");
+            if (!string.Equals(language, "C#", StringComparison.OrdinalIgnoreCase))
+            {
+                reason = $"Rule '{rule.Id}' applies only to C# field/property declarations.";
+                return false;
+            }
+        }
+
+        var declarationCountKey = GetNamingDeclarationCountKey(rule.Id);
+        if (declarationCountKey is not null
+            && fact.Metadata is not null
+            && fact.Metadata.TryGetValue("EvaluationStatus", out var evaluationStatus)
+            && (evaluationStatus is "Evaluated" or "NoDeclarations")
+            && fact.Metadata.TryGetValue(declarationCountKey, out var countText)
+            && int.TryParse(countText, out var declarationCount)
+            && declarationCount == 0)
+        {
+            reason = $"Rule '{rule.Id}' is not applicable because this file contains no declarations of the required kind.";
+            return false;
+        }
+
+        if (IsCSharpOnlyNamingRule(rule.Id))
+            return true;
+
         if (!FrontendRuleScopes.TryGetValue(rule.Id, out var targetScope))
             return true;
 
@@ -226,7 +395,7 @@ internal static class ArchitectureRuleMetricContracts
 
         var applies = targetScope switch
         {
-            FrontendScope.CrossFramework => family.Value == FrontendScope.Razor,
+            FrontendScope.CrossFramework => family.Value is FrontendScope.Razor or FrontendScope.React,
             _ => family.Value == targetScope
         };
 
@@ -241,6 +410,25 @@ internal static class ArchitectureRuleMetricContracts
 
         return false;
     }
+
+    private static bool HasCSharpEvidence(ProjectArchitectureContext context) =>
+        string.Equals(context.Language, "C#", StringComparison.OrdinalIgnoreCase)
+        || context.Modules.Any(module =>
+            module.Languages.Any(language =>
+                string.Equals(language, "C#", StringComparison.OrdinalIgnoreCase)));
+
+    private static bool IsCSharpOnlyNamingRule(string ruleId) =>
+        ruleId.Equals("AEG-NAM-R8", StringComparison.OrdinalIgnoreCase)
+        || ruleId.Equals("AEG-NAM-R9", StringComparison.OrdinalIgnoreCase);
+
+    private static string? GetNamingDeclarationCountKey(string ruleId) =>
+        ruleId.ToUpperInvariant() switch
+        {
+            "AEG-NAM-R7" => "ConstantsAnalyzed",
+            "AEG-NAM-R8" => "FieldsAnalyzed",
+            "AEG-NAM-R9" => "PropertiesAnalyzed",
+            _ => null
+        };
 
     private static FrontendScope? ResolveFrontendFamily(string framework)
     {

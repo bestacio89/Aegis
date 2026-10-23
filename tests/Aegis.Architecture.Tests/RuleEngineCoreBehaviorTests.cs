@@ -175,6 +175,51 @@ public sealed class RuleEngineCoreBehaviorTests
                 && pair.Value.Contains("framework applicability", StringComparison.OrdinalIgnoreCase));
     }
 
+
+
+    [Fact]
+    public void Every_registered_rule_has_an_explicit_producer_contract_or_unsupported_disposition()
+    {
+        var outcome = CreateEngine().EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            []);
+
+        Assert.Equal(76, ArchitectureRuleRegistry.All.Count);
+        Assert.Equal(23, outcome.Stats.RulesUnsupported);
+        Assert.Equal(51, outcome.Stats.RulesApplicable);
+        Assert.Equal(74, outcome.Stats.NotEvaluatedReasons.Count);
+        Assert.Equal(2, outcome.Stats.RulesNotApplicable.Count);
+
+        foreach (var rule in ArchitectureRuleRegistry.All)
+        {
+            if (outcome.Stats.NotApplicableReasons.ContainsKey(rule.Id))
+                continue;
+
+            var reason = outcome.Stats.NotEvaluatedReasons[rule.Id];
+            Assert.DoesNotContain(
+                "No producer-to-rule contract is registered",
+                reason,
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void EvaluateDetailed_reports_pattern_rules_without_producers_as_explicitly_unsupported()
+    {
+        var outcome = CreateEngine().EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            []);
+
+        Assert.Contains(
+            "no dedicated pattern-circular-reference producer",
+            outcome.Stats.NotEvaluatedReasons["AEG-DES-CIRC001"],
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "no dedicated pattern-overuse producer",
+            outcome.Stats.NotEvaluatedReasons["AEG-DES-OVER001"],
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void EvaluateDetailed_rejects_ambiguous_case_insensitive_metric_matches()
     {
@@ -187,7 +232,7 @@ public sealed class RuleEngineCoreBehaviorTests
             [rule.MetricKey.ToUpperInvariant()] = 1
         };
 
-        var fact = new ArchitectureEvaluatorResult("ArchitecturalEvaluator", "SampleProject")
+        var fact = new ArchitectureEvaluatorResult("CircularDependencyEvaluator", "SampleProject")
         {
             Category = "Architecture",
             Metrics = metrics,
@@ -205,6 +250,38 @@ public sealed class RuleEngineCoreBehaviorTests
             outcome.Evaluations,
             evaluation => evaluation.RuleId == rule.Id);
         Assert.Contains(rule.Id, outcome.Stats.RulesNotEvaluated);
+    }
+
+
+    [Fact]
+    public void EvaluateDetailed_does_not_allow_an_unrelated_producer_to_satisfy_a_rule()
+    {
+        var rule = ArchitectureRuleRegistry.GetById("AEG-BACK-R2");
+        Assert.NotNull(rule);
+
+        var unrelatedFact = new ArchitectureEvaluatorResult("PerformanceEvaluator", "Widget.cs")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                [rule!.MetricKey] = 99
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "src/Widget.cs"
+            }
+        };
+
+        var outcome = CreateEngine().EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [unrelatedFact]);
+
+        Assert.DoesNotContain(outcome.Evaluations, evaluation => evaluation.RuleId == rule.Id);
+        Assert.DoesNotContain(outcome.Results, result => result.RuleId == rule.Id);
+        Assert.Contains(rule.Id, outcome.Stats.RulesNotEvaluated);
+        Assert.Contains(outcome.Stats.NotEvaluatedReasons, pair =>
+            pair.Key == rule.Id
+            && pair.Value.Contains("producer", StringComparison.OrdinalIgnoreCase));
     }
 
     private static ArchitectureEvaluatorResult FrontendFact(
@@ -229,7 +306,7 @@ public sealed class RuleEngineCoreBehaviorTests
         new(NullLogger<RuleEngineCore>.Instance, new AegisArchitecturePolicy());
 
     private static ArchitectureEvaluatorResult ProjectFact(string target, double circularDependencyCount) =>
-        new("ArchitecturalEvaluator", target)
+        new("CircularDependencyEvaluator", target)
         {
             Category = "Architecture",
             Metrics = new Dictionary<string, double>

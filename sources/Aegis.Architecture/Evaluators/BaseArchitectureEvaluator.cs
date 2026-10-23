@@ -1,3 +1,4 @@
+using Aegis.Architecture.Analysis.Detectors;
 ﻿
 using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Enums;
@@ -148,8 +149,30 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                         $"Evaluator '{Name}' returned a null result.");
                 }
 
+                result.Source = Name;
                 result.WeightFactor = WeightFactor;
                 result.WasEnabled = true;
+                result.ProjectName ??= context.ProjectName;
+                result.Language ??= context.Language;
+
+                // Framework evidence is attached to each file fact independently.
+                // Do not copy a mixed repository's primary framework onto every
+                // file: Razor, Unity and backend files can coexist in one scan.
+                var evidencePath = result.Metadata?.GetValueOrDefault(FilePathMetadataKey)
+                    ?? result.File;
+                if (!string.IsNullOrWhiteSpace(evidencePath))
+                {
+                    var framework = ResolveFrameworkForFile(
+                        evidencePath,
+                        projectPath,
+                        context);
+                    if (!string.IsNullOrWhiteSpace(framework))
+                    {
+                        result.Metadata ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        result.Metadata["Framework"] = framework;
+                        result.Framework = framework;
+                    }
+                }
 
                 // Infer file scope only when a real file-path metadata entry
                 // exists. Do not infer scope from Target: it may identify a
@@ -193,6 +216,143 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         }
     }
 
+    protected static string? ResolveFrameworkForFile(
+        string filePath,
+        string projectPath,
+        ProjectArchitectureContext context)
+    {
+        if (filePath.EndsWith(".razor.cs", StringComparison.OrdinalIgnoreCase))
+            return "Blazor";
+
+        var extension = Path.GetExtension(filePath);
+        if (extension.Equals(".razor", StringComparison.OrdinalIgnoreCase))
+            return "Blazor";
+        if (extension.Equals(".cshtml", StringComparison.OrdinalIgnoreCase))
+            return "Razor";
+        if (extension.Equals(".tsx", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".jsx", StringComparison.OrdinalIgnoreCase))
+        {
+            return context.DetectedFrameworks.FirstOrDefault(framework =>
+                framework.Contains("React", StringComparison.OrdinalIgnoreCase));
+        }
+        if (extension.Equals(".ts", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".html", StringComparison.OrdinalIgnoreCase))
+        {
+            return context.DetectedFrameworks.FirstOrDefault(framework =>
+                framework.Contains("Angular", StringComparison.OrdinalIgnoreCase)
+                || framework.Contains("React", StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (IsWithinUnityProject(filePath, projectPath))
+        {
+            // A repository can contain Unity under a nested directory such as
+            // sources/client. Detect the nearest Unity root, not only Assets
+            // directly beneath the repository-level scan root.
+            return "Unity";
+        }
+
+        // Use the closest project file when possible; this is more precise than
+        // inheriting the framework selected for the repository root.
+        try
+        {
+            var directory = Directory.Exists(filePath)
+                ? filePath
+                : Path.GetDirectoryName(Path.GetFullPath(filePath));
+            var boundary = Path.GetFullPath(projectPath);
+            while (!string.IsNullOrWhiteSpace(directory))
+            {
+                var projectFile = Directory.EnumerateFiles(directory, "*.csproj", SearchOption.TopDirectoryOnly)
+                    .FirstOrDefault();
+                if (projectFile is not null)
+                {
+                    var document = System.Xml.Linq.XDocument.Load(projectFile);
+                    var sdk = document.Root?.Attribute("Sdk")?.Value ?? string.Empty;
+                    if (sdk.Contains("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase))
+                        return "ASP.NET Core";
+
+                    var packageNames = document.Descendants("PackageReference")
+                        .Select(reference => reference.Attribute("Include")?.Value
+                            ?? reference.Attribute("Update")?.Value ?? string.Empty)
+                        .ToArray();
+                    if (packageNames.Any(name => name.Contains("Blazor", StringComparison.OrdinalIgnoreCase)))
+                        return "Blazor";
+                    return ".NET";
+                }
+
+                if (string.Equals(directory.TrimEnd(Path.DirectorySeparatorChar), boundary.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                    break;
+
+                var parent = Directory.GetParent(directory)?.FullName;
+                if (parent is null || !parent.StartsWith(boundary, StringComparison.OrdinalIgnoreCase))
+                    break;
+                directory = parent;
+            }
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or System.Xml.XmlException
+            or ArgumentException
+            or NotSupportedException)
+        {
+            // Framework detection is best-effort; a read failure must not
+            // crash an otherwise valid evaluator run.
+        }
+
+        return context.Framework;
+    }
+
+    private static bool IsWithinUnityProject(string filePath, string projectPath)
+    {
+        try
+        {
+            var boundary = Path.GetFullPath(projectPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var directory = Path.GetDirectoryName(Path.GetFullPath(filePath));
+
+            while (!string.IsNullOrWhiteSpace(directory))
+            {
+                if (Path.GetFileName(directory).Equals(
+                        "Assets",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    var unityRoot = Directory.GetParent(directory)?.FullName;
+                    if (unityRoot is not null
+                        && Directory.Exists(Path.Combine(unityRoot, "Assets"))
+                        && (Directory.Exists(Path.Combine(unityRoot, "ProjectSettings"))
+                            || Directory.Exists(Path.Combine(unityRoot, "Packages"))))
+                    {
+                        return true;
+                    }
+                }
+
+                var normalizedDirectory = directory.TrimEnd(
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar);
+                if (string.Equals(normalizedDirectory, boundary, StringComparison.OrdinalIgnoreCase))
+                    break;
+
+                var parent = Directory.GetParent(directory)?.FullName;
+                if (parent is null
+                    || !parent.StartsWith(boundary + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                directory = parent;
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or ArgumentException
+                or NotSupportedException)
+        {
+            // Framework attribution is best-effort; failed probing is not a scan failure.
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Performs the evaluator-specific analysis.
     /// Implementations should observe the cancellation token during long scans.
@@ -218,19 +378,177 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             return [];
         }
 
-        return Directory
-            .EnumerateFiles(
-                projectPath,
-                "*.*",
-                SearchOption.AllDirectories)
+        return EnumerateGovernedFiles(projectPath)
             .Where(file => extensions.Any(extension =>
                 !string.IsNullOrWhiteSpace(extension)
                 && file.EndsWith(
                     extension,
                     StringComparison.OrdinalIgnoreCase)))
-            .Where(file => !IsExcludedDir(file))
-            .Where(IsApplicationCode)
+            .Where(file => IsApplicationCode(file, projectPath))
             .ToList();
+    }
+
+    private static List<string> EnumerateGovernedFiles(string rootPath)
+    {
+        var files = new List<string>();
+        var pending = new Stack<string>();
+        pending.Push(Path.GetFullPath(rootPath));
+
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            if (FileExclusions.IsExcluded(directory) || IsExcludedDir(directory))
+                continue;
+
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(
+                             directory,
+                             "*",
+                             SearchOption.TopDirectoryOnly))
+                {
+                    if (!FileExclusions.IsExcluded(file)
+                        && !IsExcludedDir(file)
+                        && IsGovernanceSource(file))
+                    {
+                        files.Add(file);
+                    }
+                }
+
+                foreach (var child in Directory.EnumerateDirectories(
+                             directory,
+                             "*",
+                             SearchOption.TopDirectoryOnly))
+                {
+                    if (FileExclusions.IsExcluded(child) || IsExcludedDir(child))
+                        continue;
+
+                    try
+                    {
+                        if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
+                            continue;
+                    }
+                    catch (IOException)
+                    {
+                        continue;
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        continue;
+                    }
+
+                    pending.Push(child);
+                }
+            }
+            catch (IOException)
+            {
+                // Preserve evidence from readable siblings when a subtree is unavailable.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // An unreadable subtree is not treated as compliant evidence.
+            }
+        }
+
+        return files;
+    }
+
+    private static bool IsUnityTempPath(string path)
+    {
+        var current = Directory.Exists(path)
+            ? Path.GetFullPath(path)
+            : Path.GetDirectoryName(Path.GetFullPath(path));
+
+        while (!string.IsNullOrWhiteSpace(current))
+        {
+            if (Path.GetFileName(current).Equals(
+                    "Temp",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var root = Directory.GetParent(current)?.FullName;
+                return root is not null
+                    && Directory.Exists(Path.Combine(root, "Assets"))
+                    && (Directory.Exists(Path.Combine(root, "ProjectSettings"))
+                        || Directory.Exists(Path.Combine(root, "Packages")));
+            }
+
+            current = Directory.GetParent(current)?.FullName;
+        }
+
+        return false;
+    }
+
+    private static bool IsTextMeshProExamplePath(string path)
+    {
+        var segments = path.Replace(
+                Path.AltDirectorySeparatorChar,
+                Path.DirectorySeparatorChar)
+            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+
+        var hasTextMeshProDirectory = segments.Any(segment =>
+            segment.Equals("TextMesh Pro", StringComparison.OrdinalIgnoreCase)
+            || segment.Equals("TextMeshPro", StringComparison.OrdinalIgnoreCase));
+        var hasExamplesDirectory = segments.Any(segment =>
+            segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase));
+
+        return hasTextMeshProDirectory && hasExamplesDirectory;
+    }
+
+    private static bool IsGovernanceSource(string file)
+    {
+        var normalized = file.Replace(
+            Path.AltDirectorySeparatorChar,
+            Path.DirectorySeparatorChar);
+
+        var segments = normalized.Split(
+            Path.DirectorySeparatorChar,
+            StringSplitOptions.RemoveEmptyEntries);
+
+        // Treat vendored libraries and tutorial/sample trees as external code,
+        // not as first-party architectural obligations. A future policy option
+        // can opt these paths back in when a team intentionally governs them.
+        if (IsTextMeshProExamplePath(file)
+            || IsUnityTempPath(file)
+            || segments.Any(segment =>
+                segment.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Third-Party", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("vendor", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("node_modules", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("PackageCache", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Logs", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("obj", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("bin", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals(".git", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("TestResults", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("coverage", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("dist", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("build", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var name = Path.GetFileName(file);
+        return !name.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".AssemblyInfo.cs", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsApplicationCode(string file, string projectPath)
+    {
+        // A discovered project is its own source boundary. Its files do not
+        // need to repeat repository-level directory names such as "back",
+        // "front", or "Assets" to be eligible for analysis.
+        if (Directory.EnumerateFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly).Any()
+            || File.Exists(Path.Combine(projectPath, "package.json"))
+            || File.Exists(Path.Combine(projectPath, "pom.xml"))
+            || Directory.Exists(Path.Combine(projectPath, "Assets")))
+        {
+            return true;
+        }
+
+        return IsApplicationCode(file);
     }
 
     /// <summary>
@@ -245,7 +563,6 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
 
         var ignoredSegments = new[]
         {
-            $"{Path.DirectorySeparatorChar}client{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}Library{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}Temp{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}Logs{Path.DirectorySeparatorChar}",
@@ -267,9 +584,13 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             Path.DirectorySeparatorChar,
             StringSplitOptions.RemoveEmptyEntries);
 
+        // Preserve conventional backend/frontend roots and Unity source trees.
+        // Unity projects are often checked in under a folder named "client";
+        // that folder name alone is not evidence that source should be ignored.
         return pathParts.Any(part =>
             part.Equals("back", StringComparison.OrdinalIgnoreCase)
-            || part.Equals("front", StringComparison.OrdinalIgnoreCase));
+            || part.Equals("front", StringComparison.OrdinalIgnoreCase)
+            || part.Equals("Assets", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

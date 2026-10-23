@@ -69,9 +69,19 @@ public sealed class ArchitecturalPerformanceEvaluator
 
     private static readonly Regex BlockingRegex =
         new(
-            @"\b(Thread\.Sleep|Task\.Wait|\.Result|time\.sleep|join\(\))\b",
+            @"\b(?:Thread\.Sleep|Task\.Wait|[A-Za-z_][A-Za-z0-9_]*\.Wait|time\.sleep|Thread\.Join)\s*\(",
             RegexOptions.IgnoreCase |
             RegexOptions.Compiled);
+
+    // .Result also names ordinary status/result objects. Do not count an
+    // awaited result access as synchronous blocking.
+    private static readonly Regex SynchronousResultRegex = new(
+        @"(?m)^(?![^\r\n]*\bawait\b)[^\r\n]*\.Result\s*(?:;|,|\)|$)",
+        RegexOptions.Compiled);
+
+    private static readonly Regex NonCodeRegex = new(
+        """"(?s)(?:\x22{3}.*?\x22{3}|\x27{3}.*?\x27{3}|\x60(?:\\.|[^\x60\\])*\x60|@?"(?:""|\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|//[^\r\n]*|/\*.*?\*/|\#[^\r\n]*)"""",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
 
 
@@ -138,8 +148,13 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
 
-        var files =
-            EnumerateSourceFiles(projectPath);
+        var files = ResolveSourceFiles(
+            projectPath,
+            ".cs",
+            ".java",
+            ".py",
+            ".ts",
+            ".js");
 
 
 
@@ -203,9 +218,9 @@ public sealed class ArchitecturalPerformanceEvaluator
         string file,
         string content)
     {
-        var score =
-            AnalyzePerformanceSignals(
-                content);
+        var language = DetectLanguage(file);
+        var sanitized = MaskNonCode(content);
+        var score = AnalyzePerformanceSignals(sanitized);
 
 
 
@@ -230,6 +245,11 @@ public sealed class ArchitecturalPerformanceEvaluator
                 ["IOMaturityScore"] =
                     score.IO * 100,
 
+                ["BlockingIOCount"] =
+                    BlockingRegex.Matches(sanitized).Count +
+                    SynchronousResultRegex.Matches(sanitized).Count +
+                    SyncIORegex.Matches(sanitized).Count,
+
                 ["PerformanceHealthIndex"] =
                     score.Health
             },
@@ -243,15 +263,35 @@ public sealed class ArchitecturalPerformanceEvaluator
                     file,
 
                 ["Language"] =
-                    DetectLanguage(file),
+                    language,
 
                 ["Evaluator"] =
-                    Name
+                    Name,
+
+                ["EvaluationScope"] =
+                    BaseArchitectureEvaluator.FileScope
             }
         };
     }
 
 
+
+    private static string MaskNonCode(string content)
+    {
+        return NonCodeRegex.Replace(content, match =>
+            string.Create(
+                match.Length,
+                match.Value,
+                static (span, value) =>
+                {
+                    for (var index = 0; index < value.Length; index++)
+                    {
+                        span[index] = value[index] is '\r' or '\n'
+                            ? value[index]
+                            : ' ';
+                    }
+                }));
+    }
 
     private PerformanceScore AnalyzePerformanceSignals(
         string content)
@@ -394,24 +434,12 @@ public sealed class ArchitecturalPerformanceEvaluator
                 Metadata =
                 {
                     ["Evaluator"] =
-                        "PerformanceEvaluator"
+                        "PerformanceEvaluator",
+
+                    ["EvaluationScope"] =
+                        BaseArchitectureEvaluator.ProjectScope
                 }
             });
-    }
-
-
-
-    private static List<string> EnumerateSourceFiles(
-        string projectPath)
-    {
-        return Directory
-            .EnumerateFiles(
-                projectPath,
-                "*.*",
-                SearchOption.AllDirectories)
-            .Where(IsSupportedFile)
-            .Where(f => !IsExcludedDir(f))
-            .ToList();
     }
 
 

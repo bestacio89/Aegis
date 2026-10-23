@@ -29,7 +29,12 @@ public sealed class FrontendAnalyzerContractTests
                 {
                   path: "front/src/app.component.ts",
                   components: [
-                    { name: "AppComponent", standalone: true }
+                    {
+                      name: "AppComponent",
+                      selector: "app-root",
+                      standalone: true,
+                      cyclomaticComplexity: 2
+                    }
                   ],
                   modules: []
                 }
@@ -52,6 +57,8 @@ public sealed class FrontendAnalyzerContractTests
 
         Assert.Equal(1, component.Metrics["AngularComponentCount"]);
         Assert.Equal(0, component.Metrics["AngularModuleCount"]);
+        Assert.Equal(100, component.Metrics["SelectorScore"]);
+        Assert.Equal(90, component.Metrics["ComplexityScore"]);
         Assert.Equal("AppComponent", component.Metadata["ComponentNames"]);
         Assert.Equal("1", component.Metadata["StandaloneComponentCount"]);
         Assert.Equal("False", component.Metadata["SemanticAnalysisPerformed"]);
@@ -59,6 +66,49 @@ public sealed class FrontendAnalyzerContractTests
             result.Metadata.GetValueOrDefault("EvaluationScope") == "Project"
             && result.Metrics.GetValueOrDefault("AngularComponentCount") == 1);
         AssertAllMetricsAreFinite(results);
+    }
+
+    [Fact]
+    public async Task AngularEvaluator_scores_noncompliant_selector_and_complex_component()
+    {
+        using var project = new TemporaryProject();
+        project.Write("src/orders.component.ts", "export class OrdersComponent {}");
+        var analyzerPath = project.Write(
+            "frontend-analyzer.mjs",
+            """
+            console.log(JSON.stringify({
+              status: "completed",
+              filesAnalyzed: 1,
+              files: [
+                {
+                  path: "src/orders.component.ts",
+                  components: [
+                    {
+                      name: "OrdersComponent",
+                      selector: "widget-root",
+                      standalone: true,
+                      cyclomaticComplexity: 8
+                    }
+                  ],
+                  modules: []
+                }
+              ]
+            }));
+            """);
+
+        using var environment = new FrontendAnalyzerEnvironment(analyzerPath);
+        var evaluator = new AngularEvaluator(
+            NullLogger<AngularEvaluator>.Instance,
+            Options.Create(new AegisArchitecturePolicy()));
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project, "TypeScript", "Angular"))).ToArray();
+        var component = Assert.Single(results, result =>
+            result.Metadata.GetValueOrDefault("EvaluationScope") == "File");
+
+        Assert.Equal(0, component.Metrics["SelectorScore"]);
+        Assert.Equal(30, component.Metrics["ComplexityScore"]);
     }
 
     [Fact]
@@ -85,7 +135,8 @@ public sealed class FrontendAnalyzerContractTests
                   filePath: "front/src/App.tsx",
                   sourceLineCount: 4,
                   components: ["App"],
-                  hooks: ["useState"],
+                  componentTyping: [{ name: "App", propsTyped: true, cyclomaticComplexity: 1 }],
+                  hooks: [{ name: "useState", line: 2, conditionallyCalled: false }],
                   jsxElementCount: 3,
                   conditionalCount: 1,
                   syntaxDiagnostics: []
@@ -109,6 +160,9 @@ public sealed class FrontendAnalyzerContractTests
 
         Assert.Equal(1, component.Metrics["ComponentCount"]);
         Assert.Equal(1, component.Metrics["HookCount"]);
+        Assert.Equal(100, component.Metrics["HookDisciplineScore"]);
+        Assert.Equal(100, component.Metrics["TypingScore"]);
+        Assert.Equal(100, component.Metrics["ComplexityScore"]);
         Assert.Equal(3, component.Metrics["JsxElementCount"]);
         Assert.Equal(1, component.Metrics["ConditionalCount"]);
         Assert.Equal(0, component.Metrics["SyntaxDiagnosticCount"]);

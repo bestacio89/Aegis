@@ -330,6 +330,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 ["FilesWithLoggingResults"] = results.Count,
                 ["UnreadableFiles"] = failedFileCount,
                 ["AverageIntegrityScore"] = integrity,
+                ["LoggingIntegrityScore"] = integrity,
                 ["AverageStructuredLogging"] = structured,
                 ["AverageLogLevelCompliance"] = levels,
                 ["AverageLoggingNoiseScore"] = noise,

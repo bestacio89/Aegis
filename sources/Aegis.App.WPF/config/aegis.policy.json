@@ -86,38 +86,27 @@
       "EnforceLayerBoundaries": true,
 
       "AllowedDependencies": {
-        "Api": [
-          "App",
-          "Domain"
-        ],
-        "App": [
-          "Domain"
-        ],
+        "Api": ["Application", "Domain", "Infrastructure", "Contracts"],
+        "Application": ["Domain", "Contracts"],
         "Domain": [],
-        "Infrastructure": [
-          "Domain"
-        ]
+        "Infrastructure": ["Domain", "Application", "Contracts"],
+        "Contracts": [],
+        "Presentation": ["Application", "Contracts", "Client"],
+        "Consumer": ["Application", "Domain", "Infrastructure", "Contracts"],
+        "Client": ["Contracts"],
+        "Tests": ["Api", "Application", "Domain", "Infrastructure", "Contracts", "Presentation", "Consumer", "Client", "Tests"]
       },
 
       "LayerHints": {
-        "Api": [
-          "Api",
-          "Controllers"
-        ],
-        "App": [
-          "Application",
-          "Services"
-        ],
-        "Domain": [
-          "Domain",
-          "Models",
-          "Entities"
-        ],
-        "Infrastructure": [
-          "Infrastructure",
-          "Data",
-          "Persistence"
-        ]
+        "Api": ["Api", "Controllers", "CompositionRoot"],
+        "Application": ["Application", "Services", "Handlers", "UseCases"],
+        "Domain": ["Domain", "Core", "Entities", "Models"],
+        "Infrastructure": ["Infrastructure", "Infra", "Data", "Persistence", "Repository"],
+        "Contracts": ["Contracts", "Abstractions", "Dtos", "Interfaces"],
+        "Presentation": ["Admin", "Presentation", "Web", "Ui", "Front"],
+        "Consumer": ["Consumer", "Worker", "Background", "Jobs"],
+        "Client": ["Client", "ClientHttp", "Unity"],
+        "Tests": ["Test", "Tests", "Testing"]
       },
 
       "EnforcementByLanguage": {

@@ -1,4 +1,5 @@
 using Aegis.Architecture.Aggregation;
+using Aegis.Architecture.Analysis;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Architecture.Scoring;
 using Aegis.Shared.Architecture.Models;
@@ -16,10 +17,10 @@ public sealed class RuleEngineOrchestrationTests
     {
         using var directory = new TemporaryDirectory();
         var successful = new FixtureEvaluator(
-            "HealthyEvaluator",
+            "CircularDependencyEvaluator",
             (_, _) => Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(
             [
-                new ArchitectureEvaluatorResult("HealthyEvaluator", "SampleProject")
+                new ArchitectureEvaluatorResult("CircularDependencyEvaluator", "SampleProject")
                 {
                     Category = "Architecture",
                     Metrics = new Dictionary<string, double>
@@ -46,13 +47,97 @@ public sealed class RuleEngineOrchestrationTests
                 Language = "C#"
             });
 
-        Assert.Contains(report.Facts, fact => fact.Source == "HealthyEvaluator");
+        Assert.Contains(report.Facts, fact => fact.Source == "CircularDependencyEvaluator");
         Assert.Contains(report.Diagnostics, diagnostic =>
             diagnostic.Code == "EvaluatorFailed"
             && diagnostic.Component == "FailingEvaluator"
             && diagnostic.AffectsCoverage);
         Assert.Contains(report.Results, result => result.RuleId == "AEG-ARCH-R1");
         Assert.Equal(1, report.ChecksPerformed);
+    }
+
+
+    [Fact]
+    public async Task RunAsync_executes_framework_specific_evaluators_only_for_matching_project_scopes()
+    {
+        using var directory = new TemporaryDirectory();
+        var backendPath = Path.Combine(directory.Path, "Backend");
+        var blazorPath = Path.Combine(directory.Path, "Blazor");
+        Directory.CreateDirectory(backendPath);
+        Directory.CreateDirectory(blazorPath);
+
+        File.WriteAllText(Path.Combine(backendPath, "Backend.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(backendPath, "Program.cs"), "public class Program { }");
+        File.WriteAllText(Path.Combine(blazorPath, "Blazor.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(blazorPath, "Program.cs"), "public class Program { }");
+        File.WriteAllText(Path.Combine(blazorPath, "Home.razor"), "@page \"/\"\n<h1>Home</h1>");
+
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(directory.Path);
+        var evaluatedPaths = new List<string>();
+        var evaluator = new FixtureEvaluator(
+            "BlazorOnlyEvaluator",
+            (path, _) =>
+            {
+                evaluatedPaths.Add(path);
+                return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>([]);
+            },
+            supportedLanguages: ["C#"],
+            supportedFrameworks: ["Blazor"]);
+
+        await CreateEngine([evaluator]).RunAsync(directory.Path, context);
+
+        Assert.Contains(evaluatedPaths, path =>
+            string.Equals(path, blazorPath, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(evaluatedPaths, path =>
+            string.Equals(path, backendPath, StringComparison.OrdinalIgnoreCase));
+    }
+
+
+    [Fact]
+    public async Task RunAsync_executes_graph_evaluators_once_at_repository_scope()
+    {
+        using var directory = new TemporaryDirectory();
+        var backendPath = Path.Combine(directory.Path, "Backend");
+        var frontendPath = Path.Combine(directory.Path, "Frontend");
+        Directory.CreateDirectory(backendPath);
+        Directory.CreateDirectory(frontendPath);
+
+        File.WriteAllText(Path.Combine(backendPath, "Backend.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(backendPath, "Program.cs"), "public class Program { }");
+        File.WriteAllText(Path.Combine(frontendPath, "Frontend.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(frontendPath, "Program.cs"), "public class FrontendProgram { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+        var evaluatedPaths = new List<string>();
+        var evaluator = new FixtureEvaluator(
+            "CircularDependencyEvaluator",
+            (path, _) =>
+            {
+                evaluatedPaths.Add(path);
+                return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>([]);
+            },
+            supportedLanguages: ["C#"],
+            supportedFrameworks: ["ASP.NET Core"]);
+
+        await CreateEngine([evaluator]).RunAsync(directory.Path, context);
+
+        Assert.Equal(new[] { directory.Path }, evaluatedPaths);
     }
 
     [Fact]
@@ -149,15 +234,19 @@ public sealed class RuleEngineOrchestrationTests
         public FixtureEvaluator(
             string name,
             Func<string, ProjectArchitectureContext,
-                Task<IEnumerable<ArchitectureEvaluatorResult>>> evaluate)
+                Task<IEnumerable<ArchitectureEvaluatorResult>>> evaluate,
+            string[]? supportedLanguages = null,
+            string[]? supportedFrameworks = null)
         {
             Name = name;
             _evaluate = evaluate;
+            SupportedLanguages = supportedLanguages ?? ["*"];
+            SupportedFrameworks = supportedFrameworks ?? ["*"];
         }
 
         public string Name { get; }
-        public string[] SupportedLanguages { get; } = ["*"];
-        public string[] SupportedFrameworks { get; } = ["*"];
+        public string[] SupportedLanguages { get; }
+        public string[] SupportedFrameworks { get; }
         public bool IsEnabled { get; set; } = true;
         public double WeightFactor { get; set; } = 1.0;
 

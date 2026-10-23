@@ -1,3 +1,4 @@
+using Aegis.Architecture.Analysis.Detectors;
 ﻿
 using System.Text.RegularExpressions;
 
@@ -49,7 +50,13 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             "__pycache__",
             ".venv",
             "venv",
-            "TestResults"
+            "TestResults",
+            "PackageCache",
+            "Temp",
+            "Logs",
+            "Generated",
+            "ThirdParty",
+            "Third-Party"
         };
 
     // Interfaces are scored separately and must not also inflate the type score.
@@ -324,11 +331,12 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             }
 
             var language = DetectLanguage(file);
+            // Resolve framework from the file's own project and path. A mixed
+            // repository may contain ASP.NET, Blazor and Unity C# simultaneously.
+            var fileFramework = ResolveFrameworkForFile(file, projectPath, Context);
             var fileContext = new ProjectArchitectureContext(
                 language,
-                string.Equals(language, Context.Language, StringComparison.OrdinalIgnoreCase)
-                    ? Context.Framework
-                    : null,
+                fileFramework,
                 Context.Confidence);
 
             var convention = _resolver.Resolve(fileContext);
@@ -341,11 +349,11 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                     fileContext.Framework,
                     token).ConfigureAwait(false);
 
-                results.Add(EvaluateCSharpFile(file, analysis, convention));
+                results.Add(EvaluateCSharpFile(file, analysis, convention, fileContext.Framework));
             }
             else
             {
-                results.Add(EvaluateFile(file, content, convention));
+                results.Add(EvaluateFile(file, content, convention, fileContext.Framework));
             }
         }
 
@@ -376,7 +384,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
     private ArchitectureEvaluatorResult EvaluateCSharpFile(
         string file,
         NamingAnalysisResult analysis,
-        INamingConventionPolicy convention)
+        INamingConventionPolicy convention,
+        string? framework)
     {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(convention);
@@ -387,6 +396,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
         result.Metadata["FileName"] = Path.GetFileName(file);
         result.Metadata["Language"] = analysis.Language;
+        result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["AnalysisMethod"] = analysis.AnalyzerId;
         result.Metadata["AnalyzerId"] = analysis.AnalyzerId;
         result.Metadata["SourceLineCount"] = analysis.SourceLineCount.ToString();
@@ -426,11 +436,19 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
         var variableNames = declarations
             .Where(declaration => declaration.Kind is
-                NamingDeclarationKind.Field
-                or NamingDeclarationKind.LocalVariable
+                NamingDeclarationKind.LocalVariable
                 or NamingDeclarationKind.Parameter)
             .Select(declaration => declaration.Name)
             .ToList();
+
+        var fieldDeclarations = declarations
+            .Where(declaration => declaration.Kind == NamingDeclarationKind.Field)
+            .ToArray();
+
+        var propertyNames = declarations
+            .Where(declaration => declaration.Kind == NamingDeclarationKind.Property)
+            .Select(declaration => declaration.Name)
+            .ToArray();
 
         var constantNames = declarations
             .Where(declaration => declaration.Kind == NamingDeclarationKind.Constant)
@@ -441,15 +459,25 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         var interfaceViolations = interfaceNames.Count(name => !convention.IsValidInterfaceName(name));
         var methodViolations = methodNames.Count(name => !convention.IsValidMethodName(name));
         var variableViolations = variableNames.Count(name => !convention.IsValidVariableName(name));
+        var fieldViolations = fieldDeclarations.Count(declaration =>
+            convention is UnityNamingConventionPolicy
+                ? !convention.IsValidVariableName(declaration.Name)
+                    && !convention.IsValidTypeName(declaration.Name)
+                : declaration.IsPublic
+                    ? !convention.IsValidTypeName(declaration.Name)
+                    : !convention.IsValidVariableName(declaration.Name));
+        var propertyViolations = propertyNames.Count(name => !convention.IsValidTypeName(name));
         var constantViolations = constantNames.Count(name => !convention.IsValidConstantName(name));
 
         var typeScore = ComputeScore(typeNames.Count, typeViolations);
         var interfaceScore = ComputeScore(interfaceNames.Length, interfaceViolations);
         var methodScore = ComputeScore(methodNames.Count, methodViolations);
         var variableScore = ComputeScore(variableNames.Count, variableViolations);
+        var fieldScore = ComputeScore(fieldDeclarations.Length, fieldViolations);
+        var propertyScore = ComputeScore(propertyNames.Length, propertyViolations);
         var constantScore = ComputeScore(constantNames.Count, constantViolations);
 
-        var fileScore = convention.IsValidFileName(Path.GetFileNameWithoutExtension(file))
+        var fileScore = convention.IsValidFileName(GetNamingFileStem(file))
             ? 100
             : 0;
 
@@ -458,28 +486,47 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             interfaceNames.Length +
             methodNames.Count +
             variableNames.Count +
+            fieldDeclarations.Length +
+            propertyNames.Length +
             constantNames.Count;
+
+        result.Metrics["FileNamingCompliance"] = fileScore;
+        result.Metrics["DeclarationsAnalyzed"] = declarationCount;
+
+        // Partial syntax analysis can discover declarations while missing or
+        // misclassifying others. Never convert incomplete evidence into a score
+        // that can trigger a pass/fail rule.
+        if (!analysis.IsComplete)
+        {
+            result.Metrics["NamingEvidenceAvailable"] = 0;
+            result.Metadata["EvaluationStatus"] = analysis.Status.ToString();
+            result.Metadata["TypesDiscovered"] = typeNames.Count.ToString();
+            result.Metadata["InterfacesDiscovered"] = interfaceNames.Length.ToString();
+            result.Metadata["MethodsDiscovered"] = methodNames.Count.ToString();
+            result.Metadata["VariablesDiscovered"] = variableNames.Count.ToString();
+            result.Metadata["ConstantsDiscovered"] = constantNames.Count.ToString();
+            return result;
+        }
 
         var weightedScore = 0d;
         var activeWeight = 0d;
 
-        AddDimension(typeNames.Count, typeScore, 0.30, ref weightedScore, ref activeWeight);
-        AddDimension(interfaceNames.Length, interfaceScore, 0.15, ref weightedScore, ref activeWeight);
+        AddDimension(typeNames.Count, typeScore, 0.25, ref weightedScore, ref activeWeight);
+        AddDimension(interfaceNames.Length, interfaceScore, 0.10, ref weightedScore, ref activeWeight);
         AddDimension(methodNames.Count, methodScore, 0.20, ref weightedScore, ref activeWeight);
         AddDimension(variableNames.Count, variableScore, 0.15, ref weightedScore, ref activeWeight);
-        AddDimension(constantNames.Count, constantScore, 0.10, ref weightedScore, ref activeWeight);
+        AddDimension(fieldDeclarations.Length, fieldScore, 0.10, ref weightedScore, ref activeWeight);
+        AddDimension(propertyNames.Length, propertyScore, 0.10, ref weightedScore, ref activeWeight);
+        AddDimension(constantNames.Count, constantScore, 0.05, ref weightedScore, ref activeWeight);
 
-        weightedScore += fileScore * 0.10;
-        activeWeight += 0.10;
+        weightedScore += fileScore * 0.05;
+        activeWeight += 0.05;
 
         var compliance = declarationCount == 0
             ? 0
             : Math.Round(weightedScore / activeWeight, 2);
 
         // Emit declaration metrics only when that dimension has evidence.
-        // Zero declarations is not a zero-compliance observation.
-        if (typeNames.Count > 0)
-            // Emit declaration metrics only when that dimension has evidence.
         // Zero declarations is not a zero-compliance observation.
         if (typeNames.Count > 0)
             result.Metrics["TypeNamingCompliance"] = typeScore;
@@ -493,11 +540,15 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         if (variableNames.Count > 0)
             result.Metrics["VariableNamingCompliance"] = variableScore;
 
+        if (fieldDeclarations.Length > 0)
+            result.Metrics["FieldNamingCompliance"] = fieldScore;
+
+        if (propertyNames.Length > 0)
+            result.Metrics["PropertyNamingCompliance"] = propertyScore;
+
         if (constantNames.Count > 0)
             result.Metrics["ConstantNamingCompliance"] = constantScore;
 
-        result.Metrics["FileNamingCompliance"] = fileScore;
-        result.Metrics["DeclarationsAnalyzed"] = declarationCount;
         result.Metrics["NamingEvidenceAvailable"] = declarationCount > 0 ? 1 : 0;
 
         if (declarationCount > 0)
@@ -505,12 +556,14 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
         result.Metadata["EvaluationStatus"] = declarationCount == 0
             ? "NoDeclarations"
-            : "Evaluated";
+            : analysis.Status.ToString();
 
         result.Metadata["TypesAnalyzed"] = typeNames.Count.ToString();
         result.Metadata["InterfacesAnalyzed"] = interfaceNames.Length.ToString();
         result.Metadata["MethodsAnalyzed"] = methodNames.Count.ToString();
         result.Metadata["VariablesAnalyzed"] = variableNames.Count.ToString();
+        result.Metadata["FieldsAnalyzed"] = fieldDeclarations.Length.ToString();
+        result.Metadata["PropertiesAnalyzed"] = propertyNames.Length.ToString();
         result.Metadata["ConstantsAnalyzed"] = constantNames.Count.ToString();
 
         return result;
@@ -519,7 +572,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
     private ArchitectureEvaluatorResult EvaluateFile(
         string file,
         string content,
-        INamingConventionPolicy convention)
+        INamingConventionPolicy convention,
+        string? framework)
     {
         var result = CreateResult(
             file,
@@ -529,6 +583,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
         result.Metadata["FileName"] = Path.GetFileName(file);
         result.Metadata["Language"] = language;
+        result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["AnalysisMethod"] = "LanguageAwareDeclarationHeuristics";
 
         var analysisContent = MaskNonCode(content);
@@ -576,7 +631,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             constantViolations);
 
         var fileScore = convention.IsValidFileName(
-            Path.GetFileNameWithoutExtension(file))
+            GetNamingFileStem(file))
             ? 100
             : 0;
 
@@ -593,15 +648,16 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         var weightedScore = 0d;
         var activeWeight = 0d;
 
-        AddDimension(typeNames.Count, typeScore, 0.30, ref weightedScore, ref activeWeight);
-        AddDimension(interfaceNames.Length, interfaceScore, 0.15, ref weightedScore, ref activeWeight);
+        AddDimension(typeNames.Count, typeScore, 0.25, ref weightedScore, ref activeWeight);
+        AddDimension(interfaceNames.Length, interfaceScore, 0.10, ref weightedScore, ref activeWeight);
         AddDimension(methodNames.Count, methodScore, 0.20, ref weightedScore, ref activeWeight);
         AddDimension(variableNames.Count, variableScore, 0.15, ref weightedScore, ref activeWeight);
-        AddDimension(constantNames.Count, constantScore, 0.10, ref weightedScore, ref activeWeight);
+        AddDimension(constantNames.Count, constantScore, 0.05, ref weightedScore, ref activeWeight);
 
-        // File naming is applicable to every discovered source file.
-        weightedScore += fileScore * 0.10;
-        activeWeight += 0.10;
+        // Field/property dimensions are emitted by the declaration-aware C#
+        // analyzer only; all languages share the same dimension weights.
+        weightedScore += fileScore * 0.05;
+        activeWeight += 0.05;
 
         var compliance = declarationCount == 0
             ? 0
@@ -898,7 +954,11 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                 var name = Path.GetFileName(
                     Path.TrimEndingDirectorySeparator(directory));
 
-                if (ExcludedDirectories.Contains(name))
+                if (ExcludedDirectories.Contains(name)
+                    || FileExclusions.IsExcluded(directory)
+                    || IsTextMeshProExamplePath(directory)
+                    || (name.Equals("Library", StringComparison.OrdinalIgnoreCase)
+                        && IsUnityLibraryDirectory(directory)))
                 {
                     continue;
                 }
@@ -927,7 +987,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             {
                 files.AddRange(
                     Directory.EnumerateFiles(current, "*")
-                        .Where(IsSupportedFile));
+                        .Where(IsSupportedFile)
+                        .Where(ShouldAnalyzeSourceFile));
             }
             catch (IOException)
             {
@@ -940,6 +1001,73 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         }
 
         return files;
+    }
+
+    private static bool IsTextMeshProExamplePath(string path)
+    {
+        var segments = path.Replace(
+                Path.AltDirectorySeparatorChar,
+                Path.DirectorySeparatorChar)
+            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+
+        var hasTextMeshProDirectory = segments.Any(segment =>
+            segment.Equals("TextMesh Pro", StringComparison.OrdinalIgnoreCase)
+            || segment.Equals("TextMeshPro", StringComparison.OrdinalIgnoreCase));
+        var hasExamplesDirectory = segments.Any(segment =>
+            segment.Equals("Examples & Extras", StringComparison.OrdinalIgnoreCase));
+
+        return hasTextMeshProDirectory && hasExamplesDirectory;
+    }
+
+    private static bool IsUnityLibraryDirectory(string directory)
+    {
+        var root = Directory.GetParent(directory)?.FullName;
+        return root is not null
+            && Directory.Exists(Path.Combine(root, "Assets"))
+            && (Directory.Exists(Path.Combine(root, "ProjectSettings"))
+                || Directory.Exists(Path.Combine(root, "Packages")));
+    }
+
+    private static string GetNamingFileStem(string file)
+    {
+        var fileName = Path.GetFileName(file);
+
+        // Blazor code-behind files follow the component's name, not the
+        // artificial compound identifier "Component.razor".
+        if (fileName.EndsWith(".razor.cs", StringComparison.OrdinalIgnoreCase))
+            return fileName[..^".razor.cs".Length];
+
+        return Path.GetFileNameWithoutExtension(fileName);
+    }
+
+    private static bool ShouldAnalyzeSourceFile(string file)
+    {
+        if (FileExclusions.IsExcluded(file))
+            return false;
+
+        var normalized = file.Replace(
+            Path.AltDirectorySeparatorChar,
+            Path.DirectorySeparatorChar);
+
+        var segments = normalized.Split(
+            Path.DirectorySeparatorChar,
+            StringSplitOptions.RemoveEmptyEntries);
+
+        // Generated artifacts and conventional third-party folders are not
+        // first-party naming-policy subjects by default. TextMesh Pro examples
+        // are excluded only when both path segments identify the vendored sample.
+        if (segments.Any(segment =>
+                segment.Equals("Generated", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("Third-Party", StringComparison.OrdinalIgnoreCase))
+            || IsTextMeshProExamplePath(file))
+            return false;
+
+        var name = Path.GetFileName(file);
+        return !name.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".AssemblyInfo.cs", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsSupportedFile(string file)

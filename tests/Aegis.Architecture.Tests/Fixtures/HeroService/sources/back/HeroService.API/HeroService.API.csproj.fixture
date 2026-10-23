@@ -1,0 +1,59 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <Import Project="../../../common.targets" />
+
+  <PropertyGroup>
+    <UserSecretsId>d6ba6873-85eb-4154-bcd5-6a49a182b334</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>..\..\..</DockerfileContext>
+    <DockerComposeProjectPath>..\..\Franz.DockerCompose.dcproj</DockerComposeProjectPath>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Controllers\NewFolder\**" />
+    <Content Remove="Controllers\NewFolder\**" />
+    <EmbeddedResource Remove="Controllers\NewFolder\**" />
+    <None Remove="Controllers\NewFolder\**" />
+    <PackageVersion Remove="Controllers\NewFolder\**" />
+  </ItemGroup>
+
+
+
+  <ItemGroup>
+    <PackageReference Include="AspNetCoreRateLimit" />
+    <PackageReference Include="Franz.Common.Hosting" />
+    <PackageReference Include="Franz.Common.Http" />
+    <PackageReference Include="Franz.Common.Http.Bootstrap" />
+    <PackageReference Include="Franz.Common.Http.Client" />
+    <PackageReference Include="Franz.Common.Http.EntityFramework" />
+    <PackageReference Include="Franz.Common.Mediator.Polly" />
+    <PackageReference Include="Franz.Common.Mediator.OpenTelemetry" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HeroService.Application\HeroService.Application.csproj" />
+    <ProjectReference Include="..\HeroService.Contracts\HeroService.Contracts.csproj" />
+    <ProjectReference Include="..\HeroService.Persistence\HeroService.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="logs\" />
+  </ItemGroup>
+
+  <Target Name="GenerateCSharpClient" AfterTargets="Build" Condition="Exists('Controllers\*.cs')">
+    <Exec Command="dotnet nswag run /variables:Configuration=$(Configuration) /variables:Platform=$(Platform) /variables:OutputPath=$(OutputPath) /variables:ProjectName=$(MSBuildProjectName) /variables:AssemblyName=$(AssemblyName) /variables:TargetFramework=$(TargetFramework) /variables:SwaggerFile=$(OutputPath)$(AssemblyName).xml /variables:CSharpClientOutput=..\Franz.ClientHTTP\Client\CSharp\$(MSBuildProjectName)Client.cs /variables:ClientNamespace=$(MSBuildProjectName).Client.CSharp /runtime:net10.0" />
+  </Target>
+
+  <Target Name="GenerateTypeScriptClient" AfterTargets="Build" Condition="Exists('Controllers\*.cs')">
+    <Exec Command="dotnet nswag run /variables:Configuration=$(Configuration) /variables:Platform=$(Platform) /variables:OutputPath=$(OutputPath) /variables:ProjectName=$(MSBuildProjectName) /variables:AssemblyName=$(AssemblyName) /variables:TargetFramework=$(TargetFramework) /variables:SwaggerFile=$(OutputPath)$(AssemblyName).xml /variables:TypeScriptClientOutput=..\Franz.ClientHTTP\Client\TypeScript\$(MSBuildProjectName)Client.ts /variables:ClientNamespace=$(MSBuildProjectName).Client.TypeScript /runtime:net10.0" />
+  </Target>
+
+</Project>

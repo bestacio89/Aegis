@@ -71,7 +71,7 @@ public static class BackendRuleset
             MetricKey = "ErrorHandlingCoverage",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = ArchitectureRuleSeverity.High,
+            Severity = ArchitectureRuleSeverity.Medium,
             Recommendation = "Add centralized exception handling and ensure try/catch coverage."
         },
 

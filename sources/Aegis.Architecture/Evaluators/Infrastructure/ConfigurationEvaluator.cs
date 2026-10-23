@@ -17,6 +17,15 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
     private const string FileScope = "File";
     private const string ProjectScope = "Project";
 
+    // Match the JSON-with-comments/trailing-commas behavior accepted by
+    // Microsoft.Extensions.Configuration for application configuration files.
+    private static readonly JsonDocumentOptions JsonOptions = new()
+    {
+        AllowTrailingCommas = true,
+        CommentHandling = JsonCommentHandling.Skip,
+        MaxDepth = 128
+    };
+
     private static readonly HashSet<string> ExcludedDirectories =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -165,7 +174,8 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
             if (assessment.SyntaxValidation == SyntaxValidationStatus.Invalid)
             {
                 diagnostics.Add(
-                    $"Configuration syntax validation failed for '{file}'.");
+                    $"Configuration syntax validation failed for '{file}': " +
+                    (assessment.SyntaxDiagnostic ?? "No parser diagnostic was provided."));
             }
 
             fileResults.Add(CreateFileResult(file, assessment));
@@ -260,10 +270,12 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 
     private FileAssessment AssessFile(string file, string content)
     {
+        var syntaxValidation = ValidateSyntax(file, content, out var syntaxDiagnostic);
         var assessment = new FileAssessment
         {
             Category = DetectCategory(file),
-            SyntaxValidation = ValidateSyntax(file, content)
+            SyntaxValidation = syntaxValidation,
+            SyntaxDiagnostic = syntaxDiagnostic
         };
 
         if (assessment.SyntaxValidation == SyntaxValidationStatus.Invalid)
@@ -273,7 +285,9 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
                     "CFG-SYNTAX-001",
                     "SyntaxValidation",
                     "Error",
-                    "The configuration document failed syntax validation."));
+                    string.IsNullOrWhiteSpace(syntaxDiagnostic)
+                        ? "The configuration document failed syntax validation."
+                        : syntaxDiagnostic));
         }
 
         if (_policy.ForbiddenKeys.Length > 0)
@@ -326,8 +340,10 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 
     private static SyntaxValidationStatus ValidateSyntax(
         string file,
-        string content)
+        string content,
+        out string? diagnostic)
     {
+        diagnostic = null;
         var extension = Path.GetExtension(file);
 
         try
@@ -336,7 +352,7 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
                     ".json",
                     StringComparison.OrdinalIgnoreCase))
             {
-                using var document = JsonDocument.Parse(content);
+                using var document = JsonDocument.Parse(content, JsonOptions);
 
                 return SyntaxValidationStatus.Valid;
             }
@@ -358,18 +374,38 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
             // properties, package manifests, or CI pipeline syntax.
             return SyntaxValidationStatus.NotValidated;
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
+            diagnostic = FormatSyntaxDiagnostic("JSON", exception.Message, exception.LineNumber, exception.BytePositionInLine);
             return SyntaxValidationStatus.Invalid;
         }
-        catch (YamlException)
+        catch (YamlException exception)
         {
+            diagnostic = $"YAML syntax validation failed: {exception.Message}";
             return SyntaxValidationStatus.Invalid;
         }
-        catch (ArgumentException)
+        catch (ArgumentException exception)
         {
+            diagnostic = $"Configuration syntax validation failed: {exception.Message}";
             return SyntaxValidationStatus.Invalid;
         }
+    }
+
+    private static string FormatSyntaxDiagnostic(
+        string format,
+        string message,
+        long? lineNumber,
+        long? bytePositionInLine)
+    {
+        var location = lineNumber.HasValue
+            ? $" Line {lineNumber.Value + 1}"
+              + (bytePositionInLine.HasValue
+                  ? $", byte position {bytePositionInLine.Value + 1}"
+                  : string.Empty)
+              + "."
+            : string.Empty;
+
+        return $"{format} syntax validation failed.{location} {message}".Trim();
     }
 
     private static void AssessInfrastructureSafety(
@@ -438,6 +474,11 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
         result.Metadata["PolicyEnabled"] = _policy.Enabled.ToString();
         result.Metadata["SyntaxValidation"] =
             assessment.SyntaxValidation.ToString();
+
+        if (!string.IsNullOrWhiteSpace(assessment.SyntaxDiagnostic))
+        {
+            result.Metadata["SyntaxDiagnostic"] = assessment.SyntaxDiagnostic;
+        }
         result.Metrics["SyntaxComplianceScore"] =
             assessment.SyntaxComplianceScore;
 
@@ -679,6 +720,7 @@ public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
     {
         public string Category { get; set; } = "Configuration";
         public SyntaxValidationStatus SyntaxValidation { get; set; }
+        public string? SyntaxDiagnostic { get; set; }
 
         public double SyntaxComplianceScore { get; set; }
         public double InfrastructureSafetyScore { get; set; }

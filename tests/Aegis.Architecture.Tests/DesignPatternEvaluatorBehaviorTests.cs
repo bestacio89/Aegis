@@ -41,6 +41,35 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.True(result.Metrics["FluentReturnCount"] >= 1);
         Assert.True(result.Metrics["MutationCount"] >= 1);
         Assert.Equal("File", result.Metadata["EvaluationScope"]);
+        Assert.Equal(100, result.Metrics["BuilderPatternComplianceIndex"]);
+        Assert.Equal(0, result.Metrics["BuilderMutabilityViolationCount"]);
+    }
+
+    [Fact]
+    public async Task BuilderEvaluator_does_not_emit_rule_metrics_for_non_candidates()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/OrderService.cs", """
+            public sealed class OrderService
+            {
+                public Order Get(int id) => new Order(id);
+            }
+
+            public sealed class Order
+            {
+                public Order(int id) => Id = id;
+                public int Id { get; }
+            }
+            """);
+
+        var results = await Evaluate(project, "BuilderPatternEvaluator");
+
+        Assert.DoesNotContain(
+            results,
+            result => result.Metrics.ContainsKey("BuilderPatternComplianceIndex"));
+        Assert.DoesNotContain(
+            results,
+            result => result.Metrics.ContainsKey("BuilderMutabilityViolationCount"));
     }
 
     [Fact]
@@ -172,9 +201,44 @@ public sealed class DesignPatternEvaluatorBehaviorTests
 
         Assert.Equal(2, result.Metrics["Properties"]);
         Assert.Equal(2, result.Metrics["StateMemberCount"]);
+        Assert.Equal(1, result.Metrics["AnemicDomainModelIndex"]);
         Assert.Equal(0, result.Metrics["Methods"]);
         Assert.Equal(0, result.Metrics["BehaviorRatio"]);
         Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
+    }
+
+
+
+    [Fact]
+    public async Task GodClassEvaluator_withholds_density_when_no_classes_were_analyzed()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Empty.cs", "namespace Empty;");
+
+        var results = await Evaluate(project, "GodClassEvaluator");
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+
+        Assert.False(summary.Metrics.ContainsKey("GodClassDensity"));
+    }
+
+    [Fact]
+    public async Task AnemicDomainModelEvaluator_does_not_treat_stateless_types_as_candidates()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Domain/OrderEntity.cs", """
+            public sealed class OrderEntity
+            {
+                public void Validate() { }
+            }
+            """);
+
+        var results = await Evaluate(project, "AnemicDomainModelEvaluator");
+
+        Assert.DoesNotContain(
+            results,
+            result => result.Metrics.ContainsKey("AnemicDomainModelIndex"));
     }
 
     [Fact]
@@ -293,8 +357,18 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         using var project = new TemporaryProject();
         var methods = string.Join(
             Environment.NewLine,
-            Enumerable.Range(0, 14).Select(index =>
-                $"    public void Operation{index}() {{ }}"));
+            Enumerable.Range(0, 21).Select(index =>
+            {
+                var statements = string.Join(
+                    Environment.NewLine,
+                    Enumerable.Range(0, 30).Select(line =>
+                        $"        var value{index}_{line} = {line};"));
+
+                return $@"    public void Operation{index}()
+    {{
+{statements}
+    }}";
+            }));
 
         project.Write(
             "back/OrderManager.cs",
@@ -310,9 +384,73 @@ public sealed class DesignPatternEvaluatorBehaviorTests
             results,
             item => item.Metadata.GetValueOrDefault("ClassName") == "OrderManager");
 
-        Assert.True(result.Metrics["MethodCount"] >= 14);
+        Assert.True(result.Metrics["MethodCount"] >= 21);
         Assert.True(result.Metrics["PropertyCount"] >= 2);
+        Assert.True(result.Metrics["GodClassSeverity"] > 1.0);
         Assert.True(result.Metrics.ContainsKey("GodClassComplianceScore"));
+        Assert.Contains(results, item =>
+            item.Metadata.GetValueOrDefault("EvaluationScope") == "Project"
+            && item.Metrics.ContainsKey("GodClassDensity"));
+    }
+
+    [Fact]
+    public async Task GodClassEvaluator_does_not_flag_data_heavy_type_without_method_bloat()
+    {
+        using var project = new TemporaryProject();
+        var entries = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 650).Select(index =>
+                $"        new SeedEntry({index}),"));
+
+        project.Write(
+            "back/HeroSeeder.cs",
+            $@"public sealed class HeroSeeder
+{{
+    public IEnumerable<SeedEntry> GetSeeds()
+    {{
+        return new SeedEntry[]
+        {{
+{entries}
+        }};
+    }}
+}}
+public sealed record SeedEntry(int Id);");
+
+        var results = await Evaluate(project, "GodClassEvaluator");
+        var result = Assert.Single(
+            results,
+            item => item.Metadata.GetValueOrDefault("ClassName") == "HeroSeeder");
+
+        Assert.True(result.Metrics["LineLimitRatio"] > 1);
+        Assert.True(result.Metrics["MethodLimitRatio"] < 1);
+        Assert.True(result.Metrics["GodClassSeverity"] < 1);
+    }
+
+    [Fact]
+    public async Task GodClassEvaluator_excludes_vendored_unity_examples_and_generated_files()
+    {
+        using var project = new TemporaryProject();
+        Directory.CreateDirectory(Path.Combine(project.Root, "Assets"));
+        Directory.CreateDirectory(Path.Combine(project.Root, "ProjectSettings"));
+
+        var largeClass = $@"public sealed class ExampleService
+{{
+{string.Join(Environment.NewLine, Enumerable.Range(0, 30).Select(index => $"    public void Operation{index}() {{ }}"))}
+}}";
+
+        project.Write("Assets/Scripts/FirstPartyService.cs", largeClass);
+        project.Write("Assets/TextMesh Pro/Examples & Extras/Scripts/VendoredExample.cs", largeClass);
+        project.Write("Assets/Scripts/GeneratedService.Designer.cs", largeClass);
+
+        var results = await Evaluate(project, "GodClassEvaluator");
+
+        Assert.Contains(results, item =>
+            item.Metadata.GetValueOrDefault("ClassName") == "ExampleService"
+            && item.Metadata.GetValueOrDefault("FilePath")?.Contains("FirstPartyService.cs", StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(results, item =>
+            item.Metadata.GetValueOrDefault("FilePath")?.Contains("Examples & Extras", StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(results, item =>
+            item.Metadata.GetValueOrDefault("FilePath")?.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase) == true);
     }
 
     private static Task<ArchitectureEvaluatorResult[]> Evaluate(

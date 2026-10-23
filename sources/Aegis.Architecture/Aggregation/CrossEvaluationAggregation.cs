@@ -283,13 +283,13 @@ public sealed class CrossEvaluatorAggregator
         // No checks in this domain = not assessed (reported through ChecksPerformed = 0).
         var score =
             checks == 0
-                ? 1.0
+                ? 0.0
                 : _weightingEngine.ComputeScore(violationWeight, checkWeight);
 
 
         var passRate =
             checks == 0
-                ? 1.0
+                ? 0.0
                 : Math.Clamp(1.0 - (double)violations / checks, 0, 1);
 
 
@@ -301,6 +301,8 @@ public sealed class CrossEvaluatorAggregator
                 stats.RulesEvaluatedByDomain.GetValueOrDefault(domain),
 
             ChecksPerformed = checks,
+
+            HasAssessmentEvidence = checks > 0,
 
             Violations = violations,
 
@@ -324,51 +326,30 @@ public sealed class CrossEvaluatorAggregator
             return new ArchitectureDomainSummary
             {
                 Domain = domain,
-
                 RulesEvaluated = 0,
-
+                ChecksPerformed = 0,
+                HasAssessmentEvidence = false,
                 Violations = 0,
-
-                WeightedScore = 1,
-
-                MaintainabilityIndex = 1 * _maintainabilityFactor,
-
-                HealthIndex = 1 * _globalHealthWeight
+                WeightedScore = 0,
+                MaintainabilityIndex = 0,
+                HealthIndex = 0
             };
         }
 
 
-        var total =
-            rules.Count;
-
-        var compliant =
-            rules.Count(
-                x => x.IsCompliant);
-
-
+        // Legacy callers supply findings without the corresponding passing checks.
+        // Findings are useful evidence of problems, but they do not provide a denominator
+        // from which a compliance or health score can be calculated.
         return new ArchitectureDomainSummary
         {
             Domain = domain,
-
-            RulesEvaluated = total,
-
-            Violations =
-                total - compliant,
-
-            WeightedScore =
-                _weightingEngine
-                    .ComputeWeightedCompliance(rules),
-
-            MaintainabilityIndex =
-                ((double)compliant / total)
-                *
-                _maintainabilityFactor,
-
-            HealthIndex =
-                rules.Average(
-                    x => x.ImpactScore)
-                *
-                _globalHealthWeight
+            RulesEvaluated = 0,
+            ChecksPerformed = 0,
+            HasAssessmentEvidence = false,
+            Violations = rules.Count,
+            WeightedScore = 0,
+            MaintainabilityIndex = 0,
+            HealthIndex = 0
         };
     }
 
@@ -448,15 +429,17 @@ public sealed class CrossEvaluatorAggregator
         {
             return new GlobalArchitectureMetrics
             {
-                ProjectHealthIndex = 100,
-
-                WeightedCompliance = 1
+                ProjectHealthIndex = 0,
+                MaintainabilityIndex = 0,
+                ResilienceIndex = 0,
+                WeightedCompliance = 0,
+                HasAssessmentEvidence = false
             };
         }
 
 
-        // Domains in which nothing was checked say nothing about compliance, so they must not
-        // dilute (or inflate) the averages. Without statistics, every domain counts as before.
+        // An unassessed domain is not a clean domain. If no valid comparisons ran,
+        // return an explicitly unassessed score instead of averaging default 1.0 values.
         var assessed =
             list
                 .Where(x => x.ChecksPerformed > 0)
@@ -464,38 +447,44 @@ public sealed class CrossEvaluatorAggregator
 
         if (assessed.Count == 0)
         {
-            assessed = list;
+            return new GlobalArchitectureMetrics
+            {
+                ProjectHealthIndex = 0,
+                MaintainabilityIndex = 0,
+                ResilienceIndex = 0,
+                WeightedCompliance = 0,
+                HasAssessmentEvidence = false
+            };
         }
 
 
 
+        var totalChecks = assessed.Sum(domain => (double)domain.ChecksPerformed);
+
         return new GlobalArchitectureMetrics
         {
-            ProjectHealthIndex =
-                Math.Round(
-                    assessed.Average(
-                        x => x.HealthIndex * 100),
-                    2),
+            // Weight aggregate scores by the number of completed checks in each domain.
+            // A tiny domain must not have the same influence as a domain with many checks.
+            ProjectHealthIndex = Math.Round(
+                assessed.Sum(domain => domain.HealthIndex * domain.ChecksPerformed)
+                    / totalChecks * 100.0,
+                2),
 
+            MaintainabilityIndex = Math.Round(
+                assessed.Sum(domain => domain.MaintainabilityIndex * domain.ChecksPerformed)
+                    / totalChecks * 100.0,
+                2),
 
-            MaintainabilityIndex =
-                Math.Round(
-                    assessed.Average(
-                        x => x.MaintainabilityIndex * 100),
-                    2),
+            WeightedCompliance = Math.Round(
+                assessed.Sum(domain => domain.WeightedScore * domain.ChecksPerformed)
+                    / totalChecks,
+                3),
 
+            ResilienceIndex = Math.Round(
+                ComputeResilience(assessed),
+                3),
 
-            WeightedCompliance =
-                Math.Round(
-                    assessed.Average(
-                        x => x.WeightedScore),
-                    3),
-
-
-            ResilienceIndex =
-                Math.Round(
-                    ComputeResilience(assessed),
-                    3)
+            HasAssessmentEvidence = true
         };
     }
 

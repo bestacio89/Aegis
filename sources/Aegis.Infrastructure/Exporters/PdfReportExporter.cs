@@ -1,5 +1,6 @@
 ﻿using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Rules;
 using Aegis.Shared.Contracts;
 using Microsoft.Extensions.Logging;
 using MigraDoc.DocumentObjectModel;
@@ -231,22 +232,44 @@ public sealed class PdfReportExporter : IReportExporter
     {
         section.AddParagraph(L(language, "Executive Summary", "Synthèse Exécutive")).Style = StyleNames.Heading1;
 
-        var health = report.Metrics?.ProjectHealthIndex ?? 0;
+        var metrics = report.Metrics;
+        var health = metrics?.ProjectHealthIndex ?? 0;
+        var healthDisplay = metrics is { HasAssessmentEvidence: true }
+            ? $"{metrics.ProjectHealthIndex:0.##}%"
+            : "N/A";
+        var coverageAdjustedDisplay = metrics is { HasCoverageEvidence: true }
+            ? $"{metrics.CoverageAdjustedHealthIndex:0.##}%"
+            : "N/A";
+        var stats = report.EvaluationStats;
+        var coveragePercent = stats is not null && stats.RulesApplicable > 0
+            ? stats.EvaluationCoverage * 100.0
+            : 0.0;
+        var supportedRulesNotEvaluated = stats is null
+            ? 0
+            : Math.Max(0, stats.RulesNotEvaluated.Count - stats.RulesUnsupported);
+        // Use the report's single source of truth: this includes unsupported
+        // rules as well as missing coverage and evaluation errors.
+        var assessmentIncomplete = report.Metrics is not { AssessmentComplete: true };
 
-        var status = health >= 80
-            ? L(language, "healthy", "saine")
-            : health >= 50
-                ? L(language, "at risk", "à risque")
-                : L(language, "critical", "critique");
+        var status = assessmentIncomplete
+            ? L(language, "incomplete", "incomplète")
+            : health >= 80
+                ? L(language, "healthy", "saine")
+                : health >= 50
+                    ? L(language, "at risk", "à risque")
+                    : L(language, "critical", "critique");
+
+        var coverageSummary = stats is null || stats.RulesApplicable == 0
+            ? L(language, "Rule-evaluation coverage is unavailable because no supported applicable rules were available.", "La couverture d'évaluation des règles est indisponible car aucune règle applicable prise en charge n'était disponible.")
+            : L(
+                language,
+                $"Rule-evaluation coverage is {coveragePercent:0.0}% ({stats.RulesEvaluated}/{stats.RulesApplicable} supported applicable rules evaluated; {supportedRulesNotEvaluated} supported rules not evaluated; {stats.RulesUnsupported} unsupported rules).",
+                $"La couverture d'évaluation des règles est de {coveragePercent:0.0} % ({stats.RulesEvaluated}/{stats.RulesApplicable} règles applicables prises en charge évaluées ; {supportedRulesNotEvaluated} règles prises en charge non évaluées ; {stats.RulesUnsupported} règles non prises en charge).");
 
         var narrative = L(
             language,
-            $"{report.ProjectName} was scanned across {report.TotalFilesScanned} files and evaluated against " +
-            $"{report.ComplianceScores.Count} rule categories. The overall architectural health is {status} " +
-            $"at {health:0.##}%, with {report.TotalViolations} findings identified across the scanned codebase.",
-            $"{report.ProjectName} a été analysé sur {report.TotalFilesScanned} fichiers et évalué selon " +
-            $"{report.ComplianceScores.Count} catégories de règles. La santé architecturale globale est {status} " +
-            $"à {health:0.##}%, avec {report.TotalViolations} constats identifiés dans le code analysé.");
+            $"{report.ProjectName} has {report.TotalFilesScanned} governed files in scope. The assessed health score is {healthDisplay}, while the coverage-adjusted diagnostic is {coverageAdjustedDisplay}. The overall assessment is {status}. {coverageSummary} {report.TotalViolations} findings were identified. The coverage-adjusted value is a diagnostic, not a compliance score.",
+            $"{report.ProjectName} contient {report.TotalFilesScanned} fichiers dans le périmètre gouverné. Le score de santé évalué est {healthDisplay}, tandis que l’indicateur ajusté à la couverture est {coverageAdjustedDisplay}. L’évaluation globale est {status}. {coverageSummary} {report.TotalViolations} constats ont été identifiés. La valeur ajustée à la couverture est un indicateur diagnostique, pas un score de conformité.");
 
         var p = section.AddParagraph(narrative);
         p.Format.SpaceAfter = 10;
@@ -266,6 +289,29 @@ public sealed class PdfReportExporter : IReportExporter
         AddRow(table, L(language, "Framework", "Framework"), context.Framework ?? "N/A");
         AddRow(table, L(language, "Architecture Style", "Style Architectural"), context.ArchitectureStyle ?? "N/A");
         AddRow(table, L(language, "Scan Date (UTC)", "Date d'Analyse (UTC)"), report.ScanDate.ToString("yyyy-MM-dd HH:mm"));
+
+        var stats = report.EvaluationStats;
+        var metrics = report.Metrics;
+        if (stats is not null)
+        {
+            var supportedRulesNotEvaluated = Math.Max(
+                0,
+                stats.RulesNotEvaluated.Count - stats.RulesUnsupported);
+
+            AddRow(table, L(language, "Rules Registered", "Règles Enregistrées"), stats.RulesRegistered.ToString());
+            AddRow(table, L(language, "Supported Rules Applicable", "Règles Applicables Prises en Charge"), stats.RulesApplicable.ToString());
+            AddRow(table, L(language, "Rules Evaluated", "Règles Évaluées"), stats.RulesEvaluated.ToString());
+            AddRow(table, L(language, "Rules Not Evaluated", "Règles Non Évaluées"), stats.RulesNotEvaluated.Count.ToString());
+            AddRow(table, L(language, "Supported Rules Not Evaluated", "Règles Prises en Charge Non Évaluées"), supportedRulesNotEvaluated.ToString());
+            AddRow(table, L(language, "Unsupported Rules", "Règles Non Prises en Charge"), stats.RulesUnsupported.ToString());
+            AddRow(table, L(language, "Rule Evaluation Coverage", "Couverture d'Évaluation des Règles"), metrics is { HasCoverageEvidence: true } ? $"{stats.EvaluationCoverage:P1}" : "N/A");
+            AddRow(table, L(language, "Assessed Health Index", "Indice de Santé Évalué"), metrics is { HasAssessmentEvidence: true } ? $"{metrics.ProjectHealthIndex:0.##}%" : "N/A");
+            AddRow(table, L(language, "Coverage-Adjusted Diagnostic", "Indicateur Ajusté à la Couverture"), metrics is { HasCoverageEvidence: true } ? $"{metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A");
+            AddRow(table, L(language, "Assessment Complete", "Évaluation Complète"), metrics is { AssessmentComplete: true } ? L(language, "Yes", "Oui") : L(language, "No", "Non"));
+            AddRow(table, L(language, "Checks Performed", "Vérifications Effectuées"), stats.ChecksPerformed.ToString());
+            AddRow(table, L(language, "Insufficient Evidence", "Preuves Insuffisantes"), stats.EvaluationsInsufficientEvidence.ToString());
+            AddRow(table, L(language, "Evaluation Errors", "Erreurs d'Évaluation"), stats.EvaluationsErrored.ToString());
+        }
     }
 
     /// <summary>
@@ -337,22 +383,42 @@ public sealed class PdfReportExporter : IReportExporter
         header.Cells[1].AddParagraph(L(language, "Score", "Score"));
         header.Cells[2].AddParagraph(L(language, "Status", "Statut"));
 
+        var registeredCategories = ArchitectureRuleRegistry.All
+            .Select(rule => Enum.TryParse<ArchitectureRuleCategory>(
+                rule.Category,
+                true,
+                out var category)
+                ? category
+                : ArchitectureRuleCategory.General)
+            .Distinct()
+            .OrderBy(category => category.ToString())
+            .ToArray();
+
         bool alt = false;
-        foreach (var score in report.ComplianceScores.OrderByDescending(x => x.Value))
+        foreach (var category in registeredCategories)
         {
+            var hasScore = report.ComplianceScores.TryGetValue(category, out var score);
             var row = table.AddRow();
             ApplyRowStyle(row, false, alt);
-            row.Cells[0].AddParagraph(LocalizeCategory(score.Key.ToString(), language));
+            row.Cells[0].AddParagraph(LocalizeCategory(category.ToString(), language));
 
-            var scoreCell = row.Cells[1].AddParagraph($"{score.Value:0.00}%");
-            scoreCell.Format.Font.Color = HealthColor(score.Value);
-            scoreCell.Format.Font.Bold = true;
+            var scoreCell = row.Cells[1].AddParagraph(hasScore ? $"{score:0.00}%" : "N/A");
+            if (hasScore)
+            {
+                scoreCell.Format.Font.Color = HealthColor(score);
+                scoreCell.Format.Font.Bold = true;
+            }
 
-            row.Cells[2].AddParagraph(score.Value >= 80
-                ? L(language, "PASSED", "CONFORME")
-                : score.Value >= 50
-                    ? L(language, "WARNING", "ATTENTION")
-                    : L(language, "CRITICAL", "CRITIQUE"));
+            var categoryStatus = !hasScore
+                ? L(language, "NOT ASSESSED", "NON ÉVALUÉ")
+                : !report.Metrics.AssessmentComplete
+                    ? L(language, "PROVISIONAL", "PROVISOIRE")
+                    : score >= 80
+                        ? L(language, "PASSED", "CONFORME")
+                        : score >= 50
+                            ? L(language, "WARNING", "ATTENTION")
+                            : L(language, "CRITICAL", "CRITIQUE");
+            row.Cells[2].AddParagraph(categoryStatus);
             alt = !alt;
         }
     }
@@ -402,11 +468,12 @@ public sealed class PdfReportExporter : IReportExporter
             row.Cells[1].AddParagraph(domain.RulesEvaluated.ToString());
             row.Cells[2].AddParagraph(domain.Violations.ToString());
 
-            var healthCell = row.Cells[3].AddParagraph($"{health:0.0}%");
-            healthCell.Format.Font.Color = HealthColor(health);
+            var healthCell = row.Cells[3].AddParagraph(domain.ChecksPerformed > 0 ? $"{health:0.0}%" : "N/A");
+            if (domain.ChecksPerformed > 0)
+                healthCell.Format.Font.Color = HealthColor(health);
             healthCell.Format.Font.Bold = true;
 
-            row.Cells[4].AddParagraph($"{compliance:0.0}%");
+            row.Cells[4].AddParagraph(domain.ChecksPerformed > 0 ? $"{compliance:0.0}%" : "N/A");
             alt = !alt;
         }
     }

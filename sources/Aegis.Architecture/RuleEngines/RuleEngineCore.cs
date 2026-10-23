@@ -81,21 +81,32 @@ public sealed class RuleEngineCore
         var notApplicableReasons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        var unsupportedRuleReasons =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         var applicableRules = new List<ArchitectureRuleDefinition>();
 
         foreach (var rule in _rules)
         {
-            if (ArchitectureRuleMetricContracts.TryGetApplicability(
+            if (!ArchitectureRuleMetricContracts.TryGetApplicability(
                     rule,
                     context,
                     out var applicabilityReason))
             {
-                applicableRules.Add(rule);
-            }
-            else
-            {
                 notApplicableReasons[rule.Id] = applicabilityReason;
+                continue;
             }
+
+            var producerDisposition =
+                ArchitectureRuleMetricContracts.GetProducerContractDisposition(rule.Id);
+
+            if (producerDisposition is not null)
+            {
+                unsupportedRuleReasons[rule.Id] = producerDisposition;
+                continue;
+            }
+
+            applicableRules.Add(rule);
         }
 
         var rulesByDomain =
@@ -152,17 +163,6 @@ public sealed class RuleEngineCore
 
             foreach (var rule in applicableRules)
             {
-                // Frontend applicability must be checked per fact as well as
-                // per project. A repository may contain multiple UI frameworks,
-                // and a shared metric key must not cross-satisfy their rules.
-                if (!ArchitectureRuleMetricContracts.TryGetFactApplicability(
-                        rule,
-                        fact,
-                        out _))
-                {
-                    continue;
-                }
-
                 var metricExists = ArchitectureRuleMetricContracts.TryResolveMetric(
                     rule,
                     fact.Metrics,
@@ -170,8 +170,17 @@ public sealed class RuleEngineCore
                     out var metricValue);
 
                 if (metricExists)
-                {
                     matchedAnyDeclaredMetric = true;
+
+                // A matching metric key is observable for diagnostics, but is
+                // not eligible evidence until producer and fact applicability
+                // contracts are satisfied.
+                if (!ArchitectureRuleMetricContracts.TryGetFactApplicability(
+                        rule,
+                        fact,
+                        out _))
+                {
+                    continue;
                 }
 
                 // Scope is part of the rule contract. Track metric evidence at
@@ -239,7 +248,9 @@ public sealed class RuleEngineCore
                         ? RuleEvaluationStatus.Violated
                         : RuleEvaluationStatus.Passed,
                     Scope = rule.Scope.ToString(),
-                    Target = fact.Target,
+                    Target = isProjectFact
+                        ? fact.ProjectName ?? fact.Target
+                        : fact.Target,
                     Domain = domain,
                     ObservedValue = metricValue,
                     Threshold = threshold,
@@ -319,6 +330,12 @@ public sealed class RuleEngineCore
         var notEvaluatedReasons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        foreach (var (ruleId, reason) in unsupportedRuleReasons)
+        {
+            notEvaluatedReasons[ruleId] =
+                $"Rule '{ruleId}' is not evaluable because its producer contract is unsupported: {reason}";
+        }
+
         var eligibleFacts = factList
             .Where(fact => fact is not null)
             .ToList();
@@ -387,16 +404,19 @@ public sealed class RuleEngineCore
             });
 
             var scopeLabel = rule.Scope.ToString().ToLowerInvariant();
+            var producerDisposition =
+                ArchitectureRuleMetricContracts.GetProducerContractDisposition(rule.Id);
 
-            // Prefer evidence-quality diagnostics over generic missing-metric
-            // messages. A partial summary explains why its project metric was
-            // deliberately withheld.
-            notEvaluatedReasons[rule.Id] = hasMetricEvidence
+            // Prefer explicit contract gaps and evidence-quality diagnostics
+            // over generic missing-metric messages.
+            notEvaluatedReasons[rule.Id] = producerDisposition is not null
+                ? producerDisposition
+                : hasMetricEvidence
                 ? $"Metric '{rule.MetricKey}' was emitted at {scopeLabel} scope, but no valid comparison completed. Check for non-finite observations or an invalid threshold."
                 : hasWrongScopeMetricEvidence
                     ? $"Metric '{rule.MetricKey}' was emitted, but only at the wrong scope for rule '{rule.Id}' (required: {scopeLabel})."
                     : hasInapplicableMetricEvidence
-                        ? $"Metric '{rule.MetricKey}' exists, but its fact-level framework applicability could not be established or does not match rule '{rule.Id}'; the metric was not reused across frameworks."
+                        ? $"Metric '{rule.MetricKey}' exists, but its producer contract or fact-level framework applicability does not match rule '{rule.Id}'; the metric was not reused."
                         : hasIncompleteScopedFacts
                             ? $"A {scopeLabel}-scope evaluator fact reports incomplete analysis; metric '{rule.MetricKey}' was withheld rather than treating partial evidence as a pass or zero."
                             : scopedFacts.Count == 0
@@ -420,6 +440,8 @@ public sealed class RuleEngineCore
         {
             RulesRegistered = _rules.Count,
             RulesApplicable = applicableRules.Count,
+            RulesUnsupported = unsupportedRuleReasons.Count,
+            UnsupportedRuleReasons = unsupportedRuleReasons,
             RulesEvaluated = evaluatedRuleIds.Count,
             RulesPassed = distinctPassedRules,
             RulesViolated = distinctViolatedRules,
@@ -589,7 +611,9 @@ public sealed class RuleEngineCore
         {
             DetectedBy = fact.Source,
             Domain = layer,
-            Target = fact.Target,
+            Target = rule.Scope == RuleEvaluationScope.Project
+                ? fact.ProjectName ?? fact.Target
+                : fact.Target,
             AnalyzerVersion = context.DetectorVersion
         };
     }

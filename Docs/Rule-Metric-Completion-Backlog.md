@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document turns the HeroService scan into an implementation backlog for closing the gap between Aegis's 73 registered rules and the evaluator evidence currently available to the rule engine. It is the delivery plan for metric contracts, producers, applicability, reporting, and regression tests—not a claim that the listed capabilities already exist.
+This document turns the HeroService scan into an implementation backlog for closing the gap between Aegis's 76 registered rules and the evaluator evidence currently available to the rule engine. It is the delivery plan for metric contracts, producers, applicability, reporting, and regression tests—not a claim that the listed capabilities already exist.
 
 **Correctness is the acceptance criterion.** A rule must be evaluated only from evidence that matches its declared meaning, scope, unit, denominator, applicability, and completeness. Missing evidence must not be converted into a zero, a pass, or a fabricated violation.
 
@@ -16,7 +16,7 @@ Captured from the user's local run on 2026-10-21:
 | Source files reported by NamingEvaluator | 7,176 |
 | Files processed by PerformanceEvaluator | 6,909 |
 | Facts generated | 8,675 |
-| Registered rules | 73 |
+| Registered rules | 76 |
 | Rules evaluated | 11 (15.1%) |
 | Rules not evaluated | 62 (84.9%) |
 | Rule checks | 32,770 |
@@ -168,7 +168,7 @@ The following 62 warnings were emitted by the scan. Their metric names and requi
 - [ ] Enumerate emitted metrics by evaluator and output scope, including project summaries and finding-only facts.
 - [ ] Identify collisions where one metric key is used by rules with different semantics, particularly shared keys such as `GodClassDensity` and `ComplexityScore`.
 - [ ] Distinguish no producer, wrong scope, no applicable evidence, unsupported input, partial analysis, invalid value, and disabled evaluator in report diagnostics.
-- [ ] Add tests that ensure all 73 rules have an explicit contract disposition and that the diagnostic counts reconcile.
+- [ ] Add tests that ensure all 76 rules have an explicit contract disposition and that the diagnostic counts reconcile.
 - [ ] Confirm that a disabled evaluator cannot silently leave a rule looking like a generic missing metric.
 
 **Exit gate:** every registered rule has an explicit producer or an explicit unsupported/not-applicable policy; every metric contract gap is accounted for by tests.
@@ -256,11 +256,11 @@ The following 62 warnings were emitted by the scan. Their metric names and requi
 - [ ] Publish rule coverage and missing/wrong-scope/inconclusive counts as CI artifacts.
 - [ ] Establish performance and coverage thresholds only after correctness baselines stabilize.
 
-**Final exit gate:** all 73 rules have an explicit, tested disposition; all enabled/applicable rules with supported complete evidence are evaluated; remaining rules have precise reasons and are not silently omitted.
+**Final exit gate:** all 76 rules have an explicit, tested disposition; all enabled/applicable rules with supported complete evidence are evaluated; remaining rules have precise reasons and are not silently omitted.
 
 ## Recommended PR sequence
 
-1. **Contract inventory and diagnostics:** executable 73-rule/metric-producer inventory, metric semantics, reporting separation, contract tests.
+1. **Contract inventory and diagnostics:** executable 76-rule/metric-producer inventory, metric semantics, reporting separation, contract tests.
 2. **Architecture/API:** complete architecture metrics, preserving the API consistency fix.
 3. **Backend:** cohesion, complexity, dependency graph density, error handling, maintainability.
 4. **Design patterns:** pattern-specific metrics and candidate/compliance semantics.
@@ -270,3 +270,36 @@ The following 62 warnings were emitted by the scan. Their metric names and requi
 8. **Regression and release gates:** deterministic end-to-end report verification and CI artifacts.
 
 Keep each PR reviewable and based on `develop`. Do not merge a stage until tests pass and the HeroService baseline shows the expected coverage change with no unexplained metric or scope gaps. Update this backlog as stages complete; do not mark a rule complete merely because its warning disappeared.
+
+
+## Correctness overhaul: producer dispositions and regression evidence
+
+The correctness overhaul binds every registered rule to an explicit producer contract or an explicit unsupported disposition. A metric key by itself is not evidence that a rule's semantic requirement was measured.
+
+The current contract inventory has 53 producer-backed rules and 23 explicitly unsupported rules. Unsupported rules remain visible as unevaluated with a reason; they must not be satisfied by a similarly named metric from another evaluator.
+
+Explicitly unsupported until a semantically valid producer is implemented:
+
+- Architecture: `AEG-ARCH-R4`, `AEG-ARCH-R6`, `AEG-ARCH-R9`, `AEG-ARCH-R10`, `AEG-ARCH-R12`
+- Backend: `AEG-BACK-R1`
+- Dependencies: `AEG-DEPS-R1` through `AEG-DEPS-R4`
+- Design patterns: `AEG-DES-DEC002`, `AEG-DES-REPO002`, `AEG-DES-FACR002`, `AEG-DES-CMD002`, `AEG-DES-MEDI002`, `AEG-DES-OBS002`, `AEG-DES-SING002`, `AEG-DES-CIRC001`, `AEG-DES-OVER001`
+- Performance: `AEG-PERF-R3`
+- Transactions: `AEG-TXN-R2` through `AEG-TXN-R4`
+
+These are not waived findings. Each disposition documents the missing evidence or semantic mismatch that must be resolved before the rule can become enforceable. In particular, package declarations do not prove freshness or usage, instantiation inside a factory is not itself a violation, and a heterogeneous set of security signals is not a calibrated compliance score.
+
+Implemented metric alignments include candidate-only builder scores and mutability signals, decorator/factory/command/mediator/strategy/observer/singleton metrics that match their actual evaluator output, a file-level god-class severity plus project-level god-class density, an anemic-domain index limited to state-bearing domain candidates, infrastructure/logging rule keys aligned with produced scores, and error-handling coverage emitted only when catch/except evidence exists.
+
+### HeroService regression snapshot
+
+The mixed-stack regression fixture is based on the following HeroService source revision:
+
+- Repository: `bestacio89/HeroService`
+- Ref: `Develop_Unity_V1`
+- Commit: `cc98b07576d60c27487742ebb9c488ec00029913`
+- Backend: `sources/back/HeroService.API`, including `Controllers/HeroController.cs`
+- Blazor admin: `sources/Front/HeroService.Admin`, including `Components/Pages/Home.razor`
+- Unity client: `sources/client`, including `Assets/Home/Service/HeroCatalogService.cs`, `Packages/manifest.json`, and `ProjectSettings/ProjectVersion.txt`
+
+The regression test copies these pinned source files into an isolated temporary repository and asserts project/module discovery plus file-level framework evidence for backend, Blazor, and Unity facts. It is deliberately evidence-oriented; aggregate violation counts are not an acceptance criterion.

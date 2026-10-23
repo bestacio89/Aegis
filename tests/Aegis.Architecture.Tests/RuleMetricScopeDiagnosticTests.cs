@@ -16,7 +16,7 @@ public sealed class RuleMetricScopeDiagnosticTests
             new AegisArchitecturePolicy());
 
         var fileFact = new ArchitectureEvaluatorResult(
-            "SampleEvaluator",
+            "CircularDependencyEvaluator",
             "Widget.cs")
         {
             Category = "ArchitectureSummary",

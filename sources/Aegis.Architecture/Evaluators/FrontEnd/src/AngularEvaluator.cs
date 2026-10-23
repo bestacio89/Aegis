@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
@@ -397,9 +398,30 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
                 ["AngularModuleCount"] = fileModuleCount
             };
 
-            // A count is an observation, not a compliance score.
-            // Do not emit compliance until policy evaluation has a verified
-            // and stable contract with the analyzer's actual evidence.
+            // These rule-facing scores are emitted only when the analyzer
+            // provides the component-level evidence required to calculate them.
+            if (TryComputeSelectorScore(components, out var selectorScore))
+            {
+                metrics["SelectorScore"] = selectorScore;
+            }
+
+            var componentComplexities = components
+                .Select(component => GetInt(component, "cyclomaticComplexity"))
+                .ToArray();
+
+            if (components.Length > 0 && componentComplexities.All(value => value.HasValue))
+            {
+                var maximumComplexity = componentComplexities
+                    .Select(value => value!.Value)
+                    .DefaultIfEmpty(1)
+                    .Max();
+
+                // A score of 100 represents a single-path component. Each
+                // additional independent path reduces the score by ten points.
+                metrics["ComplexityScore"] = Math.Max(
+                    0,
+                    100 - ((maximumComplexity - 1) * 10));
+            }
 
             var metadata = new Dictionary<string, string>
             {
@@ -875,6 +897,62 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
             "name",
             "componentName",
             "class") ?? string.Empty;
+    }
+
+    private bool TryComputeSelectorScore(
+        IReadOnlyCollection<JsonElement> components,
+        out double score)
+    {
+        score = default;
+
+        var selectors = components
+            .Select(component => GetString(component, "selector"))
+            .Where(selector => !string.IsNullOrWhiteSpace(selector))
+            .Select(selector => selector!)
+            .ToArray();
+
+        if (selectors.Length == 0)
+        {
+            return false;
+        }
+
+        var prefixes = (_policy.AllowedSelectorPrefixes ?? [])
+            .Where(prefix => !string.IsNullOrWhiteSpace(prefix))
+            .Select(Regex.Escape)
+            .ToArray();
+
+        if (prefixes.Length == 0)
+        {
+            return false;
+        }
+
+        var allowedPrefix = string.Join("|", prefixes);
+        var simpleSelector = new Regex(
+            @"^(?:[a-z][a-z0-9]*(?:-[a-z0-9]+)*|\[[A-Za-z][A-Za-z0-9]*\])$",
+            RegexOptions.CultureInvariant,
+            TimeSpan.FromMilliseconds(100));
+        var elementSelector = new Regex(
+            $@"^(?:{allowedPrefix})-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+            RegexOptions.CultureInvariant,
+            TimeSpan.FromMilliseconds(100));
+        var attributeSelector = new Regex(
+            $@"^\[(?:{allowedPrefix})[A-Z][A-Za-z0-9]*\]$",
+            RegexOptions.CultureInvariant,
+            TimeSpan.FromMilliseconds(100));
+
+        // Avoid inventing a score for compound CSS selectors that this policy
+        // does not explicitly understand. Such files remain unmeasured.
+        if (selectors.Any(selector => !simpleSelector.IsMatch(selector)))
+        {
+            return false;
+        }
+
+        var compliant = selectors.Count(selector =>
+            elementSelector.IsMatch(selector) ||
+            attributeSelector.IsMatch(selector));
+
+        score = Math.Round(compliant * 100d / selectors.Length, 2);
+        return true;
     }
 
     private static string GetCapability(

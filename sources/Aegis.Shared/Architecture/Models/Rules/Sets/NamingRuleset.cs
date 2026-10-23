@@ -52,7 +52,7 @@ public static class NamingRuleset
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
             Severity = ArchitectureRuleSeverity.Medium,
-            Recommendation = "Use Pascal for method names (e.g., calculateTotal, getUserProfile)."
+            Recommendation = "Use the language-specific method casing convention (PascalCase for C#, camelCase for Java and JavaScript/TypeScript, and snake_case for Python)."
         },
 
         // ===============================================================
@@ -68,7 +68,7 @@ public static class NamingRuleset
             Operator = ComparisonOperator.LessThan,
             Threshold = 90,
             Severity = ArchitectureRuleSeverity.Medium,
-            Recommendation = "Use camelCase for variables and UPPER_CASE only for constants if explicitly allowed."
+            Recommendation = "Use the language-specific local-variable, parameter, and field naming convention consistently."
         },
 
         // ===============================================================
@@ -99,8 +99,46 @@ public static class NamingRuleset
             MetricKey = "NamingComplianceScore",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
-            Severity = ArchitectureRuleSeverity.Critical,
+            // Naming style is maintainability guidance, not a critical
+            // architecture-boundary failure.
+            Severity = ArchitectureRuleSeverity.Low,
             Recommendation = "Improve global naming consistency across classes, methods, and variables for architectural clarity."
+        },
+        new ArchitectureRuleDefinition
+        {
+            Id = "AEG-NAM-R7",
+            Scope = RuleEvaluationScope.File,
+            Name = "Constant Naming Style Non-Compliant",
+            Category = nameof(ArchitectureRuleCategory.Naming),
+            MetricKey = "ConstantNamingCompliance",
+            Operator = ComparisonOperator.LessThan,
+            Threshold = 90,
+            Severity = ArchitectureRuleSeverity.Low,
+            Recommendation = "Use language-specific constant naming conventions; C# constants commonly use PascalCase and uppercase snake case is supported where explicitly required."
+        },
+        new ArchitectureRuleDefinition
+        {
+            Id = "AEG-NAM-R8",
+            Scope = RuleEvaluationScope.File,
+            Name = "Field Naming Style Non-Compliant",
+            Category = nameof(ArchitectureRuleCategory.Naming),
+            MetricKey = "FieldNamingCompliance",
+            Operator = ComparisonOperator.LessThan,
+            Threshold = 90,
+            Severity = ArchitectureRuleSeverity.Low,
+            Recommendation = "Apply visibility- and framework-appropriate field naming conventions; keep private fields distinct from public fields and respect framework-specific prefixes."
+        },
+        new ArchitectureRuleDefinition
+        {
+            Id = "AEG-NAM-R9",
+            Scope = RuleEvaluationScope.File,
+            Name = "Property Naming Style Non-Compliant",
+            Category = nameof(ArchitectureRuleCategory.Naming),
+            MetricKey = "PropertyNamingCompliance",
+            Operator = ComparisonOperator.LessThan,
+            Threshold = 90,
+            Severity = ArchitectureRuleSeverity.Low,
+            Recommendation = "Use PascalCase for C# property names and preserve the language-specific convention for other supported languages."
         }
     };
 }

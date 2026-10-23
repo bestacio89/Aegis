@@ -35,9 +35,9 @@ public static class PerformanceRuleset
         {
             Id = "AEG-PERF-R2",
             Scope = RuleEvaluationScope.File,
-            Name = "Threading or Async Misuse",
+            Name = "Async Maturity Below Threshold",
             Category = nameof(ArchitectureRuleCategory.Performance),
-            MetricKey = "AsyncUsageCompliance",
+            MetricKey = "AsyncMaturityScore",
             Operator = ComparisonOperator.LessThan,
             Threshold = 85,
             Severity = ArchitectureRuleSeverity.High,

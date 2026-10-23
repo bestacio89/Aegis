@@ -13,14 +13,24 @@ internal static class FrameworkDetector
         switch (ctx.Language)
         {
             case "C#":
-                foreach (var proj in files.Where(f => f.EndsWith(".csproj")))
+                foreach (var proj in files.Where(f => f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
                 {
-                    var xml = XDocument.Load(proj);
-                    foreach (var pkg in xml.Descendants("PackageReference"))
+                    try
                     {
-                        var name = pkg.Attribute("Include")?.Value ?? pkg.Attribute("Update")?.Value;
-                        if (!string.IsNullOrWhiteSpace(name))
-                            deps.Add(name);
+                        var xml = XDocument.Load(proj);
+                        foreach (var pkg in xml.Descendants("PackageReference"))
+                        {
+                            var name = pkg.Attribute("Include")?.Value ?? pkg.Attribute("Update")?.Value;
+                            if (!string.IsNullOrWhiteSpace(name))
+                                deps.Add(name);
+                        }
+                    }
+                    catch (Exception exception) when (exception is System.Xml.XmlException
+                        or IOException or UnauthorizedAccessException)
+                    {
+                        // Configuration diagnostics own malformed/unreadable
+                        // project files. One bad manifest must not abort detection
+                        // of other projects and frameworks in the repository.
                     }
                 }
                 ctx.DetectedDependencies = deps.ToList();
@@ -40,13 +50,31 @@ internal static class FrameworkDetector
                 break;
         }
 
-        if (!string.IsNullOrWhiteSpace(ctx.Framework)
-            && !ctx.DetectedFrameworks.Contains(
-                ctx.Framework,
-                StringComparer.OrdinalIgnoreCase))
+        // Discover frontend frameworks independently of the repository's primary
+        // language. A C# web API and an Angular/React client are separate technology
+        // signals in one repository; the primary backend identity must not suppress
+        // the client framework or its package inventory.
+        if (!string.Equals(
+                ctx.Language,
+                "TypeScript/JavaScript",
+                StringComparison.OrdinalIgnoreCase)
+            && files.Any(file => Path.GetFileName(file).Equals(
+                "package.json",
+                StringComparison.OrdinalIgnoreCase)))
         {
-            ctx.DetectedFrameworks.Add(ctx.Framework);
+            var nodeDependencies = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+            DetectNodeFramework(
+                ctx,
+                files,
+                nodeDependencies,
+                preservePrimaryFramework: true);
+            deps.UnionWith(nodeDependencies);
+            ctx.DetectedDependencies = deps.ToList();
         }
+
+        if (!string.IsNullOrWhiteSpace(ctx.Framework))
+            AddFramework(ctx, ctx.Framework);
     }
 
     private static void DetectDotNetFramework(
@@ -62,36 +90,34 @@ internal static class FrameworkDetector
                 ".razor",
                 StringComparison.OrdinalIgnoreCase));
 
-        if (hasBlazorComponents)
-        {
-            ctx.DetectedFrameworks.Add("Blazor");
-        }
+        var hasUnityProjectEvidence = files.Any(file =>
+            file.EndsWith(".asmdef", StringComparison.OrdinalIgnoreCase)
+            || file.EndsWith("ProjectVersion.txt", StringComparison.OrdinalIgnoreCase)
+                && file.Contains($"{Path.DirectorySeparatorChar}ProjectSettings{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+            || file.EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase)
+                && file.Contains($"{Path.DirectorySeparatorChar}Packages{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                && SafeReadText(file).Contains("com.unity", StringComparison.OrdinalIgnoreCase));
 
+        AddFramework(ctx, ".NET");
+        if (hasBlazorComponents)
+            AddFramework(ctx, "Blazor");
+        if (hasUnityProjectEvidence)
+            AddFramework(ctx, "Unity");
+
+        // Read project SDK metadata independently from the repository's primary
+        // framework. A mixed repository may contain Web, class-library and Unity
+        // projects simultaneously.
         var hasWebSdk = files
-            .Where(file => file.EndsWith(
-                ".csproj",
-                StringComparison.OrdinalIgnoreCase))
+            .Where(file => file.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
             .Any(projectFile =>
             {
                 try
                 {
                     var project = XDocument.Load(projectFile);
                     var sdk = project.Root?.Attribute("Sdk")?.Value;
-                    return sdk?.Contains(
-                        "Microsoft.NET.Sdk.Web",
-                        StringComparison.OrdinalIgnoreCase) == true;
+                    return sdk?.Contains("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase) == true;
                 }
-                catch (System.Xml.XmlException)
-                {
-                    // Malformed project files are handled by configuration
-                    // diagnostics; framework detection should not crash scanning.
-                    return false;
-                }
-                catch (IOException)
-                {
-                    return false;
-                }
-                catch (UnauthorizedAccessException)
+                catch (Exception ex) when (ex is System.Xml.XmlException or IOException or UnauthorizedAccessException)
                 {
                     return false;
                 }
@@ -108,16 +134,18 @@ internal static class FrameworkDetector
             ctx.DetectedFrameworks.Add("ASP.NET Core");
         }
 
-        if (hasBlazorComponents)
-        {
-            // Prefer Blazor as the primary UI framework while retaining ASP.NET
-            // Core as additional evidence when this is a server-hosted app.
-            ctx.Framework = "Blazor";
-        }
-        else if (hasAspNetCore)
-        {
+        if (hasAspNetCore)
+            AddFramework(ctx, "ASP.NET Core");
+
+        // Keep the primary framework aligned with the project's server/runtime
+        // identity when backend evidence exists. Blazor remains a first-class
+        // additional framework signal and is applied to Razor facts individually.
+        if (hasAspNetCore)
             ctx.Framework = "ASP.NET Core";
-        }
+        else if (hasBlazorComponents)
+            ctx.Framework = "Blazor";
+        else if (hasUnityProjectEvidence)
+            ctx.Framework = "Unity";
         else if (deps.Any(d =>
                      d.Contains("EntityFrameworkCore", StringComparison.OrdinalIgnoreCase)))
         {
@@ -127,6 +155,19 @@ internal static class FrameworkDetector
         {
             ctx.Framework = ".NET";
         }
+    }
+
+    private static void AddFramework(ProjectArchitectureContext context, string framework)
+    {
+        if (!context.DetectedFrameworks.Contains(framework, StringComparer.OrdinalIgnoreCase))
+            context.DetectedFrameworks.Add(framework);
+    }
+
+    private static string SafeReadText(string path)
+    {
+        try { return File.ReadAllText(path); }
+        catch (IOException) { return string.Empty; }
+        catch (UnauthorizedAccessException) { return string.Empty; }
     }
 
     private static void DetectJavaFramework(ProjectArchitectureContext ctx, List<string> files, HashSet<string> deps)
@@ -146,21 +187,60 @@ internal static class FrameworkDetector
         else ctx.Framework = "Python Standard";
     }
 
-    private static void DetectNodeFramework(ProjectArchitectureContext ctx, List<string> files, HashSet<string> deps)
+    private static void DetectNodeFramework(
+        ProjectArchitectureContext ctx,
+        List<string> files,
+        HashSet<string> deps,
+        bool preservePrimaryFramework = false)
     {
-        foreach (var pkg in files.Where(f => f.EndsWith("package.json")))
+        foreach (var packageFile in files.Where(file =>
+                     Path.GetFileName(file).Equals(
+                         "package.json",
+                         StringComparison.OrdinalIgnoreCase)))
         {
-            var json = JsonNode.Parse(File.ReadAllText(pkg))?.AsObject();
-            foreach (var key in new[] { "dependencies", "devDependencies" })
-                if (json?[key] is JsonObject obj)
-                    foreach (var kv in obj)
-                        deps.Add(kv.Key);
+            try
+            {
+                var json = JsonNode.Parse(File.ReadAllText(packageFile))?.AsObject();
+                foreach (var key in new[] { "dependencies", "devDependencies", "peerDependencies", "optionalDependencies" })
+                {
+                    if (json?[key] is not JsonObject dependencies)
+                        continue;
+
+                    foreach (var dependency in dependencies)
+                        deps.Add(dependency.Key);
+                }
+            }
+            catch (Exception exception) when (
+                exception is System.Text.Json.JsonException
+                    or IOException
+                    or UnauthorizedAccessException
+                    or InvalidOperationException)
+            {
+                // A malformed package manifest is not evidence for a framework.
+                // Continue discovering other manifests in a mixed repository.
+            }
         }
 
-        if (deps.Contains("@angular/core")) ctx.Framework = "Angular";
-        else if (deps.Contains("react")) ctx.Framework = "React";
-        else if (deps.Contains("vue")) ctx.Framework = "Vue";
-        else if (deps.Contains("express")) ctx.Framework = "Express";
-        else ctx.Framework = "Node.js";
+        var detectedFrameworks = new List<string>();
+        if (deps.Contains("@angular/core"))
+            detectedFrameworks.Add("Angular");
+        if (deps.Contains("react"))
+            detectedFrameworks.Add("React");
+        if (deps.Contains("vue"))
+            detectedFrameworks.Add("Vue");
+        if (deps.Contains("express"))
+            detectedFrameworks.Add("Express");
+
+        if (detectedFrameworks.Count == 0)
+            detectedFrameworks.Add("Node.js");
+
+        foreach (var framework in detectedFrameworks)
+            AddFramework(ctx, framework);
+
+        // The primary framework is a summary, not a replacement for the full
+        // framework inventory. Preserve an already detected backend in mixed
+        // repositories while still exposing all client framework signals.
+        if (!preservePrimaryFramework)
+            ctx.Framework = detectedFrameworks[0];
     }
 }

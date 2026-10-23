@@ -18,6 +18,9 @@ internal static class DomainDetector
                     "Blazor",
                     StringComparison.OrdinalIgnoreCase));
 
+        var isUnity = ctx.DetectedFrameworks.Any(framework =>
+            framework.Equals("Unity", StringComparison.OrdinalIgnoreCase));
+
         var hasBackendFramework = ctx.DetectedFrameworks.Any(framework =>
             framework.Contains("ASP.NET Core", StringComparison.OrdinalIgnoreCase)
             || framework.Contains("EntityFrameworkCore", StringComparison.OrdinalIgnoreCase)
@@ -26,9 +29,15 @@ internal static class DomainDetector
         // C# alone is not sufficient evidence for a backend classification:
         // Blazor is a UI framework. If both Blazor and server framework evidence
         // are present, preserve the mixed nature instead of hiding either side.
-        if (isBlazor && hasBackendFramework)
+        if ((isBlazor || isUnity) && hasBackendFramework)
         {
             ctx.DomainType = "FullStack";
+            return;
+        }
+
+        if (isUnity)
+        {
+            ctx.DomainType = "Game";
             return;
         }
 

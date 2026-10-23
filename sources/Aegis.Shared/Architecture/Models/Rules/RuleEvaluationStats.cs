@@ -82,9 +82,20 @@ public sealed class RuleEvaluationStats
         = new Dictionary<string, int>(
             StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Fraction of supported applicable rules with at least one completed evaluation.</summary>
-    public double EvaluationCoverage =>
-        RulesApplicable <= 0
-            ? 0.0
-            : Math.Clamp((double)RulesEvaluated / RulesApplicable, 0.0, 1.0);
+    /// <summary>
+    /// Fraction of applicable rules with at least one completed evaluation.
+    /// Applicable rules without a supported producer remain in the denominator:
+    /// missing capability must reduce coverage rather than disappear from it.
+    /// Rules positively classified as not applicable are excluded.
+    /// </summary>
+    public double EvaluationCoverage
+    {
+        get
+        {
+            var applicableRuleCount = RulesApplicable + RulesUnsupported;
+            return applicableRuleCount <= 0
+                ? 0.0
+                : Math.Clamp((double)RulesEvaluated / applicableRuleCount, 0.0, 1.0);
+        }
+    }
 }

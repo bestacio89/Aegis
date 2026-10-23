@@ -129,6 +129,7 @@ public sealed class RuleEngineCore
         var skippedInvalidThresholds = 0;
         var factsWithoutMatchingScopedMetrics = 0;
         var factsWithMetricsAtWrongScope = 0;
+        var factsWithKnownMetricsWithoutEligibleRule = 0;
 
         foreach (var fact in factList)
         {
@@ -158,6 +159,16 @@ public sealed class RuleEngineCore
                     context,
                     layerCache);
 
+            // Metric inventory and rule eligibility are separate questions.
+            // A metric declared by an unsupported or currently inapplicable
+            // rule is not an unknown metric-production gap.
+            var matchedAnyRegisteredMetric = _rules.Any(rule =>
+                ArchitectureRuleMetricContracts.TryResolveMetric(
+                    rule,
+                    fact.Metrics,
+                    out _,
+                    out _));
+
             var matchedAnyDeclaredMetric = false;
             var matchedAnyScopedMetric = false;
 
@@ -169,12 +180,8 @@ public sealed class RuleEngineCore
                     out var metricKey,
                     out var metricValue);
 
-                if (metricExists)
-                    matchedAnyDeclaredMetric = true;
-
-                // A matching metric key is observable for diagnostics, but is
-                // not eligible evidence until producer and fact applicability
-                // contracts are satisfied.
+                // A metric key alone is insufficient: first establish that
+                // this rule is allowed to consume evidence from this fact.
                 if (!ArchitectureRuleMetricContracts.TryGetFactApplicability(
                         rule,
                         fact,
@@ -183,14 +190,16 @@ public sealed class RuleEngineCore
                     continue;
                 }
 
-                // Scope is part of the rule contract. Track metric evidence at
-                // an incompatible scope for diagnostics, but never evaluate it.
-                if ((rule.Scope == RuleEvaluationScope.Project) != isProjectFact)
+                if (!metricExists)
                 {
                     continue;
                 }
 
-                if (!metricExists)
+                matchedAnyDeclaredMetric = true;
+
+                // Scope is part of the rule contract. Track metric evidence at
+                // an incompatible scope for diagnostics, but never evaluate it.
+                if ((rule.Scope == RuleEvaluationScope.Project) != isProjectFact)
                 {
                     continue;
                 }
@@ -307,9 +316,13 @@ public sealed class RuleEngineCore
                     evaluatedAt));
             }
 
-            if (applicableRules.Count > 0 && !matchedAnyDeclaredMetric)
+            if (fact.Metrics.Count > 0 && !matchedAnyRegisteredMetric)
             {
                 factsWithoutMatchingScopedMetrics++;
+            }
+            else if (matchedAnyRegisteredMetric && !matchedAnyDeclaredMetric)
+            {
+                factsWithKnownMetricsWithoutEligibleRule++;
             }
             else if (matchedAnyDeclaredMetric && !matchedAnyScopedMetric)
             {
@@ -455,6 +468,7 @@ public sealed class RuleEngineCore
             RulesNotEvaluated = rulesNotEvaluated,
             FactsWithoutMatchingScopedMetrics = factsWithoutMatchingScopedMetrics,
             FactsWithMetricsAtWrongScope = factsWithMetricsAtWrongScope,
+            FactsWithKnownMetricsWithoutEligibleRule = factsWithKnownMetricsWithoutEligibleRule,
 
             RulesNotApplicable = notApplicableReasons.Keys
                 .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
@@ -508,13 +522,16 @@ public sealed class RuleEngineCore
         _logger.LogInformation(
             "RuleEngineCore processed {Facts} facts: {Violations} violations; " +
             "{Checks} checks ({Passed} passed, {Violated} violated); " +
-            "{Evaluated}/{Registered} rules evaluated; " +
+            "{Evaluated}/{Registered} registered rules evaluated; " +
+            "{SupportedEvaluated}/{SupportedApplicable} supported applicable rules evaluated " +
+            "({Coverage:P1} coverage); " +
             "{NotApplicable} not applicable; {NotEvaluated} not evaluated; " +
             "{ProjectSummaries} project summaries processed; " +
             "{NonFiniteSkipped} non-finite metrics skipped; " +
             "{InvalidThresholds} invalid thresholds skipped; " +
-            "{FactsWithoutMetrics} facts had no declared rule metric; " +
-            "{WrongScopeFacts} facts had declared metrics only at the wrong scope.",
+            "{FactsWithoutMetrics} facts emitted only undeclared metric keys; " +
+            "{KnownButIneligible} facts emitted registered metrics with no eligible rule; " +
+            "{WrongScopeFacts} facts had applicable metrics only at the wrong scope.",
             factList.Count,
             results.Count,
             totalChecks,
@@ -522,12 +539,16 @@ public sealed class RuleEngineCore
             checksViolated,
             stats.RulesEvaluated,
             stats.RulesRegistered,
+            stats.RulesEvaluated,
+            stats.RulesApplicable,
+            stats.EvaluationCoverage,
             stats.RulesNotApplicable.Count,
             stats.RulesNotEvaluated.Count,
             projectSummaryFacts,
             skippedNonFiniteMetrics,
             skippedInvalidThresholds,
             factsWithoutMatchingScopedMetrics,
+            factsWithKnownMetricsWithoutEligibleRule,
             factsWithMetricsAtWrongScope);
 
 

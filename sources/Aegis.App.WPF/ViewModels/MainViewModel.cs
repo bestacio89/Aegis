@@ -19,9 +19,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly SemaphoreSlim _syncLock = new(1, 1);
     private readonly AegisArchitectureAnalysisRunner _runner;
 
+    private readonly ArchitectureOverviewViewModel _architectureOverview;
     private readonly SectionDashboardViewModel _sectionDashboard;
     private readonly LayerDashboardViewModel _layerDashboard;
     private readonly RuleDashboardViewModel _ruleDashboard;
+    private readonly FindingsLedgerViewModel _findingsLedger;
     private readonly ReportVisualizationViewModel _reportVisualization;
     private readonly SecurityWorkspaceViewModel _securityWorkspace;
     private readonly ConfigurationWorkspaceViewModel _configurationWorkspace;
@@ -32,12 +34,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private string _repositoryPath = string.Empty;
     private double _analysisProgress;
+    private string _analysisStage = "Idle";
     private object? _activeWorkspaceViewModel;
     private string? _selectedWorkspace;
     private string _selectedExportFormat = "pdf";
 
     public MainViewModel(
         AegisArchitectureAnalysisRunner runner,
+        ArchitectureOverviewViewModel architectureOverview,
         SectionDashboardViewModel sectionDashboard,
         LayerDashboardViewModel layerDashboard,
         RuleDashboardViewModel ruleDashboard,
@@ -47,17 +51,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         _runner = runner;
 
+        _architectureOverview = architectureOverview;
         _sectionDashboard = sectionDashboard;
         _layerDashboard = layerDashboard;
         _ruleDashboard = ruleDashboard;
+        _findingsLedger = new FindingsLedgerViewModel();
         _reportVisualization = reportVisualization;
         _securityWorkspace = securityWorkspace;
         _configurationWorkspace = configurationWorkspace;
 
         _architectureWorkspace = new ArchitectureWorkspaceViewModel(
+            _architectureOverview,
             _sectionDashboard,
             _layerDashboard,
             _ruleDashboard,
+            _findingsLedger,
             _reportVisualization);
 
         SelectRepositoryCommand =
@@ -117,6 +125,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get => _analysisProgress;
         set => SetField(ref _analysisProgress, value);
+    }
+
+    public string AnalysisStage
+    {
+        get => _analysisStage;
+        set => SetField(ref _analysisStage, value);
     }
 
     public object? ActiveWorkspaceViewModel
@@ -227,13 +241,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Logs.Add("[EXEC] Starting Aegis architecture analysis...");
 
             AnalysisProgress = 0;
+            AnalysisStage = "Preparing analysis";
+
+            // Progress<T> captures the WPF synchronization context, allowing the
+            // runner to report real pipeline progress without cross-thread UI updates.
+            var progress = new Progress<AnalysisProgressInfo>(update =>
+            {
+                AnalysisProgress = Math.Clamp(update.Percent, 0d, 100d);
+                AnalysisStage = string.IsNullOrWhiteSpace(update.Detail)
+                    ? update.Stage
+                    : $"{update.Stage}: {update.Detail}";
+            });
 
             var result = await _runner.RunSessionAsync(
                 RepositoryPath,
-                policyPath: null);
+                policyPath: null,
+                progress: progress);
 
             if (!result.Success)
             {
+                AnalysisStage = "Failed";
                 Logs.Add($"[ERROR] Analysis failed: {result.ErrorMessage}");
                 return;
             }
@@ -244,11 +271,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
             RefreshDashboards(_currentReport, _currentContext);
 
             AnalysisProgress = 100;
+            AnalysisStage = "Complete";
 
             Logs.Add("[SUCCESS] Analysis completed.");
         }
         catch (Exception ex)
         {
+            AnalysisStage = "Failed";
             Logs.Add($"[FATAL] {ex.Message}");
         }
         finally
@@ -261,9 +290,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         AegisArchitectureReport report,
         ProjectArchitectureContext context)
     {
+        _architectureOverview.Update(report, context);
         _layerDashboard.Update(report);
         _sectionDashboard.Update(report);
         _ruleDashboard.Update(report);
+        _findingsLedger.Update(report);
         _reportVisualization.Update(report, context);
     }
 

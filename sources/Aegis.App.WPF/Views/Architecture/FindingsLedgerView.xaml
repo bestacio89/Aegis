@@ -1,0 +1,125 @@
+<UserControl x:Class="Aegis.Wpf.Views.Architecture.FindingsLedgerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Aegis.Wpf.Converters"
+             Background="{StaticResource Brush.Ink}"
+             Foreground="{StaticResource Brush.TextPrimary}"
+             FontFamily="{StaticResource Font.Body}">
+  <UserControl.Resources>
+    <conv:SeverityToBrushConverter x:Key="SeverityToBrushConverter"/>
+  </UserControl.Resources>
+  <Grid Margin="12">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+    </Grid.RowDefinitions>
+
+    <Border Grid.Row="0" Style="{StaticResource Card.Structural}" Margin="0,0,0,10">
+      <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <StackPanel>
+          <TextBlock Text="FINDINGS LEDGER" Style="{StaticResource Text.Eyebrow}"
+                     Foreground="{StaticResource Brush.AccentStructural}"/>
+          <TextBlock Text="{Binding ProjectName}" Style="{StaticResource Text.Title}"
+                     Margin="0,5,0,0" TextWrapping="Wrap"/>
+          <TextBlock Text="Search, sort, and triage individual findings. Full source targets are retained to support investigation."
+                     Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
+                     Margin="0,6,12,0" TextWrapping="Wrap" MaxWidth="900"/>
+        </StackPanel>
+        <Border Grid.Column="1" Background="{StaticResource Brush.PanelElevated}"
+                BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                CornerRadius="4" Padding="12,8" VerticalAlignment="Top">
+          <StackPanel>
+            <TextBlock Text="VISIBLE / TOTAL" Style="{StaticResource Text.Eyebrow}"/>
+            <TextBlock Text="{Binding FilteredFindings, StringFormat={}{0:N0}}"
+                       Style="{StaticResource Text.KpiValue}" FontSize="22"/>
+            <TextBlock Text="{Binding TotalFindings, StringFormat=of {0:N0} findings}"
+                       Foreground="{StaticResource Brush.TextMuted}" FontSize="11"/>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Border>
+
+    <UniformGrid Grid.Row="1" Columns="6" Margin="-6,0,-6,4">
+      <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+        <StackPanel><TextBlock Text="BLOCKER" Style="{StaticResource Text.Eyebrow}"/>
+          <TextBlock Text="{Binding BlockerCount}" Style="{StaticResource Text.KpiValue}" FontSize="23" Foreground="{StaticResource Brush.StatusBlocker}"/></StackPanel>
+      </Border>
+      <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+        <StackPanel><TextBlock Text="CRITICAL" Style="{StaticResource Text.Eyebrow}"/>
+          <TextBlock Text="{Binding CriticalCount}" Style="{StaticResource Text.KpiValue}" FontSize="23" Foreground="{StaticResource Brush.StatusCritical}"/></StackPanel>
+      </Border>
+      <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+        <StackPanel><TextBlock Text="HIGH" Style="{StaticResource Text.Eyebrow}"/>
+          <TextBlock Text="{Binding HighCount}" Style="{StaticResource Text.KpiValue}" FontSize="23" Foreground="{StaticResource Brush.StatusWarning}"/></StackPanel>
+      </Border>
+      <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+        <StackPanel><TextBlock Text="MEDIUM" Style="{StaticResource Text.Eyebrow}"/>
+          <TextBlock Text="{Binding MediumCount}" Style="{StaticResource Text.KpiValue}" FontSize="23"/></StackPanel>
+      </Border>
+      <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+        <StackPanel><TextBlock Text="LOW" Style="{StaticResource Text.Eyebrow}"/>
+          <TextBlock Text="{Binding LowCount}" Style="{StaticResource Text.KpiValue}" FontSize="23"/></StackPanel>
+      </Border>
+      <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+        <StackPanel><TextBlock Text="INFO" Style="{StaticResource Text.Eyebrow}"/>
+          <TextBlock Text="{Binding InfoCount}" Style="{StaticResource Text.KpiValue}" FontSize="23"/></StackPanel>
+      </Border>
+    </UniformGrid>
+
+    <Grid Grid.Row="2" Margin="0,4,0,10">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+               ToolTip="Filter by rule, category, severity, source target, or finding text"
+               MinHeight="38" Padding="12,8" Margin="0,0,12,0"
+               Background="{StaticResource Brush.PanelElevated}"
+               Foreground="{StaticResource Brush.TextPrimary}"
+               BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+               VerticalContentAlignment="Center"/>
+      <Button Grid.Column="1" Content="Clear filter" Click="ClearFilter_Click"
+              Padding="14,8" MinHeight="38"
+              Background="{StaticResource Brush.PanelElevated}"
+              Foreground="{StaticResource Brush.TextPrimary}"
+              BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"/>
+    </Grid>
+
+    <Border Grid.Row="3" Background="{StaticResource Brush.Panel}"
+            BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+            CornerRadius="4" Padding="8">
+      <DataGrid ItemsSource="{Binding FindingsView}"
+                AutoGenerateColumns="False" IsReadOnly="True"
+                CanUserAddRows="False" CanUserDeleteRows="False"
+                CanUserReorderColumns="False" CanUserResizeRows="False"
+                CanUserSortColumns="True" SelectionMode="Single"
+                SelectionUnit="FullRow" HeadersVisibility="Column"
+                EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                VirtualizingPanel.IsVirtualizing="True"
+                VirtualizingPanel.VirtualizationMode="Recycling"
+                ScrollViewer.CanContentScroll="True"
+                RowDetailsVisibilityMode="Collapsed"
+                Style="{StaticResource Grid.Ledger}"
+                ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}">
+        <DataGrid.Columns>
+          <DataGridTemplateColumn Header="Severity" Width="105">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate>
+                <Border Background="{Binding Severity, Converter={StaticResource SeverityToBrushConverter}}"
+                        CornerRadius="3" Padding="8,3" HorizontalAlignment="Left">
+                  <TextBlock Text="{Binding Severity}" Foreground="{StaticResource Brush.Ink}"
+                             FontWeight="SemiBold" FontSize="11"/>
+                </Border>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Header="Rule" Binding="{Binding RuleName}" Width="190"/>
+          <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="140"/>
+          <DataGridTextColumn Header="Source target" Binding="{Binding Target}" Width="240"/>
+          <DataGridTextColumn Header="Impact" Binding="{Binding Impact, StringFormat={}{0:F2}}" Width="85"/>
+          <DataGridTextColumn Header="Finding" Binding="{Binding Message}" Width="*"/>
+        </DataGrid.Columns>
+      </DataGrid>
+    </Border>
+  </Grid>
+</UserControl>

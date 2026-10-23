@@ -1,4 +1,4 @@
-namespace Aegis.Shared.Architecture.Models;
+﻿namespace Aegis.Shared.Architecture.Models;
 
 /// <summary>
 /// Counts and diagnostics describing what the rule engine actually assessed.
@@ -56,16 +56,14 @@ public sealed class RuleEvaluationStats
     public int ChecksPerformed { get; init; }
 
     /// <summary>
-    /// Facts that emitted one or more metrics, but none of those keys matches a
-    /// registered rule's declared metric. This may include informational summary
-    /// metrics and is not, by itself, proof of an unknown metric or producer defect.
-    /// Facts with no metrics are not counted.
+    /// Evaluator facts that contain no metric key declared by any applicable rule.
+    /// This is a metric-production gap, not an evaluator execution failure.
     /// </summary>
     public int FactsWithoutMatchingScopedMetrics { get; init; }
 
     /// <summary>
-    /// Facts whose metric keys match a rule that is applicable to the fact,
-    /// but the rule's required scope differs from the fact's declared scope.
+    /// Evaluator facts whose metric keys are known, but only match rules at a
+    /// different scope than the fact's declared scope.
     /// </summary>
     public int FactsWithMetricsAtWrongScope { get; init; }
 
@@ -76,7 +74,6 @@ public sealed class RuleEvaluationStats
     /// Wrong-scope evidence is tracked separately.
     /// </summary>
     public int FactsWithKnownMetricsWithoutEligibleRule { get; init; }
-
 
     public IReadOnlyList<string> RulesNotEvaluated { get; init; }
         = Array.Empty<string>();
@@ -99,9 +96,20 @@ public sealed class RuleEvaluationStats
         = new Dictionary<string, int>(
             StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Fraction of supported applicable rules with at least one completed evaluation.</summary>
-    public double EvaluationCoverage =>
-        RulesApplicable <= 0
-            ? 0.0
-            : Math.Clamp((double)RulesEvaluated / RulesApplicable, 0.0, 1.0);
+    /// <summary>
+    /// Percentage of applicable rules with at least one completed evaluation.
+    /// Applicable rules without a supported producer remain in the denominator:
+    /// missing capability must reduce coverage rather than disappear from it.
+    /// Rules positively classified as not applicable are excluded.
+    /// </summary>
+    public double EvaluationCoverage
+    {
+        get
+        {
+            var applicableRuleCount = RulesApplicable + RulesUnsupported;
+            return applicableRuleCount <= 0
+                ? 0.0
+                : Math.Clamp((double)RulesEvaluated / applicableRuleCount * 100.0, 0.0, 100.0);
+        }
+    }
 }

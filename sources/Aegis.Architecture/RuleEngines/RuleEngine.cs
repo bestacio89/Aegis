@@ -295,6 +295,10 @@ public sealed class RuleEngine
             report.Diagnostics.Add(diagnostic);
         }
 
+        // Partial evaluator or discovery coverage cannot produce a complete assessment.
+        if (diagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
+            report.Metrics.AssessmentComplete = false;
+
         var configurationDiagnosticCount = facts
             .Where(fact => fact is not null
                 && string.Equals(

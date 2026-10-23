@@ -88,13 +88,15 @@ public sealed partial class ReportVisualizationViewModel
         HealthStatus =
             notAssessed
                 ? "Not assessed"
-                : health switch
-                {
-                    >= 90 => "Excellent",
-                    >= 80 => "Healthy",
-                    >= 50 => "At Risk",
-                    _ => "Critical"
-                };
+                : !report.Metrics.AssessmentComplete
+                    ? "Provisional"
+                    : health switch
+                    {
+                        >= 90 => "Excellent",
+                        >= 80 => "Healthy",
+                        >= 50 => "At Risk",
+                        _ => "Critical"
+                    };
 
 
 
@@ -169,6 +171,28 @@ public sealed partial class ReportVisualizationViewModel
                     "Metric contract failures",
                     report.EvaluationStats.MetricContractFailures.ToString(),
                     "Measurements withheld because their units or threshold scales violate a verified contract"));
+
+            SummaryItems.Add(
+                new(
+                    "Rule evaluation coverage",
+                    report.Metrics.HasCoverageEvidence
+                        ? $"{report.Metrics.RuleEvaluationCoverage:0.##}%"
+                        : "n/a",
+                    "Share of applicable rules evaluated; unsupported rules remain in the denominator"));
+
+            SummaryItems.Add(
+                new(
+                    "Coverage-adjusted health",
+                    report.Metrics.HasAssessmentEvidence && report.Metrics.HasCoverageEvidence
+                        ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.##}%"
+                        : "n/a",
+                    "Observed health discounted by rule-evaluation coverage; diagnostic, not compliance"));
+
+            SummaryItems.Add(
+                new(
+                    "Assessment completeness",
+                    report.Metrics.AssessmentComplete ? "Complete" : "Incomplete",
+                    "Incomplete means applicable rules or evidence remain unresolved"));
         }
         else
         {
@@ -255,19 +279,23 @@ public sealed partial class ReportVisualizationViewModel
             ? string.Empty
             : $" {notApplicable} rule(s) were not applicable; {notEvaluated} applicable rule(s) had no matching measurement.";
 
+        var assessmentQualifier = stats is null || report.Metrics.AssessmentComplete
+            ? string.Empty
+            : $" Assessment is incomplete: {report.Metrics.RuleEvaluationCoverage:0.##}% rule coverage; the health index is provisional.";
+
 
         if (report.TotalViolations == 0)
         {
             return stats is null
                 ? "Architecture evaluation completed successfully. No violations detected."
                 : $"Architecture evaluation completed. No violations across {stats.ChecksPerformed:N0} checks " +
-                  $"({stats.RulesEvaluated} of {stats.RulesRegistered} rules applied).{coverage}";
+                  $"({stats.RulesEvaluated} of {stats.RulesRegistered} rules applied).{coverage}{assessmentQualifier}";
         }
 
 
         return
             $"Architecture review detected {report.TotalViolations} findings. " +
-            $"Current health index is {health:0.##}%.{coverage}";
+            $"Observed health index is {health:0.##}%.{coverage}{assessmentQualifier}";
     }
 
 

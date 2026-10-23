@@ -34,13 +34,14 @@ public sealed partial class ArchitectureOverviewViewModel : ObservableObject
         FilesScanned = report.TotalFilesScanned.ToString("N0");
 
         var stats = report.EvaluationStats;
-        var hasNoChecks = stats is not null && stats.ChecksPerformed == 0;
+        var hasNoChecks = report.ChecksPerformed == 0;
         AssessmentStatus = hasNoChecks
             ? "Not assessed"
             : report.Metrics.AssessmentComplete ? "Assessment complete" : "Provisional";
 
+        // A violation count is not a rule-evaluation count. Never substitute one for the other.
         RulesEvaluated = stats is null
-            ? report.Results.Count.ToString("N0")
+            ? "n/a"
             : $"{report.RulesEvaluated:N0} / {report.RulesRegistered:N0}";
 
         RuleCoverage = report.Metrics.HasCoverageEvidence

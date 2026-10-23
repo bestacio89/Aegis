@@ -113,11 +113,26 @@ public sealed class RuleMetricScopeDiagnosticTests
             }
         };
 
+        var unknownFact = new ArchitectureEvaluatorResult(
+            "FixtureEvaluator",
+            "UnknownMetricFixture")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                ["UnregisteredFixtureMetric"] = 1
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "src/UnknownMetricFixture.cs"
+            }
+        };
+
         var outcome = engine.EvaluateDetailed(
             new ProjectArchitectureContext(),
-            [fact]);
+            [fact, unknownFact]);
 
-        Assert.Equal(0, outcome.Stats.FactsWithoutMatchingScopedMetrics);
+        Assert.Equal(1, outcome.Stats.FactsWithoutMatchingScopedMetrics);
         Assert.Equal(1, outcome.Stats.FactsWithKnownMetricsWithoutEligibleRule);
         Assert.Equal(0, outcome.Stats.FactsWithMetricsAtWrongScope);
         Assert.Contains(

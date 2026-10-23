@@ -88,13 +88,15 @@ public sealed partial class ReportVisualizationViewModel
         HealthStatus =
             notAssessed
                 ? "Not assessed"
-                : health switch
-                {
-                    >= 90 => "Excellent",
-                    >= 80 => "Healthy",
-                    >= 50 => "At Risk",
-                    _ => "Critical"
-                };
+                : !report.Metrics.AssessmentComplete
+                    ? "Provisional"
+                    : health switch
+                    {
+                        >= 90 => "Excellent",
+                        >= 80 => "Healthy",
+                        >= 50 => "At Risk",
+                        _ => "Critical"
+                    };
 
 
 

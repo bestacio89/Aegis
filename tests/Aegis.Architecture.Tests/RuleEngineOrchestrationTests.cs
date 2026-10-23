@@ -108,6 +108,48 @@ public sealed class RuleEngineOrchestrationTests
     }
 
     [Fact]
+    public async Task RunAsync_preserves_reported_diagnostic_count_when_details_are_truncated()
+    {
+        using var directory = new TemporaryDirectory();
+        var evaluator = new FixtureEvaluator(
+            "ConfigurationEvaluator",
+            (_, _) => Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(
+            [
+                new ArchitectureEvaluatorResult("ConfigurationEvaluator", directory.Path)
+                {
+                    Category = "InfrastructureSummary",
+                    Metrics = new Dictionary<string, double>
+                    {
+                        ["DiagnosticCount"] = 3
+                    },
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["EvaluationScope"] = "Project",
+                        ["AnalysisStatus"] = "CompletedWithDiagnostics",
+                        ["Diagnostics"] = "Invalid JSON input.\\nUnreadable YAML input."
+                    }
+                }
+            ]));
+
+        var report = await CreateEngine([evaluator]).RunAsync(
+            directory.Path,
+            new ProjectArchitectureContext
+            {
+                ProjectName = "SampleProject",
+                RootPath = directory.Path,
+                Language = "C#"
+            });
+
+        Assert.Equal(3, report.Diagnostics.Count);
+        Assert.Equal(2, report.Diagnostics.Count(diagnostic =>
+            diagnostic.Code == "EvaluatorReportedDiagnostic"));
+        var truncated = Assert.Single(report.Diagnostics, diagnostic =>
+            diagnostic.Code == "EvaluatorDiagnosticDetailsTruncated");
+        Assert.Contains("reported 3 diagnostics", truncated.Message, StringComparison.Ordinal);
+        Assert.True(truncated.AffectsCoverage);
+    }
+
+    [Fact]
     public async Task RunAsync_executes_framework_specific_evaluators_only_for_matching_project_scopes()
     {
         using var directory = new TemporaryDirectory();

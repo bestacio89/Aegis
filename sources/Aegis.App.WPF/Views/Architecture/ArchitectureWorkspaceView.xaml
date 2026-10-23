@@ -8,104 +8,97 @@
     Foreground="{StaticResource Brush.TextPrimary}">
 
   <UserControl.Resources>
-
+    <DataTemplate DataType="{x:Type archivm:ArchitectureOverviewViewModel}">
+      <artchiviews:ArchitectureOverviewView />
+    </DataTemplate>
     <DataTemplate DataType="{x:Type archivm:SectionDashboardViewModel}">
       <artchiviews:SectionDashboardView />
     </DataTemplate>
-
     <DataTemplate DataType="{x:Type archivm:LayerDashboardViewModel}">
       <artchiviews:LayerDashboardView />
     </DataTemplate>
-
     <DataTemplate DataType="{x:Type archivm:RuleDashboardViewModel}">
       <artchiviews:RuleDashboardView />
     </DataTemplate>
-
     <DataTemplate DataType="{x:Type archivm:ReportVisualizationViewModel}">
       <artchiviews:ReportVisualizationView />
     </DataTemplate>
 
+    <Style x:Key="ArchitectureTabItem" TargetType="TabItem">
+      <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="14,9"/>
+      <Setter Property="Margin" Value="0,0,6,0"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabItem">
+            <Border x:Name="TabBorder" Background="{TemplateBinding Background}"
+                    BorderBrush="Transparent" BorderThickness="0,0,0,2"
+                    CornerRadius="4,4,0,0" Padding="{TemplateBinding Padding}">
+              <ContentPresenter ContentSource="Header" VerticalAlignment="Center"
+                                HorizontalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource Brush.PanelElevated}"/>
+                <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource Brush.AccentStructural}"/>
+                <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource Brush.Panel}"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </UserControl.Resources>
 
   <Grid Margin="24">
-
     <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
     </Grid.RowDefinitions>
 
-    <!-- Workspace heading -->
+    <Grid Grid.Row="0" Margin="0,0,0,18">
+      <StackPanel>
+        <TextBlock Text="Architecture" FontSize="28" FontWeight="SemiBold"
+                   Foreground="{StaticResource Brush.TextPrimary}"/>
+        <TextBlock Text="Understand system structure, assess architectural rules, and investigate evidence."
+                   Margin="0,6,0,0" Foreground="{StaticResource Brush.TextMuted}"
+                   TextWrapping="Wrap"/>
+      </StackPanel>
+    </Grid>
 
-    <StackPanel
-        Grid.Row="0"
-        Margin="0,0,0,20">
-
-      <TextBlock
-          Text="Architecture"
-          FontSize="28"
-          FontWeight="SemiBold" />
-
-      <TextBlock
-          Text="Explore system structure, architectural rules, and assessment reports."
-          Margin="0,6,0,0"
-          Opacity="0.7"
-          TextWrapping="Wrap" />
-
-    </StackPanel>
-
-    <!-- Tab selector -->
-
-    <TabControl
-        Grid.Row="1"
-        ItemsSource="{Binding Tabs}"
-        SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
-        Background="Transparent"
-        BorderThickness="0"
-        Foreground="{StaticResource Brush.TextPrimary}">
-
+    <TabControl Grid.Row="1"
+                ItemsSource="{Binding Tabs}"
+                SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
+                ItemContainerStyle="{StaticResource ArchitectureTabItem}"
+                Background="Transparent" BorderThickness="0"
+                Foreground="{StaticResource Brush.TextPrimary}"
+                Padding="0" Margin="0,0,0,8">
       <TabControl.ItemTemplate>
         <DataTemplate>
-          <StackPanel
-              Orientation="Horizontal"
-              Margin="4,2"
-              VerticalAlignment="Center">
-
-            <TextBlock
-                Text="{Binding Glyph}"
-                Margin="0,0,8,0"
-                VerticalAlignment="Center" />
-
-            <TextBlock
-                Text="{Binding Name}"
-                VerticalAlignment="Center" />
-
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Glyph}" Margin="0,0,8,0" FontSize="14"/>
+            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
           </StackPanel>
         </DataTemplate>
       </TabControl.ItemTemplate>
-
-      <!-- Content is rendered once by the ContentControl below. -->
       <TabControl.ContentTemplate>
-        <DataTemplate>
-          <Grid />
-        </DataTemplate>
+        <DataTemplate><Grid/></DataTemplate>
       </TabControl.ContentTemplate>
-
     </TabControl>
 
-    <!-- Selected dashboard -->
-
-    <Border
-        Grid.Row="2"
-        Margin="0,12,0,0"
-        Background="Transparent">
-
-      <ContentControl
-          Content="{Binding ActiveContent}"
-          HorizontalContentAlignment="Stretch"
-          VerticalContentAlignment="Stretch" />
-
+    <Border Grid.Row="2" Margin="0,4,0,0" Background="Transparent">
+      <ContentControl Content="{Binding ActiveContent}"
+                      HorizontalContentAlignment="Stretch"
+                      VerticalContentAlignment="Stretch"/>
     </Border>
-
   </Grid>
 </UserControl>

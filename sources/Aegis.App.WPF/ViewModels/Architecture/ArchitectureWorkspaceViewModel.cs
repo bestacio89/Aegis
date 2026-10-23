@@ -1,29 +1,28 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
 namespace Aegis.Wpf.ViewModels.Architecture;
 
-public sealed record ArchitectureTab(
-    string Name,
-    string Glyph,
-    object ViewModel);
+public sealed record ArchitectureTab(string Name, string Glyph, object ViewModel);
 
 public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
 {
+    private readonly ArchitectureOverviewViewModel _overview;
     private readonly SectionDashboardViewModel _sections;
     private readonly LayerDashboardViewModel _layers;
     private readonly RuleDashboardViewModel _rules;
     private readonly ReportVisualizationViewModel _reports;
-
     private ArchitectureTab? _selectedTab;
 
     public ArchitectureWorkspaceViewModel(
+        ArchitectureOverviewViewModel overview,
         SectionDashboardViewModel sections,
         LayerDashboardViewModel layers,
         RuleDashboardViewModel rules,
         ReportVisualizationViewModel reports)
     {
+        _overview = overview;
         _sections = sections;
         _layers = layers;
         _rules = rules;
@@ -31,9 +30,10 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
 
         Tabs =
         [
+            new ArchitectureTab("Overview", "◈", _overview),
             new ArchitectureTab("Sections", "▦", _sections),
             new ArchitectureTab("Layers", "◫", _layers),
-            new ArchitectureTab("Rules", "☷", _rules),
+            new ArchitectureTab("Rules & Findings", "☷", _rules),
             new ArchitectureTab("Reports", "▤", _reports)
         ];
 
@@ -41,7 +41,6 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
-
     public ObservableCollection<ArchitectureTab> Tabs { get; }
 
     public ArchitectureTab? SelectedTab
@@ -53,7 +52,6 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
                 return;
 
             _selectedTab = value;
-
             OnPropertyChanged();
             OnPropertyChanged(nameof(ActiveContent));
         }
@@ -63,21 +61,15 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
 
     public void SelectTab(string name)
     {
-        var tab = Tabs.FirstOrDefault(
-            candidate => string.Equals(
-                candidate.Name,
-                name,
-                StringComparison.OrdinalIgnoreCase));
+        var tab = Tabs.FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase)
+            || (name.Equals("Rules", StringComparison.OrdinalIgnoreCase)
+                && candidate.Name.Equals("Rules & Findings", StringComparison.OrdinalIgnoreCase)));
 
         if (tab is not null)
             SelectedTab = tab;
     }
 
-    private void OnPropertyChanged(
-        [CallerMemberName] string? propertyName = null)
-    {
-        PropertyChanged?.Invoke(
-            this,
-            new PropertyChangedEventArgs(propertyName));
-    }
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }

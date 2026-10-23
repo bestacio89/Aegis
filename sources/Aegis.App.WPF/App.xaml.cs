@@ -116,6 +116,7 @@ public partial class App : Application
                 services.AddSingleton<ConfigurationDocumentService>();
                 services.AddSingleton<ConfigurationWorkspaceViewModel>();
 
+                services.AddTransient<ArchitectureOverviewViewModel>();
                 services.AddTransient<LayerDashboardViewModel>();
                 services.AddTransient<SectionDashboardViewModel>();
                 services.AddTransient<RuleDashboardViewModel>();
@@ -126,6 +127,7 @@ public partial class App : Application
                 // VIEWS
                 // =========================
                 services.AddSingleton<MainWindow>();
+                services.AddTransient<ArchitectureOverviewView>();
                 services.AddTransient<ReportVisualizationView>();
                 services.AddTransient<LayerDashboardView>();
                 services.AddTransient<SectionDashboardView>();

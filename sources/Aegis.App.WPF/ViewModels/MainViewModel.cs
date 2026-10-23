@@ -19,6 +19,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly SemaphoreSlim _syncLock = new(1, 1);
     private readonly AegisArchitectureAnalysisRunner _runner;
 
+    private readonly ArchitectureOverviewViewModel _architectureOverview;
     private readonly SectionDashboardViewModel _sectionDashboard;
     private readonly LayerDashboardViewModel _layerDashboard;
     private readonly RuleDashboardViewModel _ruleDashboard;
@@ -38,6 +39,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public MainViewModel(
         AegisArchitectureAnalysisRunner runner,
+        ArchitectureOverviewViewModel architectureOverview,
         SectionDashboardViewModel sectionDashboard,
         LayerDashboardViewModel layerDashboard,
         RuleDashboardViewModel ruleDashboard,
@@ -47,6 +49,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         _runner = runner;
 
+        _architectureOverview = architectureOverview;
         _sectionDashboard = sectionDashboard;
         _layerDashboard = layerDashboard;
         _ruleDashboard = ruleDashboard;
@@ -55,6 +58,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _configurationWorkspace = configurationWorkspace;
 
         _architectureWorkspace = new ArchitectureWorkspaceViewModel(
+            _architectureOverview,
             _sectionDashboard,
             _layerDashboard,
             _ruleDashboard,
@@ -261,6 +265,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         AegisArchitectureReport report,
         ProjectArchitectureContext context)
     {
+        _architectureOverview.Update(report, context);
         _layerDashboard.Update(report);
         _sectionDashboard.Update(report);
         _ruleDashboard.Update(report);

@@ -162,7 +162,7 @@ public sealed class RuleEngineCore
             // Metric inventory and rule eligibility are separate questions.
             // A metric declared by an unsupported or currently inapplicable
             // rule is not an unknown metric-production gap.
-            var matchedAnyRegisteredMetric = _rules.Any(rule =>
+            var matchedAnyRegisteredMetric = ArchitectureRuleRegistry.All.Any(rule =>
                 ArchitectureRuleMetricContracts.TryResolveMetric(
                     rule,
                     fact.Metrics,

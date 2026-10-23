@@ -218,7 +218,7 @@ public static class DesignPatternRuleset
             Scope = RuleEvaluationScope.File,
             Name = "Observer Missing Unsubscribe Mechanism",
             Category = nameof(ArchitectureRuleCategory.DesignPatterns),
-            MetricKey = "LeakRisk",
+            MetricKey = "ObserverUnsubscribeMissingCount",
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 0,
             Severity = ArchitectureRuleSeverity.High,

@@ -162,6 +162,12 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                     ?? result.File;
                 if (!string.IsNullOrWhiteSpace(evidencePath))
                 {
+                    if (result.Metadata?.ContainsKey(FilePathMetadataKey) == true)
+                    {
+                        result.Metadata["SourceOwnership"] =
+                            FileExclusions.ClassifySourceOwnership(evidencePath);
+                    }
+
                     var framework = ResolveFrameworkForFile(
                         evidencePath,
                         projectPath,

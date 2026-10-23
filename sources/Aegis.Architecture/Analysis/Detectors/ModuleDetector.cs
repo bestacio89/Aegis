@@ -45,7 +45,7 @@ internal static class ModuleDetector
                 // produce generic names, not the actual module identity.
                 Name = ResolveModuleName(projectFile, path),
                 Path = path,
-                Type = DetectModuleType(path)
+                Type = DetectModuleType(path, ResolveModuleName(projectFile, path))
             };
 
 
@@ -276,14 +276,24 @@ internal static class ModuleDetector
     /// LayerDetector, which now uses the real project name directly instead of guessing
     /// a semantic bucket from this keyword match.
     /// </summary>
-    private static string DetectModuleType(string path)
+    private static string DetectModuleType(string path, string moduleName)
     {
-        var name = Path.GetFileName(
+        var pathName = Path.GetFileName(
             Path.TrimEndingDirectorySeparator(path)).ToLowerInvariant();
 
-        // Match architectural roles using project-name tokens rather than
-        // arbitrary substrings in the full path (for example, "capital" must
-        // not be mistaken for an API project).
+        // The directory is the strongest local clue. When it is generic (for
+        // example, "apps/ui" or "packages/foo"), use the actual project or
+        // manifest identity as a fallback instead of leaving the module
+        // unclassified merely because its folder does not encode its role.
+        var pathType = DetectModuleTypeFromName(pathName);
+        return pathType != "Unknown"
+            ? pathType
+            : DetectModuleTypeFromName(moduleName.ToLowerInvariant());
+    }
+
+    private static string DetectModuleTypeFromName(string name)
+    {
+        // Keep classification scoped to a module identity, never the full path.
         if (name.Contains("test", StringComparison.Ordinal))
             return "Test";
 

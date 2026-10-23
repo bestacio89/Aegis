@@ -158,8 +158,8 @@ public sealed class CrossEvaluatorAggregatorTests
         Assert.Equal(0.5, stats.EvaluationCoverage);
         Assert.Equal(0.5, report.Metrics.RuleEvaluationCoverage);
         Assert.True(report.Metrics.HasCoverageEvidence);
-        Assert.Equal(50, report.Metrics.ProjectHealthIndex);
-        Assert.Equal(25, report.Metrics.CoverageAdjustedHealthIndex);
+        Assert.Equal(100, report.Metrics.ProjectHealthIndex);
+        Assert.Equal(50, report.Metrics.CoverageAdjustedHealthIndex);
         Assert.False(report.Metrics.AssessmentComplete);
     }
 

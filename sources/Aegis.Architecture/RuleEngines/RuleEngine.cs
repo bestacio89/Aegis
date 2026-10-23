@@ -285,14 +285,47 @@ public sealed class RuleEngine
             report.Diagnostics.Add(diagnostic);
         }
 
+        var configurationDiagnosticCount = facts
+            .Where(fact => string.Equals(
+                fact.Source,
+                "ConfigurationEvaluator",
+                StringComparison.OrdinalIgnoreCase))
+            .Sum(fact => (int)Math.Max(
+                0,
+                fact.Metrics.GetValueOrDefault("DiagnosticCount")));
+
+        var incompleteFactCount = facts.Count(fact =>
+        {
+            var metadata = fact.Metadata;
+            if (metadata is null)
+                return false;
+
+            if (string.Equals(
+                    metadata.GetValueOrDefault("AnalysisComplete"),
+                    "false",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var status = metadata.GetValueOrDefault("AnalysisStatus");
+            return status is not null
+                && (status.Equals("Incomplete", StringComparison.OrdinalIgnoreCase)
+                    || status.Equals("Partial", StringComparison.OrdinalIgnoreCase)
+                    || status.Equals("CompletedWithDiagnostics", StringComparison.OrdinalIgnoreCase));
+        });
+
         _logger.LogInformation(
             "Aegis scan completed. Violations={Violations}, Checks={Checks}, " +
-            "RulesEvaluated={Evaluated}/{Registered}, Diagnostics={Diagnostics}",
+            "RulesEvaluated={Evaluated}/{Registered}, PipelineDiagnostics={PipelineDiagnostics}, " +
+            "ConfigurationDiagnostics={ConfigurationDiagnostics}, IncompleteFacts={IncompleteFacts}",
             report.TotalViolations,
             outcome.Stats.ChecksPerformed,
             outcome.Stats.RulesEvaluated,
             outcome.Stats.RulesRegistered,
-            diagnostics.Count);
+            diagnostics.Count,
+            configurationDiagnosticCount,
+            incompleteFactCount);
 
         if (outcome.Stats.ChecksPerformed == 0)
         {

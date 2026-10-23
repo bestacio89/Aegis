@@ -42,7 +42,7 @@ public sealed partial class ArchitectureOverviewViewModel : ObservableObject
         // A violation count is not a rule-evaluation count. Never substitute one for the other.
         RulesEvaluated = stats is null
             ? "n/a"
-            : $"{report.RulesEvaluated:N0} / {report.RulesRegistered:N0}";
+            : $"{report.RulesEvaluated:N0} / {(stats.RulesApplicable + stats.RulesUnsupported):N0}";
 
         RuleCoverage = report.Metrics.HasCoverageEvidence
             ? $"{report.Metrics.RuleEvaluationCoverage:0.#}%"

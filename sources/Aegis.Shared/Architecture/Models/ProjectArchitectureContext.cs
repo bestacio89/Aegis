@@ -145,6 +145,20 @@ public sealed class ProjectArchitectureContext
     public List<ArchitectureInferenceTrace> InferenceHistory { get; set; }
         = new();
 
+    /// <summary>
+    /// Discovery failures that prevented a subtree or file from being examined.
+    /// These diagnostics are coverage-affecting and must not be interpreted as
+    /// evidence that the excluded area is compliant.
+    /// </summary>
+    public List<AnalysisDiagnostic> DiscoveryDiagnostics { get; set; } = [];
+
+    /// <summary>
+    /// Counts excluded path entries by reason. An excluded directory is counted
+    /// once as a subtree boundary; its descendants are not expanded into file counts.
+    /// </summary>
+    public Dictionary<string, int> ExcludedEntriesByReason { get; set; }
+        = new(StringComparer.OrdinalIgnoreCase);
+
 
 
     // ===============================================================

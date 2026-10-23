@@ -24,6 +24,22 @@ public sealed class ProjectArchitectureContextDetectorTests
     }
 
     [Fact]
+    public void Detect_reports_an_unavailable_root_as_incomplete_discovery()
+    {
+        var missingRoot = Path.Combine(
+            Path.GetTempPath(),
+            $"AegisMissingRoot_{Guid.NewGuid():N}");
+
+        var context = ProjectArchitectureContextDetector.Detect(missingRoot);
+
+        var diagnostic = Assert.Single(context.DiscoveryDiagnostics);
+        Assert.Equal("DirectoryDiscoveryFailed", diagnostic.Code);
+        Assert.Equal("ProjectArchitectureContextDetector", diagnostic.Component);
+        Assert.Equal(missingRoot, diagnostic.Target);
+        Assert.True(diagnostic.AffectsCoverage);
+    }
+
+    [Fact]
     public void Detect_counts_project_files_but_excludes_generated_output()
     {
         using var directory = new TemporaryDirectory();
@@ -43,6 +59,42 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Equal(2, context.FileCount);
         Assert.Equal("2", context.MetadataMap["FileCount"]);
         Assert.Equal(directory.Path, context.RootPath);
+    }
+
+    [Fact]
+    public void Detect_reports_excluded_path_entries_by_reason()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var sourceDirectory = Path.Combine(directory.Path, "src");
+        var generatedDirectory = Path.Combine(directory.Path, "Generated");
+        var thirdPartyDirectory = Path.Combine(directory.Path, "ThirdParty");
+        var textMeshProExamples = Path.Combine(
+            directory.Path,
+            "TextMesh Pro",
+            "Examples & Extras");
+
+        Directory.CreateDirectory(sourceDirectory);
+        Directory.CreateDirectory(generatedDirectory);
+        Directory.CreateDirectory(thirdPartyDirectory);
+        Directory.CreateDirectory(textMeshProExamples);
+
+        File.WriteAllText(Path.Combine(sourceDirectory, "Widget.cs"), "public class Widget { }");
+        File.WriteAllText(Path.Combine(sourceDirectory, "Generated.Designer.cs"), "public class Generated { }");
+        File.WriteAllText(Path.Combine(generatedDirectory, "Output.cs"), "generated");
+        File.WriteAllText(Path.Combine(thirdPartyDirectory, "Vendor.cs"), "vendor");
+        File.WriteAllText(Path.Combine(textMeshProExamples, "TMP_DigitValidator.cs"), "vendor example");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal(1, context.FileCount);
+        Assert.Equal(4, context.ExcludedEntriesByReason.Values.Sum());
+        Assert.Equal(1, context.ExcludedEntriesByReason["GeneratedCode"]);
+        Assert.Equal(1, context.ExcludedEntriesByReason["GeneratedFile"]);
+        Assert.Equal(1, context.ExcludedEntriesByReason["VendoredCode"]);
+        Assert.Equal(1, context.ExcludedEntriesByReason["VendoredExample"]);
+        Assert.Equal("4", context.MetadataMap["ExcludedPathEntryCount"]);
+        Assert.Contains("VendoredExample", context.MetadataMap["ExcludedEntriesByReason"], StringComparison.Ordinal);
     }
 
     [Fact]

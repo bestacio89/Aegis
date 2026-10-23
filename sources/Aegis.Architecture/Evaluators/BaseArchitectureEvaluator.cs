@@ -168,6 +168,13 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                     ?? result.File;
                 if (!string.IsNullOrWhiteSpace(evidencePath))
                 {
+                    if (result.Metadata is { } metadata
+                        && metadata.ContainsKey(FilePathMetadataKey))
+                    {
+                        metadata["SourceOwnership"] =
+                            FileExclusions.ClassifySourceOwnership(evidencePath);
+                    }
+
                     var framework = ResolveFrameworkForFile(
                         evidencePath,
                         projectPath,
@@ -570,7 +577,6 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         var ignoredSegments = new[]
         {
             $"{Path.DirectorySeparatorChar}Library{Path.DirectorySeparatorChar}",
-            $"{Path.DirectorySeparatorChar}Temp{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}Logs{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",

@@ -40,8 +40,27 @@ public sealed class FileDiscoveryServiceTests
         var objFile = Path.Combine(directory.Path, "obj", "Generated.cs");
         var nodeFile = Path.Combine(directory.Path, "node_modules", "pkg", "index.js");
         var gitFile = Path.Combine(directory.Path, ".git", "hooks", "sample.cs");
+        var nugetFile = Path.Combine(directory.Path, ".nuget", "packages", "sample", "sample.cs");
+        var generatedFile = Path.Combine(directory.Path, "Generated", "Generated.cs");
+        var thirdPartyFile = Path.Combine(directory.Path, "ThirdParty", "Vendor.cs");
+        var textMeshProExample = Path.Combine(
+            directory.Path,
+            "TextMesh Pro",
+            "Examples & Extras",
+            "TMP_DigitValidator.cs");
 
-        foreach (var file in new[] { included, binFile, objFile, nodeFile, gitFile })
+        foreach (var file in new[]
+                 {
+                     included,
+                     binFile,
+                     objFile,
+                     nodeFile,
+                     gitFile,
+                     nugetFile,
+                     generatedFile,
+                     thirdPartyFile,
+                     textMeshProExample
+                 })
         {
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
             File.WriteAllText(file, "// fixture");
@@ -58,6 +77,10 @@ public sealed class FileDiscoveryServiceTests
         Assert.DoesNotContain(Path.GetFullPath(objFile), files);
         Assert.DoesNotContain(Path.GetFullPath(nodeFile), files);
         Assert.DoesNotContain(Path.GetFullPath(gitFile), files);
+        Assert.DoesNotContain(Path.GetFullPath(nugetFile), files);
+        Assert.DoesNotContain(Path.GetFullPath(generatedFile), files);
+        Assert.DoesNotContain(Path.GetFullPath(thirdPartyFile), files);
+        Assert.DoesNotContain(Path.GetFullPath(textMeshProExample), files);
     }
 
     [Fact]

@@ -1,4 +1,6 @@
-﻿using Aegis.Architecture.Analysis;
+﻿using System.Text.Json;
+
+using Aegis.Architecture.Analysis;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Shared.Architecture.Models;
 using Microsoft.Extensions.Logging;
@@ -74,7 +76,11 @@ public sealed class AegisArchitectureAnalyzer
                 context,
                 token);
 
-
+        if (context.DiscoveryDiagnostics.Count > 0)
+        {
+            report.Diagnostics.AddRange(context.DiscoveryDiagnostics);
+            report.Metrics.AssessmentComplete = false;
+        }
 
         EnrichReportContext(
             report,
@@ -152,7 +158,13 @@ public sealed class AegisArchitectureAnalyzer
                     context.LinesOfCode,
 
                 ["AverageComplexity"] =
-                    context.AverageComplexity
+                    context.AverageComplexity,
+
+                ["DiscoveryDiagnosticCount"] =
+                    context.DiscoveryDiagnostics.Count,
+
+                ["ExcludedPathEntryCount"] =
+                    context.ExcludedEntriesByReason.Values.Sum()
             },
 
             Metadata =
@@ -203,7 +215,22 @@ public sealed class AegisArchitectureAnalyzer
                     context.UsesKubernetes.ToString(),
 
                 ["Confidence"] =
-                    context.Confidence.ToString("P0")
+                    context.Confidence.ToString("P0"),
+
+                ["DiscoveryDiagnosticCount"] =
+                    context.DiscoveryDiagnostics.Count.ToString(),
+
+                ["AnalysisStatus"] = context.DiscoveryDiagnostics.Count == 0
+                    ? "Completed"
+                    : "CompletedWithDiagnostics",
+
+                ["Diagnostics"] = string.Join(
+                    Environment.NewLine,
+                    context.DiscoveryDiagnostics.Select(diagnostic =>
+                        $"{diagnostic.Code}: {diagnostic.Message}")),
+
+                ["ExcludedEntriesByReason"] =
+                    JsonSerializer.Serialize(context.ExcludedEntriesByReason)
             }
         };
     }

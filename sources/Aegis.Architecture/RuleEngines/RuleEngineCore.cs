@@ -416,14 +416,27 @@ public sealed class RuleEngineCore
                         || status.Equals("CompletedWithDiagnostics", StringComparison.OrdinalIgnoreCase));
             });
 
+            var disabledProducerFact = eligibleFacts.FirstOrDefault(fact =>
+                ArchitectureRuleMetricContracts.IsDeclaredProducer(
+                    rule.Id,
+                    fact.Source)
+                && string.Equals(
+                    fact.Metadata?.GetValueOrDefault("EvaluatorExecutionStatus"),
+                    "DisabledByPolicy",
+                    StringComparison.OrdinalIgnoreCase));
+
             var scopeLabel = rule.Scope.ToString().ToLowerInvariant();
             var producerDisposition =
                 ArchitectureRuleMetricContracts.GetProducerContractDisposition(rule.Id);
 
-            // Prefer explicit contract gaps and evidence-quality diagnostics
-            // over generic missing-metric messages.
+            // Prefer explicit contract gaps and execution-state evidence over
+            // generic missing-metric messages.
             notEvaluatedReasons[rule.Id] = producerDisposition is not null
                 ? producerDisposition
+                : disabledProducerFact is not null
+                    ? $"Required evaluator '{disabledProducerFact.Source}' was disabled by policy: " +
+                      (disabledProducerFact.Metadata?.GetValueOrDefault("StatusReason")
+                       ?? "No status reason was provided.")
                 : hasMetricEvidence
                 ? $"Metric '{rule.MetricKey}' was emitted at {scopeLabel} scope, but no valid comparison completed. Check for non-finite observations or an invalid threshold."
                 : hasWrongScopeMetricEvidence

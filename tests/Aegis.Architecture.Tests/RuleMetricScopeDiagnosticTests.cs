@@ -141,6 +141,59 @@ public sealed class RuleMetricScopeDiagnosticTests
     }
 
 
+
+    [Fact]
+    public void File_candidate_evidence_overrides_a_contradictory_zero_candidate_summary()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var summary = new ArchitectureEvaluatorResult(
+            "BuilderPatternEvaluator",
+            "BuilderPatternSummary")
+        {
+            Category = "DesignPatternSummary",
+            Metrics = new Dictionary<string, double>
+            {
+                ["BuilderCandidateCount"] = 0,
+                ["DiscoveredFileCount"] = 12,
+                ["AnalyzedFileCount"] = 12,
+                ["UnreadableFileCount"] = 0
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project"
+            }
+        };
+
+        var candidate = new ArchitectureEvaluatorResult(
+            "BuilderPatternEvaluator",
+            "BuilderFixture.cs")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                ["BuilderPatternComplianceIndex"] = 100,
+                ["BuilderMutabilityViolationCount"] = 0
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "src/BuilderFixture.cs",
+                ["BuilderClassName"] = "BuilderFixture"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [summary, candidate]);
+
+        Assert.DoesNotContain("AEG-DES-BLD001", outcome.Stats.RulesNotApplicable);
+        Assert.Contains(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == "AEG-DES-BLD001");
+    }
+
     [Fact]
     public void Disabled_rule_producer_is_reported_as_disabled_not_missing_metric()
     {

@@ -16,18 +16,23 @@ public sealed class LoggingEvaluatorScopeTests
 
         try
         {
-            File.WriteAllText(Path.Combine(directory.FullName, "Application.cs"), "public class Application { }");
+            // LoggingEvaluator applies the same application-source boundary as
+            // the other architecture evaluators. Keep all candidates beneath
+            // that boundary so the assertions exercise exclusions, not discovery.
+            var application = Path.Combine(directory.FullName, "back");
+            Directory.CreateDirectory(application);
+            File.WriteAllText(Path.Combine(application, "Application.cs"), "public class Application { }");
 
-            var generated = Path.Combine(directory.FullName, "Generated");
+            var generated = Path.Combine(application, "Generated");
             Directory.CreateDirectory(generated);
             File.WriteAllText(Path.Combine(generated, "Generated.cs"), "public class Generated { }");
 
-            var thirdParty = Path.Combine(directory.FullName, "ThirdParty");
+            var thirdParty = Path.Combine(application, "ThirdParty");
             Directory.CreateDirectory(thirdParty);
             File.WriteAllText(Path.Combine(thirdParty, "Vendor.cs"), "public class Vendor { }");
 
             var textMeshProExamples = Path.Combine(
-                directory.FullName,
+                application,
                 "TextMesh Pro",
                 "Examples & Extras");
             Directory.CreateDirectory(textMeshProExamples);

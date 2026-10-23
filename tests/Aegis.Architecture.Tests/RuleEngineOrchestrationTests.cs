@@ -126,7 +126,7 @@ public sealed class RuleEngineOrchestrationTests
                     {
                         ["EvaluationScope"] = "Project",
                         ["AnalysisStatus"] = "CompletedWithDiagnostics",
-                        ["Diagnostics"] = "Invalid JSON input.\\nUnreadable YAML input."
+                        ["Diagnostics"] = "Invalid JSON input.\nUnreadable YAML input."
                     }
                 }
             ]));

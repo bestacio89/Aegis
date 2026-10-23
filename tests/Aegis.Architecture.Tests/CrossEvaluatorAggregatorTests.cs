@@ -64,7 +64,7 @@ public sealed class CrossEvaluatorAggregatorTests
         Assert.Equal(0.5, domain.HealthIndex);
         Assert.Equal(50, report.Metrics.ProjectHealthIndex);
         Assert.Equal(0.5, report.Metrics.WeightedCompliance);
-        Assert.Equal(1.0, report.Metrics.RuleEvaluationCoverage);
+        Assert.Equal(100, report.Metrics.RuleEvaluationCoverage);
         Assert.True(report.Metrics.HasCoverageEvidence);
         Assert.Equal(50, report.Metrics.CoverageAdjustedHealthIndex);
         Assert.True(report.Metrics.AssessmentComplete);
@@ -155,8 +155,8 @@ public sealed class CrossEvaluatorAggregatorTests
 
         var report = CreateAggregator().Aggregate([], stats: stats);
 
-        Assert.Equal(0.5, stats.EvaluationCoverage);
-        Assert.Equal(0.5, report.Metrics.RuleEvaluationCoverage);
+        Assert.Equal(50, stats.EvaluationCoverage);
+        Assert.Equal(50, report.Metrics.RuleEvaluationCoverage);
         Assert.True(report.Metrics.HasCoverageEvidence);
         Assert.Equal(100, report.Metrics.ProjectHealthIndex);
         Assert.Equal(50, report.Metrics.CoverageAdjustedHealthIndex);

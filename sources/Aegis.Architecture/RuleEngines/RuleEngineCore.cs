@@ -127,6 +127,9 @@ public sealed class RuleEngineCore
         var projectSummaryFacts = 0;
         var skippedNonFiniteMetrics = 0;
         var skippedInvalidThresholds = 0;
+        var skippedMetricContractFailures = 0;
+        var metricContractFailureReasons =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var factsWithoutMatchingScopedMetrics = 0;
         var factsWithMetricsAtWrongScope = 0;
 
@@ -227,6 +230,24 @@ public sealed class RuleEngineCore
                         "the check was skipped.",
                         rule.Id,
                         threshold);
+
+                    continue;
+                }
+
+                if (!ArchitectureRuleMetricContracts.TryValidateMetricContract(
+                        rule,
+                        fact,
+                        metricValue,
+                        threshold,
+                        out var metricContractFailure))
+                {
+                    skippedMetricContractFailures++;
+                    metricContractFailureReasons[rule.Id] = metricContractFailure;
+
+                    _logger.LogWarning(
+                        "Skipping metric contract mismatch for rule {RuleId}: {Reason}",
+                        rule.Id,
+                        metricContractFailure);
 
                     continue;
                 }
@@ -409,7 +430,10 @@ public sealed class RuleEngineCore
 
             // Prefer explicit contract gaps and evidence-quality diagnostics
             // over generic missing-metric messages.
-            notEvaluatedReasons[rule.Id] = producerDisposition is not null
+            notEvaluatedReasons[rule.Id] =
+                metricContractFailureReasons.TryGetValue(rule.Id, out var metricContractFailure)
+                    ? metricContractFailure
+                    : producerDisposition is not null
                 ? producerDisposition
                 : hasMetricEvidence
                 ? $"Metric '{rule.MetricKey}' was emitted at {scopeLabel} scope, but no valid comparison completed. Check for non-finite observations or an invalid threshold."
@@ -441,6 +465,7 @@ public sealed class RuleEngineCore
             RulesRegistered = _rules.Count,
             RulesApplicable = applicableRules.Count,
             RulesUnsupported = unsupportedRuleReasons.Count,
+            MetricContractFailures = skippedMetricContractFailures,
             UnsupportedRuleReasons = unsupportedRuleReasons,
             RulesEvaluated = evaluatedRuleIds.Count,
             RulesPassed = distinctPassedRules,
@@ -513,6 +538,7 @@ public sealed class RuleEngineCore
             "{ProjectSummaries} project summaries processed; " +
             "{NonFiniteSkipped} non-finite metrics skipped; " +
             "{InvalidThresholds} invalid thresholds skipped; " +
+            "{MetricContractFailures} metric contract failures skipped; " +
             "{FactsWithoutMetrics} facts had no declared rule metric; " +
             "{WrongScopeFacts} facts had declared metrics only at the wrong scope.",
             factList.Count,
@@ -527,6 +553,7 @@ public sealed class RuleEngineCore
             projectSummaryFacts,
             skippedNonFiniteMetrics,
             skippedInvalidThresholds,
+            skippedMetricContractFailures,
             factsWithoutMatchingScopedMetrics,
             factsWithMetricsAtWrongScope);
 

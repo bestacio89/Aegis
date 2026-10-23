@@ -64,6 +64,10 @@ public sealed class CrossEvaluatorAggregatorTests
         Assert.Equal(0.5, domain.HealthIndex);
         Assert.Equal(50, report.Metrics.ProjectHealthIndex);
         Assert.Equal(0.5, report.Metrics.WeightedCompliance);
+        Assert.Equal(1.0, report.Metrics.RuleEvaluationCoverage);
+        Assert.True(report.Metrics.HasCoverageEvidence);
+        Assert.Equal(50, report.Metrics.CoverageAdjustedHealthIndex);
+        Assert.True(report.Metrics.AssessmentComplete);
         Assert.Equal(50, report.ComplianceScores[ArchitectureRuleCategory.Architecture]);
         Assert.Same(stats, report.EvaluationStats);
         Assert.Single(report.Results);
@@ -121,6 +125,42 @@ public sealed class CrossEvaluatorAggregatorTests
         Assert.Equal(0, unassessedDomain.HealthIndex);
         Assert.Equal(100, report.Metrics.ProjectHealthIndex);
         Assert.True(report.Metrics.HasAssessmentEvidence);
+    }
+
+    [Fact]
+    public void Aggregate_counts_unsupported_rules_against_coverage_and_marks_assessment_incomplete()
+    {
+        var stats = new RuleEvaluationStats
+        {
+            RulesRegistered = 2,
+            RulesApplicable = 1,
+            RulesUnsupported = 1,
+            RulesEvaluated = 1,
+            RulesPassed = 1,
+            ChecksPerformed = 1,
+            ChecksPassed = 1,
+            CheckBuckets =
+            [
+                new RuleCheckBucket(
+                    "Application",
+                    ArchitectureRuleSeverity.Low,
+                    "Architecture",
+                    1)
+            ],
+            RulesEvaluatedByDomain = new Dictionary<string, int>
+            {
+                ["Application"] = 1
+            }
+        };
+
+        var report = CreateAggregator().Aggregate([], stats: stats);
+
+        Assert.Equal(0.5, stats.EvaluationCoverage);
+        Assert.Equal(0.5, report.Metrics.RuleEvaluationCoverage);
+        Assert.True(report.Metrics.HasCoverageEvidence);
+        Assert.Equal(50, report.Metrics.ProjectHealthIndex);
+        Assert.Equal(25, report.Metrics.CoverageAdjustedHealthIndex);
+        Assert.False(report.Metrics.AssessmentComplete);
     }
 
     [Fact]

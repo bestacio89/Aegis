@@ -285,6 +285,12 @@ public sealed class RuleEngine
             report.Diagnostics.Add(diagnostic);
         }
 
+        // A score derived from partial evaluator coverage remains useful as an
+        // observation, but it must not be labelled a complete assessment when
+        // source discovery or evaluator execution produced coverage diagnostics.
+        if (diagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
+            report.Metrics.AssessmentComplete = false;
+
         _logger.LogInformation(
             "Aegis scan completed. Violations={Violations}, Checks={Checks}, " +
             "RulesEvaluated={Evaluated}/{Registered}, Diagnostics={Diagnostics}",

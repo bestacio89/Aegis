@@ -199,7 +199,8 @@ public sealed class CrossEvaluatorAggregator
 
         report.Metrics =
             ComputeGlobalMetrics(
-                report.Domains);
+                report.Domains,
+                stats);
 
 
 
@@ -418,7 +419,8 @@ public sealed class CrossEvaluatorAggregator
 
 
     private GlobalArchitectureMetrics ComputeGlobalMetrics(
-        IEnumerable<ArchitectureDomainSummary> domains)
+        IEnumerable<ArchitectureDomainSummary> domains,
+        RuleEvaluationStats? stats)
     {
         var list =
             domains.ToList();
@@ -427,14 +429,7 @@ public sealed class CrossEvaluatorAggregator
 
         if (list.Count == 0)
         {
-            return new GlobalArchitectureMetrics
-            {
-                ProjectHealthIndex = 0,
-                MaintainabilityIndex = 0,
-                ResilienceIndex = 0,
-                WeightedCompliance = 0,
-                HasAssessmentEvidence = false
-            };
+            return CreateUnassessedGlobalMetrics(stats);
         }
 
 
@@ -447,14 +442,7 @@ public sealed class CrossEvaluatorAggregator
 
         if (assessed.Count == 0)
         {
-            return new GlobalArchitectureMetrics
-            {
-                ProjectHealthIndex = 0,
-                MaintainabilityIndex = 0,
-                ResilienceIndex = 0,
-                WeightedCompliance = 0,
-                HasAssessmentEvidence = false
-            };
+            return CreateUnassessedGlobalMetrics(stats);
         }
 
 
@@ -484,9 +472,45 @@ public sealed class CrossEvaluatorAggregator
                 ComputeResilience(assessed),
                 3),
 
-            HasAssessmentEvidence = true
+            HasAssessmentEvidence = true,
+            RuleEvaluationCoverage = stats?.EvaluationCoverage ?? 0,
+            HasCoverageEvidence = stats is not null
+                && stats.RulesApplicable + stats.RulesUnsupported > 0,
+            CoverageAdjustedHealthIndex = Math.Round(
+                assessed.Sum(domain => domain.HealthIndex * domain.ChecksPerformed)
+                    / totalChecks * 100.0
+                    * (stats?.EvaluationCoverage ?? 0),
+                2),
+            AssessmentComplete = stats is not null
+                && stats.RulesUnsupported == 0
+                && stats.RulesNotEvaluated.Count == 0
+                && stats.RulesWithErrors == 0
+                && stats.EvaluationsInsufficientEvidence == 0
+                && stats.EvaluationsErrored == 0
         };
     }
+
+    private static GlobalArchitectureMetrics CreateUnassessedGlobalMetrics(
+        RuleEvaluationStats? stats) =>
+        new()
+        {
+            ProjectHealthIndex = 0,
+            MaintainabilityIndex = 0,
+            ResilienceIndex = 0,
+            WeightedCompliance = 0,
+            HasAssessmentEvidence = false,
+            RuleEvaluationCoverage = stats?.EvaluationCoverage ?? 0,
+            HasCoverageEvidence = stats is not null
+                && stats.RulesApplicable + stats.RulesUnsupported > 0,
+            CoverageAdjustedHealthIndex = 0,
+            AssessmentComplete = stats is not null
+                && stats.RulesApplicable + stats.RulesUnsupported == 0
+                && stats.RulesNotEvaluated.Count == 0
+                && stats.RulesUnsupported == 0
+                && stats.RulesWithErrors == 0
+                && stats.EvaluationsInsufficientEvidence == 0
+                && stats.EvaluationsErrored == 0
+        };
 
 
 

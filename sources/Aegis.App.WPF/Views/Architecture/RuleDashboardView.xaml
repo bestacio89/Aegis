@@ -1,598 +1,129 @@
-﻿<UserControl x:Class="Aegis.Wpf.Views.Architecture.RuleDashboardView"
+<UserControl x:Class="Aegis.Wpf.Views.Architecture.RuleDashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
              xmlns:conv="clr-namespace:Aegis.Wpf.Converters"
-
              Background="{StaticResource Brush.Ink}"
              Foreground="{StaticResource Brush.TextPrimary}"
              FontFamily="{StaticResource Font.Body}">
+  <UserControl.Resources>
+    <conv:SeverityToBrushConverter x:Key="SeverityToBrushConverter"/>
+  </UserControl.Resources>
+  <Grid Margin="16">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="230"/>
+      <RowDefinition Height="*"/>
+    </Grid.RowDefinitions>
 
+    <Border Grid.Row="0" Style="{StaticResource Card.Structural}" Margin="0,0,0,10">
+      <StackPanel>
+        <TextBlock Text="RULES &amp; FINDINGS" Style="{StaticResource Text.Eyebrow}"
+                   Foreground="{StaticResource Brush.AccentStructural}"/>
+        <TextBlock Text="Investigate architectural deviations, compare category compliance, and trace findings to their source."
+                   Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
+                   Margin="0,5,0,0" TextWrapping="Wrap"/>
+      </StackPanel>
+    </Border>
 
-    <UserControl.Resources>
+    <UniformGrid Grid.Row="1" Columns="5" Margin="-6,0,-6,4">
+      <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="84">
+        <StackPanel><TextBlock Text="TOTAL FINDINGS" Style="{StaticResource Text.Eyebrow}"/>
+          <TextBlock Text="{Binding TotalViolations}" Style="{StaticResource Text.KpiValue}"/></StackPanel>
+      </Border>
+      <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="84">
+        <StackPanel><TextBlock Text="BLOCKERS" Style="{StaticResource Text.Eyebrow}"/>
+          <TextBlock Text="{Binding BlockerCount}" Style="{StaticResource Text.KpiValue}" Foreground="{StaticResource Brush.StatusBlocker}"/></StackPanel>
+      </Border>
+      <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="84">
+        <StackPanel><TextBlock Text="CRITICAL" Style="{StaticResource Text.Eyebrow}"/>
+          <TextBlock Text="{Binding CriticalCount}" Style="{StaticResource Text.KpiValue}" Foreground="{StaticResource Brush.StatusCritical}"/></StackPanel>
+      </Border>
+      <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="84">
+        <StackPanel><TextBlock Text="HIGH" Style="{StaticResource Text.Eyebrow}"/>
+          <TextBlock Text="{Binding HighCount}" Style="{StaticResource Text.KpiValue}" Foreground="{StaticResource Brush.StatusWarning}"/></StackPanel>
+      </Border>
+      <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="84">
+        <StackPanel><TextBlock Text="MEDIUM" Style="{StaticResource Text.Eyebrow}"/>
+          <TextBlock Text="{Binding MediumCount}" Style="{StaticResource Text.KpiValue}"/></StackPanel>
+      </Border>
+    </UniformGrid>
 
-        <conv:SeverityToBrushConverter x:Key="SeverityToBrushConverter"/>
-
-    </UserControl.Resources>
-
-
-
-    <Grid Margin="16">
-
-
-        <Grid.RowDefinitions>
-
-            <RowDefinition Height="Auto"/>
-
-            <RowDefinition Height="Auto"/>
-
-            <RowDefinition Height="260"/>
-
-            <RowDefinition Height="*"/>
-
-        </Grid.RowDefinitions>
-
-
-
-
-
-        <!-- HEADER -->
-
+    <Grid Grid.Row="2" Margin="0,4,0,4">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="0.8*" MinWidth="230"/>
+        <ColumnDefinition Width="2*"/>
+      </Grid.ColumnDefinitions>
+      <Border Grid.Column="0" Style="{StaticResource Card.Structural}">
         <Grid>
-
-
-            <Grid.RowDefinitions>
-
-                <RowDefinition Height="3"/>
-
-                <RowDefinition Height="Auto"/>
-
-            </Grid.RowDefinitions>
-
-
-
-            <Border Grid.Row="0"
-                    Style="{StaticResource Card.TopRule}"/>
-
-
-
-            <Border Grid.Row="1"
-                    Style="{StaticResource Card.Structural}">
-
-
-                <StackPanel>
-
-
-                    <TextBlock Text="RULE ENGINE FINDINGS"
-                               Style="{StaticResource Text.Eyebrow}"
-                               Foreground="{StaticResource Brush.AccentStructural}"/>
-
-
-
-                    <TextBlock Text="Architecture violations detected by the Aegis rule evaluation engine"
-                               Foreground="{StaticResource Brush.TextMuted}"
-                               FontSize="12"
-                               Margin="0,4,0,0"/>
-
-
-                </StackPanel>
-
-
-            </Border>
-
-
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+          <TextBlock Text="Severity distribution" Style="{StaticResource Text.SectionTitle}"/>
+          <lvc:PieChart Grid.Row="1" Series="{Binding SeveritySeries}" LegendPosition="Right"
+                        AnimationsSpeed="0:0:0"/>
         </Grid>
-
-
-
-
-
-
-
-        <!-- KPI -->
-
-        <Grid Grid.Row="1"
-              Margin="0,10,0,0">
-
-
-            <Grid.ColumnDefinitions>
-
-                <ColumnDefinition Width="*"/>
-
-                <ColumnDefinition Width="*"/>
-
-                <ColumnDefinition Width="*"/>
-
-                <ColumnDefinition Width="*"/>
-
-            </Grid.ColumnDefinitions>
-
-
-
-
-
-            <!-- TOTAL -->
-
-            <Border Grid.Column="0"
-                    Style="{StaticResource Card.Kpi}">
-
-
-                <StackPanel>
-
-
-                    <TextBlock Text="TOTAL FINDINGS"
-                               Style="{StaticResource Text.Eyebrow}"/>
-
-
-                    <TextBlock Text="{Binding TotalViolations}"
-                               Style="{StaticResource Text.KpiValue}"/>
-
-
-                </StackPanel>
-
-
-            </Border>
-
-
-
-
-
-            <!-- CRITICAL -->
-
-            <Border Grid.Column="1"
-                    Style="{StaticResource Card.Kpi}">
-
-
-                <StackPanel>
-
-
-                    <TextBlock Text="CRITICAL"
-                               Style="{StaticResource Text.Eyebrow}"/>
-
-
-                    <TextBlock Text="{Binding CriticalCount}"
-                               Style="{StaticResource Text.KpiValue}"
-                               Foreground="{StaticResource Brush.StatusCritical}"/>
-
-
-                </StackPanel>
-
-
-            </Border>
-
-
-
-
-
-            <!-- BLOCKERS -->
-
-            <Border Grid.Column="2"
-                    Style="{StaticResource Card.Kpi}">
-
-
-                <StackPanel>
-
-
-                    <TextBlock Text="BLOCKERS"
-                               Style="{StaticResource Text.Eyebrow}"/>
-
-
-                    <TextBlock Text="{Binding BlockerCount}"
-                               Style="{StaticResource Text.KpiValue}"
-                               Foreground="{StaticResource Brush.StatusBlocker}"/>
-
-
-                </StackPanel>
-
-
-            </Border>
-
-
-
-
-
-            <!-- WARNINGS -->
-
-            <Border Grid.Column="3"
-                    Style="{StaticResource Card.Kpi}">
-
-
-                <StackPanel>
-
-
-                    <TextBlock Text="MEDIUM"
-                               Style="{StaticResource Text.Eyebrow}"/>
-
-
-                    <TextBlock Text="{Binding MediumCount}"
-                               Style="{StaticResource Text.KpiValue}"
-                               Foreground="{StaticResource Brush.StatusWarning}"/>
-
-
-                </StackPanel>
-
-
-            </Border>
-
-
+      </Border>
+      <Border Grid.Column="1" Style="{StaticResource Card.Structural}">
+        <Grid>
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+          <TextBlock Text="Compliance by category" Style="{StaticResource Text.SectionTitle}"/>
+          <lvc:CartesianChart Grid.Row="1" Series="{Binding CategorySeries}"
+                              XAxes="{Binding CategoryAxes}" YAxes="{Binding ValueAxes}"
+                              Background="Transparent" DrawMarginFrame="{x:Null}"
+                              AnimationsSpeed="0:0:0"/>
         </Grid>
-
-
-
-
-
-
-
-
-
-        <!-- VISUAL ANALYSIS -->
-
-        <Grid Grid.Row="2"
-              Margin="0,10,0,0">
-
-
-            <Grid.ColumnDefinitions>
-
-                <ColumnDefinition Width="380"/>
-
-                <ColumnDefinition Width="*"/>
-
-            </Grid.ColumnDefinitions>
-
-
-
-
-
-            <!-- SEVERITY -->
-
-            <Grid>
-
-
-                <Grid.RowDefinitions>
-
-                    <RowDefinition Height="3"/>
-
-                    <RowDefinition Height="*"/>
-
-                </Grid.RowDefinitions>
-
-
-
-                <Border Grid.Row="0"
-                        Style="{StaticResource Card.TopRule}"/>
-
-
-
-                <Border Grid.Row="1"
-                        Style="{StaticResource Card.Structural}">
-
-
-                    <Grid>
-
-
-                        <Grid.RowDefinitions>
-
-                            <RowDefinition Height="Auto"/>
-
-                            <RowDefinition Height="*"/>
-
-                        </Grid.RowDefinitions>
-
-
-
-
-                        <StackPanel Orientation="Horizontal">
-
-
-                            <Border Style="{StaticResource StatusChip}"
-                                    Background="{StaticResource Brush.AccentStructural}"/>
-
-
-                            <TextBlock Text="Severity Distribution"
-                                       Style="{StaticResource Text.SectionTitle}"/>
-
-
-                        </StackPanel>
-
-
-
-
-                        <lvc:PieChart Grid.Row="1"
-                                      Margin="0,8"
-                                      Series="{Binding SeveritySeries}"
-                                      LegendPosition="Right"/>
-
-
-                    </Grid>
-
-
-                </Border>
-
-
-            </Grid>
-
-
-
-
-
-
-
-
-            <!-- CATEGORY -->
-
-            <Grid Grid.Column="1"
-                  Margin="8,0,0,0">
-
-
-                <Grid.RowDefinitions>
-
-                    <RowDefinition Height="3"/>
-
-                    <RowDefinition Height="*"/>
-
-                </Grid.RowDefinitions>
-
-
-
-
-                <Border Grid.Row="0"
-                        Style="{StaticResource Card.TopRule}"/>
-
-
-
-
-                <Border Grid.Row="1"
-                        Style="{StaticResource Card.Structural}">
-
-
-                    <Grid>
-
-
-                        <Grid.RowDefinitions>
-
-                            <RowDefinition Height="Auto"/>
-
-                            <RowDefinition Height="*"/>
-
-                        </Grid.RowDefinitions>
-
-
-
-
-
-                        <StackPanel Orientation="Horizontal">
-
-
-                            <Border Style="{StaticResource StatusChip}"
-                                    Background="{StaticResource Brush.AccentStructural}"/>
-
-
-                            <TextBlock Text="Violations by Category"
-                                       Style="{StaticResource Text.SectionTitle}"/>
-
-
-                        </StackPanel>
-
-
-
-
-
-                        <lvc:CartesianChart Grid.Row="1"
-                                            Margin="0,8"
-                                            Series="{Binding CategorySeries}"
-                                            XAxes="{Binding CategoryAxes}"
-                                            YAxes="{Binding ValueAxes}"
-                                            Background="Transparent"
-                                            DrawMarginFrame="{x:Null}"/>
-
-
-                    </Grid>
-
-
-                </Border>
-
-
-            </Grid>
-
-
-        </Grid>
-
-
-
-
-
-
-
-
-
-        <!-- FINDINGS LEDGER -->
-
-        <Grid Grid.Row="3"
-              Margin="0,10,0,0">
-
-
-            <Grid.RowDefinitions>
-
-                <RowDefinition Height="3"/>
-
-                <RowDefinition Height="*"/>
-
-            </Grid.RowDefinitions>
-
-
-
-
-
-            <Border Grid.Row="0"
-                    Style="{StaticResource Card.TopRule}"/>
-
-
-
-
-
-            <Border Grid.Row="1"
-                    Style="{StaticResource Card.Structural}">
-
-
-
-                <Grid>
-
-
-                    <Grid.RowDefinitions>
-
-                        <RowDefinition Height="Auto"/>
-
-                        <RowDefinition Height="*"/>
-
-                    </Grid.RowDefinitions>
-
-
-
-
-
-                    <StackPanel Orientation="Horizontal"
-                                Margin="0,0,0,10">
-
-
-                        <Border Style="{StaticResource StatusChip}"
-                                Background="{StaticResource Brush.AccentStructural}"/>
-
-
-                        <TextBlock Text="Architecture Findings Ledger"
-                                   Style="{StaticResource Text.SectionTitle}"/>
-
-
-                    </StackPanel>
-
-
-
-
-
-
-
-
-                    <DataGrid Grid.Row="1"
-                              ItemsSource="{Binding RuleResults}"
-                              AutoGenerateColumns="False"
-
-                              IsReadOnly="True"
-                              CanUserAddRows="False"
-                              CanUserDeleteRows="False"
-                              CanUserReorderColumns="False"
-                              CanUserResizeRows="False"
-                              CanUserSortColumns="True"
-
-                              SelectionMode="Single"
-                              SelectionUnit="FullRow"
-
-                              HeadersVisibility="Column"
-
-                              Style="{StaticResource Grid.Ledger}"
-                              ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}">
-
-
-
-
-
-                        <DataGrid.Columns>
-
-
-
-
-
-                            <DataGridTemplateColumn Header="Severity"
-                                                    Width="110">
-
-
-                                <DataGridTemplateColumn.CellTemplate>
-
-
-                                    <DataTemplate>
-
-
-                                        <Border Background="{Binding Severity, Converter={StaticResource SeverityToBrushConverter}}"
-                                                CornerRadius="3"
-                                                Padding="8,3"
-                                                HorizontalAlignment="Left">
-
-
-                                            <TextBlock Text="{Binding Severity}"
-                                                       Foreground="{StaticResource Brush.Ink}"
-                                                       FontWeight="SemiBold"
-                                                       FontSize="11"/>
-
-
-                                        </Border>
-
-
-                                    </DataTemplate>
-
-
-                                </DataGridTemplateColumn.CellTemplate>
-
-
-                            </DataGridTemplateColumn>
-
-
-
-
-
-                            <DataGridTextColumn Header="Rule"
-                                                Binding="{Binding RuleName}"
-                                                Width="180"/>
-
-
-
-
-
-                            <DataGridTextColumn Header="Category"
-                                                Binding="{Binding Category}"
-                                                Width="140"/>
-
-
-
-
-
-                            <DataGridTextColumn Header="Target"
-                                                Binding="{Binding Target}"
-                                                Width="220"/>
-
-
-
-
-
-                            <DataGridTextColumn Header="Impact"
-                                                Binding="{Binding Impact, StringFormat={}{0:F2}}"
-                                                Width="90"/>
-
-
-
-
-
-                            <DataGridTextColumn Header="Finding"
-                                                Binding="{Binding Message}"
-                                                Width="*"/>
-
-
-
-                        </DataGrid.Columns>
-
-
-
-                    </DataGrid>
-
-
-
-                </Grid>
-
-
-            </Border>
-
-
-        </Grid>
-
-
+      </Border>
     </Grid>
 
-
+    <Border Grid.Row="3" Style="{StaticResource Card.Structural}" Margin="0,4,0,0">
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <TextBlock Grid.Row="0" Text="Findings ledger" Style="{StaticResource Text.SectionTitle}"
+                   Margin="0,0,0,10"/>
+        <TextBox Grid.Row="1" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                 ToolTip="Filter by rule, category, severity, target, or finding text"
+                 MinHeight="34" Margin="0,0,0,10" Padding="10,6"
+                 Background="{StaticResource Brush.PanelElevated}"
+                 Foreground="{StaticResource Brush.TextPrimary}"
+                 BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                 VerticalContentAlignment="Center"/>
+        <DataGrid Grid.Row="2" ItemsSource="{Binding RuleResultsView}"
+                  AutoGenerateColumns="False" IsReadOnly="True"
+                  CanUserAddRows="False" CanUserDeleteRows="False"
+                  CanUserReorderColumns="False" CanUserResizeRows="False"
+                  CanUserSortColumns="True" SelectionMode="Single"
+                  SelectionUnit="FullRow" HeadersVisibility="Column"
+                  EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                  VirtualizingPanel.IsVirtualizing="True"
+                  VirtualizingPanel.VirtualizationMode="Recycling"
+                  ScrollViewer.CanContentScroll="True"
+                  RowDetailsVisibilityMode="Collapsed"
+                  Style="{StaticResource Grid.Ledger}"
+                  ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}">
+          <DataGrid.Columns>
+            <DataGridTemplateColumn Header="Severity" Width="110">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate>
+                  <Border Background="{Binding Severity, Converter={StaticResource SeverityToBrushConverter}}"
+                          CornerRadius="3" Padding="8,3" HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding Severity}" Foreground="{StaticResource Brush.Ink}"
+                               FontWeight="SemiBold" FontSize="11"/>
+                  </Border>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTextColumn Header="Rule" Binding="{Binding RuleName}" Width="180"/>
+            <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="140"/>
+            <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="180"/>
+            <DataGridTextColumn Header="Impact" Binding="{Binding Impact, StringFormat={}{0:F2}}" Width="90"/>
+            <DataGridTextColumn Header="Finding" Binding="{Binding Message}" Width="*"/>
+          </DataGrid.Columns>
+        </DataGrid>
+      </Grid>
+    </Border>
+  </Grid>
 </UserControl>

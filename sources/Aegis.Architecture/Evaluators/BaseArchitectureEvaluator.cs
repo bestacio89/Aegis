@@ -577,7 +577,6 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         var ignoredSegments = new[]
         {
             $"{Path.DirectorySeparatorChar}Library{Path.DirectorySeparatorChar}",
-            $"{Path.DirectorySeparatorChar}Temp{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}Logs{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
             $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",

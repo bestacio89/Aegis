@@ -247,6 +247,16 @@ public sealed class ArchitectureEvaluatorBehaviorTests
                 }
             }
             """);
+        // A third-party/library tree must not inflate application logging metrics.
+        project.Write("Library/External.cs", """
+            public sealed class ExternalFixture
+            {
+                public void Execute()
+                {
+                    System.Console.WriteLine("external logging");
+                }
+            }
+            """);
         project.Write(
             "appsettings.json",
             """{"Logging":{"LogLevel":{"Default":"Information"}}}""");
@@ -261,6 +271,13 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             result => result.Metrics.ContainsKey("LoggingCallCount"));
 
         Assert.True(fileResult.Metrics["LoggingCallCount"] >= 2);
+        Assert.DoesNotContain(results, result =>
+            result.Target.Contains("External.cs", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(
+            1,
+            Assert.Single(results, result =>
+                result.Metrics.ContainsKey("SourceFilesScanned"))
+                .Metrics["SourceFilesScanned"]);
         Assert.True(fileResult.Metrics.ContainsKey("StructuredLoggingScore"));
         Assert.Contains(results, result =>
             result.Metrics.ContainsKey("ObservabilityHealthIndex"));

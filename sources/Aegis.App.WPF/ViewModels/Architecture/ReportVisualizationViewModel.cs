@@ -168,7 +168,7 @@ public sealed partial class ReportVisualizationViewModel
                 new(
                     "Rule evaluation coverage",
                     report.Metrics.HasCoverageEvidence
-                        ? $"{report.Metrics.RuleEvaluationCoverage * 100:0.##}%"
+                        ? $"{report.Metrics.RuleEvaluationCoverage:0.##}%"
                         : "n/a",
                     "Share of applicable rules evaluated; unsupported rules remain in the denominator"));
 

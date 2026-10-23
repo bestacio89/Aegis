@@ -84,7 +84,7 @@
                      Foreground="{StaticResource Brush.AccentStructural}"/>
           <TextBlock Text="{Binding NextAction}" FontSize="15" FontWeight="SemiBold"
                      TextWrapping="Wrap" Margin="0,8,0,0"/>
-          <TextBlock Text="Use Rules &amp; Findings for individual rule evidence, and Reports for the full assessment summary."
+          <TextBlock Text="Use Rules &amp; Metrics for aggregate evaluation, Findings to investigate individual violations, and Reports for the full assessment summary."
                      Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap" Margin="0,8,0,0"/>
         </StackPanel>
       </Border>

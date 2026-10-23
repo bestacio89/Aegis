@@ -50,9 +50,10 @@ public sealed class RuleEvaluationStats
     public int ChecksPerformed { get; init; }
 
     /// <summary>
-    /// Facts that emitted one or more metrics, but none of those keys is declared
-    /// by any registered rule in the registry. Facts with no metrics are not counted.
-    /// This is a metric-contract gap, not an evaluator execution failure.
+    /// Facts that emitted one or more metrics, but none of those keys matches a
+    /// registered rule's declared metric. This may include informational summary
+    /// metrics and is not, by itself, proof of an unknown metric or producer defect.
+    /// Facts with no metrics are not counted.
     /// </summary>
     public int FactsWithoutMatchingScopedMetrics { get; init; }
 

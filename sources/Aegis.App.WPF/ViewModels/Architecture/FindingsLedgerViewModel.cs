@@ -18,7 +18,7 @@ public sealed partial class FindingsLedgerViewModel : ObservableObject
         _findingsView.Filter = MatchesFilter;
     }
 
-    public ObservableCollection<RuleDashboardItem> Findings { get; } = new();
+    public ObservableCollection<RuleDashboardItem> Findings { get; private set; } = new();
     public ICollectionView FindingsView => _findingsView;
 
     [ObservableProperty] private string projectName = "No assessment loaded";
@@ -51,9 +51,11 @@ public sealed partial class FindingsLedgerViewModel : ObservableObject
             result.Message,
             result.WeightedImpact)).ToArray();
 
-        Findings.Clear();
-        foreach (var item in items)
-            Findings.Add(item);
+        Findings = new ObservableCollection<RuleDashboardItem>(items);
+        _findingsView = CollectionViewSource.GetDefaultView(Findings);
+        _findingsView.Filter = MatchesFilter;
+        OnPropertyChanged(nameof(Findings));
+        OnPropertyChanged(nameof(FindingsView));
 
         var counts = report.Results.GroupBy(result => result.Severity)
             .ToDictionary(group => group.Key, group => group.Count());

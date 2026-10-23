@@ -1,4 +1,6 @@
-﻿using Aegis.Architecture.Analysis;
+﻿using System.Text.Json;
+
+using Aegis.Architecture.Analysis;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Shared.Architecture.Models;
 using Microsoft.Extensions.Logging;
@@ -159,7 +161,10 @@ public sealed class AegisArchitectureAnalyzer
                     context.AverageComplexity,
 
                 ["DiscoveryDiagnosticCount"] =
-                    context.DiscoveryDiagnostics.Count
+                    context.DiscoveryDiagnostics.Count,
+
+                ["ExcludedPathEntryCount"] =
+                    context.ExcludedEntriesByReason.Values.Sum()
             },
 
             Metadata =
@@ -222,7 +227,10 @@ public sealed class AegisArchitectureAnalyzer
                 ["Diagnostics"] = string.Join(
                     Environment.NewLine,
                     context.DiscoveryDiagnostics.Select(diagnostic =>
-                        $"{diagnostic.Code}: {diagnostic.Message}"))
+                        $"{diagnostic.Code}: {diagnostic.Message}")),
+
+                ["ExcludedEntriesByReason"] =
+                    JsonSerializer.Serialize(context.ExcludedEntriesByReason)
             }
         };
     }

@@ -260,7 +260,9 @@ public static class ProjectArchitectureContextDetector
         string reason)
     {
         excludedEntriesByReason[reason] =
-            excludedEntriesByReason.GetValueOrDefault(reason) + 1;
+            excludedEntriesByReason.TryGetValue(reason, out var count)
+                ? count + 1
+                : 1;
     }
 
     private static void PopulateContextMetadata(

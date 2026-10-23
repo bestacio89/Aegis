@@ -233,6 +233,30 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         AssertAllMetricsAreFinite(results);
     }
 
+
+    [Fact]
+    public async Task NamingEvaluator_keeps_application_source_in_a_directory_named_temp()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Temp/TempFixture.cs", """
+            public sealed class TempFixture
+            {
+                public void Execute() { }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "NamingEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+
+        Assert.Contains(results, result =>
+            result.Target.Contains("TempFixture.cs", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public async Task LoggingEvaluator_measures_logging_calls_and_emits_summary()
     {

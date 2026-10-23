@@ -355,6 +355,7 @@ public sealed class GodClassEvaluator
         result.Metadata[FilePathMetadataKey] = file;
         result.Metadata[EvaluationScopeMetadataKey] = FileScope;
         result.Metadata["ClassName"] = className;
+        result.Metadata["MetricUnit.GodClassSeverity"] = "MinimumOfLineAndMethodLimitRatios";
         result.Metadata["Language"] = language;
         result.Metadata["Layer"] = layer;
         result.Metadata["SemanticAnalysisPerformed"] = "false";

@@ -206,32 +206,12 @@ public sealed class RuleEngine
                     // Evaluators may complete their own analysis while encountering
                     // malformed or unreadable inputs. Preserve those diagnostics in
                     // the report; log output alone is not part of the audit evidence.
-                    if (string.Equals(
-                            result.Metadata?.GetValueOrDefault("AnalysisStatus"),
-                            "CompletedWithDiagnostics",
-                            StringComparison.OrdinalIgnoreCase))
-                    {
-                        var reportedDiagnostics = result.Metadata
-                            .GetValueOrDefault("Diagnostics");
+                    AppendEvaluatorDiagnostics(
+                        diagnostics,
+                        evaluator.Name,
+                        result);
 
-                        if (!string.IsNullOrWhiteSpace(reportedDiagnostics))
-                        {
-                            foreach (var message in reportedDiagnostics
-                                         .Split(
-                                             [Environment.NewLine],
-                                             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                            {
-                                diagnostics.Add(new AnalysisDiagnostic
-                                {
-                                    Code = "EvaluatorReportedDiagnostic",
-                                    Component = evaluator.Name,
-                                    Message = message,
-                                    Target = result.Target,
-                                    AffectsCoverage = true
-                                });
-                            }
-                        }
-                    }
+
 
                     result.Source = evaluator.Name;
                     result.ProjectName ??= evaluationContext.ProjectName;
@@ -347,6 +327,73 @@ public sealed class RuleEngine
             null);
 
         return report;
+    }
+
+    private static void AppendEvaluatorDiagnostics(
+        ICollection<AnalysisDiagnostic> diagnostics,
+        string evaluatorName,
+        ArchitectureEvaluatorResult result)
+    {
+        var metadata = result.Metadata;
+        if (metadata is null)
+            return;
+
+        var status = metadata.GetValueOrDefault("AnalysisStatus");
+        var detailText = metadata.GetValueOrDefault("Diagnostics");
+        var messages = string.IsNullOrWhiteSpace(detailText)
+            ? Array.Empty<string>()
+            : detailText.Split(
+                    ['\\r', '\\n'],
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+        var reportedCount = result.Metrics.TryGetValue("DiagnosticCount", out var count)
+            && double.IsFinite(count)
+            && count > 0
+            ? (int)Math.Ceiling(count)
+            : 0;
+
+        var hasPartialStatus = string.Equals(
+                status,
+                "CompletedWithDiagnostics",
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "Partial", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "Incomplete", StringComparison.OrdinalIgnoreCase);
+
+        if (!hasPartialStatus && reportedCount == 0 && messages.Length == 0)
+            return;
+
+        foreach (var message in messages)
+        {
+            diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = "EvaluatorReportedDiagnostic",
+                Component = evaluatorName,
+                Message = message,
+                Target = result.Target,
+                AffectsCoverage = true
+            });
+        }
+
+        // Some evaluators cap serialized detail to keep reports bounded. Preserve
+        // the declared count as evidence so truncation cannot make coverage look clean.
+        var omittedCount = Math.Max(0, reportedCount - messages.Length);
+        if (omittedCount > 0 || (hasPartialStatus && messages.Length == 0 && reportedCount == 0))
+        {
+            diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = omittedCount > 0
+                    ? "EvaluatorDiagnosticDetailsTruncated"
+                    : "EvaluatorPartialAnalysis",
+                Component = evaluatorName,
+                Message = omittedCount > 0
+                    ? $"The evaluator reported {reportedCount} diagnostics but serialized only {messages.Length} detail message(s); {omittedCount} diagnostic detail(s) are unavailable."
+                    : $"The evaluator reported analysis status '{status}' but did not provide diagnostic details or a diagnostic count.",
+                Target = result.Target,
+                AffectsCoverage = true
+            });
+        }
     }
 
     private sealed record AnalysisScope(string Path, ProjectArchitectureContext Context);

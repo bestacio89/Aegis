@@ -152,6 +152,13 @@ public sealed class ProjectArchitectureContext
     /// </summary>
     public List<AnalysisDiagnostic> DiscoveryDiagnostics { get; set; } = [];
 
+    /// <summary>
+    /// Counts excluded path entries by reason. An excluded directory is counted
+    /// once as a subtree boundary; its descendants are not expanded into file counts.
+    /// </summary>
+    public Dictionary<string, int> ExcludedEntriesByReason { get; set; }
+        = new(StringComparer.OrdinalIgnoreCase);
+
 
 
     // ===============================================================

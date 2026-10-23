@@ -231,6 +231,44 @@ public sealed class RuleMetricScopeDiagnosticTests
     }
 
 
+
+    [Fact]
+    public void Repository_leak_risk_cannot_satisfy_observer_unsubscribe_rule()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var repositoryFact = new ArchitectureEvaluatorResult(
+            "RepositoryPatternEvaluator",
+            "OrderRepository.cs")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                ["LeakRisk"] = 1
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "src/OrderRepository.cs",
+                ["Language"] = "C#"
+            }
+        };
+
+        var outcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [repositoryFact]);
+
+        Assert.DoesNotContain(
+            outcome.Evaluations,
+            evaluation => evaluation.RuleId == "AEG-DES-OBS001");
+        Assert.Contains("AEG-DES-OBS001", outcome.Stats.RulesNotEvaluated);
+        Assert.Contains(
+            "ObserverUnsubscribeMissingCount",
+            outcome.Stats.NotEvaluatedReasons["AEG-DES-OBS001"],
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Pattern_rules_are_not_applicable_when_complete_summaries_find_no_candidates()
     {

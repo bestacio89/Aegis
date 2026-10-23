@@ -1,6 +1,8 @@
 ﻿
 using System.Text.RegularExpressions;
 
+using Aegis.Architecture.Analysis.Detectors;
+
 using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -14,25 +16,6 @@ namespace Aegis.Architecture.Evaluators.Infrastructure;
 public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 {
     private readonly LoggingPolicy _policy;
-
-    private static readonly HashSet<string> ExcludedDirectories =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".git",
-            ".vs",
-            ".idea",
-            "bin",
-            "obj",
-            "node_modules",
-            "dist",
-            "build",
-            "coverage",
-            "vendor",
-            "packages",
-            "__pycache__",
-            ".venv",
-            "venv"
-        };
 
     private static readonly Regex LoggingCallRx = new(
         """
@@ -569,6 +552,8 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             token.ThrowIfCancellationRequested();
 
             var currentDirectory = pendingDirectories.Pop();
+            if (FileExclusions.IsExcluded(currentDirectory))
+                continue;
 
             IEnumerable<string> childDirectories;
 
@@ -590,12 +575,8 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             {
                 token.ThrowIfCancellationRequested();
 
-                if (ExcludedDirectories.Contains(
-                        Path.GetFileName(
-                            Path.TrimEndingDirectorySeparator(directory))))
-                {
+                if (FileExclusions.IsExcluded(directory))
                     continue;
-                }
 
                 pendingDirectories.Push(directory);
             }
@@ -616,7 +597,9 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 continue;
             }
 
-            files.AddRange(currentFiles.Where(IsSupportedSourceFile));
+            files.AddRange(currentFiles
+                .Where(IsSupportedSourceFile)
+                .Where(file => !FileExclusions.IsExcluded(file)));
         }
 
         return files;

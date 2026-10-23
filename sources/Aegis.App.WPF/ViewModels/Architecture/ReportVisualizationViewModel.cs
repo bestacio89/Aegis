@@ -163,6 +163,12 @@ public sealed partial class ReportVisualizationViewModel
                     "Missing measurements",
                     unevaluatedInScope.ToString(),
                     "In-scope rules without a matching metric contract"));
+
+            SummaryItems.Add(
+                new(
+                    "Metric contract failures",
+                    report.EvaluationStats.MetricContractFailures.ToString(),
+                    "Measurements withheld because their units or threshold scales violate a verified contract"));
         }
         else
         {

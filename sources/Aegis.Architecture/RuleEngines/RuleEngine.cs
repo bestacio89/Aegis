@@ -343,7 +343,7 @@ public sealed class RuleEngine
         var messages = string.IsNullOrWhiteSpace(detailText)
             ? Array.Empty<string>()
             : detailText.Split(
-                    ['\\r', '\\n'],
+                    ['\r', '\n'],
                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();

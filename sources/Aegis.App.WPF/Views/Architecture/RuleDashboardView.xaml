@@ -12,6 +12,7 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="330"/>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
       <Border Grid.Row="0" Style="{StaticResource Card.Structural}" Margin="0,0,0,10">
@@ -87,6 +88,49 @@
       </Grid>
 
       <Border Grid.Row="3" Style="{StaticResource Card.Structural}" Margin="0,8,0,0">
+        <StackPanel>
+          <TextBlock Text="RULE EVALUATION ACCOUNTING" Style="{StaticResource Text.Eyebrow}"
+                     Foreground="{StaticResource Brush.AccentStructural}"/>
+          <UniformGrid Columns="4" Margin="-6,8,-6,0">
+            <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+              <StackPanel><TextBlock Text="REGISTERED" Style="{StaticResource Text.Eyebrow}"/>
+                <TextBlock Text="{Binding RegisteredRules}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+              <StackPanel><TextBlock Text="APPLICABLE" Style="{StaticResource Text.Eyebrow}"/>
+                <TextBlock Text="{Binding ApplicableRules}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+              <StackPanel><TextBlock Text="EVALUATED" Style="{StaticResource Text.Eyebrow}"/>
+                <TextBlock Text="{Binding EvaluatedRules}" Style="{StaticResource Text.KpiValue}" FontSize="22" Foreground="{StaticResource Brush.StatusCompliant}"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+              <StackPanel><TextBlock Text="NOT EVALUATED" Style="{StaticResource Text.Eyebrow}"/>
+                <TextBlock Text="{Binding NotEvaluatedRules}" Style="{StaticResource Text.KpiValue}" FontSize="22" Foreground="{StaticResource Brush.StatusWarning}"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+              <StackPanel><TextBlock Text="NOT APPLICABLE" Style="{StaticResource Text.Eyebrow}"/>
+                <TextBlock Text="{Binding NotApplicableRules}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+              <StackPanel><TextBlock Text="UNSUPPORTED" Style="{StaticResource Text.Eyebrow}"/>
+                <TextBlock Text="{Binding UnsupportedRules}" Style="{StaticResource Text.KpiValue}" FontSize="22" Foreground="{StaticResource Brush.StatusCritical}"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+              <StackPanel><TextBlock Text="RULE ERRORS" Style="{StaticResource Text.Eyebrow}"/>
+                <TextBlock Text="{Binding RulesWithErrors}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+              <StackPanel><TextBlock Text="CONTRACT FAILURES" Style="{StaticResource Text.Eyebrow}"/>
+                <TextBlock Text="{Binding MetricContractFailures}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
+            </Border>
+          </UniformGrid>
+          <TextBlock Text="{Binding RuleAccountingDetails}" Foreground="{StaticResource Brush.TextMuted}"
+                     TextWrapping="Wrap" Margin="0,10,0,0" FontSize="12"/>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Row="4" Style="{StaticResource Card.Structural}" Margin="0,8,0,0">
         <StackPanel>
           <TextBlock Text="INTERPRETATION" Style="{StaticResource Text.Eyebrow}"
                      Foreground="{StaticResource Brush.AccentStructural}"/>

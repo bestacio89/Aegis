@@ -132,7 +132,11 @@ public sealed class CSharpNamingDeclarationAnalyzer : INamingDeclarationAnalyzer
 
         public override void VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
-            Add(node.Identifier, NamingDeclarationKind.Method, node.Modifiers);
+            Add(
+                node.Identifier,
+                NamingDeclarationKind.Method,
+                node.Modifiers,
+                isTestMethod: IsTestMethod(node));
             base.VisitMethodDeclaration(node);
         }
 
@@ -174,11 +178,31 @@ public sealed class CSharpNamingDeclarationAnalyzer : INamingDeclarationAnalyzer
             base.VisitParameter(node);
         }
 
+        private static bool IsTestMethod(MethodDeclarationSyntax method)
+        {
+            var testAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Fact", "FactAttribute",
+                "Theory", "TheoryAttribute",
+                "Test", "TestAttribute",
+                "TestCase", "TestCaseAttribute",
+                "TestCaseSource", "TestCaseSourceAttribute",
+                "TestMethod", "TestMethodAttribute",
+                "DataTestMethod", "DataTestMethodAttribute"
+            };
+
+            return method.AttributeLists
+                .SelectMany(attributeList => attributeList.Attributes)
+                .Select(attribute => attribute.Name.ToString().Split('.').Last())
+                .Any(attributeName => testAttributes.Contains(attributeName));
+        }
+
         private void Add(
             SyntaxToken identifier,
             NamingDeclarationKind kind,
             SyntaxTokenList modifiers,
-            bool isConstant = false)
+            bool isConstant = false,
+            bool isTestMethod = false)
         {
             _token.ThrowIfCancellationRequested();
             if (identifier.IsMissing || string.IsNullOrWhiteSpace(identifier.ValueText))
@@ -211,7 +235,8 @@ public sealed class CSharpNamingDeclarationAnalyzer : INamingDeclarationAnalyzer
                 Id,
                 isPublic,
                 modifiers.Any(SyntaxKind.StaticKeyword),
-                isConstant));
+                isConstant,
+                isTestMethod));
         }
     }
 }

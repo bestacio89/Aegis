@@ -26,6 +26,32 @@ internal static class DomainDetector
             return;
         }
 
+        // Supporting class libraries do not turn a web or frontend application
+        // into a heterogeneous product. They are part of its project topology.
+        if (projectKinds.Contains("WebApplication", StringComparer.OrdinalIgnoreCase)
+            && projectKinds.All(kind => kind is "WebApplication" or "ClassLibrary"))
+        {
+            ctx.DomainType = applicationModules.Any(module =>
+                module.Frameworks.Contains("Blazor", StringComparer.OrdinalIgnoreCase))
+                    ? "FullStack"
+                    : "Backend";
+            return;
+        }
+
+        if (projectKinds.Contains("FrontendApplication", StringComparer.OrdinalIgnoreCase)
+            && projectKinds.All(kind => kind is "FrontendApplication" or "ClassLibrary"))
+        {
+            ctx.DomainType = "Frontend";
+            return;
+        }
+
+        if (projectKinds.Contains("DesktopApplication", StringComparer.OrdinalIgnoreCase)
+            && projectKinds.All(kind => kind is "DesktopApplication" or "ClassLibrary"))
+        {
+            ctx.DomainType = "Desktop";
+            return;
+        }
+
         if (projectKinds.Length > 1)
         {
             ctx.DomainType = "Mixed";
@@ -34,13 +60,10 @@ internal static class DomainDetector
 
         if (projectKinds.Length == 1)
         {
-            var hasBlazorUi = applicationModules.Any(module =>
-                module.Frameworks.Contains("Blazor", StringComparer.OrdinalIgnoreCase));
-
             ctx.DomainType = projectKinds[0] switch
             {
                 "ClassLibrary" => "Library",
-                "WebApplication" => hasBlazorUi ? "FullStack" : "Backend",
+                "WebApplication" => "Backend",
                 "FrontendApplication" => "Frontend",
                 "DesktopApplication" => "Desktop",
                 "Executable" => "Application",

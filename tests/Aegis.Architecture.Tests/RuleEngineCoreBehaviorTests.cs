@@ -185,8 +185,8 @@ public sealed class RuleEngineCoreBehaviorTests
             []);
 
         Assert.Equal(76, ArchitectureRuleRegistry.All.Count);
-        Assert.Equal(23, outcome.Stats.RulesUnsupported);
-        Assert.Equal(51, outcome.Stats.RulesApplicable);
+        Assert.Equal(25, outcome.Stats.RulesUnsupported);
+        Assert.Equal(49, outcome.Stats.RulesApplicable);
         Assert.Equal(74, outcome.Stats.NotEvaluatedReasons.Count);
         Assert.Equal(74, outcome.Stats.RulesNotEvaluated.Count);
         Assert.Equal(2, outcome.Stats.RulesNotApplicable.Count);
@@ -210,6 +210,49 @@ public sealed class RuleEngineCoreBehaviorTests
                 reason,
                 StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    [Fact]
+    public void EvaluateDetailed_does_not_promote_heuristic_domain_and_mediator_signals_to_violations()
+    {
+        var facts = new[]
+        {
+            new ArchitectureEvaluatorResult("AnemicDomainModelEvaluator", "OrderModel.cs")
+            {
+                Metrics = new Dictionary<string, double>
+                {
+                    ["AnemicDomainModelIndex"] = 0.95
+                },
+                Metadata = new Dictionary<string, string>
+                {
+                    ["EvaluationScope"] = "File",
+                    ["SemanticAnalysisPerformed"] = "false"
+                }
+            },
+            new ArchitectureEvaluatorResult("MediatorPatternEvaluator", "OrderHandler.cs")
+            {
+                Metrics = new Dictionary<string, double>
+                {
+                    ["MediatorCouplingIndex"] = 0.95
+                },
+                Metadata = new Dictionary<string, string>
+                {
+                    ["EvaluationScope"] = "File",
+                    ["SemanticAnalysisPerformed"] = "false"
+                }
+            }
+        };
+
+        var outcome = CreateEngine().EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            facts);
+
+        Assert.DoesNotContain(outcome.Results, result =>
+            result.RuleId is "AEG-DES-ADM001" or "AEG-DES-MEDI001");
+        Assert.Contains("AEG-DES-ADM001", outcome.Stats.UnsupportedRuleReasons.Keys);
+        Assert.Contains("AEG-DES-MEDI001", outcome.Stats.UnsupportedRuleReasons.Keys);
+        Assert.Contains("compiler-backed", outcome.Stats.UnsupportedRuleReasons["AEG-DES-ADM001"]);
+        Assert.Contains("validated mediator-coupling", outcome.Stats.UnsupportedRuleReasons["AEG-DES-MEDI001"]);
     }
 
     [Fact]

@@ -75,6 +75,24 @@ internal static class FrameworkDetector
 
         if (!string.IsNullOrWhiteSpace(ctx.Framework))
             AddFramework(ctx, ctx.Framework);
+
+        // The repository-level framework is an aggregate. If its projects use
+        // different frameworks, do not publish one project's framework as the
+        // identity of the entire repository.
+        var projectFrameworks = ctx.Modules
+            .SelectMany(module => module.Frameworks)
+            .Where(framework => !string.IsNullOrWhiteSpace(framework))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var framework in projectFrameworks)
+            AddFramework(ctx, framework);
+
+        if (projectFrameworks.Length > 1)
+            ctx.Framework = "Multi-Framework";
+        else if (projectFrameworks.Length == 1)
+            ctx.Framework = projectFrameworks[0];
     }
 
     private static void DetectDotNetFramework(

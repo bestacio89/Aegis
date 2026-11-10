@@ -385,7 +385,7 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         ResolveSourceFiles(
             projectPath,
             includeTestProjects: false,
-            extensions);
+            extensions: extensions);
 
     protected IReadOnlyList<string> ResolveSourceFiles(
         string projectPath,

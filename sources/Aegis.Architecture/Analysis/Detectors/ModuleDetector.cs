@@ -294,6 +294,16 @@ internal static class ModuleDetector
                     : "NodePackage";
             }
 
+            if (module.Framework is null)
+            {
+                module.Framework = module.Frameworks.Count switch
+                {
+                    0 => null,
+                    1 => module.Frameworks[0],
+                    _ => "Multi-Framework"
+                };
+            }
+
             if (string.IsNullOrWhiteSpace(module.Name)
                 || module.Name.Equals("package", StringComparison.OrdinalIgnoreCase))
             {
@@ -340,6 +350,7 @@ internal static class ModuleDetector
                 StringComparison.OrdinalIgnoreCase)
                 ? "WebApplication"
                 : "JavaProject";
+            module.Framework = "Java";
             AddFramework(module, "Java");
         }
         catch (Exception exception) when (

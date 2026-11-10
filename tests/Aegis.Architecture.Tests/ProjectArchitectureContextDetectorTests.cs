@@ -380,9 +380,17 @@ public sealed class ProjectArchitectureContextDetectorTests
         var context = ProjectArchitectureContextDetector.Detect(directory.Path);
 
         Assert.Equal("C#", context.Language);
-        Assert.Equal("ASP.NET Core", context.Framework);
+        Assert.Equal("Multi-Framework", context.Framework);
         Assert.Contains("ASP.NET Core", context.DetectedFrameworks);
         Assert.Contains("Angular", context.DetectedFrameworks);
+        Assert.Equal("FullStack", context.DomainType);
+        Assert.Equal("MultiProject", context.Nature);
+        Assert.Contains(context.Modules, module =>
+            module.Name == "Server" && module.Framework == "ASP.NET Core");
+        Assert.Contains(context.Modules, module =>
+            module.Name == "client" && module.Framework == "Angular");
+        Assert.Contains(context.Modules, module =>
+            module.Name == "admin" && module.Framework == "Angular");
         Assert.Contains(context.DetectedDependencies, dependency =>
             dependency.Equals("Microsoft.EntityFrameworkCore", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(context.DetectedDependencies, dependency =>

@@ -42,22 +42,19 @@ public static class ProjectArchitectureContextDetector
             files);
 
 
+        // Discover project boundaries before framework aggregation so a
+        // mixed repository does not inherit one project's framework identity.
+        ModuleDetector.Analyze(
+            ctx,
+            files);
+
+
         FrameworkDetector.Analyze(
             ctx,
             files);
 
 
         DependencyDetector.Analyze(
-            ctx,
-            files);
-
-
-
-        // ===============================================================
-        // Structural Detection
-        // ===============================================================
-
-        ModuleDetector.Analyze(
             ctx,
             files);
 

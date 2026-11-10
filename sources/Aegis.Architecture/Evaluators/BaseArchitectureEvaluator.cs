@@ -381,25 +381,42 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
     /// </summary>
     protected IReadOnlyList<string> ResolveSourceFiles(
         string projectPath,
+        params string[] extensions) =>
+        ResolveSourceFiles(
+            projectPath,
+            includeTestProjects: false,
+            extensions);
+
+    protected IReadOnlyList<string> ResolveSourceFiles(
+        string projectPath,
+        bool includeTestProjects,
         params string[] extensions)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
         ArgumentNullException.ThrowIfNull(extensions);
 
         if (extensions.Length == 0)
-        {
             return [];
-        }
 
         return EnumerateGovernedFiles(projectPath)
             .Where(file => extensions.Any(extension =>
                 !string.IsNullOrWhiteSpace(extension)
-                && file.EndsWith(
-                    extension,
-                    StringComparison.OrdinalIgnoreCase)))
-            .Where(file => IsApplicationCode(file, projectPath))
+                && file.EndsWith(extension, StringComparison.OrdinalIgnoreCase)))
+            .Where(file =>
+                IsApplicationCode(file, projectPath)
+                || IsWithinDetectedModule(file))
+            .Where(file => includeTestProjects || !IsTestProjectFile(file))
             .ToList();
     }
+
+    protected bool IsTestProjectFile(string file) =>
+        Context?.Modules.Any(module =>
+            module.IsTestProject
+            && IsSameOrDescendantPath(file, module.Path)) == true;
+
+    private bool IsWithinDetectedModule(string file) =>
+        Context?.Modules.Any(module =>
+            IsSameOrDescendantPath(file, module.Path)) == true;
 
     private static List<string> EnumerateGovernedFiles(string rootPath)
     {

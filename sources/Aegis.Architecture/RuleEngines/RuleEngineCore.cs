@@ -687,7 +687,7 @@ public sealed class RuleEngineCore
         var evidenceText = fact.Metadata?.GetValueOrDefault(evidenceKey)
             ?? fact.Evidence;
         var evidence = string.IsNullOrWhiteSpace(evidenceText)
-            ? []
+            ? new List<string>()
             : evidenceText.Split(
                 Environment.NewLine,
                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

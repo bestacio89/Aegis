@@ -10,6 +10,55 @@
     <UserControl.Resources>
         <conv:SeverityToBrushConverter x:Key="SeverityToBrushConverter" />
 
+        <Style x:Key="FindingSeverityFilter" TargetType="ComboBox">
+            <Setter Property="Background" Value="{StaticResource Brush.PanelElevated}" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Line}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="Background" Value="{StaticResource Brush.PanelElevated}" />
+                        <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+                        <Setter Property="Padding" Value="10,7" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ComboBoxItem">
+                                    <Border x:Name="ItemSurface"
+                                            Background="{TemplateBinding Background}"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter
+                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsHighlighted" Value="True">
+                                            <Setter TargetName="ItemSurface" Property="Background"
+                                                    Value="#20384D" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="ItemSurface" Property="Background"
+                                                    Value="#29445B" />
+                                        </Trigger>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+            <Style.Resources>
+                <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#161D2E" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#E8EDF4" />
+            </Style.Resources>
+        </Style>
+
         <Style x:Key="FindingDetailLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}" />
             <Setter Property="FontSize" Value="10" />
@@ -148,11 +197,7 @@
                 SelectedItem="{Binding SelectedSeverity, Mode=TwoWay}"
                 MinHeight="38"
                 Margin="0,0,10,0"
-                Padding="8,4"
-                Background="{StaticResource Brush.PanelElevated}"
-                Foreground="{StaticResource Brush.TextPrimary}"
-                BorderBrush="{StaticResource Brush.Line}"
-                VerticalContentAlignment="Center" />
+                Style="{StaticResource FindingSeverityFilter}" />
 
             <Button
                 Grid.Column="2"

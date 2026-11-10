@@ -193,7 +193,8 @@ public sealed class ComplexityEvaluator
                         method.StartLine,
                         metrics.Complexity,
                         metrics.LineCount,
-                        violations));
+                        violations,
+                        content));
             }
         }
 
@@ -234,7 +235,8 @@ public sealed class ComplexityEvaluator
         int startLine,
         int complexity,
         int lines,
-        IReadOnlyCollection<string> violations)
+        IReadOnlyCollection<string> violations,
+        string source)
     {
         var result = CreateResult(
             file,
@@ -271,7 +273,40 @@ public sealed class ComplexityEvaluator
         result.Metadata["Interpretation"] =
             "Estimated complexity and physical method size; not compiler-backed analysis.";
 
+        var sourceLine = GetSourceLine(source, startLine);
+        var evidence =
+            $"Method '{methodName}' at line {startLine} has estimated cyclomatic complexity {complexity} " +
+            $"and {lines} non-empty source line(s).";
+
+        result.LineNumber = startLine;
+        result.Evidence = evidence;
+        result.Metadata["Evidence.EstimatedCyclomaticComplexity"] =
+            $"{evidence} Source: {sourceLine}";
+        result.Metadata["EvidenceLine.EstimatedCyclomaticComplexity"] =
+            startLine.ToString(CultureInfo.InvariantCulture);
+        result.Metadata["CodeSnippet.EstimatedCyclomaticComplexity"] = sourceLine;
+        result.Metadata["Evidence.MethodLineCount"] =
+            $"{evidence} Source: {sourceLine}";
+        result.Metadata["EvidenceLine.MethodLineCount"] =
+            startLine.ToString(CultureInfo.InvariantCulture);
+        result.Metadata["CodeSnippet.MethodLineCount"] = sourceLine;
+
         return result;
+    }
+
+    private static string GetSourceLine(string source, int lineNumber)
+    {
+        if (lineNumber <= 0)
+            return string.Empty;
+
+        using var reader = new StringReader(source);
+        for (var currentLine = 1; currentLine < lineNumber; currentLine++)
+        {
+            if (reader.ReadLine() is null)
+                return string.Empty;
+        }
+
+        return reader.ReadLine()?.Trim() ?? string.Empty;
     }
 
     private static (int Complexity, int LineCount) MeasureMethod(

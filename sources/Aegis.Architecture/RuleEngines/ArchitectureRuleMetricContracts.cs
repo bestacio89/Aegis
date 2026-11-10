@@ -43,7 +43,6 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-BACK-R4"] = ["ErrorHandlingEvaluator"],
                 ["AEG-BACK-R5"] = ["MaintainabilityEvaluator"],
 
-                ["AEG-DES-ADM001"] = ["AnemicDomainModelEvaluator"],
                 ["AEG-DES-BLD001"] = ["BuilderPatternEvaluator"],
                 ["AEG-DES-BLD002"] = ["BuilderPatternEvaluator"],
                 ["AEG-DES-CMD001"] = ["CommandPatternEvaluator"],
@@ -52,7 +51,6 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-DES-FAC002"] = ["FacadePatternEvaluator"],
                 ["AEG-DES-FACR001"] = ["FactoryPatternEvaluator"],
                 ["AEG-DES-GOD001"] = ["GodClassEvaluator"],
-                ["AEG-DES-MEDI001"] = ["MediatorPatternEvaluator"],
                 ["AEG-DES-OBS001"] = ["ObserverPatternEvaluator"],
                 ["AEG-DES-REPO001"] = ["RepositoryPatternEvaluator"],
                 ["AEG-DES-SING001"] = ["SingletonPatternEvaluator"],
@@ -106,6 +104,10 @@ internal static class ArchitectureRuleMetricContracts
         UnsupportedRuleProducerContracts =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
+                ["AEG-DES-ADM001"] =
+                    "AnemicDomainModelEvaluator currently emits lexical state-to-method heuristics and explicitly does not establish domain-model role or behavior semantics. Keep the metric diagnostic-only until candidate identification and behavior analysis are compiler-backed.",
+                ["AEG-DES-MEDI001"] =
+                    "MediatorPatternEvaluator currently emits lexical adoption and service-like call signals, not a validated mediator-coupling index. Pattern usage or service-like calls alone do not prove excessive mediator centralization.",
                 ["AEG-DES-CIRC001"] =
                     "No dedicated pattern-circular-reference producer exists yet; CircularDependencyEvaluator measures module dependency cycles and is not a semantic substitute.",
                 ["AEG-DES-OVER001"] =

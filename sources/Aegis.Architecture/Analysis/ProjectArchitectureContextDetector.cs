@@ -291,6 +291,23 @@ public static class ProjectArchitectureContextDetector
         ctx.MetadataMap["DetectedModules"] =
             ctx.Modules.Count.ToString();
 
+        ctx.MetadataMap["ProjectKindBreakdown"] =
+            JsonSerializer.Serialize(ctx.Modules
+                .GroupBy(module => module.ProjectKind, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Count()));
+
+        ctx.MetadataMap["DetectedProjectFrameworks"] =
+            JsonSerializer.Serialize(ctx.Modules
+                .Select(module => new
+                {
+                    module.Name,
+                    module.ProjectKind,
+                    module.Framework,
+                    module.Frameworks,
+                    module.TargetFrameworks,
+                    module.IsTestProject,
+                    module.IsWebProject
+                }));
 
         ctx.MetadataMap["LastModified"] =
             files

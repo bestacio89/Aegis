@@ -8,6 +8,35 @@ internal static class DomainDetector
     {
         ArgumentNullException.ThrowIfNull(ctx);
 
+        var projectKinds = ctx.Modules
+            .Select(module => module.ProjectKind)
+            .Where(kind => !string.IsNullOrWhiteSpace(kind) && kind != "Unknown")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (projectKinds.Length > 1)
+        {
+            ctx.DomainType = "Mixed";
+            return;
+        }
+
+        if (projectKinds.Length == 1)
+        {
+            ctx.DomainType = projectKinds[0] switch
+            {
+                "ClassLibrary" => "Library",
+                "WebApplication" => "Backend",
+                "FrontendApplication" => "Frontend",
+                "DesktopApplication" => "Desktop",
+                "Test" => "Test",
+                "Executable" => "Application",
+                _ => ctx.DomainType ?? "Unknown"
+            };
+
+            if (ctx.DomainType != "Unknown")
+                return;
+        }
+
         var isBlazor = string.Equals(
                 ctx.Framework,
                 "Blazor",

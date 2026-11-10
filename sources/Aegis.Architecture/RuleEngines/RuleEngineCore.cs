@@ -503,9 +503,21 @@ public sealed class RuleEngineCore
             RulesEvaluated = evaluatedRuleIds.Count,
             RulesPassed = distinctPassedRules,
             RulesViolated = distinctViolatedRules,
-            EvaluationsPassed = checksPassed,
-            EvaluationsViolated = checksViolated,
-            EvaluationsNotEvaluated = notEvaluatedReasons.Count,
+            RulesWithErrors = evaluations
+                .Where(evaluation => evaluation.Status == RuleEvaluationStatus.Error)
+                .Select(evaluation => evaluation.RuleId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
+            EvaluationsPassed = evaluations.Count(
+                evaluation => evaluation.Status == RuleEvaluationStatus.Passed),
+            EvaluationsViolated = evaluations.Count(
+                evaluation => evaluation.Status == RuleEvaluationStatus.Violated),
+            EvaluationsNotEvaluated = evaluations.Count(
+                evaluation => evaluation.Status == RuleEvaluationStatus.NotEvaluated),
+            EvaluationsInsufficientEvidence = evaluations.Count(
+                evaluation => evaluation.Status == RuleEvaluationStatus.InsufficientEvidence),
+            EvaluationsErrored = evaluations.Count(
+                evaluation => evaluation.Status == RuleEvaluationStatus.Error),
             ChecksPerformed = totalChecks,
             ChecksPassed = checksPassed,
             ChecksViolated = checksViolated,
@@ -564,12 +576,16 @@ public sealed class RuleEngineCore
             }
         }
 
+        var supportedCoverage = stats.RulesApplicable > 0
+            ? (double)stats.RulesEvaluated / stats.RulesApplicable * 100.0
+            : 0.0;
+
         _logger.LogInformation(
             "RuleEngineCore processed {Facts} facts: {Violations} violations; " +
             "{Checks} checks ({Passed} passed, {Violated} violated); " +
             "{Evaluated}/{Registered} registered rules evaluated; " +
             "{SupportedEvaluated}/{SupportedApplicable} supported applicable rules evaluated " +
-            "({Coverage:P1} coverage); " +
+            "({SupportedCoverage:0.0}% of supported rules; {Coverage:0.0}% overall applicable coverage); " +
             "{NotApplicable} not applicable; {NotEvaluated} not evaluated; " +
             "{ProjectSummaries} project summaries processed; " +
             "{NonFiniteSkipped} non-finite metrics skipped; " +
@@ -587,6 +603,7 @@ public sealed class RuleEngineCore
             stats.RulesRegistered,
             stats.RulesEvaluated,
             stats.RulesApplicable,
+            supportedCoverage,
             stats.EvaluationCoverage,
             stats.RulesNotApplicable.Count,
             stats.RulesNotEvaluated.Count,

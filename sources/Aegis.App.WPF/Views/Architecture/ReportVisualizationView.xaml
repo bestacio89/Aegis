@@ -187,7 +187,7 @@
                     <ItemsPanelTemplate>
 
 
-                        <UniformGrid Columns="4"/>
+                        <WrapPanel/>
 
 
                     </ItemsPanelTemplate>
@@ -207,6 +207,7 @@
 
 
                         <Border Margin="6"
+                                Width="250"
                                 MinHeight="130"
                                 Style="{StaticResource Card.Structural}">
 

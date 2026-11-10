@@ -188,7 +188,16 @@ public sealed class RuleEngineCoreBehaviorTests
         Assert.Equal(23, outcome.Stats.RulesUnsupported);
         Assert.Equal(51, outcome.Stats.RulesApplicable);
         Assert.Equal(74, outcome.Stats.NotEvaluatedReasons.Count);
+        Assert.Equal(74, outcome.Stats.RulesNotEvaluated.Count);
         Assert.Equal(2, outcome.Stats.RulesNotApplicable.Count);
+
+        // Rule-level missing evidence is not a scoped evaluation result.
+        Assert.Empty(outcome.Evaluations);
+        Assert.Equal(0, outcome.Stats.EvaluationsNotEvaluated);
+        Assert.Equal(0, outcome.Stats.EvaluationsInsufficientEvidence);
+        Assert.Equal(0, outcome.Stats.EvaluationsErrored);
+        Assert.Equal(0, outcome.Stats.RulesWithErrors);
+        Assert.Equal(0, outcome.Stats.EvaluationCoverage);
 
         foreach (var rule in ArchitectureRuleRegistry.All)
         {

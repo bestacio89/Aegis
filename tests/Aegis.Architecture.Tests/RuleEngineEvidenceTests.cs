@@ -70,14 +70,14 @@ public sealed class RuleEngineEvidenceTests
             new ProjectArchitectureContext { Language = "C#" },
             [fact]);
 
-        var finding = Assert.Single(
+        Assert.DoesNotContain(
             outcome.Results,
             result => result.RuleId == "AEG-NAM-R3");
-
-        Assert.Equal(string.Empty, finding.FilePath);
-        Assert.Null(finding.LineNumber);
-        Assert.Null(finding.CodeSnippet);
-        Assert.Empty(finding.Evidence);
+        Assert.Contains(outcome.Evaluations, evaluation =>
+            evaluation.RuleId == "AEG-NAM-R3"
+            && evaluation.Status == RuleEvaluationStatus.InsufficientEvidence);
+        Assert.Contains("AEG-NAM-R3", outcome.Stats.RulesNotEvaluated);
+        Assert.Equal(1, outcome.Stats.EvaluationsInsufficientEvidence);
     }
 
     private static RuleEngineCore CreateEngine() =>

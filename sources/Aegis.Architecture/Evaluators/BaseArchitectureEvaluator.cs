@@ -657,7 +657,7 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(file);
 
-        return new ArchitectureEvaluatorResult(
+        var result = new ArchitectureEvaluatorResult(
             Name,
             Path.GetFileName(file))
         {
@@ -672,6 +672,25 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                 [EvaluationScopeMetadataKey] = FileScope
             }
         };
+
+        var owningModule = Context?.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .OrderByDescending(module => module.Path.Length)
+            .FirstOrDefault(module => IsSameOrDescendantPath(file, module.Path));
+
+        if (owningModule is not null)
+        {
+            result.ProjectName = owningModule.Name;
+            result.Metadata["ProjectName"] = owningModule.Name;
+            result.Metadata["ProjectKind"] = owningModule.ProjectKind;
+            result.Metadata["IsTestProject"] = owningModule.IsTestProject.ToString();
+            result.Metadata["ProjectFile"] = owningModule.ProjectFile ?? string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(owningModule.Framework))
+                result.Metadata["Framework"] = owningModule.Framework;
+        }
+
+        return result;
     }
 
     /// <summary>

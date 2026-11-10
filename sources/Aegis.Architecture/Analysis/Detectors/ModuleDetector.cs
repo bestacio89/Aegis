@@ -1,100 +1,456 @@
-﻿using System.Text.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Xml.Linq;
-
 using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Architecture.Analysis.Detectors;
 
+/// <summary>
+/// Discovers project boundaries and records project-local technology metadata.
+/// Repository-level context remains an aggregate; it is not used as a substitute
+/// for the identity of the project that owns an individual source file.
+/// </summary>
 internal static class ModuleDetector
 {
-    private static readonly string[] ProjectFilePatterns =
-    {
-        "*.csproj",
+    private static readonly string[] ProjectManifestNames =
+    [
         "package.json",
         "pom.xml"
-    };
-
+    ];
 
     public static void Analyze(
-        ProjectArchitectureContext ctx,
+        ProjectArchitectureContext context,
         List<string> files)
     {
-        var candidateDirs = files
-            .Select(Path.GetDirectoryName)
-            .Where(x => x != null)
-            .Select(x => x!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(files);
 
+        context.Modules.Clear();
 
-        foreach (var path in candidateDirs)
+        var manifests = files
+            .Where(IsProjectManifest)
+            .Select(file => new
+            {
+                File = file,
+                Directory = Path.GetDirectoryName(Path.GetFullPath(file))!
+            })
+            .GroupBy(item => NormalizePath(item.Directory), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key.Length)
+            .ToArray();
+
+        foreach (var manifestGroup in manifests)
         {
-            var projectFile =
-                FindProjectFile(path);
-
-            if (projectFile is null)
-            {
-                continue;
-            }
-
-
-            var moduleName = ResolveModuleName(projectFile, path);
-            var module = new ProjectModuleContext
-            {
-                // Project files and package manifests use different identity fields.
-                // Path.GetFileNameWithoutExtension("package.json") and ("pom.xml")
-                // produce generic names, not the actual module identity.
-                Name = moduleName,
-                Path = path,
-                Type = DetectModuleType(path, moduleName)
-            };
-
-
-            module.Languages =
-                files
-                .Where(file => IsSameOrDescendantPath(file, path))
-                .Select(GetLanguage)
-                .Where(language => !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            var projectFiles = manifestGroup
+                .Select(item => item.File)
+                .OrderBy(GetManifestPriority)
+                .ThenBy(file => file, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
+            var modulePath = manifestGroup.First().Directory;
+            var primaryProjectFile = projectFiles[0];
+            var moduleName = ResolveModuleName(primaryProjectFile, modulePath);
 
-            ctx.Modules.Add(module);
+            var module = new ProjectModuleContext
+            {
+                Name = moduleName,
+                Path = modulePath,
+                ProjectFile = primaryProjectFile,
+                ProjectFiles = projectFiles,
+                Type = DetectModuleType(modulePath, moduleName)
+            };
+
+            var dotNetProject = projectFiles.FirstOrDefault(file =>
+                file.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase));
+            if (dotNetProject is not null)
+                PopulateDotNetMetadata(module, dotNetProject, files);
+
+            var packageManifest = projectFiles.FirstOrDefault(file =>
+                Path.GetFileName(file).Equals("package.json", StringComparison.OrdinalIgnoreCase));
+            if (packageManifest is not null)
+                PopulateNodeMetadata(module, packageManifest);
+
+            var pomManifest = projectFiles.FirstOrDefault(file =>
+                Path.GetFileName(file).Equals("pom.xml", StringComparison.OrdinalIgnoreCase));
+            if (pomManifest is not null)
+                PopulateMavenMetadata(module, pomManifest);
+
+            if (module.IsTestProject)
+                module.Type = "Test";
+
+            module.Framework = module.Frameworks.Count switch
+            {
+                0 => null,
+                1 => module.Frameworks[0],
+                _ => "Multi-Framework"
+            };
+
+            context.Modules.Add(module);
         }
 
-        // Unity projects frequently have no committed .csproj file. Discover
-        // them from Unity's Assets + ProjectSettings/Packages layout so their
-        // scripts receive a project scope instead of being lost in a mixed scan.
-        var unityRoot = FindUnityProjectRoot(ctx.RootPath, files);
-        if (!string.IsNullOrWhiteSpace(unityRoot))
+        var unityRoot = FindUnityProjectRoot(context.RootPath, files);
+        if (!string.IsNullOrWhiteSpace(unityRoot)
+            && !context.Modules.Any(module => SamePath(module.Path, unityRoot)))
         {
-            var existing = ctx.Modules.FirstOrDefault(module =>
-                string.Equals(
-                    Path.GetFullPath(module.Path),
-                    Path.GetFullPath(unityRoot),
-                    StringComparison.OrdinalIgnoreCase));
+            context.Modules.Add(new ProjectModuleContext
+            {
+                Name = Path.GetFileName(
+                    unityRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+                Path = unityRoot,
+                Type = "Unity",
+                ProjectKind = "UnityProject",
+                Framework = "Unity",
+                Frameworks = ["Unity"],
+                Languages = files
+                    .Where(file => IsSameOrDescendantPath(file, unityRoot))
+                    .Select(GetLanguage)
+                    .Where(language => language != "Unknown")
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+            });
+        }
 
-            if (existing is not null)
+        PopulateOwnedLanguages(context.Modules, files);
+    }
+
+    private static void PopulateOwnedLanguages(
+        IReadOnlyCollection<ProjectModuleContext> modules,
+        IReadOnlyCollection<string> files)
+    {
+        var orderedModules = modules
+            .OrderByDescending(module => NormalizePath(module.Path).Length)
+            .ToArray();
+
+        foreach (var module in modules)
+        {
+            var ownedFiles = files.Where(file =>
             {
-                existing.Type = "Unity";
+                if (!IsSameOrDescendantPath(file, module.Path))
+                    return false;
+
+                var owner = orderedModules.FirstOrDefault(candidate =>
+                    IsSameOrDescendantPath(file, candidate.Path));
+
+                return ReferenceEquals(owner, module);
+            });
+
+            module.Languages = ownedFiles
+                .Select(GetLanguage)
+                .Where(language => language != "Unknown")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(language => language, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
+    private static void PopulateDotNetMetadata(
+        ProjectModuleContext module,
+        string projectFile,
+        IReadOnlyCollection<string> files)
+    {
+        try
+        {
+            var document = XDocument.Load(projectFile);
+            var root = document.Root;
+            var sdk = root?.Attribute("Sdk")?.Value ?? string.Empty;
+            var properties = document.Descendants()
+                .Where(element => element.Parent?.Name.LocalName == "PropertyGroup")
+                .GroupBy(element => element.Name.LocalName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Last().Value.Trim(),
+                    StringComparer.OrdinalIgnoreCase);
+
+            var packageReferences = document.Descendants()
+                .Where(element => element.Name.LocalName == "PackageReference")
+                .Select(element =>
+                    element.Attribute("Include")?.Value
+                    ?? element.Attribute("Update")?.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            module.TargetFrameworks = ReadTargetFrameworks(properties);
+            module.IsTestProject =
+                IsTrue(properties, "IsTestProject")
+                || packageReferences.Any(IsTestPackage);
+            module.IsWebProject =
+                sdk.Contains("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase)
+                || packageReferences.Any(package =>
+                    package.Contains("Microsoft.AspNetCore", StringComparison.OrdinalIgnoreCase));
+            var isWpf = IsTrue(properties, "UseWPF");
+            var isWindowsForms = IsTrue(properties, "UseWindowsForms");
+            var outputType = properties.GetValueOrDefault("OutputType", "Library");
+
+            module.IsExecutable = outputType.Equals("Exe", StringComparison.OrdinalIgnoreCase)
+                || outputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase);
+            module.IsLibrary = !module.IsTestProject
+                && !module.IsWebProject
+                && !module.IsExecutable;
+
+            AddFramework(module, ".NET");
+            if (module.IsWebProject)
+                AddFramework(module, "ASP.NET Core");
+            if (files.Any(file =>
+                    IsSameOrDescendantPath(file, module.Path)
+                    && Path.GetExtension(file).Equals(".razor", StringComparison.OrdinalIgnoreCase)))
+                AddFramework(module, "Blazor");
+            if (isWpf)
+                AddFramework(module, "WPF");
+            if (isWindowsForms)
+                AddFramework(module, "Windows Forms");
+
+            module.ProjectKind = module.IsTestProject
+                ? "Test"
+                : module.IsWebProject
+                    ? "WebApplication"
+                    : isWpf || isWindowsForms
+                        ? "DesktopApplication"
+                        : module.IsExecutable
+                            ? "Executable"
+                            : "ClassLibrary";
+        }
+        catch (Exception exception) when (
+            exception is System.Xml.XmlException
+                or IOException
+                or UnauthorizedAccessException)
+        {
+            module.ProjectKind = "Unknown";
+        }
+    }
+
+    private static List<string> ReadTargetFrameworks(
+        IReadOnlyDictionary<string, string> properties)
+    {
+        var value = properties.GetValueOrDefault("TargetFrameworks")
+            ?? properties.GetValueOrDefault("TargetFramework");
+
+        return string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+    }
+
+    private static bool IsTestPackage(string package) =>
+        package.Equals("Microsoft.NET.Test.Sdk", StringComparison.OrdinalIgnoreCase)
+        || package.StartsWith("xunit", StringComparison.OrdinalIgnoreCase)
+        || package.StartsWith("NUnit", StringComparison.OrdinalIgnoreCase)
+        || package.StartsWith("MSTest.", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTrue(
+        IReadOnlyDictionary<string, string> properties,
+        string key) =>
+        properties.TryGetValue(key, out var value)
+        && bool.TryParse(value, out var parsed)
+        && parsed;
+
+    private static void PopulateNodeMetadata(
+        ProjectModuleContext module,
+        string packageFile)
+    {
+        try
+        {
+            var package = JsonNode.Parse(File.ReadAllText(packageFile))?.AsObject();
+            var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var key in new[]
+                     {
+                         "dependencies",
+                         "devDependencies",
+                         "peerDependencies",
+                         "optionalDependencies"
+                     })
+            {
+                if (package?[key] is not JsonObject group)
+                    continue;
+
+                foreach (var dependency in group)
+                    dependencies.Add(dependency.Key);
             }
-            else
+
+            if (dependencies.Contains("@angular/core"))
+                AddFramework(module, "Angular");
+            if (dependencies.Contains("react"))
+                AddFramework(module, "React");
+            if (dependencies.Contains("vue"))
+                AddFramework(module, "Vue");
+
+            if (module.Frameworks.Count == 0)
+                AddFramework(module, "Node.js");
+
+            if (module.ProjectKind == "Unknown")
             {
-                ctx.Modules.Add(new ProjectModuleContext
-                {
-                    Name = Path.GetFileName(
-                        unityRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
-                    Path = unityRoot,
-                    Type = "Unity",
-                    Languages = files
-                        .Where(file => IsSameOrDescendantPath(file, unityRoot))
-                        .Select(GetLanguage)
-                        .Where(language => !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList()
-                });
+                module.ProjectKind = module.Frameworks.Any(framework =>
+                    framework is "Angular" or "React" or "Vue")
+                    ? "FrontendApplication"
+                    : "NodePackage";
+            }
+
+            if (string.IsNullOrWhiteSpace(module.Name)
+                || module.Name.Equals("package", StringComparison.OrdinalIgnoreCase))
+            {
+                var name = package?["name"]?.GetValue<string>();
+                if (!string.IsNullOrWhiteSpace(name))
+                    module.Name = name.Trim();
             }
         }
+        catch (Exception exception) when (
+            exception is JsonException
+                or IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException)
+        {
+            module.ProjectKind = module.ProjectKind == "Unknown"
+                ? "Unknown"
+                : module.ProjectKind;
+        }
+    }
+
+    private static void PopulateMavenMetadata(
+        ProjectModuleContext module,
+        string pomFile)
+    {
+        try
+        {
+            var document = XDocument.Load(pomFile);
+            var artifactId = document.Root?
+                .Elements()
+                .FirstOrDefault(element => element.Name.LocalName == "artifactId")
+                ?.Value;
+
+            if (!string.IsNullOrWhiteSpace(artifactId))
+                module.Name = artifactId.Trim();
+
+            var packaging = document.Root?
+                .Elements()
+                .FirstOrDefault(element => element.Name.LocalName == "packaging")
+                ?.Value;
+
+            module.ProjectKind = string.Equals(
+                packaging,
+                "war",
+                StringComparison.OrdinalIgnoreCase)
+                ? "WebApplication"
+                : "JavaProject";
+            AddFramework(module, "Java");
+        }
+        catch (Exception exception) when (
+            exception is System.Xml.XmlException
+                or IOException
+                or UnauthorizedAccessException)
+        {
+            module.ProjectKind = "Unknown";
+        }
+    }
+
+    private static void AddFramework(ProjectModuleContext module, string framework)
+    {
+        if (!module.Frameworks.Contains(framework, StringComparer.OrdinalIgnoreCase))
+            module.Frameworks.Add(framework);
+    }
+
+    private static bool IsProjectManifest(string file)
+    {
+        var name = Path.GetFileName(file);
+        return name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+            || ProjectManifestNames.Contains(name, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static int GetManifestPriority(string file)
+    {
+        var name = Path.GetFileName(file);
+        if (name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+            return 0;
+        if (name.Equals("pom.xml", StringComparison.OrdinalIgnoreCase))
+            return 1;
+        return 2;
+    }
+
+    private static string ResolveModuleName(string projectFile, string modulePath)
+    {
+        if (Path.GetFileName(projectFile).Equals(
+                "package.json",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(projectFile));
+                if (document.RootElement.TryGetProperty("name", out var name)
+                    && name.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(name.GetString()))
+                    return name.GetString()!.Trim();
+            }
+            catch (Exception exception) when (
+                exception is JsonException or IOException or UnauthorizedAccessException)
+            {
+                // The manifest evaluator owns malformed or unreadable package diagnostics.
+            }
+        }
+
+        if (Path.GetFileName(projectFile).Equals("pom.xml", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var document = XDocument.Load(projectFile);
+                var artifactId = document.Root?
+                    .Elements()
+                    .FirstOrDefault(element => element.Name.LocalName == "artifactId")
+                    ?.Value;
+                if (!string.IsNullOrWhiteSpace(artifactId))
+                    return artifactId.Trim();
+            }
+            catch (Exception exception) when (
+                exception is System.Xml.XmlException or IOException or UnauthorizedAccessException)
+            {
+                // The manifest evaluator owns malformed or unreadable Maven diagnostics.
+            }
+        }
+
+        return Path.GetFileNameWithoutExtension(projectFile);
+    }
+
+    private static string DetectModuleType(string path, string moduleName)
+    {
+        var pathName = Path.GetFileName(
+            Path.TrimEndingDirectorySeparator(path)).ToLowerInvariant();
+
+        var pathType = DetectModuleTypeFromName(pathName);
+        return pathType != "Unknown"
+            ? pathType
+            : DetectModuleTypeFromName(moduleName.ToLowerInvariant());
+    }
+
+    private static string DetectModuleTypeFromName(string name)
+    {
+        if (name.Contains("test", StringComparison.Ordinal))
+            return "Test";
+        if (name.EndsWith(".api", StringComparison.Ordinal)
+            || name.EndsWith("api", StringComparison.Ordinal))
+            return "Api";
+        if (name.Contains("application", StringComparison.Ordinal)
+            || name.EndsWith(".app", StringComparison.Ordinal))
+            return "Application";
+        if (name.Contains("domain", StringComparison.Ordinal)
+            || name.EndsWith(".core", StringComparison.Ordinal))
+            return "Domain";
+        if (name.Contains("infrastructure", StringComparison.Ordinal)
+            || name.Contains("persistence", StringComparison.Ordinal)
+            || name.Contains("database", StringComparison.Ordinal))
+            return "Infrastructure";
+        if (name.Contains("contracts", StringComparison.Ordinal)
+            || name.Contains("abstractions", StringComparison.Ordinal))
+            return "Contracts";
+        if (name.Contains("consumer", StringComparison.Ordinal)
+            || name.Contains("worker", StringComparison.Ordinal)
+            || name.Contains("background", StringComparison.Ordinal))
+            return "Consumer";
+        if (name.Contains("admin", StringComparison.Ordinal)
+            || name.Contains("presentation", StringComparison.Ordinal)
+            || name.Contains("web", StringComparison.Ordinal))
+            return "Presentation";
+        if (name.Contains("client", StringComparison.Ordinal))
+            return "Client";
+        return "Unknown";
     }
 
     private static string? FindUnityProjectRoot(
@@ -118,14 +474,9 @@ internal static class ModuleDetector
                 if (Directory.Exists(Path.Combine(directory, "Assets"))
                     && (Directory.Exists(Path.Combine(directory, "ProjectSettings"))
                         || Directory.Exists(Path.Combine(directory, "Packages"))))
-                {
                     return directory;
-                }
 
-                if (string.Equals(
-                    directory.TrimEnd(Path.DirectorySeparatorChar),
-                    root.TrimEnd(Path.DirectorySeparatorChar),
-                    StringComparison.OrdinalIgnoreCase))
+                if (SamePath(directory, root))
                     break;
 
                 directory = Directory.GetParent(directory)?.FullName;
@@ -135,12 +486,23 @@ internal static class ModuleDetector
         return null;
     }
 
+    private static string GetLanguage(string file)
+    {
+        return Path.GetExtension(file).ToLowerInvariant() switch
+        {
+            ".cs" => "C#",
+            ".java" => "Java",
+            ".py" => "Python",
+            ".ts" or ".tsx" => "TypeScript",
+            ".js" or ".jsx" => "JavaScript",
+            _ => "Unknown"
+        };
+    }
+
     private static bool IsSameOrDescendantPath(string path, string root)
     {
-        var normalizedPath = Path.GetFullPath(path)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var normalizedRoot = Path.GetFullPath(root)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedPath = NormalizePath(path);
+        var normalizedRoot = NormalizePath(root);
 
         return string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase)
             || normalizedPath.StartsWith(
@@ -148,192 +510,9 @@ internal static class ModuleDetector
                 StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool SamePath(string left, string right) =>
+        string.Equals(NormalizePath(left), NormalizePath(right), StringComparison.OrdinalIgnoreCase);
 
-    private static string ResolveModuleName(string projectFile, string modulePath)
-    {
-        var fileName = Path.GetFileName(projectFile);
-        var directoryName = Path.GetFileName(
-            Path.TrimEndingDirectorySeparator(modulePath));
-
-        if (fileName.Equals("package.json", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                using var document = JsonDocument.Parse(File.ReadAllText(projectFile));
-                if (document.RootElement.ValueKind == JsonValueKind.Object
-                    && document.RootElement.TryGetProperty("name", out var name)
-                    && name.ValueKind == JsonValueKind.String
-                    && !string.IsNullOrWhiteSpace(name.GetString()))
-                {
-                    return name.GetString()!.Trim();
-                }
-            }
-            catch (JsonException)
-            {
-                // Keep discovery resilient; the manifest evaluator reports malformed JSON.
-            }
-            catch (IOException)
-            {
-                // The unreadable manifest remains a discovery limitation, not a fake module name.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // The unreadable manifest remains a discovery limitation, not a fake module name.
-            }
-
-            return directoryName;
-        }
-
-        if (fileName.Equals("pom.xml", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                var document = XDocument.Load(projectFile);
-                // Read the module's direct artifactId, not the parent POM's
-                // artifactId, which appears earlier in common Maven documents.
-                var artifactId = document.Root?
-                    .Elements()
-                    .FirstOrDefault(element =>
-                        element.Name.LocalName.Equals("artifactId", StringComparison.OrdinalIgnoreCase))
-                    ?.Value;
-
-                if (!string.IsNullOrWhiteSpace(artifactId))
-                    return artifactId.Trim();
-            }
-            catch (System.Xml.XmlException)
-            {
-                // Keep discovery resilient; configuration diagnostics own parse failures.
-            }
-            catch (IOException)
-            {
-                // The unreadable manifest remains a discovery limitation.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // The unreadable manifest remains a discovery limitation.
-            }
-
-            return directoryName;
-        }
-
-        return Path.GetFileNameWithoutExtension(projectFile);
-    }
-
-    /// <summary>
-    /// Returns the first recognized project/manifest file in the given directory, or null
-    /// if none exists.
-    ///
-    /// File.Exists does not support wildcards — the previous implementation called
-    /// File.Exists(Path.Combine(path, "*.csproj")), which checks for a literal file named
-    /// "*.csproj" and therefore never matched anything. That meant no C#/.NET project was
-    /// ever detected as a module root, so ctx.Modules stayed empty for any .NET-only
-    /// codebase and every violation fell through to "Unclassified" regardless of keyword
-    /// logic downstream. Directory.GetFiles supports the wildcard correctly.
-    /// </summary>
-    private static string? FindProjectFile(
-        string path)
-    {
-        if (!Directory.Exists(path))
-        {
-            return null;
-        }
-
-
-        foreach (var pattern in ProjectFilePatterns)
-        {
-            var matches =
-                Directory.GetFiles(path, pattern);
-
-            if (matches.Length > 0)
-            {
-                return matches[0];
-            }
-        }
-
-
-        return null;
-    }
-
-
-    private static string GetLanguage(string file)
-    {
-        if (file.EndsWith(".cs"))
-            return "C#";
-
-        if (file.EndsWith(".java"))
-            return "Java";
-
-        if (file.EndsWith(".py"))
-            return "Python";
-
-        if (file.EndsWith(".ts"))
-            return "TypeScript";
-
-        return "Unknown";
-    }
-
-
-    /// <summary>
-    /// Auxiliary, best-effort classification kept on ProjectModuleContext.Type for
-    /// informational purposes. No longer used to derive the Layer name — see
-    /// LayerDetector, which now uses the real project name directly instead of guessing
-    /// a semantic bucket from this keyword match.
-    /// </summary>
-    private static string DetectModuleType(string path, string moduleName)
-    {
-        var pathName = Path.GetFileName(
-            Path.TrimEndingDirectorySeparator(path)).ToLowerInvariant();
-
-        // The directory is the strongest local clue. When it is generic (for
-        // example, "apps/ui" or "packages/foo"), use the actual project or
-        // manifest identity as a fallback instead of leaving the module
-        // unclassified merely because its folder does not encode its role.
-        var pathType = DetectModuleTypeFromName(pathName);
-        return pathType != "Unknown"
-            ? pathType
-            : DetectModuleTypeFromName(moduleName.ToLowerInvariant());
-    }
-
-    private static string DetectModuleTypeFromName(string name)
-    {
-        // Keep classification scoped to a module identity, never the full path.
-        if (name.Contains("test", StringComparison.Ordinal))
-            return "Test";
-
-        if (name.EndsWith(".api", StringComparison.Ordinal)
-            || name.EndsWith("api", StringComparison.Ordinal))
-            return "Api";
-
-        if (name.Contains("application", StringComparison.Ordinal)
-            || name.EndsWith(".app", StringComparison.Ordinal))
-            return "Application";
-
-        if (name.Contains("domain", StringComparison.Ordinal)
-            || name.EndsWith(".core", StringComparison.Ordinal))
-            return "Domain";
-
-        if (name.Contains("infrastructure", StringComparison.Ordinal)
-            || name.Contains("persistence", StringComparison.Ordinal)
-            || name.Contains("database", StringComparison.Ordinal))
-            return "Infrastructure";
-
-        if (name.Contains("contracts", StringComparison.Ordinal)
-            || name.Contains("abstractions", StringComparison.Ordinal))
-            return "Contracts";
-
-        if (name.Contains("consumer", StringComparison.Ordinal)
-            || name.Contains("worker", StringComparison.Ordinal)
-            || name.Contains("background", StringComparison.Ordinal))
-            return "Consumer";
-
-        if (name.Contains("admin", StringComparison.Ordinal)
-            || name.Contains("presentation", StringComparison.Ordinal)
-            || name.Contains("web", StringComparison.Ordinal))
-            return "Presentation";
-
-        if (name.Contains("client", StringComparison.Ordinal))
-            return "Client";
-
-        return "Unknown";
-    }
+    private static string NormalizePath(string path) =>
+        Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 }

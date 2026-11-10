@@ -40,7 +40,6 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-ARCH-R11"] = ["DocumentationEvaluator"],
                 ["AEG-BACK-R2"] = ["ComplexityEvaluator"],
                 ["AEG-BACK-R3"] = ["DependencyGraphEvaluator"],
-                ["AEG-BACK-R4"] = ["ErrorHandlingEvaluator"],
                 ["AEG-BACK-R5"] = ["MaintainabilityEvaluator"],
 
                 ["AEG-DES-BLD001"] = ["BuilderPatternEvaluator"],
@@ -104,6 +103,8 @@ internal static class ArchitectureRuleMetricContracts
         UnsupportedRuleProducerContracts =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
+                ["AEG-BACK-R4"] =
+                    "ErrorHandlingEvaluator currently measures catch/except blocks without recognized logging or rethrowing indicators. This is not operation-level error-handling coverage and can misclassify legitimate fallback handling; retain as diagnostic until semantic handling analysis exists.",
                 ["AEG-DES-ADM001"] =
                     "AnemicDomainModelEvaluator currently emits lexical state-to-method heuristics and explicitly does not establish domain-model role or behavior semantics. Keep the metric diagnostic-only until candidate identification and behavior analysis are compiler-backed.",
                 ["AEG-DES-MEDI001"] =

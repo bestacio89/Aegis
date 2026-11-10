@@ -81,6 +81,55 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.True(finding.Metrics["CyclomaticComplexity"] > 10);
         Assert.Equal(1, finding.Metrics["ComplexityFinding"]);
         Assert.Equal("SourcePatternHeuristic", finding.Metadata["MeasurementMethod"]);
+        Assert.False(string.IsNullOrWhiteSpace(finding.File));
+        Assert.True(finding.LineNumber > 0);
+        Assert.Contains("HighComplexity", finding.Evidence);
+        Assert.Contains("HighComplexity", finding.Metadata["CodeSnippet.EstimatedCyclomaticComplexity"]);
+    }
+
+    [Fact]
+    public async Task ComplexityEvaluator_uses_project_boundaries_and_excludes_test_projects()
+    {
+        using var project = new TemporaryProject();
+        project.Write("Library/Library.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("Library/Production.cs", """
+            public sealed class Production
+            {
+                public void Execute() { }
+            }
+            """);
+        project.Write("Library.Tests/Library.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <IsTestProject>true</IsTestProject>
+              </PropertyGroup>
+              <ItemGroup><PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" /></ItemGroup>
+            </Project>
+            """);
+        project.Write("Library.Tests/ProductionTests.cs", """
+            public sealed class ProductionTests
+            {
+                public void TestOperation() { }
+            }
+            """);
+
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(project.Root);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "ComplexityEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(project.Root, context)).ToArray();
+
+        Assert.Contains(results, result =>
+            result.Metadata.GetValueOrDefault("MethodName") == "Execute");
+        Assert.DoesNotContain(results, result =>
+            result.Metadata.GetValueOrDefault("MethodName") == "TestOperation");
     }
 
     [Fact]

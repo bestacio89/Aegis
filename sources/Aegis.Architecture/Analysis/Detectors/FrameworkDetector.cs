@@ -79,20 +79,31 @@ internal static class FrameworkDetector
         // The repository-level framework is an aggregate. If its projects use
         // different frameworks, do not publish one project's framework as the
         // identity of the entire repository.
+        foreach (var framework in ctx.Modules.SelectMany(module => module.Frameworks))
+            AddFramework(ctx, framework);
+
+        // EF Core is a data-access capability on the .NET platform, not a
+        // separate application framework. Normalize it for repository-wide
+        // aggregation while retaining the precise module-level value.
         var projectFrameworks = ctx.Modules
-            .SelectMany(module => module.Frameworks)
+            .Select(module => module.Framework)
             .Where(framework => !string.IsNullOrWhiteSpace(framework))
+            .Select(framework => string.Equals(
+                framework,
+                ".NET (EF Core)",
+                StringComparison.OrdinalIgnoreCase)
+                    ? ".NET"
+                    : framework!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        foreach (var framework in projectFrameworks)
-            AddFramework(ctx, framework);
-
         if (projectFrameworks.Length > 1)
             ctx.Framework = "Multi-Framework";
         else if (projectFrameworks.Length == 1)
-            ctx.Framework = projectFrameworks[0];
+            ctx.Framework = ctx.Modules.Count > 1
+                ? projectFrameworks[0]
+                : ctx.Modules[0].Framework;
     }
 
     private static void DetectDotNetFramework(

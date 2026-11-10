@@ -187,17 +187,25 @@ internal static class ModuleDetector
                 && !module.IsWebProject
                 && !module.IsExecutable;
 
-            AddFramework(module, ".NET");
-            if (module.IsWebProject)
-                AddFramework(module, "ASP.NET Core");
-            if (files.Any(file =>
-                    IsSameOrDescendantPath(file, module.Path)
-                    && Path.GetExtension(file).Equals(".razor", StringComparison.OrdinalIgnoreCase)))
+            var hasBlazorComponents = files.Any(file =>
+                IsSameOrDescendantPath(file, module.Path)
+                && Path.GetExtension(file).Equals(".razor", StringComparison.OrdinalIgnoreCase));
+            var hasEntityFramework = packageReferences.Any(package =>
+                package.Contains("EntityFrameworkCore", StringComparison.OrdinalIgnoreCase));
+
+            module.Framework = module.IsWebProject
+                ? "ASP.NET Core"
+                : isWpf
+                    ? "WPF"
+                    : isWindowsForms
+                        ? "Windows Forms"
+                        : hasEntityFramework
+                            ? ".NET (EF Core)"
+                            : ".NET";
+
+            AddFramework(module, module.Framework);
+            if (hasBlazorComponents)
                 AddFramework(module, "Blazor");
-            if (isWpf)
-                AddFramework(module, "WPF");
-            if (isWindowsForms)
-                AddFramework(module, "Windows Forms");
 
             module.ProjectKind = module.IsTestProject
                 ? "Test"

@@ -72,7 +72,9 @@ public sealed class RuleEngineCoreBehaviorTests
             Metrics = new Dictionary<string, double>(),
             Metadata = new Dictionary<string, string>
             {
-                ["EvaluationScope"] = "Project"
+                ["EvaluationScope"] = "Project",
+                ["Evidence.CircularDependencyCount"] =
+                    $"Dependency graph contains {circularDependencyCount:0} circular dependency cycle(s)."
             }
         };
 
@@ -106,7 +108,10 @@ public sealed class RuleEngineCoreBehaviorTests
             Metadata = new Dictionary<string, string>
             {
                 ["EvaluationScope"] = "File",
-                ["FilePath"] = "src/Widget.cs"
+                ["FilePath"] = "src/Widget.cs",
+                ["Evidence.TypeNamingCompliance"] = "Line 1: Type 'Widget' — public class Widget { }",
+                ["EvidenceLine.TypeNamingCompliance"] = "1",
+                ["CodeSnippet.TypeNamingCompliance"] = "public class Widget { }"
             }
         };
 
@@ -121,6 +126,56 @@ public sealed class RuleEngineCoreBehaviorTests
             outcome.Evaluations,
             evaluation => evaluation.RuleId == "AEG-NAM-R1"
                 && evaluation.Scope == "File");
+    }
+
+    [Fact]
+    public void EvaluateDetailed_marks_metrics_without_evidence_as_insufficient_evidence()
+    {
+        var fact = new ArchitectureEvaluatorResult("NamingEvaluator", "Widget.cs")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                ["TypeNamingCompliance"] = 0
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "File",
+                ["FilePath"] = "src/Widget.cs"
+            }
+        };
+
+        var outcome = CreateEngine().EvaluateDetailed(
+            new ProjectArchitectureContext { Language = "C#" },
+            [fact]);
+
+        Assert.Empty(outcome.Results);
+        Assert.Contains(outcome.Evaluations, evaluation =>
+            evaluation.RuleId == "AEG-NAM-R1"
+            && evaluation.Status == RuleEvaluationStatus.InsufficientEvidence);
+        Assert.Contains("AEG-NAM-R1", outcome.Stats.RulesNotEvaluated);
+        Assert.Equal(1, outcome.Stats.EvaluationsInsufficientEvidence);
+        Assert.Contains("traceable source evidence",
+            outcome.Stats.NotEvaluatedReasons["AEG-NAM-R1"]);
+    }
+
+    [Fact]
+    public void EvaluateDetailed_does_not_evaluate_a_metric_from_incomplete_analysis()
+    {
+        var fact = ProjectFact("PartialProject", 5);
+        fact.Metadata["AnalysisComplete"] = "false";
+        fact.Metadata["AnalysisStatus"] = "Incomplete";
+
+        var outcome = CreateEngine().EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [fact]);
+
+        Assert.Empty(outcome.Results);
+        Assert.Contains(outcome.Evaluations, evaluation =>
+            evaluation.RuleId == "AEG-ARCH-R1"
+            && evaluation.Status == RuleEvaluationStatus.InsufficientEvidence);
+        Assert.Equal(1, outcome.Stats.EvaluationsInsufficientEvidence);
+        Assert.Contains("incomplete analysis",
+            outcome.Stats.NotEvaluatedReasons["AEG-ARCH-R1"]);
     }
 
     [Fact]
@@ -185,8 +240,8 @@ public sealed class RuleEngineCoreBehaviorTests
             []);
 
         Assert.Equal(76, ArchitectureRuleRegistry.All.Count);
-        Assert.Equal(25, outcome.Stats.RulesUnsupported);
-        Assert.Equal(49, outcome.Stats.RulesApplicable);
+        Assert.Equal(26, outcome.Stats.RulesUnsupported);
+        Assert.Equal(48, outcome.Stats.RulesApplicable);
         Assert.Equal(74, outcome.Stats.NotEvaluatedReasons.Count);
         Assert.Equal(74, outcome.Stats.RulesNotEvaluated.Count);
         Assert.Equal(2, outcome.Stats.RulesNotApplicable.Count);

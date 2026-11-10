@@ -8,11 +8,23 @@ internal static class DomainDetector
     {
         ArgumentNullException.ThrowIfNull(ctx);
 
-        var projectKinds = ctx.Modules
+        var applicationModules = ctx.Modules
+            .Where(module => !module.IsTestProject
+                && !string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        var projectKinds = applicationModules
             .Select(module => module.ProjectKind)
             .Where(kind => !string.IsNullOrWhiteSpace(kind) && kind != "Unknown")
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+        if (projectKinds.Contains("WebApplication", StringComparer.OrdinalIgnoreCase)
+            && projectKinds.Contains("FrontendApplication", StringComparer.OrdinalIgnoreCase))
+        {
+            ctx.DomainType = "FullStack";
+            return;
+        }
 
         if (projectKinds.Length > 1)
         {
@@ -22,7 +34,7 @@ internal static class DomainDetector
 
         if (projectKinds.Length == 1)
         {
-            var hasBlazorUi = ctx.Modules.Any(module =>
+            var hasBlazorUi = applicationModules.Any(module =>
                 module.Frameworks.Contains("Blazor", StringComparer.OrdinalIgnoreCase));
 
             ctx.DomainType = projectKinds[0] switch
@@ -31,13 +43,20 @@ internal static class DomainDetector
                 "WebApplication" => hasBlazorUi ? "FullStack" : "Backend",
                 "FrontendApplication" => "Frontend",
                 "DesktopApplication" => "Desktop",
-                "Test" => "Test",
                 "Executable" => "Application",
                 _ => ctx.DomainType ?? "Unknown"
             };
 
             if (ctx.DomainType != "Unknown")
                 return;
+        }
+
+        if (ctx.Modules.Count > 0
+            && ctx.Modules.All(module => module.IsTestProject
+                || string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase)))
+        {
+            ctx.DomainType = "Test";
+            return;
         }
 
         var isBlazor = string.Equals(

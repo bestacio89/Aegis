@@ -693,6 +693,24 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         return result;
     }
 
+    private static bool IsSameOrDescendantPath(
+        string candidate,
+        string parent)
+    {
+        var normalizedCandidate = Path.GetFullPath(candidate)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedParent = Path.GetFullPath(parent)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return string.Equals(
+                normalizedCandidate,
+                normalizedParent,
+                StringComparison.OrdinalIgnoreCase)
+            || normalizedCandidate.StartsWith(
+                normalizedParent + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// Converts evaluator facts to legacy rule results.
     /// Compliance rule interpretation should normally be performed by

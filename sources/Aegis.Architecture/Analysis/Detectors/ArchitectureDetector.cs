@@ -39,12 +39,15 @@ internal static class ArchitectureDetector
 
         if (hasMediator && hasEfCore) ctx.ArchitectureStyle = "CQRS";
         else if (hasEfCore && ctx.Layer == "Infrastructure") ctx.ArchitectureStyle = "Clean";
+        else if (ctx.DomainType == "FullStack" && ctx.Modules.Count > 1)
+            ctx.ArchitectureStyle = "Multi-Project Full-Stack";
+        else if (serviceProjectCount == 1 && ctx.Modules.Count > 1)
+            ctx.ArchitectureStyle = "Modular Monolith";
         else if ((hasMassTr || hasKafka || hasRabbit || hasAzureSB || hasNServiceBus)
             && serviceProjectCount > 1)
             ctx.ArchitectureStyle = "Message-Driven Multi-Service";
         else if (hasMassTr || hasKafka || hasRabbit || hasAzureSB || hasNServiceBus)
             ctx.ArchitectureStyle = "Message-Driven Application";
-        else if (ctx.IsMultiModule && ctx.Nature == "Service") ctx.ArchitectureStyle = "Modular Monolith";
         else if ((ctx.DomainType is "Backend" or "FullStack") && ctx.Layer == "Api") ctx.ArchitectureStyle = "MVC";
         else ctx.ArchitectureStyle = "Layered";
     }

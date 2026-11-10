@@ -662,6 +662,7 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             Path.GetFileName(file))
         {
             Category = category,
+            File = file,
 
             Metrics = new Dictionary<string, double>(),
 

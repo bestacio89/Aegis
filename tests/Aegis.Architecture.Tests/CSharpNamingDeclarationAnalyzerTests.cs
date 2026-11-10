@@ -68,6 +68,35 @@ public sealed class CSharpNamingDeclarationAnalyzerTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_identifies_test_framework_methods_without_reclassifying_helpers()
+    {
+        const string source = """
+            public sealed class OrderServiceTests
+            {
+                [Fact]
+                public void CreateOrder_WhenInventoryIsAvailable_ReturnsCreatedOrder() { }
+
+                public void CreateFixture() { }
+            }
+            """;
+
+        var result = await _analyzer.AnalyzeAsync(
+            "OrderServiceTests.cs",
+            source,
+            framework: null);
+
+        var testMethod = Assert.Single(
+            result.Declarations,
+            declaration => declaration.Name == "CreateOrder_WhenInventoryIsAvailable_ReturnsCreatedOrder");
+        var helperMethod = Assert.Single(
+            result.Declarations,
+            declaration => declaration.Name == "CreateFixture");
+
+        Assert.True(testMethod.IsTestMethod);
+        Assert.False(helperMethod.IsTestMethod);
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_returns_NoDeclarations_for_valid_source_without_declarations()
     {
         var result = await _analyzer.AnalyzeAsync(

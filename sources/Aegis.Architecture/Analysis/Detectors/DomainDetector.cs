@@ -22,10 +22,13 @@ internal static class DomainDetector
 
         if (projectKinds.Length == 1)
         {
+            var hasBlazorUi = ctx.Modules.Any(module =>
+                module.Frameworks.Contains("Blazor", StringComparer.OrdinalIgnoreCase));
+
             ctx.DomainType = projectKinds[0] switch
             {
                 "ClassLibrary" => "Library",
-                "WebApplication" => "Backend",
+                "WebApplication" => hasBlazorUi ? "FullStack" : "Backend",
                 "FrontendApplication" => "Frontend",
                 "DesktopApplication" => "Desktop",
                 "Test" => "Test",

@@ -160,9 +160,9 @@ public sealed class RuleEngineCore
                 projectSummaryFacts++;
             }
 
-            var filePath =
-                fact.Metadata?.GetValueOrDefault(FilePathKey)
-                ?? fact.Target;
+            // A target may be a symbol, module, or aggregate identifier.
+            // Only explicit source-path fields are valid file-location evidence.
+            var filePath = ResolveEvidenceFilePath(fact);
 
             var domain = isProjectFact
                 ? "Project"
@@ -676,11 +676,30 @@ public sealed class RuleEngineCore
 
         var filePath = rule.Scope == RuleEvaluationScope.Project
             ? string.Empty
-            : fact.Metadata?.GetValueOrDefault(FilePathKey)
-              ?? fact.Target;
+            : ResolveEvidenceFilePath(fact) ?? string.Empty;
 
         var @namespace =
             fact.Metadata?.GetValueOrDefault("Namespace");
+
+        var evidenceKey = $"Evidence.{metric}";
+        var snippetKey = $"CodeSnippet.{metric}";
+        var lineKey = $"EvidenceLine.{metric}";
+        var evidenceText = fact.Metadata?.GetValueOrDefault(evidenceKey)
+            ?? fact.Evidence;
+        var evidence = string.IsNullOrWhiteSpace(evidenceText)
+            ? []
+            : evidenceText.Split(
+                Environment.NewLine,
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+
+        var codeSnippet = fact.Metadata?.GetValueOrDefault(snippetKey)
+            ?? fact.Evidence;
+        var lineNumber = int.TryParse(
+            fact.Metadata?.GetValueOrDefault(lineKey),
+            out var evidenceLine)
+            ? evidenceLine
+            : fact.LineNumber;
 
         return new ArchitectureRuleresult(
             rule.Id,
@@ -699,8 +718,24 @@ public sealed class RuleEngineCore
             Target = rule.Scope == RuleEvaluationScope.Project
                 ? fact.ProjectName ?? fact.Target
                 : fact.Target,
-            AnalyzerVersion = context.DetectorVersion
+            AnalyzerVersion = context.DetectorVersion,
+            LineNumber = rule.Scope == RuleEvaluationScope.Project ? null : lineNumber,
+            CodeSnippet = codeSnippet,
+            Evidence = evidence,
+            Recommendation = rule.Recommendation
         };
+    }
+
+    private static string? ResolveEvidenceFilePath(
+        ArchitectureEvaluatorResult fact)
+    {
+        if (!string.IsNullOrWhiteSpace(fact.File))
+            return fact.File;
+
+        var metadataPath = fact.Metadata?.GetValueOrDefault(FilePathKey);
+        return string.IsNullOrWhiteSpace(metadataPath)
+            ? null
+            : metadataPath;
     }
 
     private static string ResolveLayer(

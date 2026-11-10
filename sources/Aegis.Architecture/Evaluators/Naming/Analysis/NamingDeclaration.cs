@@ -12,4 +12,5 @@ public sealed record NamingDeclaration(
     string AnalyzerId,
     bool IsPublic,
     bool IsStatic,
-    bool IsConstant);
+    bool IsConstant,
+    bool IsTestMethod = false);

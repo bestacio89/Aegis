@@ -276,7 +276,8 @@ internal static class ModuleDetector
                     dependencies.Add(dependency.Key);
             }
 
-            if (dependencies.Contains("@angular/core"))
+            if (dependencies.Contains("@angular/core")
+                || dependencies.Contains("@angular/cli"))
                 AddFramework(module, "Angular");
             if (dependencies.Contains("react"))
                 AddFramework(module, "React");

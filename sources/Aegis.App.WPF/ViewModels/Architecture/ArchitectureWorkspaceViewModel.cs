@@ -4,11 +4,10 @@ using System.Runtime.CompilerServices;
 
 namespace Aegis.Wpf.ViewModels.Architecture;
 
-public sealed record ArchitectureTab(string Name, string Glyph, object ViewModel);
-
 public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
 {
     private readonly ArchitectureOverviewViewModel _overview;
+    private readonly ArchitectureExplorerViewModel _explorer;
     private readonly SectionDashboardViewModel _sections;
     private readonly LayerDashboardViewModel _layers;
     private readonly RuleDashboardViewModel _rules;
@@ -18,6 +17,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
 
     public ArchitectureWorkspaceViewModel(
         ArchitectureOverviewViewModel overview,
+        ArchitectureExplorerViewModel explorer,
         SectionDashboardViewModel sections,
         LayerDashboardViewModel layers,
         RuleDashboardViewModel rules,
@@ -25,6 +25,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         ReportVisualizationViewModel reports)
     {
         _overview = overview;
+        _explorer = explorer;
         _sections = sections;
         _layers = layers;
         _rules = rules;
@@ -34,6 +35,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         Tabs =
         [
             new ArchitectureTab("Overview", "◈", _overview),
+            new ArchitectureTab("Explorer", "⌘", _explorer),
             new ArchitectureTab("Sections", "▦", _sections),
             new ArchitectureTab("Layers", "◫", _layers),
             new ArchitectureTab("Rules & Metrics", "◎", _rules),

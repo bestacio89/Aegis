@@ -20,6 +20,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly AegisArchitectureAnalysisRunner _runner;
 
     private readonly ArchitectureOverviewViewModel _architectureOverview;
+    private readonly ArchitectureExplorerViewModel _architectureExplorer = new();
     private readonly SectionDashboardViewModel _sectionDashboard;
     private readonly LayerDashboardViewModel _layerDashboard;
     private readonly RuleDashboardViewModel _ruleDashboard;
@@ -62,6 +63,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         _architectureWorkspace = new ArchitectureWorkspaceViewModel(
             _architectureOverview,
+            _architectureExplorer,
             _sectionDashboard,
             _layerDashboard,
             _ruleDashboard,
@@ -291,6 +293,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ProjectArchitectureContext context)
     {
         _architectureOverview.Update(report, context);
+        _architectureExplorer.Update(context);
         _layerDashboard.Update(report);
         _sectionDashboard.Update(report);
         _ruleDashboard.Update(report);

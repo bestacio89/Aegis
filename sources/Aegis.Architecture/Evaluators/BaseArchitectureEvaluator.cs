@@ -242,6 +242,18 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             return "Blazor";
         if (extension.Equals(".cshtml", StringComparison.OrdinalIgnoreCase))
             return "Razor";
+
+        var owningModule = context.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .OrderByDescending(module => module.Path.Length)
+            .FirstOrDefault(module => IsSameOrDescendantPath(filePath, module.Path));
+
+        if (!string.IsNullOrWhiteSpace(owningModule?.Framework)
+            && owningModule.Framework != "Multi-Framework")
+        {
+            return owningModule.Framework;
+        }
+
         if (extension.Equals(".tsx", StringComparison.OrdinalIgnoreCase)
             || extension.Equals(".jsx", StringComparison.OrdinalIgnoreCase))
         {

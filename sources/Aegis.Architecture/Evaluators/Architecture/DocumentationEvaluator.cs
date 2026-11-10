@@ -1,5 +1,5 @@
-﻿
 using System.Text.RegularExpressions;
+using Aegis.Architecture.Analysis;
 using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
@@ -10,9 +10,10 @@ using Microsoft.Extensions.Logging;
 namespace Aegis.Architecture.Evaluators.Architecture;
 
 /// <summary>
-/// Estimates documentation coverage of discoverable public declarations.
-/// Emits project-level measurements; RuleEngineCore owns compliance decisions.
-/// This is a source-pattern heuristic, not compiler-backed analysis.
+/// Measures documentation coverage independently for each discovered project.
+/// Evidence retains the source file and declaration line for both documented
+/// and undocumented public declarations. The measurement remains a source
+/// pattern heuristic rather than compiler-backed API analysis.
 /// </summary>
 public sealed class DocumentationEvaluator :
     BaseArchitectureEvaluator,
@@ -23,9 +24,6 @@ public sealed class DocumentationEvaluator :
         | RegexOptions.Multiline
         | RegexOptions.CultureInvariant;
 
-    // Deliberately simple: avoid a complex declaration regex that can prevent
-    // the entire evaluator from initializing. This counts public declaration
-    // lines rather than attempting complete language parsing.
     private static readonly Regex CSharpDeclarationRegex = new(
         @"^[ \t]*public\b[^\r\n]*",
         SourceRegexOptions);
@@ -59,6 +57,11 @@ public sealed class DocumentationEvaluator :
             ".git"
         };
 
+    private static readonly string[] SupportedExtensions =
+    [
+        ".cs", ".java", ".py", ".ts", ".tsx", ".js", ".jsx"
+    ];
+
     public override string Name => "DocumentationEvaluator";
 
     public override string[] SupportedLanguages =>
@@ -72,8 +75,7 @@ public sealed class DocumentationEvaluator :
 
     public override string[] SupportedFrameworks => ["*"];
 
-    public DocumentationEvaluator(
-        ILogger<DocumentationEvaluator> logger)
+    public DocumentationEvaluator(ILogger<DocumentationEvaluator> logger)
         : base(logger)
     {
     }
@@ -86,194 +88,311 @@ public sealed class DocumentationEvaluator :
         token.ThrowIfCancellationRequested();
 
         if (Context is null)
-        {
             return [];
-        }
 
-        var extensions = GetExtensions(Context.Language);
-
-        if (extensions.Length == 0)
-        {
-            AegisDiagnostics.Report(
-                Name,
-                DiagnosticLevel.Warning,
-                $"Documentation analysis skipped: unsupported language '{Context.Language}'.");
-
-            return [];
-        }
-
-        var files = ResolveSourceFiles(projectPath, extensions)
+        var files = ResolveSourceFiles(projectPath, SupportedExtensions)
             .Where(IsEligibleSourceFile)
             .ToList();
 
-        var totalDeclarations = 0;
-        var documentedDeclarations = 0;
-        var analyzedFiles = 0;
+        var scopes = BuildProjectScopes(projectPath, files);
+        var results = new List<ArchitectureEvaluatorResult>();
 
-        foreach (var file in files)
+        foreach (var scope in scopes)
         {
             token.ThrowIfCancellationRequested();
 
-            string content;
+            var totalDeclarations = 0;
+            var documentedDeclarations = 0;
+            var analyzedFiles = 0;
+            var unreadableFiles = 0;
+            var languages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var evidence = new List<string>();
 
-            try
+            foreach (var file in scope.Files)
             {
-                content = await File.ReadAllTextAsync(file, token)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-                when (token.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (IOException ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Could not read source file {SourceFile} during documentation analysis.",
-                    file);
+                token.ThrowIfCancellationRequested();
 
+                string source;
+
+                try
+                {
+                    source = await File.ReadAllTextAsync(file, token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                    when (token.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (IOException exception)
+                {
+                    unreadableFiles++;
+                    _logger.LogWarning(
+                        exception,
+                        "Could not read source file {SourceFile} during documentation analysis.",
+                        file);
+                    continue;
+                }
+                catch (UnauthorizedAccessException exception)
+                {
+                    unreadableFiles++;
+                    _logger.LogWarning(
+                        exception,
+                        "Access denied while reading source file {SourceFile} during documentation analysis.",
+                        file);
+                    continue;
+                }
+
+                token.ThrowIfCancellationRequested();
+
+                var language = DetectLanguage(file);
+                if (language == "Unknown")
+                    continue;
+
+                languages.Add(language);
+
+                var counts = CountDeclarations(
+                    source,
+                    language,
+                    Path.GetRelativePath(scope.Path, file));
+
+                totalDeclarations += counts.Total;
+                documentedDeclarations += counts.Documented;
+                analyzedFiles++;
+                evidence.AddRange(counts.Evidence);
+            }
+
+            if (unreadableFiles > 0)
+            {
+                var status = CreateExecutionStatusFact(
+                    scope.Path,
+                    "Incomplete",
+                    $"Documentation analysis could not read {unreadableFiles} of {scope.Files.Count} eligible source file(s).");
+
+                ApplyProjectIdentity(status, scope);
+                status.Metadata["AnalysisComplete"] = "false";
+                results.Add(status);
                 continue;
             }
-            catch (UnauthorizedAccessException ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Access denied while reading source file {SourceFile} during documentation analysis.",
-                    file);
 
+            if (totalDeclarations == 0)
+            {
+                var status = CreateExecutionStatusFact(
+                    scope.Path,
+                    "NoApplicableDeclarations",
+                    "No eligible public declarations were discovered in this project scope.");
+
+                ApplyProjectIdentity(status, scope);
+                status.Metadata["AnalysisComplete"] = "true";
+                status.Metadata["FilesAnalyzed"] = analyzedFiles.ToString();
+                results.Add(status);
                 continue;
             }
 
-            token.ThrowIfCancellationRequested();
+            var coverage = documentedDeclarations * 100.0 / totalDeclarations;
+            var summary = CreateProjectSummary(
+                scope,
+                coverage,
+                totalDeclarations,
+                documentedDeclarations,
+                analyzedFiles,
+                evidence,
+                languages);
 
-            var counts = CountDeclarations(content, Context.Language);
+            results.Add(summary);
 
-            totalDeclarations += counts.Total;
-            documentedDeclarations += counts.Documented;
-            analyzedFiles++;
-        }
-
-        if (totalDeclarations == 0)
-        {
             AegisDiagnostics.Report(
                 Name,
-                DiagnosticLevel.Warning,
-                $"Documentation analysis found no eligible public declarations. " +
-                $"Files considered: {files.Count}; files read: {analyzedFiles}.");
-
-            return [];
+                DiagnosticLevel.Info,
+                $"Documentation analysis completed for {scope.Name}. " +
+                $"Coverage={coverage:0.0}%; documented={documentedDeclarations}; " +
+                $"declarations={totalDeclarations}; files={analyzedFiles}.");
         }
 
-        var coverage = documentedDeclarations * 100.0 / totalDeclarations;
+        return results;
+    }
 
-        var result = CreateProjectSummary(
-            coverage,
-            totalDeclarations,
-            documentedDeclarations,
-            analyzedFiles,
-            files.Count);
+    private IReadOnlyList<ProjectScope> BuildProjectScopes(
+        string projectPath,
+        IReadOnlyCollection<string> files)
+    {
+        if (Context is null || Context.Modules.Count == 0)
+        {
+            return files.Count == 0
+                ? []
+                : [new ProjectScope(
+                    Context?.ProjectName ?? Path.GetFileName(projectPath),
+                    Path.GetFullPath(projectPath),
+                    "Unknown",
+                    Context?.Framework,
+                    files.ToArray())];
+        }
 
-        AegisDiagnostics.Report(
-            Name,
-            DiagnosticLevel.Info,
-            $"Documentation analysis completed. " +
-            $"Coverage={coverage:0.0}%; " +
-            $"Documented={documentedDeclarations}; " +
-            $"Declarations={totalDeclarations}; " +
-            $"FilesRead={analyzedFiles}.");
+        var modules = Context.Modules
+            .Where(module => !module.IsTestProject
+                && !string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(module => NormalizePath(module.Path).Length)
+            .ToArray();
 
-        return [result];
+        var scopes = new List<ProjectScope>();
+
+        foreach (var module in modules)
+        {
+            var ownedFiles = files
+                .Where(file => IsSameOrDescendantPath(file, module.Path))
+                .Where(file =>
+                {
+                    var owner = modules.FirstOrDefault(candidate =>
+                        IsSameOrDescendantPath(file, candidate.Path));
+                    return ReferenceEquals(owner, module);
+                })
+                .ToArray();
+
+            if (ownedFiles.Length == 0)
+                continue;
+
+            scopes.Add(new ProjectScope(
+                module.Name,
+                module.Path,
+                module.ProjectKind,
+                module.Framework,
+                ownedFiles));
+        }
+
+        return scopes;
     }
 
     private ArchitectureEvaluatorResult CreateProjectSummary(
+        ProjectScope scope,
         double coverage,
         int totalDeclarations,
         int documentedDeclarations,
         int analyzedFiles,
-        int discoveredFiles)
+        IReadOnlyCollection<string> evidence,
+        IReadOnlyCollection<string> languages)
     {
-        return new ArchitectureEvaluatorResult(
-            Name,
-            "DocumentationSummary")
-        {
-            Category = nameof(ArchitectureRuleCategory.Architecture),
+        var evidenceItems = evidence
+            .Take(100)
+            .ToArray();
 
+        var result = new ArchitectureEvaluatorResult(Name, scope.Name)
+        {
+            ProjectName = scope.Name,
+            Category = nameof(ArchitectureRuleCategory.Architecture),
             Metrics = new Dictionary<string, double>
             {
-                ["DocumentationCoverage"] = coverage,
-                ["DocumentationCompliance"] = coverage,
+                ["DocumentationCoverage"] = Math.Round(coverage, 2),
+                ["DocumentationCompliance"] = Math.Round(coverage, 2),
                 ["TotalDeclarations"] = totalDeclarations,
                 ["DocumentedDeclarations"] = documentedDeclarations,
-                ["MissingDocumentation"] =
-                    totalDeclarations - documentedDeclarations,
+                ["MissingDocumentation"] = totalDeclarations - documentedDeclarations,
                 ["DocumentationAnalysisFileCount"] = analyzedFiles,
-                ["DocumentationDiscoveredFileCount"] = discoveredFiles
+                ["DocumentationDiscoveredFileCount"] = scope.Files.Count
             },
-
+            Evidence = string.Join(Environment.NewLine, evidenceItems),
             Metadata = new Dictionary<string, string>
             {
                 [EvaluationScopeMetadataKey] = ProjectScope,
                 ["MetricScope"] = ProjectScope,
-                ["Language"] = Context?.Language ?? "Unknown",
-                ["Framework"] = Context?.Framework ?? "Unknown",
+                ["ProjectName"] = scope.Name,
+                ["ProjectPath"] = scope.Path,
+                ["ProjectKind"] = scope.ProjectKind,
+                ["Language"] = languages.Count == 1
+                    ? languages.Single()
+                    : languages.Count == 0 ? "Unknown" : "Multi-Language",
+                ["Framework"] = scope.Framework ?? "Unknown",
                 ["MeasurementMethod"] = "LanguageSpecificSourceHeuristics",
                 ["CoverageUnit"] = "Percent",
-                ["AnalysisStatus"] = "Completed"
+                ["AnalysisStatus"] = "Completed",
+                ["AnalysisComplete"] = "true",
+                ["Evidence.DocumentationCoverage"] =
+                    string.Join(Environment.NewLine, evidenceItems),
+                ["EvidenceSummary.DocumentationCoverage"] =
+                    $"{documentedDeclarations} of {totalDeclarations} public declarations have recognized documentation.",
+                ["EvidenceTruncated"] =
+                    (evidence.Count > evidenceItems.Length).ToString()
             }
         };
+
+        return result;
+    }
+
+    private static void ApplyProjectIdentity(
+        ArchitectureEvaluatorResult result,
+        ProjectScope scope)
+    {
+        result.ProjectName = scope.Name;
+        result.Target = scope.Name;
+        result.Metadata["ProjectName"] = scope.Name;
+        result.Metadata["ProjectPath"] = scope.Path;
+        result.Metadata["ProjectKind"] = scope.ProjectKind;
+        result.Metadata["Framework"] = scope.Framework ?? "Unknown";
+        result.Metadata["EvaluationScope"] = ProjectScope;
     }
 
     private static DeclarationCounts CountDeclarations(
         string content,
-        string language)
+        string language,
+        string relativePath)
     {
         return language switch
         {
             "C#" => CountCommentDocumentedDeclarations(
                 content,
+                relativePath,
                 CSharpDeclarationRegex,
                 CSharpXmlDocumentationRegex),
 
             "Java" => CountCommentDocumentedDeclarations(
                 content,
+                relativePath,
                 JavaDeclarationRegex,
                 null),
 
             "TypeScript" or "JavaScript" =>
                 CountCommentDocumentedDeclarations(
                     content,
+                    relativePath,
                     TypeScriptDeclarationRegex,
                     null),
 
-            "Python" => CountPythonDeclarations(content),
+            "Python" => CountPythonDeclarations(content, relativePath),
 
-            _ => new DeclarationCounts(0, 0)
+            _ => new DeclarationCounts(0, 0, [])
         };
     }
 
     private static DeclarationCounts CountCommentDocumentedDeclarations(
         string content,
+        string relativePath,
         Regex declarationRegex,
         Regex? documentationRegex)
     {
         var declarations = declarationRegex.Matches(content);
         var documentedCount = 0;
+        var evidence = new List<string>();
 
         foreach (Match declaration in declarations)
         {
-            if (HasPrecedingDocumentation(
-                    content,
-                    declaration.Index,
-                    documentationRegex))
-            {
+            var isDocumented = HasPrecedingDocumentation(
+                content,
+                declaration.Index,
+                documentationRegex);
+
+            if (isDocumented)
                 documentedCount++;
-            }
+
+            evidence.Add(FormatDeclarationEvidence(
+                content,
+                relativePath,
+                declaration.Index,
+                isDocumented));
         }
 
         return new DeclarationCounts(
             declarations.Count,
-            documentedCount);
+            documentedCount,
+            evidence);
     }
 
     private static bool HasPrecedingDocumentation(
@@ -282,58 +401,96 @@ public sealed class DocumentationEvaluator :
         Regex? documentationRegex)
     {
         var prefix = content[..declarationIndex].TrimEnd();
-
         if (prefix.Length == 0)
-        {
             return false;
-        }
 
         if (documentationRegex is not null)
         {
             var lastLineStart = prefix.LastIndexOf('\n');
             var lastLine = prefix[(lastLineStart + 1)..];
-
             return documentationRegex.IsMatch(lastLine);
         }
 
         var lastClose = prefix.LastIndexOf("*/", StringComparison.Ordinal);
-
         if (lastClose < 0)
-        {
             return false;
-        }
 
         var lastOpen = prefix.LastIndexOf(
             "/**",
             lastClose,
             StringComparison.Ordinal);
 
-        if (lastOpen < 0)
-        {
-            return false;
-        }
-
-        return string.IsNullOrWhiteSpace(prefix[(lastClose + 2)..]);
+        return lastOpen >= 0
+            && string.IsNullOrWhiteSpace(prefix[(lastClose + 2)..]);
     }
 
     private static DeclarationCounts CountPythonDeclarations(
-        string content)
+        string content,
+        string relativePath)
     {
-        var declarations = PythonDeclarationRegex.Matches(content);
-        var publicDeclarations = declarations
+        var declarations = PythonDeclarationRegex.Matches(content)
             .Cast<Match>()
             .Where(declaration =>
                 !declaration.Groups[1].Value.StartsWith(
                     "_",
                     StringComparison.Ordinal))
-            .ToList();
+            .ToArray();
 
-        var documentedCount = publicDeclarations.Count(declaration =>
-            HasPythonDocstring(content, declaration));
+        var documentedCount = 0;
+        var evidence = new List<string>();
+
+        foreach (var declaration in declarations)
+        {
+            var isDocumented = HasPythonDocstring(content, declaration);
+            if (isDocumented)
+                documentedCount++;
+
+            evidence.Add(FormatDeclarationEvidence(
+                content,
+                relativePath,
+                declaration.Index,
+                isDocumented));
+        }
 
         return new DeclarationCounts(
-            publicDeclarations.Count,
-            documentedCount);
+            declarations.Length,
+            documentedCount,
+            evidence);
+    }
+
+    private static string FormatDeclarationEvidence(
+        string content,
+        string relativePath,
+        int declarationIndex,
+        bool documented)
+    {
+        var lineNumber = GetLineNumber(content, declarationIndex);
+        var line = GetSourceLine(content, declarationIndex);
+
+        return $"{relativePath}:{lineNumber}: " +
+            $"{(documented ? "documented" : "missing documentation")} — {line}";
+    }
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int position)
+    {
+        var start = content.LastIndexOf('\n', Math.Max(0, position - 1)) + 1;
+        var end = content.IndexOf('\n', position);
+        if (end < 0)
+            end = content.Length;
+
+        return content[start..end].Trim();
     }
 
     private static bool HasPythonDocstring(
@@ -341,20 +498,14 @@ public sealed class DocumentationEvaluator :
         Match declaration)
     {
         var bodyStart = declaration.Index + declaration.Length;
-
         if (bodyStart >= content.Length)
-        {
             return false;
-        }
 
         foreach (var rawLine in content[bodyStart..].Split('\n').Take(8))
         {
             var line = rawLine.Trim();
-
             if (line.Length == 0 || line.StartsWith('#'))
-            {
                 continue;
-            }
 
             return line.StartsWith("\"\"\"", StringComparison.Ordinal)
                 || line.StartsWith("'''", StringComparison.Ordinal);
@@ -363,16 +514,16 @@ public sealed class DocumentationEvaluator :
         return false;
     }
 
-    private static string[] GetExtensions(string language)
+    private static string DetectLanguage(string file)
     {
-        return language switch
+        return Path.GetExtension(file).ToLowerInvariant() switch
         {
-            "C#" => [".cs"],
-            "Java" => [".java"],
-            "Python" => [".py"],
-            "TypeScript" => [".ts", ".tsx"],
-            "JavaScript" => [".js", ".jsx"],
-            _ => []
+            ".cs" => "C#",
+            ".java" => "Java",
+            ".py" => "Python",
+            ".ts" or ".tsx" => "TypeScript",
+            ".js" or ".jsx" => "JavaScript",
+            _ => "Unknown"
         };
     }
 
@@ -387,20 +538,44 @@ public sealed class DocumentationEvaluator :
             StringSplitOptions.RemoveEmptyEntries);
 
         if (parts.Any(ExcludedDirectoryNames.Contains))
-        {
             return false;
-        }
 
         var filename = Path.GetFileName(file);
 
-        return
-            !filename.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
+        return !filename.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
             && !filename.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase)
             && !filename.EndsWith(".designer.cs", StringComparison.OrdinalIgnoreCase)
             && !filename.EndsWith(".min.js", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsSameOrDescendantPath(string candidate, string parent)
+    {
+        var normalizedCandidate = NormalizePath(candidate);
+        var normalizedParent = NormalizePath(parent);
+
+        return string.Equals(
+                normalizedCandidate,
+                normalizedParent,
+                StringComparison.OrdinalIgnoreCase)
+            || normalizedCandidate.StartsWith(
+                normalizedParent + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string path) =>
+        Path.GetFullPath(path).TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar);
+
+    private sealed record ProjectScope(
+        string Name,
+        string Path,
+        string ProjectKind,
+        string? Framework,
+        IReadOnlyCollection<string> Files);
+
     private sealed record DeclarationCounts(
         int Total,
-        int Documented);
+        int Documented,
+        IReadOnlyCollection<string> Evidence);
 }

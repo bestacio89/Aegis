@@ -3,6 +3,7 @@ using Aegis.Shared.Architecture.Models;
 using Aegis.Wpf.models;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Windows.Data;
 
 namespace Aegis.Wpf.ViewModels.Architecture;

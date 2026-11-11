@@ -124,6 +124,14 @@ public sealed class ArchitectureEvaluatorBehaviorTests
 }}";
 
         project.Write("back/ComplexityFixture.cs", source);
+        project.Write("back/Noise.cs", """
+            public sealed class Noise
+            {
+                // public int CommentedMethod(bool value) { if (value) return 1; }
+                private const string Example =
+                    "public int FakeMethod(bool value) { if (value) return 1; }";
+            }
+            """);
 
         using var provider = CreateProvider();
         using var scope = provider.CreateScope();

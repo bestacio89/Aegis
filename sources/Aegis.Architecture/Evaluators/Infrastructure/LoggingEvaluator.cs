@@ -499,7 +499,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
         if (totalLoggingCalls == 0)
             return 100;
 
-        var recognizedLevelCalls = LogLevelRx.Matches(content).Count;
+        var recognizedLevelCalls = LogLevelRx.Matches(code).Count;
 
         return Math.Round(
             100.0 * recognizedLevelCalls / totalLoggingCalls,
@@ -516,7 +516,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             return 100;
         }
 
-        var calls = LoggingCallRx.Matches(content);
+        var calls = LoggingCallRx.Matches(code);
 
         if (calls.Count == 0)
         {
@@ -527,7 +527,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
         foreach (Match call in calls)
         {
-            var invocation = ExtractInvocationText(content, call.Index);
+            var invocation = ExtractInvocationText(content, code, call.Index);
             var interpolated = InterpolatedStringRx.IsMatch(invocation);
             var pythonPercentFormatting =
                 language == "Python"

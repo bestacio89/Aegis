@@ -2,17 +2,14 @@ using Aegis.Shared.Architecture.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Windows;
-using System.Windows.Data;
 using System.Windows.Media;
 
 namespace Aegis.Wpf.ViewModels.Architecture;
 
 /// <summary>
-/// Presents detected architecture dependencies as both a relationship ledger and
-/// a navigable graph. The graph is a projection of detector output; it does not
-/// infer, validate, or mutate architectural relationships.
+/// Presents a navigable graph projection of detector-reported dependencies.
+/// It does not infer, validate, or mutate architectural relationships.
 /// </summary>
 public sealed partial class ArchitectureExplorerViewModel : ObservableObject
 {
@@ -21,18 +18,12 @@ public sealed partial class ArchitectureExplorerViewModel : ObservableObject
     private const double GraphColumnSpacing = 292;
     private const double GraphRowSpacing = 104;
 
-    private ICollectionView _dependenciesView;
-
     public ArchitectureExplorerViewModel()
     {
         LayerFilters = ["All"];
-        _dependenciesView = CollectionViewSource.GetDefaultView(Dependencies);
-        _dependenciesView.Filter = MatchesFilter;
     }
 
     public ObservableCollection<ArchitectureDependencyContext> Dependencies { get; private set; } = new();
-
-    public ICollectionView DependenciesView => _dependenciesView;
 
     public ObservableCollection<ArchitectureGraphNodeViewModel> GraphNodes { get; } = new();
 
@@ -45,7 +36,6 @@ public sealed partial class ArchitectureExplorerViewModel : ObservableObject
     [ObservableProperty] private string projectName = "No assessment loaded";
     [ObservableProperty] private string searchText = string.Empty;
     [ObservableProperty] private string selectedLayer = "All";
-    [ObservableProperty] private ArchitectureDependencyContext? selectedDependency;
     [ObservableProperty] private ArchitectureGraphNodeViewModel? selectedGraphNode;
     [ObservableProperty] private int totalDependencies;
     [ObservableProperty] private int filteredDependencies;
@@ -58,26 +48,12 @@ public sealed partial class ArchitectureExplorerViewModel : ObservableObject
 
     partial void OnSelectedLayerChanged(string value) => RefreshFilter();
 
-    partial void OnSelectedDependencyChanged(ArchitectureDependencyContext? value)
-    {
-        CopySelectedDependencyCommand.NotifyCanExecuteChanged();
-        RefreshEdgeHighlights();
-    }
-
     partial void OnSelectedGraphNodeChanged(ArchitectureGraphNodeViewModel? value)
     {
         foreach (var node in GraphNodes)
             node.IsSelected = ReferenceEquals(node, value);
 
-        _dependenciesView.Refresh();
-
-        if (SelectedDependency is not null
-            && !_dependenciesView.Contains(SelectedDependency))
-        {
-            SelectedDependency = null;
-        }
-
-        FilteredDependencies = _dependenciesView.Cast<object>().Count();
+        FilteredDependencies = Dependencies.Count(MatchesFilter);
     }
 
     public void Update(ProjectArchitectureContext? context)
@@ -95,11 +71,8 @@ public sealed partial class ArchitectureExplorerViewModel : ObservableObject
             .ThenBy(dependency => dependency.Target, StringComparer.OrdinalIgnoreCase)
             .ToArray() ?? [];
 
-        SelectedDependency = null;
         SelectedGraphNode = null;
         Dependencies = new ObservableCollection<ArchitectureDependencyContext>(dependencies);
-        _dependenciesView = CollectionViewSource.GetDefaultView(Dependencies);
-        _dependenciesView.Filter = MatchesFilter;
 
         LayerFilters = ["All", .. dependencies
             .SelectMany(dependency => new[] { dependency.SourceLayer, dependency.TargetLayer })
@@ -111,7 +84,6 @@ public sealed partial class ArchitectureExplorerViewModel : ObservableObject
             SelectedLayer = "All";
 
         OnPropertyChanged(nameof(Dependencies));
-        OnPropertyChanged(nameof(DependenciesView));
         OnPropertyChanged(nameof(LayerFilters));
 
         TotalDependencies = dependencies.Length;
@@ -142,23 +114,6 @@ public sealed partial class ArchitectureExplorerViewModel : ObservableObject
         SelectedGraphNode = ReferenceEquals(SelectedGraphNode, node) ? null : node;
     }
 
-    [RelayCommand(CanExecute = nameof(HasSelectedDependency))]
-    private void CopySelectedDependency()
-    {
-        if (SelectedDependency is not { } dependency)
-            return;
-
-        Clipboard.SetText($"""
-            {dependency.Source} -> {dependency.Target}
-            Source layer: {dependency.SourceLayer}
-            Target layer: {dependency.TargetLayer}
-            Dependency type: {dependency.DependencyType}
-            Evidence file: {dependency.File}
-            """);
-    }
-
-    private bool HasSelectedDependency() => SelectedDependency is not null;
-
     private void RefreshFilter()
     {
         var graphDependencies = Dependencies
@@ -173,16 +128,7 @@ public sealed partial class ArchitectureExplorerViewModel : ObservableObject
                 string.Equals(node.Name, SelectedGraphNode.Name, StringComparison.OrdinalIgnoreCase));
         }
 
-        _dependenciesView.Refresh();
-
-        if (SelectedDependency is not null
-            && !_dependenciesView.Contains(SelectedDependency))
-        {
-            SelectedDependency = null;
-        }
-
-        FilteredDependencies = _dependenciesView.Cast<object>().Count();
-        RefreshEdgeHighlights();
+        FilteredDependencies = Dependencies.Count(MatchesFilter);
     }
 
     private bool MatchesFilter(object item)
@@ -416,16 +362,6 @@ public sealed partial class ArchitectureExplorerViewModel : ObservableObject
         arrowGeometry.Transform = localTransform;
 
         return (bounds.X, bounds.Y, lineGeometry, arrowGeometry);
-    }
-
-    private void RefreshEdgeHighlights()
-    {
-        foreach (var edge in GraphEdges)
-        {
-            edge.IsHighlighted = SelectedDependency is { } dependency
-                && string.Equals(edge.Source, dependency.Source, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(edge.Target, dependency.Target, StringComparison.OrdinalIgnoreCase);
-        }
     }
 
     private static bool Contains(string? value, string query) =>

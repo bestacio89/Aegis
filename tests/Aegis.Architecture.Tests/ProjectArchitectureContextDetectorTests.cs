@@ -601,6 +601,44 @@ public sealed class ProjectArchitectureContextDetectorTests
     }
 
     [Fact]
+    public void Detect_classifies_business_and_transport_neutral_contract_package_families()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var expectedLayers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Business"] = "Domain",
+            ["Headers"] = "Contracts",
+            ["Errors"] = "Contracts",
+            ["Annotations"] = "Contracts"
+        };
+
+        foreach (var moduleName in expectedLayers.Keys)
+        {
+            var modulePath = Path.Combine(directory.Path, "sources", $"Franz.Common.{moduleName}");
+            Directory.CreateDirectory(modulePath);
+            File.WriteAllText(
+                Path.Combine(modulePath, $"Franz.Common.{moduleName}.csproj"),
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                </Project>
+                """);
+        }
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        foreach (var expected in expectedLayers)
+        {
+            var module = Assert.Single(
+                context.Modules,
+                candidate => candidate.Name == $"Franz.Common.{expected.Key}");
+            Assert.Equal(expected.Value, module.Type);
+            Assert.Equal(expected.Value, Assert.Single(module.Layers).Name);
+        }
+    }
+
+    [Fact]
     public void Detect_classifies_projects_under_test_directories_as_test_scope_without_name_or_sdk_hints()
     {
         using var directory = new TemporaryDirectory();

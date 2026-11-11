@@ -611,7 +611,7 @@ internal static class GradleBuildModelResolver
 
         var richVersion = Regex.Match(
             value,
-            @"version\s*=\s*\{(?<constraint>[^{}]*)\\}",
+            @"version\s*=\s*\{(?<constraint>[^{}]*)\}",
             RegexOptions.CultureInvariant);
         if (richVersion.Success)
         {

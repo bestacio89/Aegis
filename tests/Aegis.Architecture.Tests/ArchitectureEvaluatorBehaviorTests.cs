@@ -43,7 +43,7 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.Equal(3, summary.Metrics["TotalDeclarations"]);
         Assert.Equal(2, summary.Metrics["DocumentedDeclarations"]);
         Assert.Equal(1, summary.Metrics["MissingDocumentation"]);
-        Assert.Equal(200d / 3d, summary.Metrics["DocumentationCoverage"], precision: 5);
+        Assert.Equal(Math.Round(200d / 3d, 2), summary.Metrics["DocumentationCoverage"]);
         Assert.Equal("Completed", summary.Metadata["AnalysisStatus"]);
         Assert.Contains("DocumentationFixture.cs", summary.Evidence);
         Assert.Contains("UndocumentedOperation", summary.Evidence);

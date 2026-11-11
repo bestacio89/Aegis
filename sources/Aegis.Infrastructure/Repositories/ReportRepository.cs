@@ -28,6 +28,7 @@ public sealed class ReportRepository : IReportRepository
 
     public async Task<ReportEntity?> GetPreviousForProjectAsync(
         string projectPath,
+        DateTime currentScanDate,
         int currentReportId,
         CancellationToken token = default)
     {
@@ -40,7 +41,8 @@ public sealed class ReportRepository : IReportRepository
             .Include(report => report.RuleResults)
             .Where(report =>
                 report.ProjectPath == projectPathIdentity
-                && report.Id != currentReportId)
+                && (report.ScanDate < currentScanDate
+                    || (report.ScanDate == currentScanDate && report.Id < currentReportId)))
             .OrderByDescending(report => report.ScanDate)
             .FirstOrDefaultAsync(token);
     }

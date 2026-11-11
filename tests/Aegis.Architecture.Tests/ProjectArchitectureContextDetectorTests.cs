@@ -599,6 +599,30 @@ public sealed class ProjectArchitectureContextDetectorTests
     }
 
     [Fact]
+    public void Detect_classifies_projects_under_test_directories_as_test_scope_without_name_or_sdk_hints()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var testProjectPath = Path.Combine(directory.Path, "tests", "IntegrationHarness");
+        Directory.CreateDirectory(testProjectPath);
+        File.WriteAllText(
+            Path.Combine(testProjectPath, "IntegrationHarness.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+        var module = Assert.Single(context.Modules);
+
+        Assert.True(module.IsTestProject);
+        Assert.Equal("Test", module.ProjectKind);
+        Assert.Equal("Test", module.Type);
+        Assert.Equal("Tests", Assert.Single(module.Layers).Name);
+    }
+
+    [Fact]
     public void Detect_preserves_test_project_relationships_without_mixing_them_into_production_architecture()
     {
         using var directory = new TemporaryDirectory();

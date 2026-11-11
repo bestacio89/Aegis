@@ -8,10 +8,7 @@ internal static class DomainDetector
     {
         ArgumentNullException.ThrowIfNull(ctx);
 
-        var applicationModules = ctx.Modules
-            .Where(module => !module.IsTestProject
-                && !string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var applicationModules = ctx.ProductionModules;
 
         var projectKinds = applicationModules
             .Select(module => module.ProjectKind)
@@ -94,11 +91,15 @@ internal static class DomainDetector
                 return;
         }
 
-        if (ctx.Modules.Count > 0
-            && ctx.Modules.All(module => module.IsTestProject
-                || string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase)))
+        if (ctx.ProductionModules.Count == 0 && ctx.TestModules.Count > 0)
         {
             ctx.DomainType = "Test";
+            return;
+        }
+
+        if (ctx.ProductionModules.Count == 0 && ctx.TestSupportModules.Count > 0)
+        {
+            ctx.DomainType = "Library";
             return;
         }
 

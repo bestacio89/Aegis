@@ -70,15 +70,30 @@ public sealed class ProjectArchitectureContext
 
     /// <summary>Modules that belong to the production architecture.</summary>
     public IReadOnlyList<ProjectModuleContext> ProductionModules =>
-        Modules.Where(module => !module.IsTestProject && !module.IsTestSupport).ToArray();
+        Modules.Where(module =>
+            !module.IsTestProject
+            && !module.IsTestSupport
+            && !string.Equals(module.Type, "Test", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(module.Type, "TestSupport", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(module.ProjectKind, "TestSupport", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
 
     /// <summary>Test projects retained for source analysis and evidence.</summary>
     public IReadOnlyList<ProjectModuleContext> TestModules =>
-        Modules.Where(module => module.IsTestProject).ToArray();
+        Modules.Where(module =>
+            module.IsTestProject
+            || string.Equals(module.Type, "Test", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
 
     /// <summary>Reusable test-support packages, distinct from test projects.</summary>
     public IReadOnlyList<ProjectModuleContext> TestSupportModules =>
-        Modules.Where(module => module.IsTestSupport).ToArray();
+        Modules.Where(module =>
+            module.IsTestSupport
+            || string.Equals(module.Type, "TestSupport", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(module.ProjectKind, "TestSupport", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
 
 
     /// <summary>
@@ -208,7 +223,12 @@ public sealed class ProjectArchitectureContext
         }
 
         return module is not null
-            && (module.IsTestProject || module.IsTestSupport);
+            && (module.IsTestProject
+                || module.IsTestSupport
+                || string.Equals(module.Type, "Test", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(module.Type, "TestSupport", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(module.ProjectKind, "TestSupport", StringComparison.OrdinalIgnoreCase));
     }
 
 

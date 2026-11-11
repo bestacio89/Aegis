@@ -557,8 +557,8 @@ internal static class GradleBuildModelResolver
     }
 
     private static string NormalizeAlias(string alias) =>
-        alias.Replace('-', '.', StringComparison.Ordinal)
-            .Replace('_', '.', StringComparison.Ordinal)
+        alias.Replace('-', '.')
+            .Replace('_', '.')
             .Trim('.');
 
     private static GradleBuildModel Incomplete(string buildFile, string code, string message) =>

@@ -429,7 +429,7 @@ internal static class GradleBuildModelResolver
                     var assignment = CatalogAssignment.Match(line);
                     if (!assignment.Success)
                     {
-                        if (section is "versions" or "libraries" or "plugins")
+                        if (section is "versions" or "libraries" or "bundles" or "plugins")
                         {
                             diagnostics.Add(Diagnostic(
                                 "GradleVersionCatalogEntryUnsupported",

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using Aegis.Security.Bootstrap;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
@@ -29,6 +30,7 @@ public static class PluginRegistrationExtensions
         "architecture.policy.json",
         "repository.policy.json",
         "security.policy.json",
+        "security.runtime.json",
         "maintainability.policy.json",
         "dependency.policy.json",
         "naming.policy.json",
@@ -104,6 +106,7 @@ public static class PluginRegistrationExtensions
             });
         services.Configure<RepositoryPolicy>(configuration.GetSection("Repository"));
         services.Configure<SecurityPolicy>(configuration.GetSection("Security"));
+        services.Configure<AegisSecurityOptions>(configuration.GetSection("AegisSecurity"));
         services.Configure<MaintainabilityPolicy>(configuration.GetSection("Maintainability"));
         services.Configure<DependencyPolicy>(configuration.GetSection("Dependency"));
         services.Configure<NamingPolicy>(configuration.GetSection("Naming"));

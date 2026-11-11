@@ -265,11 +265,25 @@ public sealed class RuleEngineCoreBehaviorTests
             }
         };
 
+        var cycleSummary = new ArchitectureEvaluatorResult(
+            "CircularDependencyEvaluator",
+            "Project")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                ["CircularDependencyCount"] = 0
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project"
+            }
+        };
+
         var outcome = new RuleEngineCore(
             NullLogger<RuleEngineCore>.Instance,
             policy).EvaluateDetailed(
                 new ProjectArchitectureContext { Language = "C#" },
-                [summary]);
+                [summary, cycleSummary]);
 
         Assert.Contains("AEG-DES-STRAT001", outcome.Stats.RulesNotApplicable);
         Assert.Contains("AEG-DES-STRAT002", outcome.Stats.RulesNotApplicable);
@@ -281,7 +295,7 @@ public sealed class RuleEngineCoreBehaviorTests
             NullLogger<RuleEngineCore>.Instance,
             policy).EvaluateDetailed(
                 new ProjectArchitectureContext { Language = "C#" },
-                [summary]);
+                [summary, cycleSummary]);
 
         Assert.Equal(
             outcome.Stats.RulesApplicable + 2,

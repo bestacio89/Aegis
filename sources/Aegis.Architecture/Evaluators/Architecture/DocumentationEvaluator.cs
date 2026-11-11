@@ -1,4 +1,8 @@
 using System.Text.RegularExpressions;
+
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
@@ -23,10 +27,6 @@ public sealed class DocumentationEvaluator :
         | RegexOptions.Multiline
         | RegexOptions.CultureInvariant;
 
-    private static readonly Regex CSharpDeclarationRegex = new(
-        @"^[ \t]*public\b[^\r\n]*",
-        SourceRegexOptions);
-
     private static readonly Regex JavaDeclarationRegex = new(
         @"^[ \t]*public\b[^\r\n]*",
         SourceRegexOptions);
@@ -37,10 +37,6 @@ public sealed class DocumentationEvaluator :
 
     private static readonly Regex PythonDeclarationRegex = new(
         @"^[ \t]*(?:async\s+)?(?:def|class)\s+([A-Za-z]\w*)\s*(?:\([^:\r\n]*\))?[^:\r\n]*:",
-        SourceRegexOptions);
-
-    private static readonly Regex CSharpXmlDocumentationRegex = new(
-        @"^[ \t]*///",
         SourceRegexOptions);
 
     private static readonly HashSet<string> ExcludedDirectoryNames =
@@ -104,6 +100,8 @@ public sealed class DocumentationEvaluator :
             var documentedDeclarations = 0;
             var analyzedFiles = 0;
             var unreadableFiles = 0;
+            var incompleteFiles = new List<string>();
+            var analysisDiagnostics = new List<string>();
             var languages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var evidence = new List<string>();
 
@@ -159,17 +157,30 @@ public sealed class DocumentationEvaluator :
                 documentedDeclarations += counts.Documented;
                 analyzedFiles++;
                 evidence.AddRange(counts.Evidence);
+
+                if (!counts.IsComplete)
+                {
+                    incompleteFiles.Add(file);
+                    analysisDiagnostics.AddRange(counts.Diagnostics ?? []);
+                }
             }
 
-            if (unreadableFiles > 0)
+            if (unreadableFiles > 0 || incompleteFiles.Count > 0)
             {
                 var status = CreateExecutionStatusFact(
                     scope.Path,
                     "Incomplete",
-                    $"Documentation analysis could not read {unreadableFiles} of {scope.Files.Count} eligible source file(s).");
+                    $"Documentation analysis could not fully analyze {unreadableFiles} unreadable and {incompleteFiles.Count} syntactically incomplete source file(s).");
 
                 ApplyProjectIdentity(status, scope);
                 status.Metadata["AnalysisComplete"] = "false";
+                status.Metadata["UnreadableFiles"] = unreadableFiles.ToString();
+                status.Metadata["IncompleteFiles"] = incompleteFiles.Count.ToString();
+                status.Metadata["FilesAnalyzed"] = analyzedFiles.ToString();
+                status.Metadata["AnalysisDiagnosticCount"] = analysisDiagnostics.Count.ToString();
+                status.Metadata["AnalysisDiagnostics"] = string.Join(
+                    Environment.NewLine,
+                    analysisDiagnostics.Take(20));
                 results.Add(status);
                 continue;
             }
@@ -358,11 +369,7 @@ public sealed class DocumentationEvaluator :
     {
         return language switch
         {
-            "C#" => CountCommentDocumentedDeclarations(
-                content,
-                relativePath,
-                CSharpDeclarationRegex,
-                CSharpXmlDocumentationRegex),
+            "C#" => CountCSharpDeclarations(content, relativePath),
 
             "Java" => CountCommentDocumentedDeclarations(
                 content,
@@ -382,6 +389,86 @@ public sealed class DocumentationEvaluator :
             _ => new DeclarationCounts(0, 0, [])
         };
     }
+
+    private static DeclarationCounts CountCSharpDeclarations(
+        string content,
+        string relativePath)
+    {
+        var syntaxTree = CSharpSyntaxTree.ParseText(
+            content,
+            new CSharpParseOptions(LanguageVersion.Preview));
+        var root = syntaxTree.GetRoot();
+
+        var declarations = root.DescendantNodes()
+            .OfType<MemberDeclarationSyntax>()
+            .Where(IsPublicCSharpDeclaration)
+            .ToArray();
+
+        var documented = 0;
+        var evidence = new List<string>(declarations.Length);
+
+        foreach (var declaration in declarations)
+        {
+            var isDocumented = declaration.GetLeadingTrivia().Any(trivia =>
+                trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
+                || trivia.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia));
+
+            if (isDocumented)
+                documented++;
+
+            evidence.Add(FormatDeclarationEvidence(
+                content,
+                relativePath,
+                declaration.SpanStart,
+                isDocumented));
+        }
+
+        var diagnostics = syntaxTree.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Take(20)
+            .Select(diagnostic =>
+            {
+                var line = diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1;
+                return $"Line {line}: {diagnostic.GetMessage()}";
+            })
+            .ToArray();
+
+        return new DeclarationCounts(
+            declarations.Length,
+            documented,
+            evidence,
+            diagnostics.Length == 0,
+            diagnostics);
+    }
+
+    private static bool IsPublicCSharpDeclaration(
+        MemberDeclarationSyntax declaration)
+    {
+        if (declaration is EnumMemberDeclarationSyntax)
+            return true;
+
+        if (declaration is BaseTypeDeclarationSyntax
+            or DelegateDeclarationSyntax)
+        {
+            return HasPublicModifier(declaration);
+        }
+
+        if (HasPublicModifier(declaration))
+            return true;
+
+        // Interface members are public by default unless explicitly private,
+        // protected or internal. Explicit access modifiers take precedence.
+        return declaration.Parent is InterfaceDeclarationSyntax
+            && !HasNonPublicModifier(declaration);
+    }
+
+    private static bool HasPublicModifier(MemberDeclarationSyntax declaration) =>
+        declaration.Modifiers.Any(SyntaxKind.PublicKeyword);
+
+    private static bool HasNonPublicModifier(MemberDeclarationSyntax declaration) =>
+        declaration.Modifiers.Any(SyntaxKind.PrivateKeyword)
+        || declaration.Modifiers.Any(SyntaxKind.ProtectedKeyword)
+        || declaration.Modifiers.Any(SyntaxKind.InternalKeyword);
 
     private static DeclarationCounts CountCommentDocumentedDeclarations(
         string content,
@@ -598,5 +685,7 @@ public sealed class DocumentationEvaluator :
     private sealed record DeclarationCounts(
         int Total,
         int Documented,
-        IReadOnlyCollection<string> Evidence);
+        IReadOnlyCollection<string> Evidence,
+        bool IsComplete = true,
+        IReadOnlyCollection<string>? Diagnostics = null);
 }

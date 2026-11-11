@@ -69,7 +69,7 @@ internal static class GradleBuildModelResolver
 
         var gradleRoots = context.Modules
             .Where(module => module.GradleModel is not null)
-            .OrderByDescending(module => NormalizePath(module.Path).Length)
+            .OrderByDescending(module => Path.GetFullPath(module.Path).Length)
             .ToArray();
 
         context.DependencyEvidence.RemoveAll(evidence =>
@@ -680,6 +680,9 @@ internal static class GradleBuildModelResolver
             && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
             && !relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
     }
+
+    private static bool PathsEqual(string left, string right) =>
+        PathComparer.Equals(Path.GetFullPath(left), Path.GetFullPath(right));
 
     private static string NormalizeAlias(string alias) =>
         alias.Replace('-', '.')

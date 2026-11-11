@@ -497,6 +497,7 @@ internal static class ModuleDetector
             Path.TrimEndingDirectorySeparator(path)).ToLowerInvariant();
 
         if (pathName.Contains("testsupport", StringComparison.Ordinal)
+            || pathName.Equals("testing", StringComparison.Ordinal)
             || pathName.EndsWith(".testing", StringComparison.Ordinal))
         {
             return "TestSupport";
@@ -560,7 +561,7 @@ internal static class ModuleDetector
             || name.Contains("grpc", StringComparison.Ordinal)
             || name.Contains("aras", StringComparison.Ordinal)
             || name.Contains("mapping", StringComparison.Ordinal)
-            || name.Contains("io", StringComparison.Ordinal)
+            || name.Split('.').Contains("io", StringComparer.Ordinal)
             || name.Contains("opentelemetry", StringComparison.Ordinal)
             || name.Contains("polly", StringComparison.Ordinal)
             || name.Contains("kafka", StringComparison.Ordinal)
@@ -571,7 +572,6 @@ internal static class ModuleDetector
             || name.Contains("multitenancy", StringComparison.Ordinal)
             || name.Contains("identity", StringComparison.Ordinal)
             || name.Contains("sso", StringComparison.Ordinal)
-            || name.Contains("testing", StringComparison.Ordinal)
             || name.Equals("franz.common", StringComparison.Ordinal)
             || name.Contains("caching", StringComparison.Ordinal)
             || name.Contains("cache", StringComparison.Ordinal)

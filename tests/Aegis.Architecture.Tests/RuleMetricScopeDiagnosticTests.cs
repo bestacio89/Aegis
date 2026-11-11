@@ -219,14 +219,11 @@ public sealed class RuleMetricScopeDiagnosticTests
             new ProjectArchitectureContext(),
             [status]);
 
-        Assert.Contains("AEG-DES-STRAT001", outcome.Stats.RulesNotEvaluated);
+        Assert.Contains("AEG-DES-STRAT001", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-DES-STRAT001", outcome.Stats.RulesNotEvaluated);
         Assert.Contains(
-            "disabled by policy",
-            outcome.Stats.NotEvaluatedReasons["AEG-DES-STRAT001"],
-            StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(
-            "no file-scope evaluator fact",
-            outcome.Stats.NotEvaluatedReasons["AEG-DES-STRAT001"],
+            "disabled by the active policy",
+            outcome.Stats.NotApplicableReasons["AEG-DES-STRAT001"],
             StringComparison.OrdinalIgnoreCase);
     }
 
@@ -235,9 +232,11 @@ public sealed class RuleMetricScopeDiagnosticTests
     [Fact]
     public void Repository_leak_risk_cannot_satisfy_observer_unsubscribe_rule()
     {
+        var policy = new AegisArchitecturePolicy();
+        policy.Architecture.DesignPatterns.EnforceObserverPattern = true;
         var engine = new RuleEngineCore(
             NullLogger<RuleEngineCore>.Instance,
-            new AegisArchitecturePolicy());
+            policy);
 
         var repositoryFact = new ArchitectureEvaluatorResult(
             "RepositoryPatternEvaluator",
@@ -327,9 +326,14 @@ public sealed class RuleMetricScopeDiagnosticTests
         string discoveredMetric,
         string ruleId)
     {
+        var policy = new AegisArchitecturePolicy();
+        policy.Architecture.DesignPatterns.EnforceCommandPattern = true;
+        policy.Architecture.DesignPatterns.EnforceObserverPattern = true;
+        policy.Architecture.DesignPatterns.EnforceStrategyPattern = true;
+
         var engine = new RuleEngineCore(
             NullLogger<RuleEngineCore>.Instance,
-            new AegisArchitecturePolicy());
+            policy);
 
         var completeSummary = new ArchitectureEvaluatorResult(
             producer,

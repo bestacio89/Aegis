@@ -192,7 +192,7 @@ public sealed class RepositoryPatternEvaluator
             try
             {
                 var source = await File.ReadAllTextAsync(file, token);
-                var language = DetectLanguage(file);
+                var language = ResolveLanguageForFile(file);
                 readableFiles[file] = new SourceFile(
                     source,
                     SourceCodeMasker.Mask(source),
@@ -422,7 +422,7 @@ public sealed class RepositoryPatternEvaluator
         result.Target = repositoryName;
         result.Language = sourceFile.Language;
         result.Framework = ResolveFrameworkForFile(file, projectPath, Context!);
-        result.Layer = ResolveLayer(file);
+        result.Layer = ResolveLayerForFile(file);
         result.Metrics = metrics;
 
         result.Metadata["FilePath"] = file;

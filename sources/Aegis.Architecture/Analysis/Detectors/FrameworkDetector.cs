@@ -287,6 +287,12 @@ internal static class FrameworkDetector
             context.DetectedFrameworks.Add(framework);
     }
 
+    private static void AddFramework(ProjectModuleContext module, string framework)
+    {
+        if (!module.Frameworks.Contains(framework, StringComparer.OrdinalIgnoreCase))
+            module.Frameworks.Add(framework);
+    }
+
     private static string SafeReadText(string path)
     {
         try { return File.ReadAllText(path); }

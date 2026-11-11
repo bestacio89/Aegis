@@ -242,7 +242,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             .Select(call =>
             {
                 var lineNumber = GetLineNumber(content, call.Index);
-                return $"Line {lineNumber}: {call.Value.Trim()} — {GetSourceLine(content, lineNumber)}";
+                return $"{Path.GetFileName(file)}:{lineNumber}: {call.Value.Trim()} — {GetSourceLine(content, lineNumber)}";
             })
             .ToArray();
 

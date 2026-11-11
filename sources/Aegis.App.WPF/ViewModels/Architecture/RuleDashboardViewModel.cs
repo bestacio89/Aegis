@@ -62,7 +62,7 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
     [ObservableProperty] private int highCount;
     [ObservableProperty] private int mediumCount;
     [ObservableProperty] private string registeredRules = "n/a";
-    [ObservableProperty] private string applicableRules = "n/a";
+    [ObservableProperty] private string inScopeRules = "n/a";
     [ObservableProperty] private string evaluatedRules = "n/a";
     [ObservableProperty] private string notEvaluatedRules = "n/a";
     [ObservableProperty] private string notApplicableRules = "n/a";
@@ -108,7 +108,7 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
 
             var stats = report.EvaluationStats;
             RegisteredRules = stats is null ? "n/a" : stats.RulesRegistered.ToString("N0");
-            ApplicableRules = stats is null ? "n/a" : (stats.RulesApplicable + stats.RulesUnsupported).ToString("N0");
+            InScopeRules = stats is null ? "n/a" : (stats.RulesApplicable + stats.RulesUnsupported).ToString("N0");
             EvaluatedRules = stats is null ? "n/a" : stats.RulesEvaluated.ToString("N0");
             NotEvaluatedRules = stats is null ? "n/a" : stats.RulesNotEvaluated.Count.ToString("N0");
             NotApplicableRules = stats is null ? "n/a" : stats.RulesNotApplicable.Count.ToString("N0");

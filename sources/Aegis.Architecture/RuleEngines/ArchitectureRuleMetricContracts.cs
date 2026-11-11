@@ -96,23 +96,24 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-DES-BLD001"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount"),
                 ["AEG-DES-BLD002"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount"),
                 ["AEG-DES-CMD001"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-CMD002"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount"),
                 ["AEG-DES-DEC001"] = ("DecoratorPatternEvaluator", "DecoratorCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-FAC001"] = ("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-FAC002"] = ("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-GOD001"] = ("GodClassEvaluator", "ClassCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-OBS001"] = ("ObserverPatternEvaluator", "AnalyzedComponents", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-REPO001"] = ("RepositoryPatternEvaluator", "RepositoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-SING001"] = ("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-STRAT001"] = ("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-STRAT002"] = ("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-STRAT001"] = ("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-STRAT002"] = ("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-DEC002"] = ("DecoratorPatternEvaluator", "DecoratorCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
                 ["AEG-DES-FAC001"] = ("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
                 ["AEG-DES-FAC002"] = ("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
                 ["AEG-DES-FACR001"] = ("FactoryPatternEvaluator", "FactoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
                 ["AEG-DES-FACR002"] = ("FactoryPatternEvaluator", "FactoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-GOD001"] = ("GodClassEvaluator", "ClassCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
                 ["AEG-DES-MEDI001"] = ("MediatorPatternEvaluator", "MediatorImplementationCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-REPO001"] = ("RepositoryPatternEvaluator", "RepositoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles")
+                ["AEG-DES-MEDI002"] = ("MediatorPatternEvaluator", "MediatorImplementationCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-OBS001"] = ("ObserverPatternEvaluator", "ObserverCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-OBS002"] = ("ObserverPatternEvaluator", "ObserverCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-REPO001"] = ("RepositoryPatternEvaluator", "RepositoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-REPO002"] = ("RepositoryPatternEvaluator", "RepositoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-SING001"] = ("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-SING002"] = ("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-STRAT001"] = ("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-STRAT002"] = ("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles")
             };
 
     private static readonly IReadOnlyDictionary<string, string>
@@ -250,8 +251,8 @@ internal static class ArchitectureRuleMetricContracts
         }
 
         reason =
-            $"Rule '{ruleId}' is not applicable because its evaluator is disabled " +
-            "by the active policy.";
+            $"Rule '{ruleId}' is disabled by the active policy and was excluded " +
+            "from applicability and evaluation coverage.";
 
         return false;
     }

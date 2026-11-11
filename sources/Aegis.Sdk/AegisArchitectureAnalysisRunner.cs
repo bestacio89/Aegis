@@ -106,7 +106,7 @@ public sealed class AegisArchitectureAnalysisRunner
         {
             token.ThrowIfCancellationRequested();
 
-            Report(progress, 1, "Preparing", "Loading policy");
+            Report(progress, 1, "Preparing", "Resolving active policy snapshot");
 
             // The registered options instance is the same policy snapshot
             // consumed by evaluator constructors. Using it by default keeps
@@ -118,6 +118,23 @@ public sealed class AegisArchitectureAnalysisRunner
             token.ThrowIfCancellationRequested();
 
             _engine.ApplyPolicy(policy);
+
+            var designPatterns = policy.Architecture.DesignPatterns;
+            _logger.LogInformation(
+                "Active design-pattern policy: Command={Command}, Strategy={Strategy}, " +
+                "Observer={Observer}, Singleton={Singleton}, Mediator={Mediator}.",
+                designPatterns.EnforceCommandPattern,
+                designPatterns.EnforceStrategyPattern,
+                designPatterns.EnforceObserverPattern,
+                designPatterns.EnforceSingletonPattern,
+                designPatterns.EnforceMediatorPattern);
+
+            if (!string.IsNullOrWhiteSpace(policyPath))
+            {
+                _logger.LogWarning(
+                    "An explicit policy path overrides rule interpretation, but evaluator options remain bound to the registered split policy documents. " +
+                    "Use the split policy files for evaluator configuration.");
+            }
 
             Report(progress, 4, "Preparing", "Policy applied");
 

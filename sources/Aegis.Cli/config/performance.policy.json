@@ -1,0 +1,16 @@
+{
+  "Performance": {
+    "Enabled": true,
+    "MaxNestedLoopDepth": 3,
+    "MaxLoopBodyLength": 80,
+    "RequireAsyncForIOMethods": true,
+    "DisallowBlockingCalls": true,
+    "CheckThreadSleepUsage": true,
+    "DetectStringConcatenationInLoops": true,
+    "DetectLargeCollectionsInitialization": true,
+    "LargeCollectionThreshold": 1000,
+    "WarnThreadCreationInHotPaths": true,
+    "DetectSynchronousWaits": true,
+    "SuggestAsyncStreams": true
+  }
+}

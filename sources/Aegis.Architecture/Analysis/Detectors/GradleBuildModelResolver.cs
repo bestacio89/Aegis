@@ -585,11 +585,24 @@ internal static class GradleBuildModelResolver
                 || !relative[buildIndex + 2].Equals("sources", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var sourceSetIndex = Array.FindLastIndex(relative, segment =>
-                segment.Equals("main", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("test", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("integrationTest", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals("testFixtures", StringComparison.OrdinalIgnoreCase));
+            var sourceSetIndex = -1;
+            // Gradle's generated-source layout places the source-set name
+            // immediately after the generator/language segments. Do not scan
+            // package names: a package called "main" is not source-set evidence.
+            foreach (var candidateIndex in new[] { buildIndex + 5, buildIndex + 4 })
+            {
+                if (candidateIndex >= relative.Length)
+                    continue;
+
+                if (relative[candidateIndex].Equals("main", StringComparison.OrdinalIgnoreCase)
+                    || relative[candidateIndex].Equals("test", StringComparison.OrdinalIgnoreCase)
+                    || relative[candidateIndex].Equals("integrationTest", StringComparison.OrdinalIgnoreCase)
+                    || relative[candidateIndex].Equals("testFixtures", StringComparison.OrdinalIgnoreCase))
+                {
+                    sourceSetIndex = candidateIndex;
+                    break;
+                }
+            }
 
             ProjectSourceRootOwnership ownership;
             int rootLength;

@@ -927,7 +927,6 @@ internal static class MavenProjectModelResolver
                 ]
             });
         }
-    }
 
         foreach (var processor in model.AnnotationProcessorPaths)
         {

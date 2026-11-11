@@ -38,7 +38,8 @@ public sealed class FrontendRuleApplicabilityRegressionTests
             {
                 Language = "C#",
                 Framework = "Blazor",
-                DetectedFrameworks = ["Blazor"]
+                DetectedFrameworks = ["Blazor"],
+                FrontendFrameworkDiscoveryComplete = true
             },
             [fact]);
 
@@ -134,6 +135,7 @@ public sealed class FrontendRuleApplicabilityRegressionTests
                 Language = "C#",
                 Framework = "ASP.NET Core",
                 DetectedFrameworks = ["ASP.NET Core", "Blazor", ".NET"],
+                FrontendFrameworkDiscoveryComplete = true,
                 Modules =
                 [
                     new ProjectModuleContext { Name = "Api", Path = "src/Api" },

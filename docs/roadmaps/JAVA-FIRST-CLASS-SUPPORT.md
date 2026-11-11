@@ -415,9 +415,9 @@ References:
 - [x] Define semantic run outcomes: not requested, unsupported, completed, partially completed, and failed.
 - [x] Define the shared semantic-analysis request and language-adapter boundary without parser-specific dependencies.
 - [x] Build a representative Java fixture corpus covering Maven, Gradle, modules, generics, annotations, unresolved symbols, generated code and test sources.
-- [ ] Benchmark Eclipse JDT and JavaParser against the same fixtures; include Spoon only if it adds comparative value.
-- [ ] Record the engine and deployment decision, trade-offs, licensing and measured results in a checkpoint comment.
-- [x] Run the full existing non-WPF regression suite and production build after shared-contract changes (both green on the contract-only head; the new fixture tests and benchmark harness still require final-head CI execution).
+- [x] Benchmark Eclipse JDT and JavaParser against the same fixtures in source-only and controlled external-classpath modes; Spoon was not added because the two primary candidates already exposed the relevant J0 trade-offs.
+- [x] Record the evidence-based J2 prototype candidate, trade-offs, licensing and measured results in the PR checkpoint discussion; production engine and deployment selection remain subject to J2 validation.
+- [x] Run the full existing non-WPF regression suite and production build, WPF build, fixture tests and benchmark workflow on the final J0 head.
 
 ### J0 contract implementation — 2026-11-11
 
@@ -440,14 +440,47 @@ This slice defines contracts only. No Java adapter is registered, no semantic en
 
 ### J0 semantic-engine spike harness — 2026-11-11
 
-An isolated Maven tool under tools/java-semantic-spike now compares:
-- Eclipse JDT Core 3.47.0 (EPL-2.0).
-- JavaParser Symbol Solver 3.28.2 (Apache-2.0 or LGPL-3.0, selected by the adopter).
+An isolated Maven tool under `tools/java-semantic-spike` compares:
+- Eclipse JDT Core `3.47.0` (EPL-2.0).
+- JavaParser Symbol Solver `3.28.2` (Apache-2.0 or LGPL-3.0, selected by the adopter).
 
-The workflow .github/workflows/java-semantic-engine-spike.yml runs both engines against the same checked-in source corpus and uploads JSON metrics. The harness materializes only .java.fixture files; it never executes Maven/Gradle fixture builds, plugins or annotation processors.
+The workflow `.github/workflows/java-semantic-engine-spike.yml` runs both engines in two independent modes against the same checked-in corpus:
+1. Source roots plus the running JDK.
+2. The same source roots plus a separately resolved, pinned external classpath (Spring Context, JUnit Jupiter API, MapStruct API and transitives).
 
-The first pass is deliberately source-root + running-JDK only. It does not yet include third-party dependency JARs resolved from Maven/Gradle metadata. The output reports parse/diagnostic counts, binding attempts/successes, elapsed analysis time and an approximate post-run heap snapshot. Diagnostic models and heap values are not directly interchangeable, and these aggregate metrics are not a correctness score.
+The classpath manifest is independent of the fixture Maven and Gradle builds. CI does not execute fixture build scripts, plugins or annotation processors. Both engines receive the same external JAR list: JDT through `ASTParser.setEnvironment`, JavaParser through `JarTypeSolver`.
 
-**No benchmark measurements have been collected yet. No engine or production deployment model has been selected.** The external dependency classpath phase and representative real-world repository measurements remain required before the J0 engine decision.
+The corpus contains 15 Java source fixtures and six source roots. The benchmark independently tracks five expected cross-source types, three expected external types and two intentionally unresolved type identities. The run fails if either engine resolves an intentionally missing target.
 
-**J0 status:** Shared contracts, adapter boundary, fixture corpus, full discovery/evaluator source trace and initial benchmark harness implemented. Benchmark execution and analysis, dependency-classpath comparison, final-head CI validation and acceptance decision remain open.
+#### Final J0 benchmark evidence
+
+Final benchmark workflow run: `43077082530`, commit `14bcb141a69733c54a886f51d5d0c0f53ce21ed7`, artifact `13883240203`.
+
+| Metric | JDT source-only | JDT external classpath | JavaParser source-only | JavaParser external classpath |
+|---|---:|---:|---:|---:|
+| Parsed files | 15/15 | 15/15 | 15/15 | 15/15 |
+| Expected cross-source types | 3/5 | 3/5 | 5/5 | 5/5 |
+| Expected external types | 0/3 | 3/3 | 0/3 | 3/3 |
+| Unexpectedly resolved missing types | 0 | 0 | 0 | 0 |
+| Diagnostics | 22 | 9 | 0 | 0 |
+| Elapsed milliseconds | 709 | 819 | 275 | 261 |
+| Approximate post-run heap | 61.7 MB | 44.0 MB | 19.1 MB | 25.7 MB |
+
+The controlled classpath contained 13 JAR entries. Both engines resolved all three expected external types. Adding the external classpath reduced JDT diagnostics from 22 to 9 and increased its aggregate successful bindings from 65/72 to 66/72. JavaParser aggregate successful bindings increased from 50/82 to 54/82. Aggregate binding counts and ratios are not directly comparable because the engines expose different AST visitor and diagnostic models. Heap values are approximate post-run snapshots, not peak memory; timings are single-run observations.
+
+#### J0 engine decision
+
+**JavaParser Symbol Solver is the preferred candidate for the J2 integration prototype.** It resolved all five expected cross-source types, all three expected external types and none of the intentionally unresolved targets. It also completed both benchmark passes faster and with lower observed post-run heap than JDT on this corpus.
+
+This is a candidate decision, not a production-engine or deployment-model commitment. The 15-file corpus is too small to establish production reliability. J2 must validate JavaParser against larger real-world Maven and Gradle repositories, module-path and dependency-version conflict cases, partial/error recovery, and memory/performance envelopes. JDT remains a comparator until that validation is complete. The two engines' aggregate binding ratios are not used as the selection criterion.
+
+No production parser dependency has been added to Aegis, no Java adapter is registered, and no Java semantic capability is claimed operational.
+
+#### Final J0 CI evidence
+
+All mandatory workflows completed successfully on final J0 head `14bcb141a69733c54a886f51d5d0c0f53ce21ed7`:
+- Non-WPF quality gates: run `43077082507` — success. All non-WPF test projects and production builds passed.
+- WPF build validation: run `43077082484` — success.
+- Java semantic engine spike: run `43077082530` — success. Both source-only and controlled-classpath passes completed, including the negative-resolution oracle.
+
+**J0 checkpoint outcome: accepted.** Shared contracts, adapter boundary, discovery/evaluator audit, representative fixture corpus, controlled semantic-engine comparison, evidence-based J2 candidate decision and final-head CI validation are complete. J1 may proceed.

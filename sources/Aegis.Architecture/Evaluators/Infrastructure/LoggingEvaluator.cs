@@ -473,8 +473,6 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             var hasPythonParameters =
                 language == "Python"
                 && PythonParameterizedLoggingRx.IsMatch(invocation);
-            var hasInterpolation = InterpolatedStringRx.IsMatch(invocation);
-
             if (hasTemplate)
                 structuredCalls++;
             else if (hasPythonParameters)

@@ -336,6 +336,44 @@ public sealed class ArchitectureEvaluatorBehaviorTests
 
 
     [Fact]
+    public async Task NamingEvaluator_accepts_descriptive_test_methods_and_private_field_conventions()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/NamingFixture.cs", """
+            public sealed class NamingFixture
+            {
+                private readonly object _clock = new();
+                internal readonly object _logger = new();
+                public string invalidField = string.Empty;
+
+                [Xunit.Fact]
+                public void CreateOrder_WhenInventoryIsAvailable_ReturnsCreatedOrder() { }
+
+                public void CreateFixture() { }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "NamingEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+
+        var finding = Assert.Single(
+            results,
+            result => result.Target.Contains("NamingFixture.cs", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(100, finding.Metrics["MethodNamingCompliance"]);
+        Assert.Equal(100, finding.Metrics["FileNamingCompliance"]);
+        Assert.Equal(100.0 / 3.0 * 2.0, finding.Metrics["FieldNamingCompliance"], 2);
+        Assert.Contains("invalidField", finding.Metadata["Evidence.FieldNamingCompliance"]);
+        Assert.DoesNotContain("_clock", finding.Metadata["Evidence.FieldNamingCompliance"]);
+        Assert.DoesNotContain("_logger", finding.Metadata["Evidence.FieldNamingCompliance"]);
+    }
+
+    [Fact]
     public async Task NamingEvaluator_keeps_application_source_in_a_directory_named_temp()
     {
         using var project = new TemporaryProject();

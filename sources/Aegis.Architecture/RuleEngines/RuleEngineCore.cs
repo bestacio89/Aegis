@@ -287,10 +287,18 @@ public sealed class RuleEngineCore
                     continue;
                 }
 
-                if (!HasEvidenceForMetric(fact, metricKey, rule.Scope))
+                var isViolation = IsViolation(
+                    rule.Operator,
+                    metricValue,
+                    threshold);
+
+                // A compliant measurement may contribute to coverage when
+                // analysis completed. A violation must always carry traceable
+                // source evidence before it can become a finding.
+                if (isViolation && !HasEvidenceForMetric(fact, metricKey, rule.Scope))
                 {
                     var reason =
-                        $"The evaluator emitted '{metricKey}' without traceable " +
+                        $"The evaluator emitted violating metric '{metricKey}' without traceable " +
                         "source evidence for this rule scope.";
 
                     insufficientEvidenceReasons[rule.Id] = reason;
@@ -304,11 +312,6 @@ public sealed class RuleEngineCore
                         reason));
                     continue;
                 }
-
-                var isViolation = IsViolation(
-                    rule.Operator,
-                    metricValue,
-                    threshold);
 
                 var evaluatedAt = DateTimeOffset.UtcNow;
 

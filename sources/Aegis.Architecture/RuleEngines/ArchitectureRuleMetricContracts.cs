@@ -92,6 +92,7 @@ internal static class ArchitectureRuleMetricContracts
             new Dictionary<string, (string, string, string, string)>(StringComparer.OrdinalIgnoreCase)
             {
                 ["AEG-DES-BLD001"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-BLD002"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
                 ["AEG-DES-CMD001"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "DiscoveredFileCount"),
                 ["AEG-DES-DEC001"] = ("DecoratorPatternEvaluator", "DecoratorCandidateCount", "UnreadableFiles", "DiscoveredFiles")
             };

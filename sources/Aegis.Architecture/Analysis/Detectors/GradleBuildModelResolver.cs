@@ -258,7 +258,7 @@ internal static class GradleBuildModelResolver
                 var parts = notation.Groups["notation"].Value.Split(':');
                 if (parts.Length is >= 2 and <= 3
                     && parts.All(part => part.Length > 0)
-                    && parts.All(part => !part.Contains('
+                    && parts.All(part => !part.Contains('$') && !part.Contains('{')))
                 {
                     result.Add(new GradleBuildModel.Dependency(
                         configuration, parts[0], parts[1], parts.Length == 3 ? parts[2] : null,

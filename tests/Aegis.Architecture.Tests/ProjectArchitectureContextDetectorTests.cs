@@ -534,6 +534,46 @@ public sealed class ProjectArchitectureContextDetectorTests
             && string.Equals(module.Path, Path.Combine(directory.Path, "UnityClient"), StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Detect_classifies_foundational_runtime_and_abstraction_modules_as_infrastructure()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var moduleNames = new[]
+        {
+            "Mediator",
+            "Messaging",
+            "Serialization",
+            "Base.Abstractions"
+        };
+
+        foreach (var moduleName in moduleNames)
+        {
+            var modulePath = Path.Combine(directory.Path, "src", moduleName);
+            Directory.CreateDirectory(modulePath);
+
+            File.WriteAllText(
+                Path.Combine(modulePath, $"{moduleName}.csproj"),
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(
+                Path.Combine(modulePath, "Component.cs"),
+                "public sealed class Component { }");
+        }
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal(moduleNames.Length, context.Modules.Count);
+        Assert.All(context.Modules, module =>
+        {
+            Assert.Equal("Infrastructure", module.Type);
+            Assert.Equal("Infrastructure", Assert.Single(module.Layers).Name);
+        });
+    }
+
     private sealed class TemporaryDirectory : IDisposable
     {
         public string Path { get; } = System.IO.Path.Combine(

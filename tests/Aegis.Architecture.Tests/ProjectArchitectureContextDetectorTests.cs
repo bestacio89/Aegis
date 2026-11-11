@@ -347,6 +347,10 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.True(testsModule.IsTestProject);
         Assert.Equal("Test", testsModule.ProjectKind);
         Assert.Equal("Test", testsModule.Type);
+        Assert.Equal("Library", context.DomainType);
+        Assert.Single(context.ProductionModules, module => module.IsTestSupport == false);
+        Assert.Single(context.TestSupportModules);
+        Assert.Single(context.TestModules);
     }
 
     [Fact]

@@ -664,6 +664,9 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Equal("Test", module.ProjectKind);
         Assert.Equal("Test", module.Type);
         Assert.Equal("Tests", Assert.Single(module.Layers).Name);
+        Assert.Empty(context.Layers);
+        Assert.Empty(context.ProductionModules);
+        Assert.Single(context.TestModules);
     }
 
     [Fact]
@@ -716,6 +719,11 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Single(context.ProductionDependencies);
         Assert.Single(context.TestDependencies);
         Assert.Equal(2, context.Dependencies.Count);
+        Assert.Equal(2, context.ProductionModules.Count);
+        Assert.Single(context.TestModules);
+        Assert.DoesNotContain(context.Layers, layer => layer.Name == "Tests");
+        Assert.Equal("Tests", Assert.Single(
+            context.TestModules.Single().Layers).Name);
 
         var productionRelationship = Assert.Single(
             context.ProductionDependencies,

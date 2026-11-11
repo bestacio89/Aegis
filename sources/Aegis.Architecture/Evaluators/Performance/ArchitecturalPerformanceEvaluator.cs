@@ -647,11 +647,13 @@ public sealed class ArchitecturalPerformanceEvaluator
         var evidence = fileResults
             .SelectMany(result =>
             {
-                var fileName = Path.GetFileName(
-                    result.Metadata.GetValueOrDefault("FilePath") ?? result.Target);
+                var filePath = result.Metadata.GetValueOrDefault("FilePath");
+                var relativePath = string.IsNullOrWhiteSpace(filePath)
+                    ? result.Target
+                    : Path.GetRelativePath(projectPath, filePath);
                 return (result.Evidence ?? string.Empty)
                     .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(item => $"{fileName}: {item}");
+                    .Select(item => $"{relativePath}: {item}");
             })
             .Take(100)
             .ToArray();

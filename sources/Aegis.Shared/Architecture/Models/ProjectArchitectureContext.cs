@@ -283,6 +283,8 @@ public sealed class ProjectArchitectureContext
 
             BoundaryCount = Boundaries.Count,
             DependencyCount = Dependencies.Count,
+            ProductionDependencyCount = ProductionDependencies.Count,
+            TestDependencyCount = TestDependencies.Count,
 
             Confidence,
             DetectionStrategy,

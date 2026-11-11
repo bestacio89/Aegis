@@ -728,6 +728,12 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         summaryResult.Metadata["NamingConventionVerified"] =
             (namingApplicableCount > 0).ToString();
         summaryResult.Metadata["StructuralAnalysisHeuristic"] = "true";
+        var analysisComplete = unreadableFiles == 0
+            && analyzedFiles == discoveredFiles;
+        summaryResult.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
+        summaryResult.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "Incomplete";
 
         return summaryResult;
     }

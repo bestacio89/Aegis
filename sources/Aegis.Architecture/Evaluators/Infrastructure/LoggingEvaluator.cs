@@ -1,6 +1,8 @@
 ﻿
 using System.Text.RegularExpressions;
 
+using Aegis.Architecture.Evaluators.Analysis;
+
 using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -180,15 +182,16 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             }
 
             var language = DetectLanguage(file);
-            var loggingCalls = LoggingCallRx.Matches(content);
+            var code = SourceCodeMasker.Mask(content);
+            var loggingCalls = LoggingCallRx.Matches(code);
             if (loggingCalls.Count == 0)
                 continue;
 
             scope.LoggingFileCount++;
 
-            var structuredScore = EvaluateStructuredLogging(content, language);
-            var levelScore = EvaluateLogLevels(content);
-            var noiseScore = EvaluateLoggingNoise(content, language);
+            var structuredScore = EvaluateStructuredLogging(content, code, language);
+            var levelScore = EvaluateLogLevels(code);
+            var noiseScore = EvaluateLoggingNoise(content, code, language);
             var integrityScore = ComputeIntegrity(
                 structuredScore,
                 levelScore,
@@ -440,6 +443,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
     private double EvaluateStructuredLogging(
         string content,
+        string code,
         string language)
     {
         if (!_policy.RequireStructuredLogging)
@@ -447,7 +451,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             return 100;
         }
 
-        var calls = LoggingCallRx.Matches(content);
+        var calls = LoggingCallRx.Matches(code);
 
         if (calls.Count == 0)
         {
@@ -486,14 +490,14 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             2);
     }
 
-    private double EvaluateLogLevels(string content)
+    private double EvaluateLogLevels(string code)
     {
         if (!_policy.RequireLogLevels)
         {
             return 100;
         }
 
-        var totalLoggingCalls = LoggingCallRx.Matches(content).Count;
+        var totalLoggingCalls = LoggingCallRx.Matches(code).Count;
         if (totalLoggingCalls == 0)
             return 100;
 
@@ -506,6 +510,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
     private double EvaluateLoggingNoise(
         string content,
+        string code,
         string language)
     {
         if (!_policy.WarnInterpolatedStrings)

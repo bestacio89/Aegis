@@ -570,6 +570,60 @@ public sealed class ArchitectureEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task PerformanceEvaluator_emits_independent_project_summaries_for_multi_project_repositories()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/LibraryA/LibraryA.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("back/LibraryA/OrderService.cs", """
+            public sealed class OrderService
+            {
+                public void Execute() { }
+            }
+            """);
+        project.Write("back/LibraryB/LibraryB.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("back/LibraryB/CustomerService.cs", """
+            public sealed class CustomerService
+            {
+                public void Execute() { }
+            }
+            """);
+
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(project.Root);
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(project.Root, context)).ToArray();
+        var summaries = results
+            .Where(result => result.Category == "PerformanceSummary")
+            .ToArray();
+
+        Assert.Equal(2, summaries.Length);
+        Assert.Contains(summaries, summary =>
+            summary.ProjectName == "LibraryA"
+            && summary.Metrics["AnalyzedFiles"] == 1
+            && summary.Metadata["ProjectPath"].EndsWith(
+                Path.Combine("back", "LibraryA"),
+                StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(summaries, summary =>
+            summary.ProjectName == "LibraryB"
+            && summary.Metrics["AnalyzedFiles"] == 1
+            && summary.Metadata["ProjectPath"].EndsWith(
+                Path.Combine("back", "LibraryB"),
+                StringComparison.OrdinalIgnoreCase));
+        Assert.All(summaries, summary =>
+            Assert.Equal("true", summary.Metadata["AnalysisComplete"]));
+    }
+
+    [Fact]
     public async Task PerformanceEvaluator_resolves_concrete_frameworks_within_multi_framework_projects()
     {
         using var project = new TemporaryProject();

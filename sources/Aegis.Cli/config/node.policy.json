@@ -1,0 +1,10 @@
+{
+  "Node": {
+    "DisallowEval": true,
+    "DisallowChildProcess": true,
+    "CheckUnhandledPromises": true,
+    "ValidatePackageJsonScripts": true,
+    "EnforceESModules": true,
+    "EnforceRequireUsage": true
+  }
+}

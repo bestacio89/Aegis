@@ -43,6 +43,7 @@ public sealed class MediatorPatternEvaluator
         ".cs",
         ".java",
         ".ts",
+        ".tsx",
         ".py"
     ];
 
@@ -382,7 +383,7 @@ public sealed class MediatorPatternEvaluator
                 ? $"Mediator implementation '{className}' has no detected service-like member calls."
                 : $"Mediator implementation '{className}' contains {directMatches.Count} service-like member call(s).";
 
-            var couplingMatches = directMatches.Count > 0
+            IReadOnlyCollection<Match> couplingMatches = directMatches.Count > 0
                 ? directMatches
                 : new[] { mediatorImplementation };
 

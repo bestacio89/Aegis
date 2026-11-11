@@ -258,6 +258,11 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.Equal(1, fileResult.Metrics["SwallowedExceptions"]);
         Assert.Equal(1, summary.Metrics["FilesAnalyzed"]);
         Assert.Equal(1, summary.Metrics["TotalCatchBlocks"]);
+        Assert.Equal(0, summary.Metrics["ErrorHandlingCoverage"]);
+        Assert.Contains("catch", fileResult.Evidence, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Evidence.SwallowedExceptions", fileResult.Metadata.Keys);
+        Assert.Contains("ErrorHandlingFixture.cs", summary.Evidence);
+        Assert.Contains("Evidence.ErrorHandlingCoverage", summary.Metadata.Keys);
     }
 
     [Fact]

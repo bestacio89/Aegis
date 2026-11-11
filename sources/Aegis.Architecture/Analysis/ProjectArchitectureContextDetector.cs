@@ -300,6 +300,12 @@ public static class ProjectArchitectureContextDetector
         ctx.MetadataMap["DetectedDependencies"] =
             ctx.DetectedDependencies.Count.ToString();
 
+        ctx.MetadataMap["ProductionDependencyCount"] =
+            ctx.ProductionDependencies.Count.ToString();
+
+        ctx.MetadataMap["TestDependencyCount"] =
+            ctx.TestDependencies.Count.ToString();
+
 
         ctx.MetadataMap["DetectedLayers"] =
             ctx.Layers.Count.ToString();
@@ -323,6 +329,7 @@ public static class ProjectArchitectureContextDetector
                     module.Frameworks,
                     module.TargetFrameworks,
                     module.IsTestProject,
+                    module.IsTestSupport,
                     module.IsWebProject
                 }));
 

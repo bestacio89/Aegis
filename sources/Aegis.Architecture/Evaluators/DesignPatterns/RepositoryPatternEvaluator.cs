@@ -622,8 +622,8 @@ public sealed class RepositoryPatternEvaluator
 
         var relationshipKeyword = language switch
         {
-            "Java" => @"implements",
-            "TypeScript" => @"implements",
+            "Java" => @"\bimplements\b",
+            "TypeScript" => @"\bimplements\b",
             "Python" => string.Empty,
             _ => @":"
         };
@@ -631,11 +631,11 @@ public sealed class RepositoryPatternEvaluator
         return language == "Python"
             ? Regex.IsMatch(
                 classHeader,
-                $@"{Regex.Escape(expectedInterfaceName)}",
+                $@"\b{Regex.Escape(expectedInterfaceName)}\b",
                 RegexOptions.CultureInvariant)
             : Regex.IsMatch(
                 classHeader,
-                $@"{relationshipKeyword}\s*[^{{]*{Regex.Escape(expectedInterfaceName)}",
+                $@"{relationshipKeyword}\s*[^{{]*\b{Regex.Escape(expectedInterfaceName)}\b",
                 RegexOptions.CultureInvariant);
     }
 

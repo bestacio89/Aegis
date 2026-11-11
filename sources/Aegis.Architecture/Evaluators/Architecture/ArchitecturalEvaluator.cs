@@ -1,4 +1,5 @@
 ﻿
+using Aegis.Architecture.Analysis;
 using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
@@ -65,7 +66,8 @@ public sealed class ArchitecturalEvaluator :
     {
         token.ThrowIfCancellationRequested();
 
-        if (Context is null)
+        if (Context is null
+            || ArchitectureLayerApplicability.IsMultiProjectWithoutLayerBoundaryModel(Context))
         {
             return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(
                 []);
@@ -293,6 +295,13 @@ public sealed class ArchitecturalEvaluator :
                 ["Framework"] = Context?.Framework ?? "Unknown"
             }
         };
+
+        if (!complete)
+        {
+            result.Metadata["IncompleteReason"] =
+                $"{incompleteCount} of {totalDependencies} dependency relation(s) " +
+                "could not be classified because source, target, layer, or policy evidence was incomplete.";
+        }
 
         if (complete)
         {

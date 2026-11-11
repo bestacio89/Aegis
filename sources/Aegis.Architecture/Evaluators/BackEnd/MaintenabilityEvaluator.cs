@@ -439,7 +439,9 @@ public sealed class MaintainabilityEvaluator
         var decisionPointDescription = maximumMemberName is not null
             ? $"maximum executable-member decision points {decisionPointCount} " +
               $"in '{maximumMemberName}' at line {maximumMemberLine}"
-            : $"file-level lexical decision points {decisionPointCount}";
+            : decisionPointMeasurement.StartsWith("Roslyn AST", StringComparison.Ordinal)
+                ? "no executable members were found; decision points 0"
+                : $"file-level lexical decision points {decisionPointCount}";
 
         var evidenceSummary =
             $"Maintainability score {roundedScore:0.##}/100; " +

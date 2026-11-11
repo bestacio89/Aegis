@@ -70,8 +70,9 @@ internal static class LayerDetector
         }
 
         // A project/module is not itself an architectural layer. The top-level
-        // inventory contains distinct semantic roles, with their owned files
-        // aggregated, while each module retains its own path-specific layer view.
+        // inventory contains production semantic roles with their owned files
+        // aggregated. Test projects and test-support modules retain their own
+        // path-specific Tests layer without becoming production architecture layers.
         var productionLayers = context.Modules
             .Where(module => !module.IsTestProject && !module.IsTestSupport)
             .SelectMany(module => module.Layers);

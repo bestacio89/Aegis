@@ -91,15 +91,15 @@ internal static class DomainDetector
                 return;
         }
 
-        if (ctx.ProductionModules.Count == 0 && ctx.TestModules.Count > 0)
-        {
-            ctx.DomainType = "Test";
-            return;
-        }
-
         if (ctx.ProductionModules.Count == 0 && ctx.TestSupportModules.Count > 0)
         {
             ctx.DomainType = "Library";
+            return;
+        }
+
+        if (ctx.ProductionModules.Count == 0 && ctx.TestModules.Count > 0)
+        {
+            ctx.DomainType = "Test";
             return;
         }
 

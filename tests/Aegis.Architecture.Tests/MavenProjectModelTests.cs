@@ -295,6 +295,66 @@ public sealed class MavenProjectModelTests
         }
     }
 
+    [Fact]
+    public void Detect_classifies_conventional_and_generated_maven_source_roots_by_ownership()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>org.example</groupId>
+                  <artifactId>generated-source-fixture</artifactId>
+                  <version>1.0.0</version>
+                </project>
+                """);
+
+            WriteJavaSource(root, "src/main/java/org/example/Production.java");
+            WriteJavaSource(root, "src/test/java/org/example/ProductionTest.java");
+            WriteJavaSource(root, "target/generated-sources/annotations/org/example/GeneratedMapper.java");
+            WriteJavaSource(root, "target/generated-test-sources/test-annotations/org/example/GeneratedTestMapper.java");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var roots = Assert.IsType<Aegis.Shared.Architecture.Models.MavenProjectModel>(module.MavenModel)
+                .SourceRoots;
+
+            Assert.Contains(roots, sourceRoot =>
+                sourceRoot.Ownership == ProjectSourceRootOwnership.Production
+                && sourceRoot.Origin == ProjectSourceRootOrigin.Conventional
+                && !sourceRoot.IsGenerated
+                && sourceRoot.ContainsJavaSources
+                && sourceRoot.Directory == Path.Combine(root, "src", "main", "java"));
+            Assert.Contains(roots, sourceRoot =>
+                sourceRoot.Ownership == ProjectSourceRootOwnership.Test
+                && sourceRoot.Origin == ProjectSourceRootOrigin.Conventional
+                && sourceRoot.Directory == Path.Combine(root, "src", "test", "java"));
+            Assert.Contains(roots, sourceRoot =>
+                sourceRoot.Ownership == ProjectSourceRootOwnership.Production
+                && sourceRoot.Origin == ProjectSourceRootOrigin.GeneratedConvention
+                && sourceRoot.IsGenerated
+                && sourceRoot.Directory == Path.Combine(root, "target", "generated-sources", "annotations"));
+            Assert.Contains(roots, sourceRoot =>
+                sourceRoot.Ownership == ProjectSourceRootOwnership.Test
+                && sourceRoot.Origin == ProjectSourceRootOrigin.GeneratedConvention
+                && sourceRoot.IsGenerated
+                && sourceRoot.Directory == Path.Combine(root, "target", "generated-test-sources", "test-annotations"));
+            Assert.Equal(roots, module.SourceRoots);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static void WriteJavaSource(string root, string relativePath)
+    {
+        var path = Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "package org.example; final class Fixture {}");
+    }
+
     private static string CreateTemporaryDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), $"AegisMavenModel_{Guid.NewGuid():N}");

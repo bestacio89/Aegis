@@ -97,21 +97,26 @@ public sealed class RuleEngineCore
                 continue;
             }
 
-            var producerDisposition =
-                ArchitectureRuleMetricContracts.GetProducerContractDisposition(rule.Id);
-
-            if (producerDisposition is not null)
-            {
-                unsupportedRuleReasons[rule.Id] = producerDisposition;
-                continue;
-            }
-
+            // A complete project summary proving that a candidate-dependent
+            // rule has no applicable candidates takes precedence over the
+            // rule's semantic support status. With no candidate, the rule is
+            // not applicable; with candidates, its producer contract still
+            // determines whether the measurement is currently supportable.
             if (ArchitectureRuleMetricContracts.TryGetNoCandidateDisposition(
                     rule.Id,
                     factList.Where(fact => fact is not null).ToList(),
                     out var noCandidateReason))
             {
                 notApplicableReasons[rule.Id] = noCandidateReason;
+                continue;
+            }
+
+            var producerDisposition =
+                ArchitectureRuleMetricContracts.GetProducerContractDisposition(rule.Id);
+
+            if (producerDisposition is not null)
+            {
+                unsupportedRuleReasons[rule.Id] = producerDisposition;
                 continue;
             }
 

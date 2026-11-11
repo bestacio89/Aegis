@@ -14,6 +14,9 @@
         <DataTemplate DataType="{x:Type archivm:ArchitectureExplorerViewModel}">
             <artchiviews:ArchitectureExplorerView />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type archivm:RelationshipLedgerViewModel}">
+            <artchiviews:RelationshipLedgerView />
+        </DataTemplate>
         <DataTemplate DataType="{x:Type archivm:SectionDashboardViewModel}">
             <artchiviews:SectionDashboardView />
         </DataTemplate>

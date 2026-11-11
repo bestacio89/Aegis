@@ -82,9 +82,16 @@ internal static class FrameworkDetector
 
         var hasUnclassifiedFrontendSource = files.Any(file =>
             Path.GetExtension(file).ToLowerInvariant() is ".tsx" or ".jsx" or ".vue");
+        var isNodeLanguage = string.Equals(
+            ctx.Language,
+            "TypeScript/JavaScript",
+            StringComparison.OrdinalIgnoreCase);
 
-        if (!hasPackageManifest && hasUnclassifiedFrontendSource)
+        if (!hasPackageManifest
+            && (hasUnclassifiedFrontendSource || isNodeLanguage))
+        {
             ctx.FrontendFrameworkDiscoveryComplete = false;
+        }
 
         if (files.Any(file => Path.GetExtension(file).Equals(
                 ".cshtml",

@@ -248,6 +248,9 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         if (extension.Equals(".cshtml", StringComparison.OrdinalIgnoreCase))
             return "Razor";
 
+        if (IsWithinUnityProject(filePath, projectPath))
+            return "Unity";
+
         var owningModule = context.Modules
             .Where(module => !string.IsNullOrWhiteSpace(module.Path))
             .OrderByDescending(module => module.Path.Length)
@@ -260,7 +263,9 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             || extension.Equals(".jsx", StringComparison.OrdinalIgnoreCase))
         {
             return FindFramework(moduleFrameworks, "React")
-                ?? FindFramework(context.DetectedFrameworks, "React");
+                ?? (owningModule is null && context.Modules.Count == 0
+                    ? FindFramework(context.DetectedFrameworks, "React")
+                    : null);
         }
 
         if (extension.Equals(".ts", StringComparison.OrdinalIgnoreCase))
@@ -276,8 +281,13 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             if (moduleClientFrameworks.Length > 1)
                 return null;
 
+            if (owningModule is not null || context.Modules.Count > 0)
+                return null;
+
             var repositoryClientFrameworks = context.DetectedFrameworks
-                .Where(framework => framework is "Angular" or "React")
+                .Where(framework =>
+                    string.Equals(framework, "Angular", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(framework, "React", StringComparison.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
@@ -289,7 +299,9 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         if (extension.Equals(".html", StringComparison.OrdinalIgnoreCase))
         {
             return FindFramework(moduleFrameworks, "Angular")
-                ?? FindFramework(context.DetectedFrameworks, "Angular");
+                ?? (owningModule is null && context.Modules.Count == 0
+                    ? FindFramework(context.DetectedFrameworks, "Angular")
+                    : null);
         }
 
         if (owningModule is not null)
@@ -319,9 +331,6 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                 ? moduleFrameworks[0]
                 : null;
         }
-
-        if (IsWithinUnityProject(filePath, projectPath))
-            return "Unity";
 
         // The repository context is only a fallback when no project owns the
         // file. A mixed repository must not assign its aggregate framework to

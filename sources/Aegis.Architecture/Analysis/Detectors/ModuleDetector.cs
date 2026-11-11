@@ -37,6 +37,9 @@ internal static class ModuleDetector
             .GroupBy(item => NormalizePath(item.Directory), StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key.Length)
             .ToArray();
+        var projectPaths = manifests
+            .Select(group => group.First().Directory)
+            .ToArray();
 
         foreach (var manifestGroup in manifests)
         {
@@ -62,7 +65,7 @@ internal static class ModuleDetector
             var dotNetProject = projectFiles.FirstOrDefault(file =>
                 file.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase));
             if (dotNetProject is not null)
-                PopulateDotNetMetadata(module, dotNetProject, files);
+                PopulateDotNetMetadata(module, dotNetProject, files, projectPaths);
 
             var packageManifest = projectFiles.FirstOrDefault(file =>
                 Path.GetFileName(file).Equals("package.json", StringComparison.OrdinalIgnoreCase));
@@ -88,25 +91,32 @@ internal static class ModuleDetector
         }
 
         var unityRoot = FindUnityProjectRoot(context.RootPath, files);
-        if (!string.IsNullOrWhiteSpace(unityRoot)
-            && !context.Modules.Any(module => SamePath(module.Path, unityRoot)))
+        if (!string.IsNullOrWhiteSpace(unityRoot))
         {
-            context.Modules.Add(new ProjectModuleContext
+            var unityModule = context.Modules.FirstOrDefault(module =>
+                SamePath(module.Path, unityRoot));
+
+            if (unityModule is null)
             {
-                Name = Path.GetFileName(
-                    unityRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
-                Path = unityRoot,
-                Type = "Unity",
-                ProjectKind = "UnityProject",
-                Framework = "Unity",
-                Frameworks = ["Unity"],
-                Languages = files
-                    .Where(file => IsSameOrDescendantPath(file, unityRoot))
-                    .Select(GetLanguage)
-                    .Where(language => language != "Unknown")
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList()
-            });
+                unityModule = new ProjectModuleContext
+                {
+                    Name = Path.GetFileName(
+                        unityRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+                    Path = unityRoot
+                };
+                context.Modules.Add(unityModule);
+            }
+
+            unityModule.Type = "Unity";
+            unityModule.ProjectKind = "UnityProject";
+            unityModule.Framework = "Unity";
+            unityModule.Frameworks = ["Unity"];
+            unityModule.Languages = files
+                .Where(file => IsSameOrDescendantPath(file, unityRoot))
+                .Select(GetLanguage)
+                .Where(language => language != "Unknown")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         PopulateOwnedLanguages(context.Modules, files);
@@ -145,7 +155,8 @@ internal static class ModuleDetector
     private static void PopulateDotNetMetadata(
         ProjectModuleContext module,
         string projectFile,
-        IReadOnlyCollection<string> files)
+        IReadOnlyCollection<string> files,
+        IReadOnlyCollection<string> projectPaths)
     {
         try
         {
@@ -188,7 +199,7 @@ internal static class ModuleDetector
                 && !module.IsExecutable;
 
             var hasBlazorComponents = files.Any(file =>
-                IsSameOrDescendantPath(file, module.Path)
+                IsOwnedByProject(file, module.Path, projectPaths)
                 && Path.GetExtension(file).Equals(".razor", StringComparison.OrdinalIgnoreCase));
             var hasEntityFramework = packageReferences.Any(package =>
                 package.Contains("EntityFrameworkCore", StringComparison.OrdinalIgnoreCase));
@@ -224,6 +235,19 @@ internal static class ModuleDetector
         {
             module.ProjectKind = "Unknown";
         }
+    }
+
+    private static bool IsOwnedByProject(
+        string file,
+        string projectPath,
+        IReadOnlyCollection<string> projectPaths)
+    {
+        var owner = projectPaths
+            .Where(path => IsSameOrDescendantPath(file, path))
+            .OrderByDescending(path => NormalizePath(path).Length)
+            .FirstOrDefault();
+
+        return owner is not null && SamePath(owner, projectPath);
     }
 
     private static List<string> ReadTargetFrameworks(

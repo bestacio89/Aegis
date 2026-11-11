@@ -328,8 +328,10 @@ public sealed class PdfReportExporter : IReportExporter
         table.AddColumn("6cm");
         table.AddColumn("12cm");
 
-        AddRow(table, L(language, "Modules Detected", "Modules Détectés"), context.Modules.Count.ToString());
-        AddRow(table, L(language, "Layers Detected", "Couches Détectées"), context.Layers.Count.ToString());
+        AddRow(table, L(language, "Production Modules", "Modules de Production"), context.ProductionModules.Count.ToString());
+        AddRow(table, L(language, "Test Projects Analyzed", "Projets de Test Analysés"), context.TestModules.Count.ToString());
+        AddRow(table, L(language, "Test Support Modules", "Modules de Support de Test"), context.TestSupportModules.Count.ToString());
+        AddRow(table, L(language, "Production Layers", "Couches de Production"), context.Layers.Count.ToString());
         AddRow(table, L(language, "Build System", "Système de Build"), context.BuildSystem.ToString());
         AddRow(table, L(language, "Detection Confidence", "Confiance de Détection"), $"{context.Confidence:P0}");
         AddRow(table, L(language, "Detector Version", "Version du Détecteur"), context.DetectorVersion);
@@ -339,9 +341,9 @@ public sealed class PdfReportExporter : IReportExporter
             AddRow(table, L(language, "Patterns Detected", "Modèles Détectés"), string.Join(", ", context.PatternsDetected));
         }
 
-        if (context.Modules.Count > 0)
+        if (context.ProductionModules.Count > 0)
         {
-            section.AddParagraph(L(language, "Detected Modules", "Modules Détectés")).Style = StyleNames.Heading2;
+            section.AddParagraph(L(language, "Production Modules", "Modules de Production")).Style = StyleNames.Heading2;
 
             var modTable = section.AddTable();
             ConfigureBaseTable(modTable);
@@ -356,7 +358,7 @@ public sealed class PdfReportExporter : IReportExporter
             header.Cells[2].AddParagraph(L(language, "Languages", "Langages"));
 
             bool alt = false;
-            foreach (var module in context.Modules.OrderBy(m => m.Name))
+            foreach (var module in context.ProductionModules.OrderBy(m => m.Name))
             {
                 var row = modTable.AddRow();
                 ApplyRowStyle(row, false, alt);

@@ -209,6 +209,14 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 integrityScore));
         }
 
+        if (scopes.Count == 0)
+        {
+            var projectScope = ResolveProjectScope(projectPath, projectPath);
+            scopes.Add(
+                projectScope.Path,
+                new ProjectLoggingScope(projectScope));
+        }
+
         foreach (var scope in scopes.Values)
         {
             results.AddRange(scope.FileResults);

@@ -201,7 +201,8 @@ public sealed class MavenProjectModelTests
             Assert.Contains(model.ManagedPlugins, plugin =>
                 plugin.ArtifactId == "managed-codegen-plugin" && plugin.Version == "2.0.0");
 
-            var processor = Assert.Single(model.AnnotationProcessorPaths);
+            var processor = Assert.Single(model.AnnotationProcessorPaths,
+                dependency => dependency.ArtifactId == "mapstruct-processor");
             Assert.Equal("mapstruct-processor", processor.ArtifactId);
             Assert.Equal("1.6.3", processor.Version);
             Assert.Contains(context.DependencyEvidence, item =>

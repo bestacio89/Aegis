@@ -106,7 +106,8 @@ public sealed class RuleEvaluationStats
     /// Percentage of applicable rules with at least one completed evaluation.
     /// Applicable rules without a supported producer remain in the denominator:
     /// missing capability must reduce coverage rather than disappear from it.
-    /// Rules positively classified as not applicable are excluded.
+    /// Rules positively classified as not applicable and rules disabled by
+    /// explicit policy are excluded from the coverage denominator.
     /// </summary>
     public double EvaluationCoverage
     {

@@ -122,7 +122,6 @@ public sealed class MavenProjectModelTests
             Assert.Equal("5.12.2", junit.Version);
             Assert.True(junit.IsVersionManaged);
             Assert.Equal("test", junit.Scope);
-            Assert.Equal("test", junit.Scope);
             Assert.True(junit.Scope.Equals("test", StringComparison.OrdinalIgnoreCase));
 
             var internalApi = Assert.Single(model.Dependencies, dependency =>
@@ -166,6 +165,7 @@ public sealed class MavenProjectModelTests
                     <groupId>org.external</groupId>
                     <artifactId>missing-parent</artifactId>
                     <version>9.0.0</version>
+                    <relativePath>../not-present/pom.xml</relativePath>
                   </parent>
                   <artifactId>fixture</artifactId>
                   <dependencyManagement>

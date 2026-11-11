@@ -150,6 +150,13 @@ internal static class MavenProjectModelResolver
                             $"Parent POM '{relativePath}' was not found among the scanned repository manifests. Files outside the scanned project are not read.",
                             fullPath));
                     }
+                } 
+                else
+                {
+                    diagnostics.Add(Diagnostic(
+                        "MavenParentNotResolved",
+                        "The parent relativePath is explicitly disabled and no remote parent resolution is attempted.",
+                        fullPath));
                 }
             }
 

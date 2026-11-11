@@ -11,12 +11,12 @@ public sealed class SemanticAnalysisRequest
 
     public string ProjectPath { get; init; } = string.Empty;
 
-    public List<string> SourceFiles { get; init; } = [];
+    public IReadOnlyList<string> SourceFiles { get; init; } = Array.Empty<string>();
 
-    public List<string> BuildFiles { get; init; } = [];
+    public IReadOnlyList<string> BuildFiles { get; init; } = Array.Empty<string>();
 
     /// <summary>Stable capability identifiers requested from the selected adapter.</summary>
-    public List<string> RequestedCapabilities { get; init; } = [];
+    public IReadOnlyList<string> RequestedCapabilities { get; init; } = Array.Empty<string>();
 
     public bool IncludeGeneratedCode { get; init; }
 

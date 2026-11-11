@@ -144,7 +144,9 @@ public sealed class AegisArchitectureAnalysisRunner
 
             Report(progress, 5, "Detecting project", projectPath);
 
-            var context = ProjectArchitectureContextDetector.Detect(projectPath);
+            var context = ProjectArchitectureContextDetector.Detect(
+                projectPath,
+                policy.Architecture);
 
             _logger.LogInformation(
                 "Context detected: {Language}/{Framework} -> {Domain}/{Layer}",

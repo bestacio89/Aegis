@@ -135,7 +135,10 @@ internal static class MavenProjectModelResolver
                     if (Directory.Exists(parentPath))
                         parentPath = Path.Combine(parentPath, "pom.xml");
 
-                    if (File.Exists(parentPath))
+                    var knownPomFiles = new HashSet<string>(
+                        allPomFiles.Select(Path.GetFullPath),
+                        PathComparer);
+                    if (File.Exists(parentPath) && knownPomFiles.Contains(parentPath))
                     {
                         parentProjectFile = parentPath;
                         parentModel = Resolve(parentPath, allPomFiles, cache, visiting);
@@ -144,11 +147,14 @@ internal static class MavenProjectModelResolver
                     {
                         diagnostics.Add(Diagnostic(
                             "MavenParentNotResolved",
-                            $"Parent POM '{relativePath}' was not found locally. Remote parent resolution is not attempted.",
+                            $"Parent POM '{relativePath}' was not found among the scanned repository manifests. Files outside the scanned project are not read.",
                             fullPath));
                     }
                 }
             }
+
+            if (parentModel is not null)
+                diagnostics.AddRange(parentModel.Diagnostics);
 
             var properties = new Dictionary<string, string>(
                 parentModel?.EffectiveProperties ?? new Dictionary<string, string>(),

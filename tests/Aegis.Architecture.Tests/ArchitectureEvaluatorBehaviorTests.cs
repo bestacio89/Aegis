@@ -897,8 +897,23 @@ public sealed class ArchitectureEvaluatorBehaviorTests
                 && result.Metadata.GetValueOrDefault("FileName") == "TransactionFixture.cs");
 
         Assert.Equal("True", fileResult.Metadata["ContainsTransactionScope"]);
+        Assert.Equal("File", fileResult.Metadata["EvaluationScope"]);
         Assert.Equal(60, fileResult.Metrics["CommitScore"]);
         Assert.Equal(60, fileResult.Metrics["RollbackScore"]);
+
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+
+        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
+        Assert.Equal("Completed", summary.Metadata["AnalysisStatus"]);
+        Assert.Equal(1, summary.Metrics["DiscoveredFiles"]);
+        Assert.Equal(1, summary.Metrics["AnalyzedFiles"]);
+        Assert.Equal(0, summary.Metrics["UnreadableFiles"]);
+        Assert.Equal(
+            fileResult.Metrics["TransactionIntegrityIndex"],
+            summary.Metrics["TransactionIntegrityIndex"]);
+
         AssertAllMetricsAreFinite(results);
     }
 

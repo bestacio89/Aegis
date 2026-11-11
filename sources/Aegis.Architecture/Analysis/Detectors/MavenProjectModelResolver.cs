@@ -117,7 +117,7 @@ internal static class MavenProjectModelResolver
 
             MavenProjectModel? parentModel = null;
             string? parentProjectFile = null;
-            var diagnostics = new List<AnalysisDiagnostic>();
+            var diagnostics = parentModel?.Diagnostics.ToList() ?? [];
 
             if (parentElement is not null)
             {
@@ -169,7 +169,7 @@ internal static class MavenProjectModelResolver
             var coordinates = new MavenProjectModel.Coordinates(groupId, artifactId, version);
             var packaging = ResolveValue(Value(root, "packaging") ?? "jar", properties) ?? "jar";
 
-            AddBuiltInProperties(properties, coordinates, parentModel?.ProjectCoordinates, fullPath);
+            AddBuiltInProperties(properties, coordinates, parentModel?.ProjectCoordinates, packaging, fullPath);
             ResolveProperties(properties);
             groupId = ResolveValue(groupId, properties);
             artifactId = ResolveValue(artifactId, properties);
@@ -233,6 +233,17 @@ internal static class MavenProjectModelResolver
 
             MergeDependencies(effectiveDependencies, localDependencies);
 
+            foreach (var unresolvedDependency in effectiveDependencies.Where(dependency =>
+                         string.IsNullOrWhiteSpace(dependency.GroupId)
+                         || string.IsNullOrWhiteSpace(dependency.ArtifactId)
+                         || string.IsNullOrWhiteSpace(dependency.Version)))
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenDependencyCoordinateIncomplete",
+                    $"Dependency coordinates or effective version are incomplete: {unresolvedDependency.GroupId}:{unresolvedDependency.ArtifactId}:{unresolvedDependency.Version}.",
+                    fullPath));
+            }
+
             var plugins = parentModel?.Plugins
                 .Select(plugin => plugin with { IsInherited = true })
                 .ToList() ?? [];
@@ -269,7 +280,6 @@ internal static class MavenProjectModelResolver
                 ProfileIds = profileIds,
                 Diagnostics = diagnostics,
                 IsComplete = diagnostics.Count == 0
-                    && parentModel?.IsComplete != false
             };
 
             cache[fullPath] = model;
@@ -324,8 +334,8 @@ internal static class MavenProjectModelResolver
         bool inherited)
     {
         var build = Child(root, "build");
-        var pluginElements = (Child(build, "plugins")?.Elements() ?? [])
-            .Concat(Child(Child(build, "pluginManagement"), "plugins")?.Elements() ?? [])
+        var pluginElements = (Child(build, "plugins")?.Elements() ?? Enumerable.Empty<XElement>())
+            .Concat(Child(Child(build, "pluginManagement"), "plugins")?.Elements() ?? Enumerable.Empty<XElement>())
             .Where(element => NameIs(element, "plugin"));
 
         return pluginElements.Select(plugin => new MavenProjectModel.Plugin(
@@ -454,6 +464,7 @@ internal static class MavenProjectModelResolver
         IDictionary<string, string> properties,
         MavenProjectModel.Coordinates coordinates,
         MavenProjectModel.Coordinates? parent,
+        string packaging,
         string projectFile)
     {
         properties["project.groupId"] = coordinates.GroupId ?? string.Empty;
@@ -462,14 +473,14 @@ internal static class MavenProjectModelResolver
         properties["pom.artifactId"] = coordinates.ArtifactId ?? string.Empty;
         properties["project.version"] = coordinates.Version ?? string.Empty;
         properties["pom.version"] = coordinates.Version ?? string.Empty;
-        properties["project.packaging"] = "jar";
+        properties["project.packaging"] = packaging;
         properties["project.parent.groupId"] = parent?.GroupId ?? string.Empty;
         properties["project.parent.artifactId"] = parent?.ArtifactId ?? string.Empty;
         properties["project.parent.version"] = parent?.Version ?? string.Empty;
         properties["basedir"] = Path.GetDirectoryName(projectFile) ?? string.Empty;
     }
 
-    private static void ResolveProperties(IDictionary<string, string> properties)
+    private static void ResolveProperties(Dictionary<string, string> properties)
     {
         for (var pass = 0; pass < 10; pass++)
         {

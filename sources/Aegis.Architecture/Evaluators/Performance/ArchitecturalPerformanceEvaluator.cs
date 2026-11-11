@@ -1,6 +1,7 @@
 ﻿using System.Text.RegularExpressions;
 
 using Aegis.Architecture.Evaluators;
+using Aegis.Architecture.Evaluators.Analysis;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Performance;
@@ -80,10 +81,6 @@ public sealed class ArchitecturalPerformanceEvaluator
 
     private static readonly Regex ReaderVariableDeclarationRegex = new(
         @"\b(?:System\.IO\.)?(?:StreamReader|TextReader)\s+(?<name>@?[A-Za-z_][A-Za-z0-9_]*)\b",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly Regex NonCodeRegex = new(
-        """"(?s)(?:\x22{3}.*?\x22{3}|\x27{3}.*?\x27{3}|\x60(?:\\.|[^\x60\\])*\x60|@?"(?:""|\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|//[^\r\n]*|/\*.*?\*/|\#[^\r\n]*)"""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
 
@@ -223,7 +220,7 @@ public sealed class ArchitecturalPerformanceEvaluator
         string content)
     {
         var language = DetectLanguage(file);
-        var sanitized = MaskNonCode(content);
+        var sanitized = SourceCodeMasker.Mask(content);
         var score = AnalyzePerformanceSignals(sanitized);
         var blockingMatches = FindBlockingOperations(sanitized);
         var evidenceItems = blockingMatches
@@ -351,23 +348,6 @@ public sealed class ArchitecturalPerformanceEvaluator
         return lineNumber <= lines.Length
             ? lines[lineNumber - 1].Trim()
             : string.Empty;
-    }
-
-    private static string MaskNonCode(string content)
-    {
-        return NonCodeRegex.Replace(content, match =>
-            string.Create(
-                match.Length,
-                match.Value,
-                static (span, value) =>
-                {
-                    for (var index = 0; index < value.Length; index++)
-                    {
-                        span[index] = value[index] is '\r' or '\n'
-                            ? value[index]
-                            : ' ';
-                    }
-                }));
     }
 
     private PerformanceScore AnalyzePerformanceSignals(

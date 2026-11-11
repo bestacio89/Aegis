@@ -187,8 +187,8 @@ public sealed class MediatorPatternEvaluator
             if (mediatorImplementation is { Success: false })
                 mediatorImplementation = null;
 
-            var directMatches = mediatorImplementation is null
-                ? []
+            IReadOnlyCollection<Match> directMatches = mediatorImplementation is null
+                ? Array.Empty<Match>()
                 : FindDirectServiceLikeMatches(content, mediatorImplementation);
 
             var handlerCount = handlerMatches.Count;
@@ -240,14 +240,16 @@ public sealed class MediatorPatternEvaluator
                 ["UsesMediator"] = hasMediatorCalls ? 1 : 0,
                 ["HandlerDensity"] = handlerDensity,
                 ["MediatorUsageRatio"] = mediatorUsageRatio,
-                ["DirectServiceLikeCallCount"] = directCouplingCalls,
                 ["PortReferenceCount"] = portReferences,
                 ["HexagonalPortAlignment"] = portAlignment,
                 ["MediatorComplianceScore"] = compliance
             };
 
             if (hasMediatorImplementation)
+            {
+                metrics["DirectServiceLikeCallCount"] = directCouplingCalls;
                 metrics["CouplingRisk"] = couplingRisk;
+            }
 
             fileMetrics.Add(metrics);
 
@@ -351,14 +353,6 @@ public sealed class MediatorPatternEvaluator
         AddMetricEvidence(
             result,
             evidence,
-            "DirectServiceLikeCallCount",
-            directMatches,
-            source,
-            sanitized,
-            "No service-like member calls were detected within the mediator implementation.");
-        AddMetricEvidence(
-            result,
-            evidence,
             "PortReferenceCount",
             portMatches,
             source,
@@ -383,9 +377,9 @@ public sealed class MediatorPatternEvaluator
 
         if (mediatorImplementation is not null)
         {
-            var couplingMatches = new[] { mediatorImplementation }
-                .Concat(directMatches)
-                .ToArray();
+            var couplingMatches = new List<Match> { mediatorImplementation };
+            couplingMatches.AddRange(directMatches);
+
             var className = mediatorImplementation.Groups["name"].Value;
             var couplingDescription = directMatches.Count == 0
                 ? $"Mediator implementation '{className}' has no detected service-like member calls."
@@ -401,14 +395,16 @@ public sealed class MediatorPatternEvaluator
                 couplingDescription);
         }
 
-        var complianceMatches = (mediatorImplementation is null
-                ? Enumerable.Empty<Match>()
-                : [mediatorImplementation])
-            .Concat(handlerMatches)
-            .Concat(mediatorMatches)
-            .Concat(contractMatches)
-            .Concat(directMatches)
-            .Concat(portMatches)
+        var complianceMatches = new List<Match>();
+        if (mediatorImplementation is not null)
+            complianceMatches.Add(mediatorImplementation);
+        complianceMatches.AddRange(handlerMatches);
+        complianceMatches.AddRange(mediatorMatches);
+        complianceMatches.AddRange(contractMatches);
+        complianceMatches.AddRange(directMatches);
+        complianceMatches.AddRange(portMatches);
+
+        var orderedComplianceMatches = complianceMatches
             .GroupBy(match => match.Index)
             .Select(group => group.First())
             .OrderBy(match => match.Index)
@@ -418,7 +414,7 @@ public sealed class MediatorPatternEvaluator
             result,
             evidence,
             "MediatorComplianceScore",
-            complianceMatches,
+            orderedComplianceMatches,
             source,
             sanitized,
             "No mediator-related declarations or calls were detected in this file.");
@@ -602,19 +598,6 @@ public sealed class MediatorPatternEvaluator
         summary.Metadata["StructuralAnalysisHeuristic"] = "true";
 
         return summary;
-    }
-
-    private static int CountHandlerClasses(
-        string content,
-        string language) =>
-        FindHandlerMatches(content, language).Count;
-
-    private static int CountDirectServiceLikeCalls(string content)
-    {
-        return ServiceLikeMemberCallRegex.Matches(content)
-            .Cast<Match>()
-            .Count(match =>
-                IsServiceLikeName(match.Groups["receiver"].Value.TrimStart('_')));
     }
 
     private static bool IsServiceLikeName(string name) =>

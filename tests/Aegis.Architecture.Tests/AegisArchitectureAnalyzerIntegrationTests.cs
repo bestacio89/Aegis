@@ -133,9 +133,12 @@ public sealed class AegisArchitectureAnalyzerIntegrationTests
                     {
                         ["CircularDependencyCount"] = 1
                     },
+                    Evidence = "Dependency cycle: Orders -> Payments -> Orders.",
                     Metadata =
                     {
-                        ["EvaluationScope"] = "Project"
+                        ["EvaluationScope"] = "Project",
+                        ["Evidence.CircularDependencyCount"] =
+                            "Dependency cycle: Orders -> Payments -> Orders."
                     }
                 }
             ];

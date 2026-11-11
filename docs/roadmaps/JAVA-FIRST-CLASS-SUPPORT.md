@@ -380,6 +380,15 @@ This audit began from the `main` branch baseline. During J0 implementation, the 
 11. **The shared evidence model is currently thin.** `ArchitectureDependencyContext` carries source/target names, layers, dependency type and file only; `ArchitectureInferenceTrace` has a broad source enum and confidence; `ArchitectureEvaluatorResult` has generic evidence and line fields. These are useful existing primitives, but they do not yet form a stable semantic evidence contract with typed relationship kinds, provenance identity, resolution status or completeness semantics.
 12. **The repository already has a test suite and solution.** The solution includes architecture, shared, quality, security, infrastructure and SDK test projects. Java fixtures should be added to the existing architecture test strategy rather than creating an isolated test universe.
 
+13. **The discovery pipeline is ordered and currently loses Java build evidence.** `ProjectArchitectureContextDetector` runs language/build detection, module discovery, framework detection, dependency inventory, then layer/domain/architecture/pattern analysis and dependency graph mapping. Because Java framework detection runs before dependency extraction, its local dependency set is empty. The Java framework detector therefore falls back to a path substring check for `spring`, not declared framework coordinates or resolved annotations.
+14. **Gradle is not a viable detected Java project path yet.** `LanguageAndBuildDetector` selects Maven for any Java source/POM and does not inspect Gradle settings/build manifests. `ModuleDetector` discovers `pom.xml` and `package.json`, not Gradle manifests. A Gradle-only project can have Java source classified as Maven, and its project/module boundaries are absent.
+15. **The Maven module projection is shallow.** `PopulateMavenMetadata` reads the module's local artifact ID and packaging. It does not calculate inherited coordinates, parent properties, reactor relationships, dependency management, or effective scopes. This is project naming/type metadata, not Maven model resolution.
+16. **Java dependency inventory is not coordinate-safe.** The current Java parser collects every `artifactId` from POM XML. It cannot distinguish project coordinates, dependency coordinates, BOM imports, plugins, extensions or annotation processors, and it drops group/version/scope/exclusion/provenance.
+17. **Java entry-point detection is lexical.** `EntryPointDetector` searches source text for the classic `public static void main(` spelling. It does not bind the declaration to a type, account for module/project ownership, or support newer simplified/instance main-method forms. It should remain an indicator until semantic analysis exists.
+18. **Naming declaration analysis is C#-specific at the semantic boundary.** Dependency injection registers `CSharpNamingDeclarationAnalyzer` as a concrete singleton and `NamingEvaluator` injects that concrete type. The `INamingDeclarationAnalyzer` interface is not used as a language-adapter collection. Java takes the generic C-style regex path in `EvaluateFile`; this is lexical naming evidence, not a Java AST analyzer.
+19. **Evaluator applicability can suppress plain Java.** `RuleEngine` selects evaluators by both `SupportedLanguages` and `SupportedFrameworks`. `ArchitecturalEvaluator` lists Java but only lists Spring Boot among Java framework identities; the detector's default Java identity is Java SE. Consequently a plain Java SE module may not execute that evaluator. This needs an explicit language-agnostic/framework-applicability decision, not an accidental framework-name workaround.
+20. **Existing Java design-pattern evaluators are heuristic by contract.** Their regex/source-mask analysis can identify naming and lexical patterns but cannot prove symbol identity, inheritance, interface implementation, injection wiring or invocation relationships. The existing `SemanticAnalysisPerformed=false` and heuristic metadata must remain truthful until normalized semantic evidence is consumed.
+
 ## Semantic engine evaluation — initial evidence
 
 | Candidate | Confirmed strengths | Risks / questions |
@@ -401,14 +410,14 @@ References:
 
 - [x] Inspect the shared project context, dependency, inference, diagnostics and naming-analysis contracts.
 - [x] Re-inspect the affected detector and evaluator paths on the actual PR base (`develop`) and correct stale baseline references.
-- [ ] Complete the end-to-end trace of Java source files through evaluator applicability and identify all C#-specific assumptions that affect Java.
+- [x] Complete the end-to-end trace of Java source files through discovery, project/module context, evaluator applicability and naming-analysis registration; record remaining C#-specific assumptions.
 - [x] Define normalized project, dependency, framework, symbol and relationship evidence with source provenance, confidence, canonical identity, and explicit resolution state.
 - [x] Define semantic run outcomes: not requested, unsupported, completed, partially completed, and failed.
 - [x] Define the shared semantic-analysis request and language-adapter boundary without parser-specific dependencies.
-- [ ] Build a representative Java fixture corpus covering Maven, Gradle, modules, generics, annotations, unresolved symbols, generated code and test sources.
+- [x] Build a representative Java fixture corpus covering Maven, Gradle, modules, generics, annotations, unresolved symbols, generated code and test sources.
 - [ ] Benchmark Eclipse JDT and JavaParser against the same fixtures; include Spoon only if it adds comparative value.
 - [ ] Record the engine and deployment decision, trade-offs, licensing and measured results in a checkpoint comment.
-- [ ] Run the full existing non-WPF regression suite and production build after shared-contract changes.
+- [x] Run the full existing non-WPF regression suite and production build after shared-contract changes (both green on the contract-only head; the new fixture tests and benchmark harness still require final-head CI execution).
 
 ### J0 contract implementation — 2026-11-11
 
@@ -429,4 +438,16 @@ The first additive contract slice is committed on this branch:
 
 This slice defines contracts only. No Java adapter is registered, no semantic engine has been selected, and no Java semantic-analysis capability is being claimed as operational.
 
-**J0 status:** Shared contract and adapter-boundary design implemented. Fixture corpus, full evaluator trace, comparative engine benchmark, regression validation and acceptance decision remain open.
+### J0 semantic-engine spike harness — 2026-11-11
+
+An isolated Maven tool under tools/java-semantic-spike now compares:
+- Eclipse JDT Core 3.47.0 (EPL-2.0).
+- JavaParser Symbol Solver 3.28.2 (Apache-2.0 or LGPL-3.0, selected by the adopter).
+
+The workflow .github/workflows/java-semantic-engine-spike.yml runs both engines against the same checked-in source corpus and uploads JSON metrics. The harness materializes only .java.fixture files; it never executes Maven/Gradle fixture builds, plugins or annotation processors.
+
+The first pass is deliberately source-root + running-JDK only. It does not yet include third-party dependency JARs resolved from Maven/Gradle metadata. The output reports parse/diagnostic counts, binding attempts/successes, elapsed analysis time and an approximate post-run heap snapshot. Diagnostic models and heap values are not directly interchangeable, and these aggregate metrics are not a correctness score.
+
+**No benchmark measurements have been collected yet. No engine or production deployment model has been selected.** The external dependency classpath phase and representative real-world repository measurements remain required before the J0 engine decision.
+
+**J0 status:** Shared contracts, adapter boundary, fixture corpus, full discovery/evaluator source trace and initial benchmark harness implemented. Benchmark execution and analysis, dependency-classpath comparison, final-head CI validation and acceptance decision remain open.

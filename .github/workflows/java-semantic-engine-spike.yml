@@ -1,0 +1,62 @@
+name: Java semantic engine spike
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: java-semantic-engine-spike-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare-semantic-engines:
+    name: Compare JDT and JavaParser on shared fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify Maven
+        run: mvn --version
+
+      - name: Prepare result directory
+        run: mkdir -p artifacts
+
+      - name: Run Eclipse JDT
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml \
+            compile exec:java \
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java" \
+            | tee artifacts/jdt.jsonl
+
+      - name: Run JavaParser Symbol Solver
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml \
+            compile exec:java \
+            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java" \
+            | tee artifacts/javaparser.jsonl
+
+      - name: Upload comparison results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-semantic-engine-spike
+          path: artifacts/
+          if-no-files-found: warn

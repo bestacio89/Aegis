@@ -1,0 +1,12 @@
+plugins {
+    `kotlin-dsl`
+}
+
+gradlePlugin {
+    plugins {
+        create("fixture-conventions") {
+            id = "org.aegis.fixture.conventions"
+            implementationClass = "FixtureConventionsPlugin"
+        }
+    }
+}

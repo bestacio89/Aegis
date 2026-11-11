@@ -1,0 +1,13 @@
+[versions]
+spring = "6.1.14"
+junit = "5.11.0"
+mapstruct = "1.6.2"
+
+[libraries]
+spring-context = { module = "org.springframework:spring-context", version.ref = "spring" }
+junit-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
+mapstruct = { module = "org.mapstruct:mapstruct", version.ref = "mapstruct" }
+mapstruct-processor = { module = "org.mapstruct:mapstruct-processor", version.ref = "mapstruct" }
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version = "3.3.5" }

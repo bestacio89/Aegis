@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "corpora": [
+    {
+      "id": "maven-multi-module",
+      "buildSystem": "Maven",
+      "root": "MavenMultiModule/pom.xml.fixture",
+      "requiredEvidence": [
+        "parent-inheritance",
+        "multi-module-reactor",
+        "dependency-management-bom",
+        "dependency-scopes",
+        "exclusions",
+        "annotation-processors",
+        "generated-sources",
+        "production-test-separation",
+        "generics-and-inheritance",
+        "annotations-and-di",
+        "reflection-and-service-loading",
+        "module-descriptor",
+        "unresolved-external-reference"
+      ]
+    },
+    {
+      "id": "gradle-kotlin-multi-project",
+      "buildSystem": "Gradle",
+      "root": "GradleKotlinMultiProject/settings.gradle.kts.fixture",
+      "requiredEvidence": [
+        "multi-project-settings",
+        "included-build",
+        "version-catalog",
+        "plugin-management",
+        "java-toolchain",
+        "custom-configurations",
+        "source-sets",
+        "generated-sources",
+        "production-test-separation",
+        "generics-and-inheritance",
+        "annotations-and-di",
+        "reflection-and-service-loading",
+        "unresolved-external-reference"
+      ]
+    }
+  ]
+}

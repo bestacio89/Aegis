@@ -1,0 +1,8 @@
+package org.aegis.fixture.generated;
+
+// Representative annotation-processor output; source is generated, not handwritten.
+public final class OrderMapperImpl {
+    public String mapId(org.aegis.fixture.domain.Order order) {
+        return order.id();
+    }
+}

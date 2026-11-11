@@ -1,0 +1,13 @@
+package org.aegis.fixture.integration;
+
+import java.util.ServiceLoader;
+
+public final class PluginLoader {
+    public Class<?> load(String className) throws ClassNotFoundException {
+        return Class.forName(className);
+    }
+
+    public long providerCount() {
+        return ServiceLoader.load(Extension.class).stream().count();
+    }
+}

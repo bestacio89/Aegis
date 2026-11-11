@@ -1,0 +1,5 @@
+module org.aegis.fixture.service {
+    requires java.base;
+    exports org.aegis.fixture.domain;
+    uses org.aegis.fixture.integration.Extension;
+}

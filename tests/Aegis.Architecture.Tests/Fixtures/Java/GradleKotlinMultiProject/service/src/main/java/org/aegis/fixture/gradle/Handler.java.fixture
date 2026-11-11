@@ -1,0 +1,17 @@
+package org.aegis.fixture.gradle;
+
+import java.util.List;
+import org.springframework.stereotype.Component;
+
+@Component
+public class Handler<T extends Command> {
+    private final CommandStore<T> store;
+
+    public Handler(CommandStore<T> store) {
+        this.store = store;
+    }
+
+    public List<T> handle() {
+        return store.loadAll();
+    }
+}

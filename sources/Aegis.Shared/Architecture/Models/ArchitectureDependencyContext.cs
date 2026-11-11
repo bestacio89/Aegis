@@ -21,9 +21,9 @@ public sealed class ArchitectureDependencyContext
     public string DependencyType { get; set; } = string.Empty;
 
     /// <summary>
-    /// Production when both endpoints are production projects; Test when either
-    /// endpoint is a test project. Test relationships remain evidence but are
-    /// excluded from the production dependency graph.
+    /// Production when both endpoints are production modules; Test when either
+    /// endpoint is a test project or test-support module. Test relationships
+    /// remain evidence but are excluded from the production dependency graph.
     /// </summary>
     public string Scope { get; set; } = "Production";
 

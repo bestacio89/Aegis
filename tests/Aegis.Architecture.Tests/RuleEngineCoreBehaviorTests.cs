@@ -252,7 +252,7 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
     [Fact]
-    public void EvaluateDetailed_marks_policy_disabled_supported_rules_not_applicable()
+    public void EvaluateDetailed_classifies_policy_disabled_rules_separately()
     {
         var disabledPolicy = new AegisArchitecturePolicy();
         disabledPolicy.Architecture.DesignPatterns.EnforceStrategyPattern = false;

@@ -187,6 +187,7 @@ public sealed class ObserverPatternEvaluator
             DetectEventFramework(contents.Values);
 
         var analyzedComponents = 0;
+        var observerCandidateCount = 0;
         var componentsWithLeakRisk = 0;
         var componentsWithPolling = 0;
         var complianceScores = new List<double>();
@@ -228,6 +229,11 @@ public sealed class ObserverPatternEvaluator
             }
 
             analyzedComponents++;
+
+            if (subscribeCount > 0)
+            {
+                observerCandidateCount++;
+            }
 
             // This is a heuristic signal, not proof of a memory leak.
             var leakRisk =
@@ -324,6 +330,7 @@ public sealed class ObserverPatternEvaluator
         summary.Metrics["AnalyzedFiles"] = contents.Count;
         summary.Metrics["UnreadableFiles"] = unreadableFiles;
         summary.Metrics["AnalyzedComponents"] = analyzedComponents;
+        summary.Metrics["ObserverCandidateCount"] = observerCandidateCount;
         summary.Metrics["AverageComplianceScore"] = averageCompliance;
         summary.Metrics["ComponentsWithLeakRisk"] = componentsWithLeakRisk;
         summary.Metrics["ComponentLeakRiskRate"] = leakRate;

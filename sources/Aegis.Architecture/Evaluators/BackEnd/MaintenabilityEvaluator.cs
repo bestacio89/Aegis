@@ -87,6 +87,7 @@ public sealed class MaintainabilityEvaluator
 
         var analyzedFiles = 0;
         var unreadableFiles = 0;
+        var unreadableFilePaths = new List<string>();
 
         double totalDecisionPoints = 0;
         double totalCommentDensity = 0;
@@ -112,6 +113,7 @@ public sealed class MaintainabilityEvaluator
             catch (IOException exception)
             {
                 unreadableFiles++;
+                unreadableFilePaths.Add(file);
 
                 _logger.LogWarning(
                     exception,
@@ -124,6 +126,7 @@ public sealed class MaintainabilityEvaluator
             catch (UnauthorizedAccessException exception)
             {
                 unreadableFiles++;
+                unreadableFilePaths.Add(file);
 
                 _logger.LogWarning(
                     exception,
@@ -161,6 +164,7 @@ public sealed class MaintainabilityEvaluator
                 files.Count,
                 analyzedFiles,
                 unreadableFiles,
+                unreadableFilePaths,
                 totalDecisionPoints,
                 totalCommentDensity,
                 totalNonEmptyLines,
@@ -237,6 +241,7 @@ public sealed class MaintainabilityEvaluator
         int filesDiscovered,
         int analyzedFiles,
         int unreadableFiles,
+        IReadOnlyCollection<string> unreadableFilePaths,
         double totalDecisionPoints,
         double totalCommentDensity,
         double totalNonEmptyLines,
@@ -292,15 +297,49 @@ public sealed class MaintainabilityEvaluator
         summary.Metadata["CommentDensityMeasurement"] =
             "Project-wide comment-line count divided by non-empty physical source lines.";
 
-        var analysisComplete = filesDiscovered > 0
-            && analyzedFiles == filesDiscovered
-            && unreadableFiles == 0;
+        var discoveryDiagnosticCount = context?.DiscoveryDiagnostics.Count(
+            diagnostic => diagnostic.AffectsCoverage) ?? 0;
+        var analysisComplete = analyzedFiles == filesDiscovered
+            && unreadableFiles == 0
+            && discoveryDiagnosticCount == 0;
         summary.Metadata["AnalysisComplete"] =
             analysisComplete.ToString().ToLowerInvariant();
-        summary.Metadata["AnalysisStatus"] =
-            analysisComplete ? "Completed" : "Incomplete";
+        summary.Metadata["AnalysisStatus"] = analysisComplete
+            ? filesDiscovered == 0 ? "NoSourceFiles" : "Completed"
+            : "Incomplete";
+        summary.Metadata["DiscoveryDiagnosticCount"] =
+            discoveryDiagnosticCount.ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
+
+        if (!analysisComplete)
+        {
+            var reasons = new List<string>();
+            if (unreadableFiles > 0)
+            {
+                reasons.Add(
+                    $"{unreadableFiles} source file(s) could not be read.");
+            }
+
+            if (analyzedFiles != filesDiscovered)
+            {
+                reasons.Add(
+                    $"{analyzedFiles} of {filesDiscovered} discovered source file(s) were analyzed.");
+            }
+
+            if (discoveryDiagnosticCount > 0)
+            {
+                reasons.Add(
+                    $"{discoveryDiagnosticCount} coverage-affecting project discovery diagnostic(s) were recorded.");
+            }
+
+            summary.Metadata["IncompleteReason"] = string.Join(" ", reasons);
+            summary.Metadata["UnreadableFilePaths"] = string.Join(
+                Environment.NewLine,
+                unreadableFilePaths.Take(20));
+        }
+
         summary.Metadata["MaintainabilityMeasurement"] =
-            "Aegis heuristic; average is unavailable (-1) when any discovered file was unreadable.";
+            "Aegis heuristic; average is unavailable (-1) when any discovered file was unreadable. A scope with no governed source files is reported as NoSourceFiles, not as an incomplete analysis.";
 
         return summary;
     }

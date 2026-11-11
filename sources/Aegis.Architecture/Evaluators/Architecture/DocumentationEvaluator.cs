@@ -657,25 +657,6 @@ public sealed class DocumentationEvaluator :
             && !filename.EndsWith(".min.js", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsSameOrDescendantPath(string candidate, string parent)
-    {
-        var normalizedCandidate = NormalizePath(candidate);
-        var normalizedParent = NormalizePath(parent);
-
-        return string.Equals(
-                normalizedCandidate,
-                normalizedParent,
-                StringComparison.OrdinalIgnoreCase)
-            || normalizedCandidate.StartsWith(
-                normalizedParent + Path.DirectorySeparatorChar,
-                StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizePath(string path) =>
-        Path.GetFullPath(path).TrimEnd(
-            Path.DirectorySeparatorChar,
-            Path.AltDirectorySeparatorChar);
-
     private sealed record DocumentationProjectScope(
         string Name,
         string Path,

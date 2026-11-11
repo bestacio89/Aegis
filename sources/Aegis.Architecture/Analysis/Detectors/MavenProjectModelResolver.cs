@@ -39,7 +39,7 @@ internal static class MavenProjectModelResolver
 
         foreach (var pomFile in pomFiles)
         {
-            var model = Resolve(pomFile, knownPomFiles, coordinateIndex, cache, visiting);
+            var model = Resolve(pomFile, files, knownPomFiles, coordinateIndex, cache, visiting);
             var modulePath = Path.GetDirectoryName(pomFile);
             var module = context.Modules.FirstOrDefault(candidate =>
                 modulePath is not null && PathsEqual(candidate.Path, modulePath));
@@ -63,6 +63,7 @@ internal static class MavenProjectModelResolver
 
     private static MavenProjectModel Resolve(
         string pomFile,
+        IReadOnlyCollection<string> files,
         IReadOnlySet<string> knownPomFiles,
         IReadOnlyDictionary<string, List<string>> coordinateIndex,
         IDictionary<string, MavenProjectModel> cache,
@@ -142,7 +143,7 @@ internal static class MavenProjectModelResolver
                     if (File.Exists(parentPath) && knownPomFiles.Contains(parentPath))
                     {
                         parentProjectFile = parentPath;
-                        parentModel = Resolve(parentPath, knownPomFiles, coordinateIndex, cache, visiting);
+                        parentModel = Resolve(parentPath, files, knownPomFiles, coordinateIndex, cache, visiting);
                     }
                     else
                     {
@@ -227,6 +228,7 @@ internal static class MavenProjectModelResolver
                 var importedBom = FindLocalBomModel(
                     bom,
                     fullPath,
+                    files,
                     knownPomFiles,
                     coordinateIndex,
                     cache,
@@ -429,6 +431,7 @@ internal static class MavenProjectModelResolver
     private static MavenProjectModel? FindLocalBomModel(
         MavenProjectModel.Dependency bom,
         string importingProjectFile,
+        IReadOnlyCollection<string> files,
         IReadOnlySet<string> knownPomFiles,
         IReadOnlyDictionary<string, List<string>> coordinateIndex,
         IDictionary<string, MavenProjectModel> cache,
@@ -464,7 +467,7 @@ internal static class MavenProjectModelResolver
 
         var candidate = candidates[0];
         return knownPomFiles.Contains(candidate)
-            ? Resolve(candidate, knownPomFiles, coordinateIndex, cache, visiting)
+            ? Resolve(candidate, files, knownPomFiles, coordinateIndex, cache, visiting)
             : null;
     }
 

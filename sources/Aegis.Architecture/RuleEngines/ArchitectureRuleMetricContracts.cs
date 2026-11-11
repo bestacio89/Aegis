@@ -317,7 +317,9 @@ internal static class ArchitectureRuleMetricContracts
             return false;
 
         var summaryScopes = summaries
-            .Select(summary => summary.Target ?? summary.ProjectName ?? string.Empty)
+            .Select(summary => !string.IsNullOrWhiteSpace(summary.ProjectName)
+                ? summary.ProjectName
+                : summary.Target ?? string.Empty)
             .Where(scope => !string.IsNullOrWhiteSpace(scope))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Count();

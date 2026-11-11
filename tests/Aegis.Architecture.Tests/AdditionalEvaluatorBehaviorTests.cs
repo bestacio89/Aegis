@@ -269,6 +269,60 @@ public sealed class AdditionalEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task MaintainabilityEvaluator_reports_an_empty_scope_without_marking_analysis_incomplete()
+    {
+        using var project = new TemporaryProject();
+
+        var results = await Evaluate(
+            project,
+            "MaintainabilityEvaluator",
+            "C#",
+            "ASP.NET Core");
+
+        var summary = Assert.Single(
+            results,
+            result => result.Metrics.ContainsKey("FilesDiscovered"));
+
+        Assert.Equal(0, summary.Metrics["FilesDiscovered"]);
+        Assert.Equal(0, summary.Metrics["AnalyzedFiles"]);
+        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
+        Assert.Equal("NoSourceFiles", summary.Metadata["AnalysisStatus"]);
+        Assert.DoesNotContain("IncompleteReason", summary.Metadata.Keys);
+    }
+
+    [Fact]
+    public async Task ArchitecturalEvaluator_skips_mixed_library_scopes_without_layer_boundaries()
+    {
+        using var project = new TemporaryProject();
+        var context = CreateContext(project, "C#", ".NET");
+        context.ArchitectureStyle = "Multi-Project / Mixed";
+        context.Modules =
+        [
+            new() { Name = "Franz.Common", Path = project.Root },
+            new() { Name = "Franz.Common.Client", Path = Path.Combine(project.Root, "Client") }
+        ];
+        context.Layers =
+        [
+            new() { Name = "Client", Path = project.Root },
+            new() { Name = "Tests", Path = Path.Combine(project.Root, "Tests") }
+        ];
+        context.Dependencies.Add(
+            new ArchitectureDependencyContext
+            {
+                File = Path.Combine(project.Root, "back", "Unclassified.cs"),
+                Source = "UnclassifiedA",
+                Target = "UnclassifiedB"
+            });
+
+        var results = await Evaluate(
+            project,
+            "ArchitecturalEvaluator",
+            context);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
     public async Task DependencyGraphEvaluator_measures_supplied_layer_relations()
     {
         using var project = new TemporaryProject();

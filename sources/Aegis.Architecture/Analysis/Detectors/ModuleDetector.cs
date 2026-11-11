@@ -89,13 +89,11 @@ internal static class ModuleDetector
                 module.IsLibrary = false;
             }
 
-            module.Framework = module.Frameworks.Count switch
-            {
-                0 => null,
-                1 => module.Frameworks[0],
-                _ => "Multi-Framework"
-            };
-
+            // Keep the primary runtime identity established by the project
+            // manifest. Frameworks is the complete technology inventory and may
+            // include UI technologies such as Blazor alongside ASP.NET Core.
+            // Collapsing that inventory into "Multi-Framework" here loses the
+            // project's primary runtime and weakens file-level attribution.
             context.Modules.Add(module);
         }
 

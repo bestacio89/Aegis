@@ -43,12 +43,10 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-BACK-R5"] = ["MaintainabilityEvaluator"],
 
                 ["AEG-DES-BLD001"] = ["BuilderPatternEvaluator"],
-                ["AEG-DES-BLD002"] = ["BuilderPatternEvaluator"],
                 ["AEG-DES-CMD001"] = ["CommandPatternEvaluator"],
                 ["AEG-DES-DEC001"] = ["DecoratorPatternEvaluator"],
                 ["AEG-DES-FAC001"] = ["FacadePatternEvaluator"],
                 ["AEG-DES-FAC002"] = ["FacadePatternEvaluator"],
-                ["AEG-DES-FACR001"] = ["FactoryPatternEvaluator"],
                 ["AEG-DES-GOD001"] = ["GodClassEvaluator"],
                 ["AEG-DES-OBS001"] = ["ObserverPatternEvaluator"],
                 ["AEG-DES-REPO001"] = ["RepositoryPatternEvaluator"],
@@ -94,7 +92,6 @@ internal static class ArchitectureRuleMetricContracts
             new Dictionary<string, (string, string, string, string)>(StringComparer.OrdinalIgnoreCase)
             {
                 ["AEG-DES-BLD001"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
-                ["AEG-DES-BLD002"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
                 ["AEG-DES-CMD001"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "DiscoveredFileCount"),
                 ["AEG-DES-DEC001"] = ("DecoratorPatternEvaluator", "DecoratorCandidateCount", "UnreadableFiles", "DiscoveredFiles")
             };

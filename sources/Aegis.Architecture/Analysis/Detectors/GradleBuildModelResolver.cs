@@ -73,7 +73,8 @@ internal static class GradleBuildModelResolver
             .SelectMany(model => model!.VersionCatalogFiles)
             .Distinct(PathComparer)
             .ToArray();
-        var catalog = ReadVersionCatalog(catalogFiles);
+        var catalogDiagnostics = new List<AnalysisDiagnostic>();
+        var catalog = ReadVersionCatalog(catalogFiles, catalogDiagnostics);
 
         context.DependencyEvidence.RemoveAll(evidence =>
             evidence.Ecosystem.Equals("Gradle", StringComparison.OrdinalIgnoreCase));
@@ -101,7 +102,7 @@ internal static class GradleBuildModelResolver
                 continue;
             }
 
-            var diagnostics = new List<AnalysisDiagnostic>();
+            var diagnostics = new List<AnalysisDiagnostic>(catalogDiagnostics);
             var plugins = ParsePlugins(ExtractBlock(source, "plugins"), catalog, diagnostics, buildFile);
             var dependencies = ParseDependencies(
                 ExtractBlock(source, "dependencies"), catalog, diagnostics, buildFile);
@@ -325,89 +326,195 @@ internal static class GradleBuildModelResolver
         }
     }
 
-    private static VersionCatalog ReadVersionCatalog(IReadOnlyCollection<string> catalogFiles)
+    private static VersionCatalog ReadVersionCatalog(
+        IReadOnlyCollection<string> catalogFiles,
+        ICollection<AnalysisDiagnostic> diagnostics)
     {
         var result = new VersionCatalog();
         foreach (var file in catalogFiles)
         {
             if (!File.Exists(file))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleVersionCatalogMissing",
+                    "A discovered Gradle version catalog is no longer available.",
+                    file));
                 continue;
+            }
 
             var section = string.Empty;
             var versions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var libraries = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var plugins = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var pending = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var plugins = new Dictionary<string, VersionCatalog.Plugin>(StringComparer.OrdinalIgnoreCase);
+            var pendingLibraries = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var skippingMultilineEntry = false;
 
-            foreach (var rawLine in File.ReadLines(file))
+            try
             {
-                var line = rawLine.Trim();
-                if (line.Length == 0 || line.StartsWith('#'))
-                    continue;
-                if (line.StartsWith('[') && line.EndsWith(']'))
+                foreach (var rawLine in File.ReadLines(file))
                 {
-                    section = line[1..^1];
-                    continue;
-                }
+                    var line = rawLine.Trim();
+                    if (line.Length == 0 || line.StartsWith('#'))
+                        continue;
 
-                var assignment = CatalogAssignment.Match(line);
-                if (!assignment.Success)
-                    continue;
-
-                var alias = NormalizeAlias(assignment.Groups["alias"].Value);
-                var value = assignment.Groups["value"].Value;
-                if (section.Equals("versions", StringComparison.OrdinalIgnoreCase))
-                {
-                    var literal = QuotedNotation.Match(value);
-                    if (literal.Success)
-                        versions[alias] = literal.Groups["notation"].Value;
-                }
-                else if (section.Equals("libraries", StringComparison.OrdinalIgnoreCase))
-                {
-                    var module = CatalogModule.Match(value);
-                    var shorthand = QuotedNotation.Match(value);
-                    if (module.Success)
-                        libraries[alias] = module.Groups["module"].Value;
-                    else if (shorthand.Success)
-                        libraries[alias] = shorthand.Groups["notation"].Value;
-                    pending[alias] = value;
-                }
-                else if (section.Equals("plugins", StringComparison.OrdinalIgnoreCase))
-                {
-                    pending[alias] = value;
-                    var id = Regex.Match(value, @"id\s*=\s*['""](?<id>[^'""]+)['""]");
-                    if (id.Success)
+                    if (skippingMultilineEntry)
                     {
+                        if (line.Contains('}'))
+                            skippingMultilineEntry = false;
+                        continue;
+                    }
+
+                    if (line.StartsWith('[') && line.EndsWith(']'))
+                    {
+                        section = line[1..^1];
+                        continue;
+                    }
+
+                    var assignment = CatalogAssignment.Match(line);
+                    if (!assignment.Success)
+                    {
+                        if (section is "versions" or "libraries" or "plugins")
+                        {
+                            diagnostics.Add(Diagnostic(
+                                "GradleVersionCatalogEntryUnsupported",
+                                $"A version-catalog entry in [{section}] is not a supported single-line assignment: '{line}'.",
+                                file));
+                        }
+
+                        continue;
+                    }
+
+                    var alias = NormalizeAlias(assignment.Groups["alias"].Value);
+                    var value = assignment.Groups["value"].Value.Trim();
+
+                    if (value.StartsWith('{') && !value.Contains('}'))
+                    {
+                        diagnostics.Add(Diagnostic(
+                            "GradleVersionCatalogEntryUnsupported",
+                            $"Version-catalog alias '{alias}' uses a multiline TOML table, which is outside the supported static subset.",
+                            file));
+                        skippingMultilineEntry = true;
+                        continue;
+                    }
+
+                    if (section.Equals("versions", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var literal = QuotedNotation.Match(value);
+                        if (literal.Success)
+                        {
+                            versions[alias] = literal.Groups["notation"].Value;
+                        }
+                        else
+                        {
+                            diagnostics.Add(Diagnostic(
+                                "GradleVersionCatalogVersionNotStatic",
+                                $"Version alias '{alias}' does not use a supported literal string value.",
+                                file));
+                        }
+                    }
+                    else if (section.Equals("libraries", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var module = CatalogModule.Match(value);
+                        var shorthand = QuotedNotation.Match(value);
+                        if (module.Success)
+                        {
+                            libraries[alias] = module.Groups["module"].Value;
+                            pendingLibraries[alias] = value;
+                        }
+                        else if (shorthand.Success)
+                        {
+                            libraries[alias] = shorthand.Groups["notation"].Value;
+                            pendingLibraries[alias] = value;
+                        }
+                        else
+                        {
+                            diagnostics.Add(Diagnostic(
+                                "GradleVersionCatalogLibraryNotStatic",
+                                $"Library alias '{alias}' does not use a supported module or shorthand notation.",
+                                file));
+                        }
+                    }
+                    else if (section.Equals("plugins", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var id = Regex.Match(value, @"id\s*=\s*['""](?<id>[^'""]+)['""]");
+                        if (!id.Success)
+                        {
+                            diagnostics.Add(Diagnostic(
+                                "GradleVersionCatalogPluginNotStatic",
+                                $"Plugin alias '{alias}' does not declare a supported literal plugin ID.",
+                                file));
+                            continue;
+                        }
+
                         var version = CatalogVersion.Match(value);
-                        plugins[alias] = $"{id.Groups["id"].Value}|{(version.Success ? version.Groups["version"].Value : string.Empty)}";
+                        var versionReference = CatalogVersionReference.Match(value);
+                        var resolvedVersion = version.Success
+                            ? version.Groups["version"].Value
+                            : versionReference.Success
+                                ? versions.GetValueOrDefault(NormalizeAlias(versionReference.Groups["reference"].Value))
+                                : null;
+
+                        if (versionReference.Success && resolvedVersion is null)
+                        {
+                            diagnostics.Add(Diagnostic(
+                                "GradleVersionCatalogVersionReferenceNotResolved",
+                                $"Plugin alias '{alias}' references missing version alias '{versionReference.Groups["reference"].Value}'.",
+                                file));
+                        }
+
+                        plugins[alias] = new VersionCatalog.Plugin(
+                            id.Groups["id"].Value,
+                            resolvedVersion);
                     }
                 }
             }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleVersionCatalogReadFailed",
+                    $"Gradle version catalog could not be read: {exception.Message}",
+                    file));
+                continue;
+            }
 
-            foreach (var entry in pending.Where(entry => libraries.ContainsKey(entry.Key)))
+            foreach (var entry in pendingLibraries)
             {
                 var coordinates = libraries[entry.Key].Split(':');
-                if (coordinates.Length != 2)
+                if (coordinates.Length is not (2 or 3)
+                    || coordinates.Any(string.IsNullOrWhiteSpace))
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleVersionCatalogLibraryNotStatic",
+                        $"Library alias '{entry.Key}' does not contain valid group:artifact coordinates.",
+                        file));
                     continue;
+                }
 
                 var version = CatalogVersion.Match(entry.Value);
                 var versionReference = CatalogVersionReference.Match(entry.Value);
-                var resolvedVersion = version.Success
-                    ? version.Groups["version"].Value
-                    : versionReference.Success
-                        ? versions.GetValueOrDefault(NormalizeAlias(versionReference.Groups["reference"].Value))
-                        : null;
+                var resolvedVersion = coordinates.Length == 3
+                    ? coordinates[2]
+                    : version.Success
+                        ? version.Groups["version"].Value
+                        : versionReference.Success
+                            ? versions.GetValueOrDefault(NormalizeAlias(versionReference.Groups["reference"].Value))
+                            : null;
+
+                if (versionReference.Success && resolvedVersion is null)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleVersionCatalogVersionReferenceNotResolved",
+                        $"Library alias '{entry.Key}' references missing version alias '{versionReference.Groups["reference"].Value}'.",
+                        file));
+                }
 
                 result.Libraries[entry.Key] = new VersionCatalog.Library(
                     coordinates[0], coordinates[1], resolvedVersion);
             }
 
             foreach (var entry in plugins)
-            {
-                var parts = entry.Value.Split('|', 2);
-                result.Plugins[entry.Key] = new VersionCatalog.Plugin(
-                    parts[0], parts.Length == 2 && parts[1].Length > 0 ? parts[1] : null);
-            }
+                result.Plugins[entry.Key] = entry.Value;
         }
 
         return result;

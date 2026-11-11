@@ -24,6 +24,7 @@ public sealed class GradleBuildModelTests
                 plugins {
                     id("org.springframework.boot") version "3.4.1"
                     alias(libs.plugins.mapstruct)
+                    alias(libs.plugins.spring.boot)
                 }
                 java {
                     toolchain {
@@ -42,12 +43,14 @@ public sealed class GradleBuildModelTests
                 """
                 [versions]
                 mapstruct = "1.6.3"
+                springBoot = "3.4.1"
 
                 [libraries]
                 mapstruct = { module = "org.mapstruct:mapstruct", version.ref = "mapstruct" }
 
                 [plugins]
                 mapstruct = { id = "org.mapstruct", version = "1.6.3" }
+                spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
                 """);
             var source = Path.Combine(service, "src", "main", "java", "example", "Service.java");
             var testSource = Path.Combine(service, "src", "test", "java", "example", "ServiceTest.java");
@@ -64,6 +67,8 @@ public sealed class GradleBuildModelTests
             Assert.Equal("21", model.JavaToolchainVersion);
             Assert.Contains(model.Plugins, plugin => plugin.Id == "org.springframework.boot" && plugin.Version == "3.4.1");
             Assert.Contains(model.Plugins, plugin => plugin.Id == "org.mapstruct" && plugin.Version == "1.6.3");
+            Assert.Contains(model.Plugins, plugin =>
+                plugin.Id == "org.springframework.boot" && plugin.Version == "3.4.1");
             Assert.Contains(model.Dependencies, dependency =>
                 dependency.Group == "org.springframework" && dependency.Artifact == "spring-context");
             Assert.Contains(model.Dependencies, dependency =>
@@ -108,6 +113,46 @@ public sealed class GradleBuildModelTests
             Assert.False(module.GradleBuildModel.IsComplete);
             Assert.Contains(module.GradleBuildModel.Diagnostics,
                 diagnostic => diagnostic.Code == "GradleDependencyNotStaticallyResolved");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+    
+    [Fact]
+    public void Detect_marks_multiline_version_catalog_entries_incomplete_without_fabricating_aliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleCatalog_{Guid.NewGuid():N}");
+        var catalogDirectory = Path.Combine(root, "gradle");
+        Directory.CreateDirectory(catalogDirectory);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"catalog-sample\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                dependencies {
+                    implementation(libs.mapstruct)
+                }
+                """);
+            File.WriteAllText(Path.Combine(catalogDirectory, "libs.versions.toml"), """
+                [libraries]
+                mapstruct = {
+                    module = "org.mapstruct:mapstruct",
+                    version = "1.6.3"
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.False(model.IsComplete);
+            Assert.Contains(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleVersionCatalogEntryUnsupported");
+            Assert.Contains(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleDependencyAliasNotResolved");
+            Assert.DoesNotContain(model.Dependencies, dependency => dependency.Artifact == "mapstruct");
         }
         finally
         {

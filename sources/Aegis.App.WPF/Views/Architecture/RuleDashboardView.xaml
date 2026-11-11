@@ -91,7 +91,7 @@
         <StackPanel>
           <TextBlock Text="RULE EVALUATION ACCOUNTING" Style="{StaticResource Text.Eyebrow}"
                      Foreground="{StaticResource Brush.AccentStructural}"/>
-          <UniformGrid Columns="4" Margin="-6,8,-6,0">
+          <UniformGrid Columns="3" Margin="-6,8,-6,0">
             <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
               <StackPanel><TextBlock Text="REGISTERED" Style="{StaticResource Text.Eyebrow}"/>
                 <TextBlock Text="{Binding RegisteredRules}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>

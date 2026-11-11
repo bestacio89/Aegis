@@ -17,6 +17,7 @@ import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
+import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.SimpleType;
 
@@ -38,6 +39,12 @@ import java.util.stream.Stream;
  */
 public final class SemanticEngineBenchmark {
     private static final String FIXTURE_SUFFIX = ".fixture";
+    private static final Set<String> EXPECTED_SOURCE_TYPES = Set.of(
+        "org.aegis.fixture.domain.Entity",
+        "org.aegis.fixture.domain.Order",
+        "org.aegis.fixture.application.OrderRepository",
+        "org.aegis.fixture.gradle.Command",
+        "org.aegis.fixture.gradle.CommandStore");
 
     private SemanticEngineBenchmark() {
     }
@@ -144,6 +151,7 @@ public final class SemanticEngineBenchmark {
         int diagnostics = 0;
         int resolutionAttempts = 0;
         int resolvedBindings = 0;
+        Set<String> resolvedExpectedTypes = new HashSet<>();
         long started = System.nanoTime();
 
         for (Path sourceFile : sourceFiles) {
@@ -166,8 +174,11 @@ public final class SemanticEngineBenchmark {
             for (ClassOrInterfaceType type : unit.findAll(ClassOrInterfaceType.class)) {
                 resolutionAttempts++;
                 try {
-                    type.resolve();
+                    String qualifiedName = type.resolve().getQualifiedName();
                     resolvedBindings++;
+                    if (EXPECTED_SOURCE_TYPES.contains(qualifiedName)) {
+                        resolvedExpectedTypes.add(qualifiedName);
+                    }
                 } catch (RuntimeException unresolvedOrUnsupported) {
                     // Resolution failures are evidence; they do not abort the corpus.
                 }
@@ -204,6 +215,8 @@ public final class SemanticEngineBenchmark {
             diagnostics,
             resolutionAttempts,
             resolvedBindings,
+            resolvedExpectedTypes.size(),
+            EXPECTED_SOURCE_TYPES.size(),
             elapsedMilliseconds,
             heapUsedBytes);
     }
@@ -226,6 +239,7 @@ public final class SemanticEngineBenchmark {
         int diagnostics = 0;
         int resolutionAttempts = 0;
         int resolvedBindings = 0;
+        Set<String> resolvedExpectedTypes = new HashSet<>();
         long started = System.nanoTime();
 
         for (Path sourceFile : sourceFiles) {
@@ -258,8 +272,12 @@ public final class SemanticEngineBenchmark {
                     public boolean visit(SimpleType node) {
                         attempts[0]++;
                         try {
-                            if (node.resolveBinding() != null) {
+                            ITypeBinding binding = node.resolveBinding();
+                            if (binding != null) {
                                 resolved[0]++;
+                                if (EXPECTED_SOURCE_TYPES.contains(binding.getQualifiedName())) {
+                                    resolvedExpectedTypes.add(binding.getQualifiedName());
+                                }
                             }
                         } catch (RuntimeException unresolvedOrUnsupported) {
                             // Resolution failures are evidence; they do not abort the corpus.
@@ -311,6 +329,8 @@ public final class SemanticEngineBenchmark {
             diagnostics,
             resolutionAttempts,
             resolvedBindings,
+            resolvedExpectedTypes.size(),
+            EXPECTED_SOURCE_TYPES.size(),
             elapsedMilliseconds,
             heapUsedBytes);
     }
@@ -329,7 +349,8 @@ public final class SemanticEngineBenchmark {
             "{\"engine\":\"%s\",\"sourceFiles\":%d,\"parsedFiles\":%d,"
                 + "\"diagnostics\":%d,\"sourceRoots\":%d,"
                 + "\"resolutionAttempts\":%d,\"resolvedBindings\":%d,"
-                + "\"resolutionRatio\":%.4f,\"elapsedMilliseconds\":%d,"
+                + "\"resolutionRatio\":%.4f,\"expectedSourceTypesResolved\":%d,"
+                + "\"expectedSourceTypesTotal\":%d,\"elapsedMilliseconds\":%d,"
                 + "\"heapUsedBytes\":%d,\"externalClasspathEnabled\":false}%n",
             engine,
             metrics.sourceFiles(),
@@ -341,6 +362,8 @@ public final class SemanticEngineBenchmark {
             metrics.resolutionAttempts() == 0
                 ? 0d
                 : (double) metrics.resolvedBindings() / metrics.resolutionAttempts(),
+            metrics.expectedSourceTypesResolved(),
+            metrics.expectedSourceTypesTotal(),
             metrics.elapsedMilliseconds(),
             metrics.heapUsedBytes());
     }
@@ -363,6 +386,8 @@ public final class SemanticEngineBenchmark {
         int diagnostics,
         int resolutionAttempts,
         int resolvedBindings,
+        int expectedSourceTypesResolved,
+        int expectedSourceTypesTotal,
         long elapsedMilliseconds,
         long heapUsedBytes) {
     }

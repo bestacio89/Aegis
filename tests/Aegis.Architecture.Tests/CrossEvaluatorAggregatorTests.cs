@@ -128,7 +128,7 @@ public sealed class CrossEvaluatorAggregatorTests
     }
 
     [Fact]
-    public void Aggregate_counts_unsupported_rules_against_coverage_and_marks_assessment_incomplete()
+    public void Aggregate_reports_rule_capability_separately_from_project_evaluation_coverage()
     {
         var stats = new RuleEvaluationStats
         {
@@ -155,11 +155,13 @@ public sealed class CrossEvaluatorAggregatorTests
 
         var report = CreateAggregator().Aggregate([], stats: stats);
 
-        Assert.Equal(50, stats.EvaluationCoverage);
-        Assert.Equal(50, report.Metrics.RuleEvaluationCoverage);
+        Assert.Equal(100, stats.EvaluationCoverage);
+        Assert.Equal(50, stats.RuleCapabilityCoverage);
+        Assert.Equal(100, report.Metrics.RuleEvaluationCoverage);
+        Assert.Equal(50, report.Metrics.RuleCapabilityCoverage);
         Assert.True(report.Metrics.HasCoverageEvidence);
         Assert.Equal(100, report.Metrics.ProjectHealthIndex);
-        Assert.Equal(50, report.Metrics.CoverageAdjustedHealthIndex);
+        Assert.Equal(100, report.Metrics.CoverageAdjustedHealthIndex);
         Assert.False(report.Metrics.AssessmentComplete);
     }
 

@@ -1,6 +1,7 @@
 ﻿using System.Text.RegularExpressions;
 
 using Aegis.Architecture.Evaluators;
+using Aegis.Architecture.Evaluators.Analysis;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -44,26 +45,16 @@ public sealed class RepositoryPatternEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "ASP.NET",
-        "Spring",
-        "Django",
-        "FastAPI",
-        "Flask",
-        "CleanArchitecture",
-        "Hexagonal",
-        "DDD",
-        "Microservices"
+        "LanguageAgnostic"
     ];
 
-    private static readonly Regex StringLiteralRegex = new(
-        """
-        @(?:""|[^"])*"|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`
-        """,
+    private static readonly Regex InterfaceDeclarationRegex = new(
+        @"\binterface\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*)\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private static readonly Regex CommentRegex = new(
-        @"//[^\r\n]*|/\*[\s\S]*?\*/|#[^\r\n]*",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex PythonProtocolRegex = new(
+        @"^[ \t]*class\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\bProtocol\b[^)]*\)\s*:",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Multiline);
 
     private static readonly Regex BraceClassRegex = new(
         """
@@ -193,101 +184,115 @@ public sealed class RepositoryPatternEvaluator
             Name,
             files.Count);
 
+        var readableFiles = new Dictionary<string, SourceFile>(
+            StringComparer.OrdinalIgnoreCase);
         var unreadableFiles = 0;
-        var analyzedFiles = 0;
 
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
-            string content;
-
             try
             {
-                content = await File.ReadAllTextAsync(file, token);
+                var source = await File.ReadAllTextAsync(file, token);
+                var language = DetectLanguage(file);
+                readableFiles[file] = new SourceFile(
+                    source,
+                    SourceCodeMasker.Mask(source),
+                    language,
+                    ResolveProjectScopePath(file, projectPath));
             }
             catch (OperationCanceledException)
+                when (token.IsCancellationRequested)
             {
                 throw;
             }
-            catch (IOException ex)
+            catch (IOException exception)
             {
                 unreadableFiles++;
-
                 _logger.LogWarning(
-                    ex,
+                    exception,
                     "{Evaluator} could not read {FilePath}.",
                     Name,
                     file);
-
-                continue;
             }
-            catch (UnauthorizedAccessException ex)
+            catch (UnauthorizedAccessException exception)
             {
                 unreadableFiles++;
-
                 _logger.LogWarning(
-                    ex,
+                    exception,
                     "{Evaluator} has no access to {FilePath}.",
                     Name,
                     file);
-
-                continue;
             }
+        }
 
-            analyzedFiles++;
+        var interfaceIndex = BuildInterfaceIndex(readableFiles);
+        var analyzedFiles = readableFiles.Count;
 
-            var language = DetectLanguage(file);
-            var sanitized = RemoveCommentsAndStrings(content);
-            var classRegex = language == "Python"
+        foreach (var entry in readableFiles)
+        {
+            token.ThrowIfCancellationRequested();
+
+            var file = entry.Key;
+            var sourceFile = entry.Value;
+            var classRegex = sourceFile.Language == "Python"
                 ? PythonClassRegex
                 : BraceClassRegex;
 
-            foreach (Match classMatch in classRegex.Matches(sanitized))
+            foreach (Match classMatch in classRegex.Matches(sourceFile.Sanitized))
             {
                 token.ThrowIfCancellationRequested();
 
                 var repositoryName = classMatch.Groups["name"].Value;
-
                 if (!repositoryName.EndsWith(
-                    "Repository",
-                    StringComparison.OrdinalIgnoreCase))
+                        "Repository",
+                        StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
                 if (!TryExtractClassBody(
-                    sanitized,
-                    classMatch,
-                    language,
-                    out var classBody))
+                        sourceFile.Sanitized,
+                        classMatch,
+                        sourceFile.Language,
+                        out var classBody,
+                        out var classBodyStart))
                 {
                     _logger.LogDebug(
                         "{Evaluator} could not isolate class body for {ClassName} in {FilePath}.",
                         Name,
                         repositoryName,
                         file);
-
                     continue;
                 }
 
-                var classHeader = sanitized.Substring(
+                var classHeader = sourceFile.Sanitized.Substring(
                     classMatch.Index,
                     classMatch.Length);
+                var expectedInterfaceName = $"I{repositoryName}";
+                var interfaceKey = BuildInterfaceKey(
+                    sourceFile.ProjectScopePath,
+                    expectedInterfaceName);
+                var matchingInterface = interfaceIndex.GetValueOrDefault(interfaceKey);
 
                 var hasMatchingInterface = HasMatchingAbstraction(
-                    repositoryName,
+                    expectedInterfaceName,
                     classHeader,
-                    sanitized,
-                    language);
+                    sourceFile.Language,
+                    matchingInterface is not null);
 
-                var methodCount = CountMethods(classBody, language);
-                var fieldCount = CountFields(classBody, language);
-                var hasAsyncSignal = HasAsyncSignal(classBody, language);
+                var methodCount = CountMethods(classBody, sourceFile.Language);
+                var fieldCount = CountFields(classBody, sourceFile.Language);
+                var asyncMatches = FindAsyncMatches(classBody, sourceFile.Language);
+                var hasAsyncSignal = asyncMatches.Count > 0;
 
-                var leakIndicators = FindLeakIndicators(classBody);
-                var hasPersistenceOrTransportSignals =
-                    leakIndicators.Count > 0;
+                var leakMatches = FindLeakMatches(classBody);
+                var leakIndicators = leakMatches
+                    .Select(match => match.Indicator)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var hasPersistenceOrTransportSignals = leakMatches.Count > 0;
 
                 var namingCompliance = string.IsNullOrWhiteSpace(
                     _policy.RepositorySuffix)
@@ -298,15 +303,11 @@ public sealed class RepositoryPatternEvaluator
                         _policy.RepositorySuffix,
                         StringComparison.Ordinal);
 
-                var complexity = ComputeComplexity(
-                    methodCount,
-                    fieldCount);
-
+                var complexity = ComputeComplexity(methodCount, fieldCount);
                 var interfaceScore = hasMatchingInterface ? 1d : 0d;
                 var asyncScore = hasAsyncSignal ? 1d : 0d;
                 var leakScore = hasPersistenceOrTransportSignals ? 1d : 0d;
                 var namingScore = namingCompliance ? 1d : 0d;
-
                 var compliance = ComputeCompliance(
                     interfaceScore,
                     asyncScore,
@@ -314,88 +315,53 @@ public sealed class RepositoryPatternEvaluator
                     namingScore,
                     complexity);
 
-                var result = new ArchitectureEvaluatorResult(
-                    Name,
-                    file)
+                var metrics = new Dictionary<string, double>
                 {
-                    Category =
-                        ArchitectureRuleCategory.DesignPatterns.ToString()
+                    ["InterfaceAdherence"] = interfaceScore,
+                    ["AsyncCompliance"] = asyncScore,
+                    ["LeakRisk"] = leakScore,
+                    ["NamingCompliance"] = namingScore,
+                    ["RepositoryComplexity"] = complexity,
+                    ["RepositoryComplianceScore"] = compliance,
+                    ["MethodCount"] = methodCount,
+                    ["FieldCount"] = fieldCount,
+                    ["PersistenceTransportIndicatorCount"] = leakMatches.Count
                 };
 
-                result.Metrics["InterfaceAdherence"] = interfaceScore;
-                result.Metrics["AsyncCompliance"] = asyncScore;
-                result.Metrics["LeakRisk"] = leakScore;
-                result.Metrics["NamingCompliance"] = namingScore;
-                result.Metrics["RepositoryComplexity"] = complexity;
-                result.Metrics["RepositoryComplianceScore"] = compliance;
-                result.Metrics["MethodCount"] = methodCount;
-                result.Metrics["FieldCount"] = fieldCount;
-                result.Metrics["PersistenceTransportIndicatorCount"] =
-                    leakIndicators.Count;
-
-                result.Metadata[BaseArchitectureEvaluator.FilePathMetadataKey] =
-                    file;
-                result.Metadata[BaseArchitectureEvaluator.EvaluationScopeMetadataKey] =
-                    BaseArchitectureEvaluator.FileScope;
-                result.Metadata["RepositoryName"] = repositoryName;
-                result.Metadata["Language"] = language;
-                result.Metadata["HasMatchingAbstraction"] =
-                    hasMatchingInterface.ToString();
-                result.Metadata["HasAsyncSignal"] =
-                    hasAsyncSignal.ToString();
-                result.Metadata["HasPersistenceOrTransportSignals"] =
-                    hasPersistenceOrTransportSignals.ToString();
-                result.Metadata["PersistenceTransportIndicators"] =
-                    string.Join(", ", leakIndicators);
-                result.Metadata["NamingConventionSatisfied"] =
-                    namingCompliance.ToString();
-                result.Metadata["ComplexityMeasure"] =
-                    "Normalized method-and-field count; not cyclomatic complexity.";
-                result.Metadata["SemanticAnalysisPerformed"] =
-                    bool.FalseString;
-                result.Metadata["InterfaceImplementationVerified"] =
-                    bool.FalseString;
-                result.Metadata["PolicyEnabled"] =
-                    _policy.EnforceRepositoryPattern.ToString();
-
-                results.Add(result);
+                results.Add(CreateRepositoryResult(
+                    projectPath,
+                    file,
+                    sourceFile,
+                    repositoryName,
+                    classMatch,
+                    classBody,
+                    classBodyStart,
+                    metrics,
+                    hasMatchingInterface,
+                    expectedInterfaceName,
+                    matchingInterface,
+                    hasAsyncSignal,
+                    asyncMatches,
+                    leakIndicators,
+                    leakMatches));
             }
         }
 
-        // Snapshot file-level findings before adding the project summary.
-        var repositoryResults = results.ToList();
-
-        var averageCompliance = AverageMetric(
-            repositoryResults,
-            "RepositoryComplianceScore");
-
-        var averageComplexity = AverageMetric(
-            repositoryResults,
-            "RepositoryComplexity");
-
-        var averageAsyncSignalRate = AverageMetric(
-            repositoryResults,
-            "AsyncCompliance");
-
-        var leakCount = repositoryResults.Count(
-            result => GetMetric(result, "LeakRisk") > 0);
-
-        var repositoryCount = repositoryResults.Count;
-
-        var leakRate = repositoryCount > 0
-            ? leakCount / (double)repositoryCount
-            : 0d;
-
+        var repositoryResults = results.ToArray();
+        var averageCompliance = AverageMetric(repositoryResults, "RepositoryComplianceScore");
+        var averageComplexity = AverageMetric(repositoryResults, "RepositoryComplexity");
+        var averageAsyncSignalRate = AverageMetric(repositoryResults, "AsyncCompliance");
+        var leakCount = repositoryResults.Count(result => GetMetric(result, "LeakRisk") > 0);
+        var repositoryCount = repositoryResults.Length;
+        var leakRate = repositoryCount > 0 ? leakCount / (double)repositoryCount : 0d;
         var overallHealth = repositoryCount > 0
             ? averageCompliance * (1d - leakRate)
             : 0d;
 
-        var summary = new ArchitectureEvaluatorResult(
-            Name,
-            projectPath)
+        var summary = new ArchitectureEvaluatorResult(Name, projectPath)
         {
-            Category =
-                ArchitectureRuleCategory.DesignPatterns.ToString()
+            Category = ArchitectureRuleCategory.DesignPatterns.ToString(),
+            ProjectName = Context?.ProjectName
         };
 
         summary.Metrics["DiscoveredFiles"] = files.Count;
@@ -412,14 +378,16 @@ public sealed class RepositoryPatternEvaluator
         summary.Metadata[BaseArchitectureEvaluator.EvaluationScopeMetadataKey] =
             BaseArchitectureEvaluator.ProjectScope;
         summary.Metadata["Evaluator"] = Name;
-        summary.Metadata["PolicyEnabled"] =
-            _policy.EnforceRepositoryPattern.ToString();
-        summary.Metadata["SemanticAnalysisPerformed"] =
-            bool.FalseString;
+        summary.Metadata["PolicyEnabled"] = _policy.EnforceRepositoryPattern.ToString();
+        summary.Metadata["SemanticAnalysisPerformed"] = bool.FalseString;
         summary.Metadata["ComplexityMeasure"] =
             "Normalized method-and-field count; not cyclomatic complexity.";
-        summary.Metadata["EmptyRepositorySet"] =
-            (repositoryCount == 0).ToString();
+        summary.Metadata["EmptyRepositorySet"] = (repositoryCount == 0).ToString();
+        var analysisComplete = unreadableFiles == 0 && analyzedFiles == files.Count;
+        summary.Metadata["AnalysisComplete"] = analysisComplete.ToString();
+        summary.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "CompletedWithDiagnostics";
 
         results.Add(summary);
 
@@ -434,41 +402,304 @@ public sealed class RepositoryPatternEvaluator
         return results;
     }
 
-    private static string RemoveCommentsAndStrings(string source)
+    private ArchitectureEvaluatorResult CreateRepositoryResult(
+        string projectPath,
+        string file,
+        SourceFile sourceFile,
+        string repositoryName,
+        Match classMatch,
+        string classBody,
+        int classBodyStart,
+        Dictionary<string, double> metrics,
+        bool hasMatchingInterface,
+        string expectedInterfaceName,
+        InterfaceEvidence? matchingInterface,
+        bool hasAsyncSignal,
+        IReadOnlyCollection<Match> asyncMatches,
+        IReadOnlyCollection<string> leakIndicators,
+        IReadOnlyCollection<LeakMatch> leakMatches)
     {
-        // Preserve offsets and line breaks so class-body extraction still
-        // operates against the original source positions.
-        var withoutStrings = StringLiteralRegex.Replace(
-            source,
-            match => MaskPreservingLineBreaks(match.Value));
+        var classLine = GetLineNumber(sourceFile.Sanitized, classMatch.Index);
+        var classSnippet = GetSourceLine(sourceFile.Source, classLine);
+        var relativePath = Path.GetRelativePath(sourceFile.ProjectScopePath, file);
 
-        return CommentRegex.Replace(
-            withoutStrings,
-            match => MaskPreservingLineBreaks(match.Value));
+        var result = CreateResult(file, ArchitectureRuleCategory.DesignPatterns.ToString());
+        result.Target = repositoryName;
+        result.Language = sourceFile.Language;
+        result.Framework = ResolveFrameworkForFile(file, projectPath, Context!);
+        result.Layer = ResolveLayer(file);
+        result.Metrics = metrics;
+
+        result.Metadata["FilePath"] = file;
+        result.Metadata["RepositoryName"] = repositoryName;
+        result.Metadata["Language"] = sourceFile.Language;
+        result.Metadata["Framework"] = result.Framework ?? "Unknown";
+        result.Metadata["HasMatchingAbstraction"] = hasMatchingInterface.ToString();
+        result.Metadata["HasAsyncSignal"] = hasAsyncSignal.ToString();
+        result.Metadata["HasPersistenceOrTransportSignals"] = (leakMatches.Count > 0).ToString();
+        result.Metadata["PersistenceTransportIndicators"] = string.Join(", ", leakIndicators);
+        result.Metadata["NamingConventionSatisfied"] =
+            metrics["NamingCompliance"] > 0 ? bool.TrueString : bool.FalseString;
+        result.Metadata["ComplexityMeasure"] =
+            "Normalized method-and-field count; not cyclomatic complexity.";
+        result.Metadata["SemanticAnalysisPerformed"] = bool.FalseString;
+        result.Metadata["InterfaceImplementationVerified"] = bool.FalseString;
+        result.Metadata["PolicyEnabled"] = _policy.EnforceRepositoryPattern.ToString();
+        result.Metadata["EvaluationScope"] = BaseArchitectureEvaluator.FileScope;
+        result.Metadata["AnalysisComplete"] = bool.TrueString;
+
+        var interfaceEvidence = hasMatchingInterface && matchingInterface is not null
+            ? $"Matching abstraction '{expectedInterfaceName}' found at " +
+              $"{Path.GetRelativePath(sourceFile.ProjectScopePath, matchingInterface.FilePath)}:" +
+              $"{matchingInterface.LineNumber}. Repository declaration: {relativePath}:{classLine} — {classSnippet}"
+            : $"No matching abstraction '{expectedInterfaceName}' was found in project scope '{sourceFile.ProjectScopePath}'. " +
+              $"Repository declaration: {relativePath}:{classLine} — {classSnippet}";
+
+        AddMetricEvidence(
+            result,
+            "InterfaceAdherence",
+            interfaceEvidence,
+            classLine,
+            classSnippet);
+
+        var asyncEvidence = asyncMatches.Count == 0
+            ? "No asynchronous API signals were detected in this repository class."
+            : string.Join(
+                Environment.NewLine,
+                asyncMatches.Take(50).Select(match =>
+                {
+                    var line = GetLineNumber(sourceFile.Sanitized, classBodyStart + match.Index);
+                    return $"Line {line}: {GetSourceLine(sourceFile.Source, line)}";
+                }));
+        AddMetricEvidence(
+            result,
+            "AsyncCompliance",
+            asyncEvidence,
+            asyncMatches.Count > 0
+                ? GetLineNumber(sourceFile.Sanitized, classBodyStart + asyncMatches[0].Index)
+                : classLine,
+            asyncMatches.Count > 0
+                ? GetSourceLine(
+                    sourceFile.Source,
+                    GetLineNumber(sourceFile.Sanitized, classBodyStart + asyncMatches[0].Index))
+                : classSnippet);
+
+        var leakEvidence = leakMatches.Count == 0
+            ? "No recognized persistence or transport indicators were detected in this repository class."
+            : string.Join(
+                Environment.NewLine,
+                leakMatches.Take(50).Select(match =>
+                {
+                    var line = GetLineNumber(sourceFile.Sanitized, classBodyStart + match.Match.Index);
+                    return $"Line {line}: {match.Indicator} — {GetSourceLine(sourceFile.Source, line)}";
+                }));
+        AddMetricEvidence(
+            result,
+            "LeakRisk",
+            leakEvidence,
+            leakMatches.Count > 0
+                ? GetLineNumber(sourceFile.Sanitized, classBodyStart + leakMatches[0].Match.Index)
+                : classLine,
+            leakMatches.Count > 0
+                ? GetSourceLine(
+                    sourceFile.Source,
+                    GetLineNumber(sourceFile.Sanitized, classBodyStart + leakMatches[0].Match.Index))
+                : classSnippet);
+
+        AddMetricEvidence(
+            result,
+            "NamingCompliance",
+            $"Repository type '{repositoryName}' evaluated against suffix '{_policy.RepositorySuffix}'.",
+            classLine,
+            classSnippet);
+
+        var complexityEvidence =
+            $"Repository '{repositoryName}' has {metrics["MethodCount"]} methods and {metrics["FieldCount"]} fields; " +
+            $"normalized repository complexity is {metrics["RepositoryComplexity"]:0.##}.";
+        AddMetricEvidence(
+            result,
+            "RepositoryComplexity",
+            complexityEvidence,
+            classLine,
+            classSnippet);
+
+        var complianceEvidence =
+            $"Repository compliance score {metrics["RepositoryComplianceScore"]:0.##}/100; " +
+            $"interface adherence {metrics["InterfaceAdherence"]:0.##}; async signal {metrics["AsyncCompliance"]:0.##}; " +
+            $"persistence/transport signal {metrics["LeakRisk"]:0.##}; naming {metrics["NamingCompliance"]:0.##}; " +
+            $"complexity {metrics["RepositoryComplexity"]:0.##}.";
+        AddMetricEvidence(
+            result,
+            "RepositoryComplianceScore",
+            complianceEvidence,
+            classLine,
+            classSnippet);
+
+        result.Evidence = string.Join(
+            Environment.NewLine,
+            new[]
+            {
+                interfaceEvidence,
+                asyncEvidence,
+                leakEvidence,
+                complexityEvidence,
+                complianceEvidence
+            });
+
+        result.LineNumber = classLine;
+        return result;
     }
 
-    private static string MaskPreservingLineBreaks(string value)
+    private static void AddMetricEvidence(
+        ArchitectureEvaluatorResult result,
+        string metricKey,
+        string evidence,
+        int lineNumber,
+        string codeSnippet)
     {
-        var chars = value.ToCharArray();
+        result.Metadata[$"Evidence.{metricKey}"] = evidence;
+        result.Metadata[$"EvidenceSummary.{metricKey}"] = evidence;
+        result.Metadata[$"EvidenceScope.{metricKey}"] = "FileMetrics";
+        result.Metadata[$"EvidenceLine.{metricKey}"] =
+            lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        result.Metadata[$"CodeSnippet.{metricKey}"] = codeSnippet;
+    }
 
-        for (var i = 0; i < chars.Length; i++)
+    private static Dictionary<string, InterfaceEvidence> BuildInterfaceIndex(
+        IReadOnlyDictionary<string, SourceFile> readableFiles)
+    {
+        var index = new Dictionary<string, InterfaceEvidence>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in readableFiles)
         {
-            if (chars[i] is not '\r' and not '\n')
+            var sourceFile = entry.Value;
+            var regex = sourceFile.Language == "Python"
+                ? PythonProtocolRegex
+                : InterfaceDeclarationRegex;
+
+            foreach (Match match in regex.Matches(sourceFile.Sanitized))
             {
-                chars[i] = ' ';
+                var interfaceName = match.Groups["name"].Value;
+                var line = GetLineNumber(sourceFile.Sanitized, match.Index);
+                var key = BuildInterfaceKey(sourceFile.ProjectScopePath, interfaceName);
+
+                index.TryAdd(
+                    key,
+                    new InterfaceEvidence(entry.Key, line, GetSourceLine(sourceFile.Source, line)));
             }
         }
 
-        return new string(chars);
+        return index;
+    }
+
+    private static string BuildInterfaceKey(string projectPath, string interfaceName)
+    {
+        var normalizedProject = Path.GetFullPath(projectPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .ToUpperInvariant();
+
+        return $"{normalizedProject}|{interfaceName.ToUpperInvariant()}";
+    }
+
+    private string ResolveProjectScopePath(string file, string projectPath)
+    {
+        var owningModule = Context?.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .OrderByDescending(module => module.Path.Length)
+            .FirstOrDefault(module => IsSameOrDescendantPath(file, module.Path));
+
+        return owningModule?.Path ?? Path.GetFullPath(projectPath);
+    }
+
+    private static bool HasMatchingAbstraction(
+        string expectedInterfaceName,
+        string classHeader,
+        string language,
+        bool interfaceDeclarationExists)
+    {
+        if (!interfaceDeclarationExists)
+            return false;
+
+        var relationshipKeyword = language switch
+        {
+            "Java" => @"implements",
+            "TypeScript" => @"implements",
+            "Python" => string.Empty,
+            _ => @":"
+        };
+
+        return language == "Python"
+            ? Regex.IsMatch(
+                classHeader,
+                $@"{Regex.Escape(expectedInterfaceName)}",
+                RegexOptions.CultureInvariant)
+            : Regex.IsMatch(
+                classHeader,
+                $@"{relationshipKeyword}s*[^{{]*{Regex.Escape(expectedInterfaceName)}",
+                RegexOptions.CultureInvariant);
+    }
+
+    private static IReadOnlyCollection<Match> FindAsyncMatches(
+        string classBody,
+        string language)
+    {
+        var regex = language == "Python"
+            ? PythonAsyncSignalRegex
+            : AsyncSignalRegex;
+
+        return regex.Matches(classBody).Cast<Match>().ToArray();
+    }
+
+    private static IReadOnlyCollection<LeakMatch> FindLeakMatches(string classBody)
+    {
+        var matches = new List<LeakMatch>();
+        foreach (var indicator in PersistenceAndTransportIndicators)
+        {
+            matches.AddRange(
+                Regex.Matches(
+                        classBody,
+                        Regex.Escape(indicator),
+                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                    .Cast<Match>()
+                    .Select(match => new LeakMatch(indicator, match)));
+        }
+
+        return matches.OrderBy(match => match.Match.Index).ToArray();
+    }
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position && index < content.Length; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        return lineNumber > 0 && lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
     }
 
     private static bool TryExtractClassBody(
         string source,
         Match classMatch,
         string language,
-        out string body)
+        out string body,
+        out int bodyStart)
     {
         body = string.Empty;
+        bodyStart = 0;
 
         if (language == "Python")
         {
@@ -499,7 +730,7 @@ public sealed class RepositoryPatternEvaluator
                 declarationLineStart,
                 classMatch.Index);
 
-            var bodyStart = newline + 1;
+            bodyStart = newline + 1;
             var position = bodyStart;
 
             while (position < source.Length)
@@ -571,8 +802,9 @@ public sealed class RepositoryPatternEvaluator
 
                 if (depth == 0)
                 {
+                    bodyStart = openingBrace + 1;
                     body = source.Substring(
-                        openingBrace + 1,
+                        bodyStart,
                         i - openingBrace - 1);
 
                     return true;
@@ -699,6 +931,21 @@ public sealed class RepositoryPatternEvaluator
             ".ts" => "TypeScript",
             _ => "Unknown"
         };
+
+    private sealed record SourceFile(
+        string Source,
+        string Sanitized,
+        string Language,
+        string ProjectScopePath);
+
+    private sealed record InterfaceEvidence(
+        string FilePath,
+        int LineNumber,
+        string SourceLine);
+
+    private sealed record LeakMatch(
+        string Indicator,
+        Match Match);
 
     private static double ComputeComplexity(
         int methodCount,

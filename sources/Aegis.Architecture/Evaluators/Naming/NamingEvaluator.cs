@@ -348,7 +348,13 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                     fileContext.Framework,
                     token).ConfigureAwait(false);
 
-                results.Add(EvaluateCSharpFile(file, analysis, convention, fileContext.Framework, content));
+                results.Add(EvaluateCSharpFile(
+                        file,
+                        analysis,
+                        convention,
+                        fileContext.Framework,
+                        content,
+                        IsTestProjectFile(file)));
             }
             else
             {
@@ -385,7 +391,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         NamingAnalysisResult analysis,
         INamingConventionPolicy convention,
         string? framework,
-        string source)
+        string source,
+        bool isTestProject)
     {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(convention);
@@ -496,13 +503,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             .ToArray();
         var variableViolations = invalidVariableDeclarations.Length;
         var invalidFieldDeclarations = fieldDeclarations
-            .Where(declaration =>
-                convention is UnityNamingConventionPolicy
-                    ? !convention.IsValidVariableName(declaration.Name)
-                        && !convention.IsValidTypeName(declaration.Name)
-                    : declaration.IsPublic
-                        ? !convention.IsValidTypeName(declaration.Name)
-                        : !convention.IsValidVariableName(declaration.Name))
+            .Where(declaration => !IsValidFieldName(declaration, convention, isTestProject))
             .ToArray();
         var fieldViolations = invalidFieldDeclarations.Length;
 
@@ -544,6 +545,20 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
         result.Metrics["FileNamingCompliance"] = fileScore;
         result.Metrics["DeclarationsAnalyzed"] = declarationCount;
+
+        if (fileScore < 100)
+        {
+            var fileName = Path.GetFileName(file);
+            var fileEvidence =
+                $"File name '{fileName}' does not satisfy the active naming convention.";
+
+            result.Evidence = string.IsNullOrWhiteSpace(result.Evidence)
+                ? fileEvidence
+                : $"{result.Evidence}{Environment.NewLine}{fileEvidence}";
+            result.Metadata["Evidence.FileNamingCompliance"] = fileEvidence;
+            result.Metadata["CodeSnippet.FileNamingCompliance"] = fileName;
+            result.Metadata["EvidenceScope.FileNamingCompliance"] = "FileName";
+        }
 
         // Partial syntax analysis can discover declarations while missing or
         // misclassifying others. Never convert incomplete evidence into a score
@@ -646,6 +661,29 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         result.Metadata["ConstantsAnalyzed"] = constantNames.Count.ToString();
 
         return result;
+    }
+
+    private static bool IsValidFieldName(
+        NamingDeclaration declaration,
+        INamingConventionPolicy convention,
+        bool isTestProject)
+    {
+        if (convention is UnityNamingConventionPolicy)
+        {
+            return convention.IsValidVariableName(declaration.Name)
+                || convention.IsValidTypeName(declaration.Name);
+        }
+
+        if (declaration.IsPublic)
+            return convention.IsValidTypeName(declaration.Name);
+
+        // A single underscore prefix is a conventional private-field style
+        // in .NET. It is not a naming violation in production or test code.
+        var candidate = declaration.Name.StartsWith('_')
+            ? declaration.Name[1..]
+            : declaration.Name;
+
+        return convention.IsValidVariableName(candidate);
     }
 
     private static bool IsValidDescriptiveTestMethodName(string name) =>

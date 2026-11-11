@@ -150,10 +150,7 @@ internal static class LayerDetector
             return false;
 
         var normalizedHint = NormalizeIdentifier(hint);
-        if (normalizedHint.Length > 0 && identifiers.Contains(normalizedHint))
-            return true;
-
-        return SplitIdentifier(hint).Any(identifiers.Contains);
+        return normalizedHint.Length > 0 && identifiers.Contains(normalizedHint);
     }
 
     private static void AddIdentifiers(

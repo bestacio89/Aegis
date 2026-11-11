@@ -484,3 +484,44 @@ All mandatory workflows completed successfully on final J0 head `14bcb141a69733c
 - Java semantic engine spike: run `43077082530` — success. Both source-only and controlled-classpath passes completed, including the negative-resolution oracle.
 
 **J0 checkpoint outcome: accepted.** Shared contracts, adapter boundary, discovery/evaluator audit, representative fixture corpus, controlled semantic-engine comparison, evidence-based J2 candidate decision and final-head CI validation are complete. J1 may proceed.
+
+---
+
+# J1 implementation checkpoint — Gradle model foundation — 2026-11-11
+
+**Status: implementation slice committed; J1 overall remains in progress and is not accepted.**
+
+## Implemented in this slice
+
+- Added a module-owned `GradleBuildModel` and static resolver.
+- Discovered common literal plugin and dependency declarations in Groovy and Kotlin DSL.
+- Distinguished direct external dependencies, platform/enforced-platform dependencies, and project dependencies.
+- Resolved version-catalog library and plugin aliases for supported literal forms.
+- Captured Java toolchain version and conventional Java `main`/`test` source roots.
+- Projected Gradle declarations into the shared dependency inventory with configuration, module ownership, build-file provenance, test-only classification, and declared-version evidence.
+- Preserved unresolved artifact versions as unresolved; no dependency version is fabricated.
+- Added Gradle model tests, including dynamic-coordinate diagnostics.
+- Static inspection does not execute Gradle scripts or plugins.
+
+## Validation evidence
+
+All three workflows completed successfully on head `86f0c86313da8b5afd18015641b4121e64dc2d8a`:
+
+| Workflow | Run | Result |
+|---|---:|---|
+| Non-WPF quality gates (all non-WPF test projects and production builds) | 43086474332 | Success |
+| WPF build validation | 43086473905 | Success |
+| Java semantic engine spike (JDT and JavaParser, source-only and controlled external classpath) | 43086474035 | Success |
+
+This is CI evidence for the current J1 implementation slice, not acceptance of J1 as a whole.
+
+## Known limitations and remaining J1 work
+
+- The Gradle resolver is a bounded static parser for common literal forms, not a complete implementation of either DSL.
+- Arbitrary expressions, custom source sets, generated source roots, advanced catalog syntax, and full Gradle resolution semantics are not established by this slice. Unsupported or dynamic declarations must remain explicitly incomplete rather than being inferred.
+- Expand fixture coverage for Groovy and Kotlin syntax, malformed/unreadable catalogs, multiline declarations, included-build ownership, and unsupported constructs.
+- Complete Maven reactor and BOM model resolution, external parent/BOM evidence, pluginManagement separation, and profile-aware completeness.
+- Complete Gradle included-build/project ownership, source-set and generated-root modelling, annotation processors, and declared-versus-resolved evidence.
+- Trace and correct framework/dependency pipeline ordering so framework analysis consumes the intended structured dependency evidence without relying on path-name heuristics.
+
+**Checkpoint decision:** proceed with J1 hardening and completion. Do not begin J2 production integration until J1 acceptance criteria are demonstrated across Maven and Gradle fixtures.

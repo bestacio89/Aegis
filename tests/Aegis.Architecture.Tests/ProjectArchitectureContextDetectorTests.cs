@@ -548,40 +548,62 @@ public sealed class ProjectArchitectureContextDetectorTests
         var moduleNames = new[]
         {
             "Franz.Common",
-            "Mediator",
-            "Messaging",
-            "Http",
-            "Http.Client",
-            "Http.Authentication",
-            "Http.Refit",
-            "Http.Headers",
-            "Http.EntityFramework",
-            "Http.MultiTenancy",
-            "Http.Messaging",
-            "Http.Documentation",
-            "Http.Bootstrap",
-            "Serialization",
-            "Reflection",
-            "DependencyInjection",
-            "Bootstrap",
-            "Hosting",
-            "AzureCosmosDB",
-            "EntityFramework",
-            "MongoDB",
-            "Grpc",
-            "Aras",
-            "Mapping",
-            "IO",
-            "Caching",
-            "Logging",
-            "Identity",
-            "SSO",
-            "MultiTenancy",
-            "Messaging.Kafka",
-            "Messaging.RabbitMQ",
-            "Messaging.Sagas",
-            "Mediator.SourceGenerator",
-            "Base.Abstractions"
+            "Franz.Common.Mediator",
+            "Franz.Common.Mediator.SourceGenerator",
+            "Franz.Common.Mediator.OpenTelemetry",
+            "Franz.Common.Mediator.Polly",
+            "Franz.Common.Messaging",
+            "Franz.Common.Messaging.Kafka",
+            "Franz.Common.Messaging.RabbitMQ",
+            "Franz.Common.Messaging.Sagas",
+            "Franz.Common.Messaging.AzureEventBus",
+            "Franz.Common.Messaging.AzureEventGrid",
+            "Franz.Common.Messaging.AzureEventHubs",
+            "Franz.Common.Messaging.Bootstrap",
+            "Franz.Common.Messaging.EntityFramework",
+            "Franz.Common.Messaging.Hosting",
+            "Franz.Common.Messaging.Hosting.Azure",
+            "Franz.Common.Messaging.Hosting.Kafka",
+            "Franz.Common.Messaging.Hosting.Mediator",
+            "Franz.Common.Messaging.Hosting.RabbitMQ",
+            "Franz.Common.Messaging.Identity",
+            "Franz.Common.Messaging.MassTransit",
+            "Franz.Common.Messaging.MultiTenancy",
+            "Franz.Common.Http",
+            "Franz.Common.Http.Client",
+            "Franz.Common.Http.Authentication",
+            "Franz.Common.Http.Refit",
+            "Franz.Common.Http.Headers",
+            "Franz.Common.Http.EntityFramework",
+            "Franz.Common.Http.MultiTenancy",
+            "Franz.Common.Http.Messaging",
+            "Franz.Common.Http.Documentation",
+            "Franz.Common.Http.Bootstrap",
+            "Franz.Common.Http.Identity",
+            "Franz.Common.Serialization",
+            "Franz.Common.Reflection",
+            "Franz.Common.DependencyInjection",
+            "Franz.Common.Bootstrap",
+            "Franz.Common.Hosting",
+            "Franz.Common.AzureCosmosDB",
+            "Franz.Common.EntityFramework",
+            "Franz.Common.EntityFramework.MariaDB",
+            "Franz.Common.EntityFramework.Oracle",
+            "Franz.Common.EntityFramework.PostGres",
+            "Franz.Common.EntityFramework.SQLServer",
+            "Franz.Common.MongoDB",
+            "Franz.Common.Grpc",
+            "Franz.Common.Grpc.AspNetCore",
+            "Franz.Common.Aras",
+            "Franz.Common.Mapping",
+            "Franz.Common.Mapping.Generators",
+            "Franz.Common.IO",
+            "Franz.Common.Caching",
+            "Franz.Common.Logging",
+            "Franz.Common.Identity",
+            "Franz.Common.SSO",
+            "Franz.Common.MultiTenancy",
+            "Franz.Common.Base.Abstractions"
         };
 
         foreach (var moduleName in moduleNames)
@@ -601,10 +623,10 @@ public sealed class ProjectArchitectureContextDetectorTests
                 "public sealed class Component { }");
         }
 
-        var contractPath = Path.Combine(directory.Path, "src", "Http.Contracts");
+        var contractPath = Path.Combine(directory.Path, "src", "Franz.Common.Http.Contracts");
         Directory.CreateDirectory(contractPath);
         File.WriteAllText(
-            Path.Combine(contractPath, "Http.Contracts.csproj"),
+            Path.Combine(contractPath, "Franz.Common.Http.Contracts.csproj"),
             """
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
@@ -623,7 +645,7 @@ public sealed class ProjectArchitectureContextDetectorTests
 
         var contractsModule = Assert.Single(
             context.Modules,
-            module => module.Name == "Http.Contracts");
+            module => module.Name == "Franz.Common.Http.Contracts");
         Assert.Equal("Contracts", contractsModule.Type);
         Assert.Equal("Contracts", Assert.Single(contractsModule.Layers).Name);
     }
@@ -635,18 +657,18 @@ public sealed class ProjectArchitectureContextDetectorTests
 
         var expectedLayers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Business"] = "Domain",
-            ["Headers"] = "Contracts",
-            ["Errors"] = "Contracts",
-            ["Annotations"] = "Contracts"
+            ["Franz.Common.Business"] = "Domain",
+            ["Franz.Common.Headers"] = "Contracts",
+            ["Franz.Common.Errors"] = "Contracts",
+            ["Franz.Common.Annotations"] = "Contracts"
         };
 
         foreach (var moduleName in expectedLayers.Keys)
         {
-            var modulePath = Path.Combine(directory.Path, "sources", $"Franz.Common.{moduleName}");
+            var modulePath = Path.Combine(directory.Path, "sources", moduleName);
             Directory.CreateDirectory(modulePath);
             File.WriteAllText(
-                Path.Combine(modulePath, $"Franz.Common.{moduleName}.csproj"),
+                Path.Combine(modulePath, $"{moduleName}.csproj"),
                 """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
@@ -660,7 +682,7 @@ public sealed class ProjectArchitectureContextDetectorTests
         {
             var module = Assert.Single(
                 context.Modules,
-                candidate => candidate.Name == $"Franz.Common.{expected.Key}");
+                candidate => candidate.Name == expected.Key);
             Assert.Equal(expected.Value, module.Type);
             Assert.Equal(expected.Value, Assert.Single(module.Layers).Name);
         }

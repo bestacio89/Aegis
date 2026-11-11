@@ -204,6 +204,17 @@ public sealed class MavenProjectModelTests
             var processor = Assert.Single(model.AnnotationProcessorPaths);
             Assert.Equal("mapstruct-processor", processor.ArtifactId);
             Assert.Equal("1.6.3", processor.Version);
+            Assert.Contains(context.DependencyEvidence, item =>
+                item.Name == "org.mapstruct:mapstruct-processor"
+                && item.Scope == "annotationProcessor"
+                && item.IsDirect
+                && item.ResolutionStatus == DependencyResolutionStatus.Declared);
+            Assert.Contains(context.DependencyEvidence, item =>
+                item.Name == "org.example:parent-processor"
+                && item.Scope == "annotationProcessor"
+                && !item.IsDirect
+                && item.Provenance.Any(provenance =>
+                    provenance.FilePath == Path.Combine(parentDirectory, "pom.xml")));
 
             var evidence = context.DependencyEvidence.Where(item =>
                 item.SourceProjectPath == module.Path).ToArray();

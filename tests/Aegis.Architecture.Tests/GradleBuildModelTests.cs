@@ -36,7 +36,12 @@ public sealed class GradleBuildModelTests
                     testImplementation("org.junit.jupiter:junit-jupiter-api:5.12.2")
                     annotationProcessor(libs.mapstruct)
                     implementation(platform("org.springframework.boot:spring-boot-dependencies:3.4.1"))
+                    implementation(enforcedPlatform("org.example:strict-bom:1.0.0"))
                     implementation(project(":api"))
+                    api("org.example:public-contract:1.0.0")
+                    compileOnly("org.example:provided-api:1.0.0")
+                    runtimeOnly("org.example:runtime-implementation:1.0.0")
+                    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.2.0")
                 }
                 """);
             File.WriteAllText(Path.Combine(catalogDirectory, "libs.versions.toml"),
@@ -78,11 +83,34 @@ public sealed class GradleBuildModelTests
             Assert.Contains(model.Dependencies, dependency => dependency.IsPlatform
                 && dependency.Group == "org.springframework.boot");
             Assert.Contains(model.Dependencies, dependency => dependency.ProjectPath == ":api");
+            Assert.Contains(model.Dependencies, dependency =>
+                dependency.IsPlatform && dependency.IsEnforcedPlatform
+                && dependency.Artifact == "strict-bom");
             Assert.Contains(model.SourceSets, sourceSet => sourceSet.Name == "main" && !sourceSet.IsTest);
             Assert.Contains(model.SourceSets, sourceSet => sourceSet.Name == "test" && sourceSet.IsTest);
             Assert.Contains(context.DependencyEvidence, dependency =>
                 dependency.Ecosystem == "Gradle" && dependency.Name == "org.junit.jupiter:junit-jupiter-api"
                 && dependency.IsTestOnly && dependency.ResolvedVersion is null);
+            Assert.Contains(context.DependencyEvidence, dependency =>
+                dependency.Name == "project::api"
+                && dependency.Kind == DependencyEvidenceKind.Project
+                && dependency.ResolutionStatus == DependencyResolutionStatus.Declared);
+            Assert.Contains(context.DependencyEvidence, dependency =>
+                dependency.Name == "org.example:strict-bom"
+                && dependency.Kind == DependencyEvidenceKind.Platform
+                && dependency.IsEnforced);
+            Assert.Contains(context.DependencyEvidence, dependency =>
+                dependency.Name == "org.example:public-contract"
+                && dependency.Scope == "api" && !dependency.IsTestOnly);
+            Assert.Contains(context.DependencyEvidence, dependency =>
+                dependency.Name == "org.example:provided-api"
+                && dependency.Scope == "compileOnly" && !dependency.IsTestOnly);
+            Assert.Contains(context.DependencyEvidence, dependency =>
+                dependency.Name == "org.example:runtime-implementation"
+                && dependency.Scope == "runtimeOnly" && !dependency.IsTestOnly);
+            Assert.Contains(context.DependencyEvidence, dependency =>
+                dependency.Name == "org.junit.platform:junit-platform-launcher"
+                && dependency.Scope == "testRuntimeOnly" && dependency.IsTestOnly);
             Assert.Contains("org.springframework:spring-context", context.DetectedDependencies);
         }
         finally

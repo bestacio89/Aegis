@@ -396,8 +396,7 @@ internal static class GradleBuildModelResolver
                      !string.IsNullOrWhiteSpace(dependency.Group)
                      && !string.IsNullOrWhiteSpace(dependency.Artifact)))
         {
-            var testOnly = dependency.Configuration.Contains("test", StringComparison.OrdinalIgnoreCase)
-                || dependency.Configuration.Contains("integrationTest", StringComparison.OrdinalIgnoreCase);
+            var testOnly = IsTestConfiguration(dependency.Configuration);
             context.DependencyEvidence.Add(new ArchitectureDependencyEvidence
             {
                 Id = $"gradle:{dependency.Group}:{dependency.Artifact}:{dependency.Version}:{dependency.Configuration}:{module.Path}",
@@ -425,6 +424,12 @@ internal static class GradleBuildModelResolver
                 ]
             });
         }
+    }
+
+    private static bool IsTestConfiguration(string configuration)
+    {
+        return Regex.Split(configuration, @"(?<=[a-z0-9])(?=[A-Z])")
+            .Any(segment => segment.Equals("test", StringComparison.OrdinalIgnoreCase));
     }
 
     private static IReadOnlyCollection<string> DiscoverLocalVersionCatalog(

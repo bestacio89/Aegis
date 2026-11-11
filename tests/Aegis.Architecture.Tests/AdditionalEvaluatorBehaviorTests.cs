@@ -72,6 +72,24 @@ public sealed class AdditionalEvaluatorBehaviorTests
                 SourceLayer = "Infrastructure",
                 TargetLayer = "Application",
                 DependencyType = "Project"
+            },
+            new ArchitectureDependencyContext
+            {
+                Source = "TestA",
+                Target = "TestB",
+                SourceLayer = "Tests",
+                TargetLayer = "Tests",
+                DependencyType = "Project",
+                Scope = "Test"
+            },
+            new ArchitectureDependencyContext
+            {
+                Source = "TestB",
+                Target = "TestA",
+                SourceLayer = "Tests",
+                TargetLayer = "Tests",
+                DependencyType = "Project",
+                Scope = "Test"
             }
         ]);
 
@@ -83,7 +101,7 @@ public sealed class AdditionalEvaluatorBehaviorTests
         var summary = Assert.Single(
             results,
             result => result.Metrics.ContainsKey("CircularDependencyCount"));
-        Assert.True(summary.Metrics["CircularDependencyCount"] >= 1);
+        Assert.Equal(1, summary.Metrics["CircularDependencyCount"]);
     }
 
     [Fact]
@@ -344,6 +362,15 @@ public sealed class AdditionalEvaluatorBehaviorTests
                 SourceLayer = "Application",
                 TargetLayer = "Infrastructure",
                 DependencyType = "Project"
+            },
+            new ArchitectureDependencyContext
+            {
+                Source = "TestProject",
+                Target = "Api",
+                SourceLayer = "Tests",
+                TargetLayer = "Presentation",
+                DependencyType = "Project",
+                Scope = "Test"
             }
         ]);
 
@@ -365,7 +392,8 @@ public sealed class AdditionalEvaluatorBehaviorTests
     {
         using var project = new TemporaryProject();
         var context = CreateContext(project, "C#", "ASP.NET Core");
-        context.Dependencies.Add(
+        context.Dependencies.AddRange(
+        [
             new ArchitectureDependencyContext
             {
                 Source = "Orders",
@@ -373,7 +401,17 @@ public sealed class AdditionalEvaluatorBehaviorTests
                 SourceLayer = "Application",
                 TargetLayer = "Infrastructure",
                 DependencyType = "Project"
-            });
+            },
+            new ArchitectureDependencyContext
+            {
+                Source = "TestProject",
+                Target = "Database",
+                SourceLayer = "Tests",
+                TargetLayer = "Infrastructure",
+                DependencyType = "Project",
+                Scope = "Test"
+            }
+        ]);
         context.DetectedDependencies.AddRange(["Microsoft.EntityFrameworkCore", "Serilog"]);
 
         var results = await Evaluate(project, "CouplingEvaluator", context);

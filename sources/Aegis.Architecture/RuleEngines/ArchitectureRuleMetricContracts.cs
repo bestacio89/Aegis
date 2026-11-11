@@ -419,6 +419,18 @@ internal static class ArchitectureRuleMetricContracts
             return false;
         }
 
+        if (IsLayerBoundaryRule(rule.Id)
+            && IsMultiProjectRepositoryWithoutLayerRoles(context))
+        {
+            reason =
+                $"Rule '{rule.Id}' is not applicable because the repository is " +
+                "classified as a multi-project mixed/library system without any " +
+                "recognized architectural layer roles. Configure project roles " +
+                "before enforcing layer-boundary rules.";
+
+            return false;
+        }
+
         if (!FrontendRuleScopes.TryGetValue(rule.Id, out var targetScope))
             return true;
 
@@ -609,6 +621,44 @@ internal static class ArchitectureRuleMetricContracts
               $"but this fact belongs to '{family.Value}'.";
 
         return false;
+    }
+
+    private static bool IsLayerBoundaryRule(string ruleId) =>
+        ruleId.Equals("AEG-ARCH-R2", StringComparison.OrdinalIgnoreCase)
+        || ruleId.Equals("AEG-ARCH-R3", StringComparison.OrdinalIgnoreCase)
+        || ruleId.Equals("AEG-ARCH-R5", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsMultiProjectRepositoryWithoutLayerRoles(
+        ProjectArchitectureContext context)
+    {
+        if (context.Modules.Count == 0
+            || context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
+        {
+            return false;
+        }
+
+        var isMultiProjectLibraryOrMixed =
+            string.Equals(
+                context.ArchitectureStyle,
+                "Multi-Project / Mixed",
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                context.ArchitectureStyle,
+                "Multi-Project Library",
+                StringComparison.OrdinalIgnoreCase);
+
+        if (!isMultiProjectLibraryOrMixed)
+            return false;
+
+        return !context.Layers.Any(layer =>
+            !string.IsNullOrWhiteSpace(layer.Name)
+            && !layer.Name.StartsWith(
+                "Unclassified:",
+                StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(
+                layer.Name,
+                "Tests",
+                StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool HasCSharpEvidence(ProjectArchitectureContext context) =>

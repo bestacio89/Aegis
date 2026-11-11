@@ -235,6 +235,44 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
     [Fact]
+    public void EvaluateDetailed_marks_strategy_rules_not_applicable_when_complete_analysis_finds_no_candidates()
+    {
+        var policy = new AegisArchitecturePolicy();
+        policy.Architecture.DesignPatterns.EnforceStrategyPattern = true;
+
+        var summary = new ArchitectureEvaluatorResult(
+            "StrategyPatternEvaluator",
+            "SampleProject")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                ["StrategyCount"] = 0,
+                ["UnreadableFiles"] = 0,
+                ["AnalyzedFiles"] = 2,
+                ["DiscoveredFiles"] = 2
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project",
+                ["AnalysisComplete"] = "true",
+                ["AnalysisStatus"] = "Completed",
+                ["EmptyImplementationSet"] = "True"
+            }
+        };
+
+        var outcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            policy).EvaluateDetailed(
+                new ProjectArchitectureContext { Language = "C#" },
+                [summary]);
+
+        Assert.Contains("AEG-DES-STRAT001", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-DES-STRAT002", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-DES-STRAT001", outcome.Stats.RulesNotEvaluated);
+        Assert.DoesNotContain("AEG-DES-STRAT002", outcome.Stats.RulesNotEvaluated);
+    }
+
+    [Fact]
     public void EvaluateDetailed_marks_layer_boundary_rules_not_applicable_when_policy_disables_them()
     {
         var policy = new AegisArchitecturePolicy();

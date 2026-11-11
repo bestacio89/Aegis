@@ -122,6 +122,17 @@ internal static class GradleProjectModelResolver
                     continue;
                 }
 
+                var includedBuildOwner = includedBuilds.FirstOrDefault(includedBuild =>
+                    IsSameOrDescendantPath(projectDirectory, includedBuild.Directory));
+                if (includedBuildOwner is not null)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleProjectOverlapsIncludedBuild",
+                        $"Project '{projectPath}' resolves inside included build '{includedBuildOwner.BuildPath}' and is not attached to the declaring build.",
+                        settingsFile));
+                    continue;
+                }
+
                 projects.Add(new GradleProjectModel.ProjectReference(
                     projectPath,
                     projectDirectory,
@@ -148,6 +159,7 @@ internal static class GradleProjectModelResolver
 
             AttachRootModel(context, rootDirectory, model);
             AttachIncludedProjects(context, model);
+            ResolveIncludedBuildMembership(context, model);
         }
     }
 
@@ -261,9 +273,20 @@ internal static class GradleProjectModelResolver
                 continue;
             }
 
+            var includedDirectory = Path.GetFullPath(
+                Path.Combine(rootDirectory, relativeDirectory));
+            if (includedBuilds.Any(includedBuild =>
+                    PathsEqual(includedBuild.Directory, includedDirectory)))
+            {
+                continue;
+            }
+
             includedBuilds.Add(new GradleProjectModel.IncludedBuild(
                 relativeDirectory,
-                Path.GetFullPath(Path.Combine(rootDirectory, relativeDirectory))));
+                includedDirectory,
+                false,
+                null,
+                null));
         }
 
         var declarations = Regex.Matches(source, @"\bincludeBuild\b", RegexOptions.CultureInvariant).Count;
@@ -276,6 +299,125 @@ internal static class GradleProjectModelResolver
         }
 
         return includedBuilds;
+    }
+
+    private static void ResolveIncludedBuildMembership(
+        ProjectArchitectureContext context,
+        GradleProjectModel model)
+    {
+        var analysisRoot = Path.GetFullPath(context.RootPath);
+
+        for (var index = 0; index < model.IncludedBuilds.Count; index++)
+        {
+            var includedBuild = model.IncludedBuilds[index];
+            var includedDirectory = Path.GetFullPath(includedBuild.Directory);
+
+            if (!IsSameOrDescendantPath(includedDirectory, analysisRoot))
+            {
+                model.Diagnostics.Add(Diagnostic(
+                    "GradleIncludedBuildOutsideAnalysisRoot",
+                    $"Included build '{includedBuild.BuildPath}' resolves outside the analyzed repository and is not inspected.",
+                    model.SettingsFile));
+                continue;
+            }
+
+            if (PathsEqual(includedDirectory, model.RootDirectory))
+            {
+                model.Diagnostics.Add(Diagnostic(
+                    "GradleIncludedBuildSelfReference",
+                    "A Gradle build cannot include its own root as a separate composite member.",
+                    model.SettingsFile));
+                continue;
+            }
+
+            FileAttributes attributes;
+            try
+            {
+                attributes = File.GetAttributes(includedDirectory);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                model.Diagnostics.Add(Diagnostic(
+                    "GradleIncludedBuildDirectoryMissing",
+                    $"Included build directory '{includedBuild.BuildPath}' does not exist.",
+                    model.SettingsFile));
+                continue;
+            }
+            catch (FileNotFoundException)
+            {
+                model.Diagnostics.Add(Diagnostic(
+                    "GradleIncludedBuildDirectoryMissing",
+                    $"Included build directory '{includedBuild.BuildPath}' does not exist.",
+                    model.SettingsFile));
+                continue;
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                model.Diagnostics.Add(Diagnostic(
+                    "GradleIncludedBuildAccessDenied",
+                    $"Included build directory '{includedBuild.BuildPath}' could not be inspected: {exception.Message}",
+                    model.SettingsFile));
+                continue;
+            }
+            catch (IOException exception)
+            {
+                model.Diagnostics.Add(Diagnostic(
+                    "GradleIncludedBuildInspectionFailed",
+                    $"Included build directory '{includedBuild.BuildPath}' could not be inspected: {exception.Message}",
+                    model.SettingsFile));
+                continue;
+            }
+
+            if ((attributes & FileAttributes.Directory) == 0)
+            {
+                model.Diagnostics.Add(Diagnostic(
+                    "GradleIncludedBuildPathNotDirectory",
+                    $"Included build path '{includedBuild.BuildPath}' does not identify a directory.",
+                    model.SettingsFile));
+                continue;
+            }
+
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                model.Diagnostics.Add(Diagnostic(
+                    "GradleIncludedBuildReparsePointSkipped",
+                    $"Included build '{includedBuild.BuildPath}' resolves through a reparse point and is not inspected.",
+                    model.SettingsFile));
+                continue;
+            }
+
+            var includedModule = context.Modules.FirstOrDefault(module =>
+                PathsEqual(module.Path, includedDirectory)
+                && module.ProjectFiles.Any(IsGradleManifest));
+
+            if (includedModule is null)
+            {
+                model.Diagnostics.Add(Diagnostic(
+                    "GradleIncludedBuildNotDiscovered",
+                    $"Included build '{includedBuild.BuildPath}' has no independently discovered Gradle project manifest.",
+                    model.SettingsFile));
+                continue;
+            }
+
+            var settingsFile = includedModule.GradleModel?.SettingsFile
+                ?? includedModule.ProjectFiles.FirstOrDefault(IsSettingsManifest);
+            model.IncludedBuilds[index] = includedBuild with
+            {
+                IsDiscovered = true,
+                SettingsFile = settingsFile,
+                RootProjectName = includedModule.GradleModel?.RootProjectName ?? includedModule.Name
+            };
+        }
+
+        model.IsComplete = model.Diagnostics.Count == 0;
+    }
+
+    private static bool IsGradleManifest(string file)
+    {
+        var name = Path.GetFileName(file);
+        return IsSettingsManifest(file)
+            || name.Equals("build.gradle", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void AttachRootModel(

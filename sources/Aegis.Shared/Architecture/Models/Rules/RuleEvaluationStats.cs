@@ -6,8 +6,10 @@
 /// </summary>
 public sealed class RuleEvaluationStats
 {
+    /// <summary>Total number of rule definitions in the registry.</summary>
     public int RulesRegistered { get; init; }
 
+    /// <summary>Supported rules whose applicability conditions match the analyzed scope.</summary>
     public int RulesApplicable { get; init; }
 
     /// <summary>Rules explicitly disabled by the active policy; excluded from applicability and coverage.</summary>
@@ -81,6 +83,11 @@ public sealed class RuleEvaluationStats
     /// </summary>
     public int FactsWithKnownMetricsWithoutEligibleRule { get; init; }
 
+    /// <summary>
+    /// Supported, applicable rules for which the required evidence or a
+    /// completed comparison was unavailable. Unsupported, disabled, and
+    /// positively inapplicable rules are tracked separately.
+    /// </summary>
     public IReadOnlyList<string> RulesNotEvaluated { get; init; }
         = Array.Empty<string>();
 

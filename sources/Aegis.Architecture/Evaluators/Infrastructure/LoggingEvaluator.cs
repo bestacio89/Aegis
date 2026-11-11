@@ -479,40 +479,24 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
         foreach (Match call in calls)
         {
-            var windowLength = Math.Min(
-                500,
-                content.Length - call.Index);
-
-            if (windowLength <= 0)
-            {
+            // Console and Trace output are observable diagnostics, but they
+            // are not structured application-logger message templates.
+            if (IsConsoleOrTraceCall(call.Value))
                 continue;
-            }
 
-            var window = content.Substring(call.Index, windowLength);
-
-            // These checks are intentionally conservative heuristics:
-            // AST-backed analysis would be required to associate every
-            // message template and argument list with complete accuracy.
-            var hasTemplate = StructuredTemplateRx.IsMatch(window);
+            var invocation = ExtractInvocationText(content, call.Index);
+            var hasTemplate = StructuredTemplateRx.IsMatch(invocation);
             var hasPythonParameters =
-                language == "Python" &&
-                PythonParameterizedLoggingRx.IsMatch(window);
-
-            var hasInterpolation =
-                InterpolatedStringRx.IsMatch(window);
+                language == "Python"
+                && PythonParameterizedLoggingRx.IsMatch(invocation);
+            var hasInterpolation = InterpolatedStringRx.IsMatch(invocation);
 
             if (hasTemplate)
-            {
                 structuredCalls++;
-            }
             else if (hasPythonParameters)
-            {
                 parameterizedCalls++;
-            }
             else if (hasInterpolation)
-            {
                 interpolatedCalls++;
-            }
         }
 
         // Structured message templates and parameterized Python logging
@@ -531,20 +515,14 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             return 100;
         }
 
-        var calls = LogLevelRx.Matches(content);
+        var totalLoggingCalls = LoggingCallRx.Matches(content).Count;
+        if (totalLoggingCalls == 0)
+            return 100;
 
-        if (calls.Count == 0)
-        {
-            // The caller already established that a recognizable logging
-            // call exists; no recognized level-specific call is neutral
-            // evidence rather than proof of compliance.
-            return 50;
-        }
-
-        var recognizedLevelCalls = calls.Count;
+        var recognizedLevelCalls = LogLevelRx.Matches(content).Count;
 
         return Math.Round(
-            100.0 * recognizedLevelCalls / calls.Count,
+            100.0 * recognizedLevelCalls / totalLoggingCalls,
             2);
     }
 
@@ -568,28 +546,14 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
         foreach (Match call in calls)
         {
-            var windowLength = Math.Min(
-                500,
-                content.Length - call.Index);
-
-            if (windowLength <= 0)
-            {
-                continue;
-            }
-
-            var window = content.Substring(call.Index, windowLength);
-
-            var interpolated =
-                InterpolatedStringRx.IsMatch(window);
-
+            var invocation = ExtractInvocationText(content, call.Index);
+            var interpolated = InterpolatedStringRx.IsMatch(invocation);
             var pythonPercentFormatting =
-                language == "Python" &&
-                PythonParameterizedLoggingRx.IsMatch(window);
+                language == "Python"
+                && PythonParameterizedLoggingRx.IsMatch(invocation);
 
             if (interpolated && !pythonPercentFormatting)
-            {
                 interpolatedCalls++;
-            }
         }
 
         var ratio = (double)interpolatedCalls / calls.Count;
@@ -597,6 +561,120 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
         return Math.Round(
             Math.Clamp(100.0 * (1.0 - ratio), 0, 100),
             2);
+    }
+
+    private static bool IsConsoleOrTraceCall(string call) =>
+        call.Contains("Console.", StringComparison.OrdinalIgnoreCase)
+        || call.Contains("System.Diagnostics.Trace", StringComparison.OrdinalIgnoreCase);
+
+    private static string ExtractInvocationText(string content, int callStart)
+    {
+        var openingParenthesis = content.IndexOf('(', callStart);
+        if (openingParenthesis < 0)
+            return string.Empty;
+
+        var depth = 0;
+        var quote = '\0';
+        var verbatim = false;
+        var rawQuoteCount = 0;
+
+        for (var index = openingParenthesis; index < content.Length; index++)
+        {
+            var current = content[index];
+
+            if (quote != '\0')
+            {
+                if (rawQuoteCount > 0)
+                {
+                    if (current == '"' && HasQuoteRun(content, index, rawQuoteCount))
+                    {
+                        index += rawQuoteCount - 1;
+                        quote = '\0';
+                        rawQuoteCount = 0;
+                    }
+
+                    continue;
+                }
+
+                if (!verbatim && current == '\\')
+                {
+                    index++;
+                    continue;
+                }
+
+                if (verbatim && current == '"' && index + 1 < content.Length
+                    && content[index + 1] == '"')
+                {
+                    index++;
+                    continue;
+                }
+
+                if (current == quote)
+                {
+                    quote = '\0';
+                    verbatim = false;
+                }
+
+                continue;
+            }
+
+            if (current is '"' or '\'')
+            {
+                quote = current;
+                if (current == '"')
+                {
+                    var quoteRun = CountQuoteRun(content, index);
+                    if (quoteRun >= 3)
+                    {
+                        rawQuoteCount = quoteRun;
+                        index += quoteRun - 1;
+                        continue;
+                    }
+
+                    verbatim = index > 0 && content[index - 1] == '@';
+                }
+
+                continue;
+            }
+
+            if (current == '(')
+            {
+                depth++;
+                continue;
+            }
+
+            if (current == ')')
+            {
+                depth--;
+                if (depth == 0)
+                    return content[(openingParenthesis + 1)..index];
+            }
+        }
+
+        return content[(openingParenthesis + 1)..];
+    }
+
+    private static int CountQuoteRun(string content, int start)
+    {
+        var count = 0;
+        while (start + count < content.Length && content[start + count] == '"')
+            count++;
+
+        return count;
+    }
+
+    private static bool HasQuoteRun(string content, int start, int count)
+    {
+        if (start + count > content.Length)
+            return false;
+
+        for (var index = start; index < start + count; index++)
+        {
+            if (content[index] != '"')
+                return false;
+        }
+
+        return true;
     }
 
     private static double ComputeIntegrity(

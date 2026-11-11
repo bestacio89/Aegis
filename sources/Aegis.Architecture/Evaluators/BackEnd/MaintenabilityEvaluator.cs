@@ -7,6 +7,9 @@ using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
 using Aegis.Shared.Diagnostics;
 using Franz.Common.DependencyInjection;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -206,13 +209,12 @@ public sealed class MaintainabilityEvaluator
         result.Metadata["Layer"] = result.Layer ?? "Unknown";
         result.Metadata["EvaluationScope"] = FileScope;
 
-        result.Metadata["ComplexityMeasurement"] =
-            "Lexical decision-point count for the entire file; not method-level cyclomatic complexity.";
+        result.Metadata["ComplexityMeasurement"] = metrics.DecisionPointMeasurement;
 
         result.Metadata["CommentDensityMeasurement"] =
             "Percentage of non-empty physical lines containing comment text.";
         result.Metadata["MaintainabilityMeasurement"] =
-            "Aegis heuristic (0-100): 100 minus weighted lexical decision points and non-comment code lines beyond the policy limit. Comment density is informational only and does not affect the score. This is not a compiler-backed or industry-standard maintainability index.";
+            "Aegis heuristic (0-100): 100 minus a weighted maximum executable-member decision-point count for C# (Roslyn AST), or file-level lexical decision points for Java/Python, and non-comment code lines beyond the policy limit. Comment density is informational only. This is not an industry-standard maintainability index.";
         result.Metadata["CommentDensityInterpretation"] =
             "Comment density is informational only; low comment density is not treated as a maintainability defect.";
         result.Metadata["AnalysisComplete"] = "true";
@@ -292,7 +294,7 @@ public sealed class MaintainabilityEvaluator
         summary.Metadata["Framework"] = context?.Framework ?? "Unknown";
 
         summary.Metadata["ComplexityMeasurement"] =
-            "Sum of file-level lexical decision-point counts.";
+            "Sum of per-file maximum executable-member decision-point counts for C# and file-level lexical decision-point counts for Java/Python.";
 
         summary.Metadata["CommentDensityMeasurement"] =
             "Project-wide comment-line count divided by non-empty physical source lines.";
@@ -371,6 +373,56 @@ public sealed class MaintainabilityEvaluator
             .Cast<Match>()
             .ToArray() ?? [];
         var decisionPointCount = decisionMatches.Length;
+        var decisionPointMeasurement =
+            "File-level lexical decision-point count; method boundaries are not parsed for this language.";
+        var decisionEvidence = new List<string>();
+        int? firstEvidenceLine = null;
+        var evidenceTruncated = decisionMatches.Length > 50;
+        string? maximumMemberName = null;
+        int? maximumMemberLine = null;
+
+        if (string.Equals(language, "C#", StringComparison.OrdinalIgnoreCase))
+        {
+            var csharpAnalysis = AnalyzeCSharpDecisionPoints(content);
+
+            if (csharpAnalysis is not null)
+            {
+                decisionPointCount = csharpAnalysis.DecisionPoints.Count;
+                maximumMemberName = csharpAnalysis.Member?.Name;
+                maximumMemberLine = csharpAnalysis.Member?.Line;
+                decisionPointMeasurement =
+                    "Roslyn AST: maximum decision-point count of any executable member; nested local functions and lambdas are measured independently.";
+
+                foreach (var decisionPoint in csharpAnalysis.DecisionPoints.Take(50))
+                {
+                    decisionEvidence.Add(
+                        $"Line {decisionPoint.Line}: member '{maximumMemberName}' contains " +
+                        $"{decisionPoint.Kind} — {GetSourceLine(content, decisionPoint.Line)}");
+                }
+
+                firstEvidenceLine = csharpAnalysis.DecisionPoints.FirstOrDefault()?.Line
+                    ?? maximumMemberLine;
+                evidenceTruncated = csharpAnalysis.DecisionPoints.Count > 50;
+            }
+            else
+            {
+                decisionPointMeasurement =
+                    "File-level lexical fallback: Roslyn reported syntax errors, so method-level decision points could not be measured reliably.";
+            }
+        }
+
+        if (decisionEvidence.Count == 0 && decisionMatches.Length > 0)
+        {
+            foreach (var match in decisionMatches.Take(50))
+            {
+                var lineNumber = GetLineNumber(sanitized, match.Index);
+                decisionEvidence.Add(
+                    $"Line {lineNumber}: file-level lexical decision point '{match.Value}' — " +
+                    GetSourceLine(content, lineNumber));
+            }
+
+            firstEvidenceLine ??= GetLineNumber(sanitized, decisionMatches[0].Index);
+        }
 
         var roundedCommentDensity = Math.Round(commentDensity, 2);
         var complexityPenalty = decisionPointCount * Math.Max(0, _policy.ComplexityWeight);
@@ -384,20 +436,20 @@ public sealed class MaintainabilityEvaluator
             100.0);
 
         var roundedScore = Math.Round(score, 2);
+        var decisionPointDescription = maximumMemberName is not null
+            ? $"maximum executable-member decision points {decisionPointCount} " +
+              $"in '{maximumMemberName}' at line {maximumMemberLine}"
+            : $"file-level lexical decision points {decisionPointCount}";
+
         var evidenceSummary =
             $"Maintainability score {roundedScore:0.##}/100; " +
-            $"decision points {decisionPointCount} (penalty {complexityPenalty:0.##}); " +
+            $"{decisionPointDescription} (penalty {complexityPenalty:0.##}); " +
             $"non-comment code lines {nonEmptyLineCount}, maximum {_policy.MaxLinesPerFile} " +
             $"(penalty {linePenalty:0.##}); comment density {roundedCommentDensity:0.##}% " +
             "(informational only; not included in the score).";
 
         var evidence = new List<string> { evidenceSummary };
-        foreach (var match in decisionMatches.Take(50))
-        {
-            var lineNumber = GetLineNumber(sanitized, match.Index);
-            evidence.Add(
-                $"Line {lineNumber}: decision point '{match.Value}' — {GetSourceLine(content, lineNumber)}");
-        }
+        evidence.AddRange(decisionEvidence);
 
         return new MaintainabilityMetrics(
             decisionPointCount,
@@ -407,12 +459,135 @@ public sealed class MaintainabilityEvaluator
             roundedScore,
             evidence,
             evidenceSummary,
-            decisionMatches.Length > 0
-                ? GetLineNumber(sanitized, decisionMatches[0].Index)
-                : null,
+            firstEvidenceLine,
             content,
-            decisionMatches.Length > 50);
+            evidenceTruncated,
+            decisionPointMeasurement);
     }
+
+    private static CSharpDecisionAnalysis? AnalyzeCSharpDecisionPoints(string content)
+    {
+        var syntaxTree = CSharpSyntaxTree.ParseText(
+            content,
+            new CSharpParseOptions(LanguageVersion.Latest));
+
+        if (syntaxTree.GetDiagnostics().Any(
+                diagnostic => diagnostic.Severity == DiagnosticSeverity.Error))
+        {
+            return null;
+        }
+
+        var root = syntaxTree.GetRoot();
+        var executableMembers = root.DescendantNodesAndSelf()
+            .Select(TryGetCSharpExecutableMember)
+            .Where(member => member is not null)
+            .Cast<CSharpExecutableMember>()
+            .ToArray();
+
+        if (executableMembers.Length == 0)
+            return new CSharpDecisionAnalysis(null, []);
+
+        var mostComplexMember = executableMembers
+            .Select(member => new
+            {
+                Member = member,
+                DecisionPoints = GetCSharpDecisionPoints(member.Body)
+            })
+            .OrderByDescending(item => item.DecisionPoints.Count)
+            .ThenBy(item => item.Member.Line)
+            .First();
+
+        return new CSharpDecisionAnalysis(
+            mostComplexMember.Member,
+            mostComplexMember.DecisionPoints);
+    }
+
+    private static CSharpExecutableMember? TryGetCSharpExecutableMember(
+        SyntaxNode node)
+    {
+        var body = node switch
+        {
+            BaseMethodDeclarationSyntax method =>
+                (SyntaxNode?)method.Body ?? method.ExpressionBody?.Expression,
+            AccessorDeclarationSyntax accessor =>
+                (SyntaxNode?)accessor.Body ?? accessor.ExpressionBody?.Expression,
+            LocalFunctionStatementSyntax localFunction =>
+                (SyntaxNode?)localFunction.Body ?? localFunction.ExpressionBody?.Expression,
+            LambdaExpressionSyntax lambda => lambda.Body,
+            AnonymousMethodExpressionSyntax anonymousMethod => anonymousMethod.Block,
+            PropertyDeclarationSyntax property => property.ExpressionBody?.Expression,
+            IndexerDeclarationSyntax indexer => indexer.ExpressionBody?.Expression,
+            _ => null
+        };
+
+        if (body is null)
+            return null;
+
+        return new CSharpExecutableMember(
+            body,
+            GetCSharpExecutableMemberName(node),
+            node.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+    }
+
+    private static string GetCSharpExecutableMemberName(SyntaxNode node) =>
+        node switch
+        {
+            MethodDeclarationSyntax method => method.Identifier.ValueText,
+            ConstructorDeclarationSyntax constructor => constructor.Identifier.ValueText,
+            DestructorDeclarationSyntax destructor => $"~{destructor.Identifier.ValueText}",
+            OperatorDeclarationSyntax operation => $"operator {operation.OperatorToken.ValueText}",
+            ConversionOperatorDeclarationSyntax conversion =>
+                $"{conversion.ImplicitOrExplicitKeyword.ValueText} operator {conversion.Type}",
+            AccessorDeclarationSyntax accessor => accessor.Keyword.ValueText,
+            LocalFunctionStatementSyntax localFunction => localFunction.Identifier.ValueText,
+            LambdaExpressionSyntax => "lambda",
+            AnonymousMethodExpressionSyntax => "anonymous method",
+            PropertyDeclarationSyntax property => property.Identifier.ValueText,
+            IndexerDeclarationSyntax => "this[]",
+            _ => node.Kind().ToString()
+        };
+
+    private static IReadOnlyList<CSharpDecisionPoint> GetCSharpDecisionPoints(
+        SyntaxNode executableBody)
+    {
+        return executableBody
+            .DescendantNodesAndSelf(descendIntoChildren: node =>
+                !IsNestedExecutableMember(node))
+            .Where(IsCSharpDecisionPoint)
+            .Select(node => new CSharpDecisionPoint(
+                node.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
+                node.Kind().ToString()))
+            .ToArray();
+    }
+
+    private static bool IsNestedExecutableMember(SyntaxNode node) =>
+        node is BaseMethodDeclarationSyntax
+            or AccessorDeclarationSyntax
+            or LocalFunctionStatementSyntax
+            or LambdaExpressionSyntax
+            or AnonymousMethodExpressionSyntax
+            or PropertyDeclarationSyntax
+            or IndexerDeclarationSyntax;
+
+    private static bool IsCSharpDecisionPoint(SyntaxNode node) =>
+        node is IfStatementSyntax
+            or ForStatementSyntax
+            or ForEachStatementSyntax
+            or ForEachVariableStatementSyntax
+            or WhileStatementSyntax
+            or DoStatementSyntax
+            or CatchClauseSyntax
+            or ConditionalExpressionSyntax
+            or CaseSwitchLabelSyntax
+            or CasePatternSwitchLabelSyntax
+            or SwitchExpressionArmSyntax
+            or WhenClauseSyntax
+        || node is BinaryExpressionSyntax binaryExpression
+            && (binaryExpression.IsKind(SyntaxKind.LogicalAndExpression)
+                || binaryExpression.IsKind(SyntaxKind.LogicalOrExpression))
+        || node is BinaryPatternSyntax binaryPattern
+            && (binaryPattern.IsKind(SyntaxKind.AndPattern)
+                || binaryPattern.IsKind(SyntaxKind.OrPattern));
 
     private static Regex? GetDecisionRegex(string? language) =>
         language?.Trim() switch
@@ -793,5 +968,19 @@ public sealed class MaintainabilityEvaluator
         string EvidenceSummary,
         int? FirstEvidenceLine,
         string Source,
-        bool EvidenceTruncated);
+        bool EvidenceTruncated,
+        string DecisionPointMeasurement);
+
+    private sealed record CSharpExecutableMember(
+        SyntaxNode Body,
+        string Name,
+        int Line);
+
+    private sealed record CSharpDecisionPoint(
+        int Line,
+        string Kind);
+
+    private sealed record CSharpDecisionAnalysis(
+        CSharpExecutableMember? Member,
+        IReadOnlyList<CSharpDecisionPoint> DecisionPoints);
 }

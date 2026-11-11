@@ -735,13 +735,14 @@ public sealed class RuleEngineCore
                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList();
 
-        var codeSnippet = fact.Metadata?.GetValueOrDefault(snippetKey)
-            ?? fact.Evidence;
+        var codeSnippet = fact.Metadata?.GetValueOrDefault(snippetKey);
         var lineNumber = int.TryParse(
             fact.Metadata?.GetValueOrDefault(lineKey),
             out var evidenceLine)
             ? evidenceLine
-            : fact.LineNumber;
+            : fact.Metrics.Count == 1
+                ? fact.LineNumber
+                : null;
 
         return new ArchitectureRuleresult(
             rule.Id,
@@ -762,7 +763,7 @@ public sealed class RuleEngineCore
                 : fact.Target,
             AnalyzerVersion = context.DetectorVersion,
             LineNumber = rule.Scope == RuleEvaluationScope.Project ? null : lineNumber,
-            CodeSnippet = codeSnippet,
+            CodeSnippet = codeSnippet ?? string.Empty,
             Evidence = evidence,
             Recommendation = rule.Recommendation
         };
@@ -795,14 +796,17 @@ public sealed class RuleEngineCore
         var metadata = fact.Metadata;
         var metricEvidence = metadata?.GetValueOrDefault($"Evidence.{metricKey}");
         var metricSnippet = metadata?.GetValueOrDefault($"CodeSnippet.{metricKey}");
+        var evidenceScope = metadata?.GetValueOrDefault($"EvidenceScope.{metricKey}");
         var genericEvidence = fact.Evidence ?? metadata?.GetValueOrDefault("Evidence");
 
-        var hasEvidenceText =
+        var hasMetricEvidence =
             !string.IsNullOrWhiteSpace(metricEvidence)
-            || !string.IsNullOrWhiteSpace(metricSnippet)
-            || !string.IsNullOrWhiteSpace(genericEvidence);
+            || !string.IsNullOrWhiteSpace(metricSnippet);
+        var hasUnambiguousGenericEvidence =
+            !string.IsNullOrWhiteSpace(genericEvidence)
+            && fact.Metrics.Count == 1;
 
-        if (!hasEvidenceText)
+        if (!hasMetricEvidence && !hasUnambiguousGenericEvidence)
             return false;
 
         if (scope == RuleEvaluationScope.Project)
@@ -812,24 +816,28 @@ public sealed class RuleEngineCore
         if (string.IsNullOrWhiteSpace(filePath))
             return false;
 
-        var lineNumber = fact.LineNumber;
-        if (lineNumber is null or <= 0)
+        if (string.Equals(
+                evidenceScope,
+                "FileName",
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                evidenceScope,
+                "FileMetrics",
+                StringComparison.OrdinalIgnoreCase))
         {
-            var evidenceScope = metadata?.GetValueOrDefault($"EvidenceScope.{metricKey}");
-            if (string.Equals(
-                    evidenceScope,
-                    "FileName",
-                    StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (!int.TryParse(
-                    metadata?.GetValueOrDefault($"EvidenceLine.{metricKey}"),
-                    out var parsedLine)
-                || parsedLine <= 0)
-                return false;
+            return hasMetricEvidence;
         }
 
-        return true;
+        if (int.TryParse(
+                metadata?.GetValueOrDefault($"EvidenceLine.{metricKey}"),
+                out var evidenceLine)
+            && evidenceLine > 0)
+        {
+            return hasMetricEvidence;
+        }
+
+        return hasUnambiguousGenericEvidence
+            && fact.LineNumber is > 0;
     }
 
     private static RuleEvaluationResult CreateInsufficientEvidenceEvaluation(

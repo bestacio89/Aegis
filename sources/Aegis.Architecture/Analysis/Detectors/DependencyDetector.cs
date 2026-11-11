@@ -113,7 +113,8 @@ internal static class DependencyDetector
                 // Preserve every project relationship as evidence. A relationship
                 // involving a test project is test-scoped even when its other
                 // endpoint is a production component.
-                var scope = sourceModule.IsTestProject || targetModule.IsTestProject
+                var scope = sourceModule.IsTestProject || sourceModule.IsTestSupport
+                    || targetModule.IsTestProject || targetModule.IsTestSupport
                     ? "Test"
                     : "Production";
 

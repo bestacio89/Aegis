@@ -173,7 +173,8 @@ public sealed class RepositoryPatternEvaluator
             ".cs",
             ".java",
             ".py",
-            ".ts");
+            ".ts",
+            ".tsx");
 
         _logger.LogInformation(
             "Running {Evaluator} on {Count} source files.",
@@ -320,6 +321,7 @@ public sealed class RepositoryPatternEvaluator
                     ["RepositoryComplianceScore"] = compliance,
                     ["MethodCount"] = methodCount,
                     ["FieldCount"] = fieldCount,
+                    ["ExternalTransportIndicatorCount"] = leakMatches.Count,
                     ["PersistenceTransportIndicatorCount"] = leakMatches.Count
                 };
 
@@ -329,7 +331,6 @@ public sealed class RepositoryPatternEvaluator
                     sourceFile,
                     repositoryName,
                     classMatch,
-                    classBody,
                     classBodyStart,
                     metrics,
                     hasMatchingInterface,
@@ -403,7 +404,6 @@ public sealed class RepositoryPatternEvaluator
         SourceFile sourceFile,
         string repositoryName,
         Match classMatch,
-        string classBody,
         int classBodyStart,
         Dictionary<string, double> metrics,
         bool hasMatchingInterface,
@@ -890,13 +890,13 @@ public sealed class RepositoryPatternEvaluator
 
     private static double ComputeCompliance(
         double interfaceAdherence,
-        double persistenceTransportSignal,
+        double externalTransportSignal,
         double namingCompliance,
         double complexity)
     {
         var score =
             interfaceAdherence * 0.30 +
-            (1d - persistenceTransportSignal) * 0.35 +
+            (1d - externalTransportSignal) * 0.35 +
             namingCompliance * 0.15 +
             (1d - complexity) * 0.20;
 

@@ -235,6 +235,40 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
     [Fact]
+    public void EvaluateDetailed_marks_layer_boundary_rules_not_applicable_when_policy_disables_them()
+    {
+        var policy = new AegisArchitecturePolicy();
+        policy.Architecture.EnforceLayerBoundaries = false;
+
+        var context = new ProjectArchitectureContext
+        {
+            ArchitectureStyle = "Multi-Project / Mixed",
+            Modules =
+            [
+                new() { Name = "Application", Path = "src/Application" },
+                new() { Name = "Infrastructure", Path = "src/Infrastructure" }
+            ],
+            Layers =
+            [
+                new() { Name = "Application" },
+                new() { Name = "Infrastructure" }
+            ]
+        };
+
+        var outcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            policy).EvaluateDetailed(context, []);
+
+        Assert.Contains("AEG-ARCH-R2", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-ARCH-R3", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-ARCH-R5", outcome.Stats.RulesNotApplicable);
+        Assert.Contains(
+            outcome.Stats.NotApplicableReasons,
+            pair => pair.Key == "AEG-ARCH-R2"
+                && pair.Value.Contains("disabled", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void EvaluateDetailed_marks_layer_boundary_rules_not_applicable_without_two_architectural_roles()
     {
         var context = new ProjectArchitectureContext

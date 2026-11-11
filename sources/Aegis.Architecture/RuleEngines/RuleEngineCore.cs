@@ -815,6 +815,13 @@ public sealed class RuleEngineCore
         var lineNumber = fact.LineNumber;
         if (lineNumber is null or <= 0)
         {
+            var evidenceScope = metadata?.GetValueOrDefault($"EvidenceScope.{metricKey}");
+            if (string.Equals(
+                    evidenceScope,
+                    "FileName",
+                    StringComparison.OrdinalIgnoreCase))
+                return true;
+
             if (!int.TryParse(
                     metadata?.GetValueOrDefault($"EvidenceLine.{metricKey}"),
                     out var parsedLine)

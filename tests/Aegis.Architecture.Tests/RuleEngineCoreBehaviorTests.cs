@@ -203,6 +203,61 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
     [Fact]
+    public void EvaluateDetailed_marks_layer_boundary_rules_not_applicable_without_two_architectural_roles()
+    {
+        var context = new ProjectArchitectureContext
+        {
+            ArchitectureStyle = "Multi-Project / Mixed",
+            Modules =
+            [
+                new() { Name = "LibraryA", Path = "src/LibraryA" },
+                new() { Name = "LibraryB", Path = "src/LibraryB" }
+            ],
+            Layers =
+            [
+                new() { Name = "Client" },
+                new() { Name = "Tests" },
+                new() { Name = "Unclassified:LibraryA" },
+                new() { Name = "Unclassified:LibraryB" }
+            ]
+        };
+
+        var outcome = CreateEngine().EvaluateDetailed(context, []);
+
+        Assert.Contains("AEG-ARCH-R2", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-ARCH-R3", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-ARCH-R5", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-ARCH-R2", outcome.Stats.RulesNotEvaluated);
+        Assert.DoesNotContain("AEG-ARCH-R3", outcome.Stats.RulesNotEvaluated);
+        Assert.DoesNotContain("AEG-ARCH-R5", outcome.Stats.RulesNotEvaluated);
+    }
+
+    [Fact]
+    public void EvaluateDetailed_keeps_layer_boundary_rules_applicable_when_two_architectural_roles_exist()
+    {
+        var context = new ProjectArchitectureContext
+        {
+            ArchitectureStyle = "Multi-Project / Mixed",
+            Modules =
+            [
+                new() { Name = "Application", Path = "src/Application" },
+                new() { Name = "Infrastructure", Path = "src/Infrastructure" }
+            ],
+            Layers =
+            [
+                new() { Name = "Application" },
+                new() { Name = "Infrastructure" }
+            ]
+        };
+
+        var outcome = CreateEngine().EvaluateDetailed(context, []);
+
+        Assert.DoesNotContain("AEG-ARCH-R2", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-ARCH-R3", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-ARCH-R5", outcome.Stats.RulesNotApplicable);
+    }
+
+    [Fact]
     public void EvaluateDetailed_does_not_guess_frontend_applicability_without_fact_framework_evidence()
     {
         var rule = ArchitectureRuleRegistry.GetById("AEG-FRONT-R1");

@@ -9,7 +9,8 @@ internal static class DependencyDetector
 {
     public static void Analyze(
         ProjectArchitectureContext ctx,
-        List<string> files)
+        List<string> files,
+        bool includeProjectReferences = true)
     {
         var dependencies = new HashSet<string>(
             ctx.DetectedDependencies,
@@ -40,7 +41,7 @@ internal static class DependencyDetector
         // Package manifests populate DetectedDependencies only. Internal
         // architecture edges come from explicit project references, never from
         // package names or package versions.
-        if (ctx.Modules.Count > 0)
+        if (includeProjectReferences && ctx.Modules.Count > 0)
             AnalyzeDotNetProjectReferences(ctx, files);
     }
 

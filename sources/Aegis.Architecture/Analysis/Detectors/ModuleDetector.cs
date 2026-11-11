@@ -520,6 +520,13 @@ internal static class ModuleDetector
         {
             return "Test";
         }
+
+        if (name.Equals("testing", StringComparison.Ordinal)
+            || name.EndsWith(".testing", StringComparison.Ordinal)
+            || name.Contains("testsupport", StringComparison.Ordinal))
+        {
+            return "TestSupport";
+        }
         // Explicit contract packages take precedence over the technical family
         // names used by adapters such as Http.Contracts.
         if (name.Contains("contracts", StringComparison.Ordinal)

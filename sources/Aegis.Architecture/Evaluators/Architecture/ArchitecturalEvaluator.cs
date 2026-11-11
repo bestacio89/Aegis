@@ -67,6 +67,7 @@ public sealed class ArchitecturalEvaluator :
         token.ThrowIfCancellationRequested();
 
         if (Context is null
+            || !_policy.EnforceLayerBoundaries
             || ArchitectureLayerApplicability.IsMultiProjectWithoutLayerBoundaryModel(Context))
         {
             return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(

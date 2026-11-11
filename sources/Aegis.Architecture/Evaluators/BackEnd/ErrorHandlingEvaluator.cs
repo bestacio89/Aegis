@@ -50,9 +50,7 @@ public sealed class ErrorHandlingEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "ASP.NET",
-        "Spring Boot",
-        "FastAPI"
+        "LanguageAgnostic"
     ];
 
     public ErrorHandlingEvaluator(
@@ -80,19 +78,11 @@ public sealed class ErrorHandlingEvaluator
             return results;
         }
 
-        var extensions = GetExtensions(context.Language);
-
-        if (extensions.Length == 0)
-        {
-            AegisDiagnostics.Report(
-                Name,
-                DiagnosticLevel.Trace,
-                $"Unsupported language for error-handling analysis: {context.Language}.");
-
-            return results;
-        }
-
-        var files = ResolveSourceFiles(projectPath, extensions);
+        var files = ResolveSourceFiles(
+            projectPath,
+            ".cs",
+            ".java",
+            ".py");
         var filesAnalyzed = 0;
         var unreadableFiles = 0;
 
@@ -150,9 +140,12 @@ public sealed class ErrorHandlingEvaluator
 
             filesAnalyzed++;
 
-            var metrics = AnalyzeCatchBlocks(
-                content,
-                context.Language);
+            var language = DetectLanguage(file);
+            if (!SupportedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            var framework = ResolveFrameworkForFile(file, projectPath, context);
+            var metrics = AnalyzeCatchBlocks(content, language);
 
             totalCatchBlocks += metrics.TotalCatchBlocks;
             totalEmptyCatchBlocks += metrics.EmptyCatchBlocks;
@@ -163,7 +156,7 @@ public sealed class ErrorHandlingEvaluator
             // exists. The project summary below records the full analysis scope.
             if (metrics.TotalCatchBlocks > 0)
             {
-                results.Add(CreateFileResult(file, metrics));
+                results.Add(CreateFileResult(file, metrics, language, framework));
             }
         }
 
@@ -191,13 +184,14 @@ public sealed class ErrorHandlingEvaluator
 
     private ArchitectureEvaluatorResult CreateFileResult(
         string file,
-        CatchAnalysis metrics)
+        CatchAnalysis metrics,
+        string language,
+        string? framework)
     {
         var result = CreateResult(file, "ErrorHandling");
 
-        result.ProjectName = Context?.ProjectName;
-        result.Language = Context?.Language;
-        result.Framework = Context?.Framework;
+        result.Language = language;
+        result.Framework = framework;
         result.Layer = ResolveLayer(file);
         result.DetectionConfidence = Context?.Confidence ?? 0;
 
@@ -207,8 +201,8 @@ public sealed class ErrorHandlingEvaluator
         result.Metrics["SwallowedExceptions"] = metrics.SwallowedExceptions;
 
         result.Metadata["FilePath"] = file;
-        result.Metadata["Language"] = Context?.Language ?? "Unknown";
-        result.Metadata["Framework"] = Context?.Framework ?? "Unknown";
+        result.Metadata["Language"] = language;
+        result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["Layer"] = result.Layer ?? "Unknown";
         result.Metadata["EvaluationScope"] = FileScope;
         result.Metadata["MeasurementMethod"] =
@@ -216,7 +210,85 @@ public sealed class ErrorHandlingEvaluator
         result.Metadata["SwallowedExceptionDefinition"] =
             "Catch/except body contains no recognized rethrow, raise, or logging indicator.";
 
+        var allEvidence = metrics.Evidence;
+        result.Evidence = string.Join(
+            Environment.NewLine,
+            allEvidence.Select(item =>
+                $"Line {item.LineNumber}: {item.SourceLine}"));
+
+        result.LineNumber = allEvidence.FirstOrDefault()?.LineNumber;
+
+        AddMetricEvidence(
+            result,
+            "TotalCatchBlocks",
+            allEvidence,
+            "No catch/except clauses were detected in this file.");
+        AddMetricEvidence(
+            result,
+            "EmptyCatchBlocks",
+            allEvidence.Where(item => item.IsEmpty).ToArray(),
+            $"No empty catch/except clauses were detected among {metrics.TotalCatchBlocks} clause(s).");
+        AddMetricEvidence(
+            result,
+            "GenericCatchBlocks",
+            allEvidence.Where(item => item.IsGeneric).ToArray(),
+            $"No generic catch/except types were detected among {metrics.TotalCatchBlocks} clause(s).");
+        AddMetricEvidence(
+            result,
+            "SwallowedExceptions",
+            allEvidence.Where(item => item.IsSwallowed).ToArray(),
+            $"No swallowed exception indicators were detected among {metrics.TotalCatchBlocks} clause(s).");
+
         return result;
+    }
+
+    private static void AddMetricEvidence(
+        ArchitectureEvaluatorResult result,
+        string metricKey,
+        IReadOnlyCollection<CatchEvidence> evidence,
+        string emptyEvidence)
+    {
+        var evidenceText = evidence.Count == 0
+            ? emptyEvidence
+            : string.Join(
+                Environment.NewLine,
+                evidence.Select(item =>
+                    $"Line {item.LineNumber}: {item.SourceLine}"));
+
+        result.Metadata[$"Evidence.{metricKey}"] = evidenceText;
+        result.Metadata[$"EvidenceScope.{metricKey}"] = "FileMetrics";
+
+        var first = evidence.FirstOrDefault();
+        if (first is null)
+            return;
+
+        result.Metadata[$"EvidenceLine.{metricKey}"] =
+            first.LineNumber.ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
+        result.Metadata[$"CodeSnippet.{metricKey}"] = first.SourceLine;
+    }
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position && index < content.Length; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        return lineNumber > 0 && lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
     }
 
     private static CatchAnalysis AnalyzeCatchBlocks(
@@ -242,6 +314,7 @@ public sealed class ErrorHandlingEvaluator
         var empty = 0;
         var generic = 0;
         var swallowed = 0;
+        var evidence = new List<CatchEvidence>();
 
         foreach (Match match in BraceCatchRegex.Matches(sanitized))
         {
@@ -274,17 +347,32 @@ public sealed class ErrorHandlingEvaluator
                 generic++;
             }
 
-            if (!ContainsHandlingIndicator(body))
-            {
+            var isEmpty = string.IsNullOrWhiteSpace(body);
+            var isGeneric = IsGenericExceptionType(exceptionType);
+            var isSwallowed = !ContainsHandlingIndicator(body);
+
+            if (isEmpty)
+                empty++;
+            if (isGeneric)
+                generic++;
+            if (isSwallowed)
                 swallowed++;
-            }
+
+            var lineNumber = GetLineNumber(sanitized, match.Index);
+            evidence.Add(new CatchEvidence(
+                lineNumber,
+                GetSourceLine(content, lineNumber),
+                isEmpty,
+                isGeneric,
+                isSwallowed));
         }
 
         return new CatchAnalysis(
             total,
             empty,
             generic,
-            swallowed);
+            swallowed,
+            evidence);
     }
 
     private static CatchAnalysis AnalyzePythonExceptBlocks(
@@ -296,6 +384,7 @@ public sealed class ErrorHandlingEvaluator
         var empty = 0;
         var generic = 0;
         var swallowed = 0;
+        var evidence = new List<CatchEvidence>();
 
         foreach (Match match in PythonExceptRegex.Matches(sanitized))
         {
@@ -325,17 +414,32 @@ public sealed class ErrorHandlingEvaluator
                 generic++;
             }
 
-            if (!ContainsHandlingIndicator(body))
-            {
+            var isEmpty = string.IsNullOrWhiteSpace(body);
+            var isGeneric = IsGenericExceptionType(exceptionType);
+            var isSwallowed = !ContainsHandlingIndicator(body);
+
+            if (isEmpty)
+                empty++;
+            if (isGeneric)
+                generic++;
+            if (isSwallowed)
                 swallowed++;
-            }
+
+            var lineNumber = GetLineNumber(sanitized, match.Index);
+            evidence.Add(new CatchEvidence(
+                lineNumber,
+                GetSourceLine(content, lineNumber),
+                isEmpty,
+                isGeneric,
+                isSwallowed));
         }
 
         return new CatchAnalysis(
             total,
             empty,
             generic,
-            swallowed);
+            swallowed,
+            evidence);
     }
 
     private static bool IsGenericExceptionType(string exceptionType)
@@ -751,15 +855,62 @@ public sealed class ErrorHandlingEvaluator
             ?.Name;
     }
 
-    private static string[] GetExtensions(string? language)
-    {
-        return language?.Trim() switch
+    private static string DetectLanguage(string file) =>
+        Path.GetExtension(file).ToLowerInvariant() switch
         {
-            "C#" => [".cs"],
-            "Java" => [".java"],
-            "Python" => [".py"],
-            _ => []
+            ".cs" => "C#",
+            ".java" => "Java",
+            ".py" => "Python",
+            _ => "Unknown"
         };
+
+    private static void AddMetricEvidence(
+        ArchitectureEvaluatorResult result,
+        string metricKey,
+        IReadOnlyCollection<CatchEvidence> evidence,
+        string emptyEvidence)
+    {
+        var evidenceText = evidence.Count == 0
+            ? emptyEvidence
+            : string.Join(
+                Environment.NewLine,
+                evidence.Select(item =>
+                    $"Line {item.LineNumber}: {item.SourceLine}"));
+
+        result.Metadata[$"Evidence.{metricKey}"] = evidenceText;
+        result.Metadata[$"EvidenceScope.{metricKey}"] = "FileMetrics";
+
+        var first = evidence.FirstOrDefault();
+        if (first is null)
+            return;
+
+        result.Metadata[$"EvidenceLine.{metricKey}"] =
+            first.LineNumber.ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
+        result.Metadata[$"CodeSnippet.{metricKey}"] = first.SourceLine;
+    }
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position && index < content.Length; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        return lineNumber > 0 && lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
     }
 
     private void AddSummary(
@@ -817,8 +968,38 @@ public sealed class ErrorHandlingEvaluator
             "Aggregated lexical analysis of supported source files.";
         summary.Metadata["SwallowedExceptionDefinition"] =
             "Potential swallowing: no recognized rethrow, raise, or logging indicator was detected.";
-        summary.Metadata["AnalysisComplete"] =
-            (filesAnalyzed + unreadableFiles == filesDiscovered).ToString();
+        var analysisComplete = filesAnalyzed + unreadableFiles == filesDiscovered;
+        summary.Metadata["AnalysisComplete"] = analysisComplete.ToString();
+
+        if (summary.Metrics.TryGetValue("ErrorHandlingCoverage", out var coverage))
+        {
+            var evidence = results
+                .Where(result => result.Category == "ErrorHandling")
+                .SelectMany(result =>
+                {
+                    var filePath = result.Metadata.GetValueOrDefault("FilePath");
+                    var relativePath = string.IsNullOrWhiteSpace(filePath)
+                        ? result.Target
+                        : Path.GetRelativePath(
+                            Context?.RootPath ?? Path.GetDirectoryName(filePath)!,
+                            filePath);
+
+                    return (result.Evidence ?? string.Empty)
+                        .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(item => $"{relativePath}: {item}");
+                })
+                .Take(100)
+                .ToArray();
+
+            var evidenceSummary =
+                $"{totalCatchBlocks - totalSwallowedExceptions} of {totalCatchBlocks} analyzed catch/except clauses have a recognized handling indicator; coverage {coverage:0.##}%.";
+
+            summary.Evidence = string.Join(
+                Environment.NewLine,
+                new[] { evidenceSummary }.Concat(evidence));
+            summary.Metadata["Evidence.ErrorHandlingCoverage"] = summary.Evidence;
+            summary.Metadata["EvidenceSummary.ErrorHandlingCoverage"] = evidenceSummary;
+        }
 
         results.Add(summary);
     }
@@ -833,12 +1014,20 @@ public sealed class ErrorHandlingEvaluator
         }
     }
 
+    private sealed record CatchEvidence(
+        int LineNumber,
+        string SourceLine,
+        bool IsEmpty,
+        bool IsGeneric,
+        bool IsSwallowed);
+
     private readonly record struct CatchAnalysis(
         int TotalCatchBlocks,
         int EmptyCatchBlocks,
         int GenericCatchBlocks,
-        int SwallowedExceptions)
+        int SwallowedExceptions,
+        IReadOnlyCollection<CatchEvidence> Evidence)
     {
-        public static CatchAnalysis Empty => new(0, 0, 0, 0);
+        public static CatchAnalysis Empty => new(0, 0, 0, 0, []);
     }
 }

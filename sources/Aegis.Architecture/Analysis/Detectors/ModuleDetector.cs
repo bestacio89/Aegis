@@ -469,11 +469,11 @@ internal static class ModuleDetector
             return 0;
         if (name.Equals("pom.xml", StringComparison.OrdinalIgnoreCase))
             return 1;
-        if (name.Equals("settings.gradle", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("settings.gradle.kts", StringComparison.OrdinalIgnoreCase))
-            return 2;
         if (name.Equals("build.gradle", StringComparison.OrdinalIgnoreCase)
             || name.Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase))
+            return 2;
+        if (name.Equals("settings.gradle", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("settings.gradle.kts", StringComparison.OrdinalIgnoreCase))
             return 3;
         return 4;
     }

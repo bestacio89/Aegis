@@ -78,6 +78,7 @@ public sealed class JavaProjectDiscoveryTests
                 Path.GetFileName(file).Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase));
             var gradleModel = Assert.IsType<Aegis.Shared.Architecture.Models.GradleProjectModel>(rootModule.GradleModel);
             Assert.Equal("gradle-root", gradleModel.RootProjectName);
+            Assert.EndsWith("build.gradle.kts", rootModule.ProjectFile, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(gradleModel.Projects, project => project.ProjectPath == ":api" && project.ProjectDirectory == apiRoot);
             Assert.Contains(gradleModel.Projects, project => project.ProjectPath == ":service" && project.ProjectDirectory == serviceRoot);
             Assert.Contains(gradleModel.IncludedBuilds, build => build.Directory == Path.Combine(root, "build-logic"));

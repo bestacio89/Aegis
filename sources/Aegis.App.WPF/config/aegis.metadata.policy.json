@@ -1,0 +1,8 @@
+{
+  "AegisPolicyMetadata": {
+    "Name": "Default Aegis Policy",
+    "Version": "1.0",
+    "ReportDetailLevel": "SummaryOnly",
+    "EnableGlobalWeighting": true
+  }
+}

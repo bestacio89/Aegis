@@ -583,7 +583,7 @@ internal static class GradleBuildModelResolver
             var relative = Path.GetRelativePath(modulePath, sourceFile)
                 .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var buildIndex = 0;
-            if (buildIndex < 0 || buildIndex + 2 >= relative.Length
+            if (buildIndex + 2 >= relative.Length
                 || !relative[buildIndex + 1].Equals("generated", StringComparison.OrdinalIgnoreCase)
                 || !relative[buildIndex + 2].Equals("sources", StringComparison.OrdinalIgnoreCase))
                 continue;

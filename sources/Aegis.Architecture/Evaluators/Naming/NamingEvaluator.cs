@@ -353,7 +353,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                         analysis,
                         convention,
                         fileContext.Framework,
-                        content));
+                        content,
+                        IsTestProjectFile(file)));
             }
             else
             {
@@ -390,7 +391,8 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         NamingAnalysisResult analysis,
         INamingConventionPolicy convention,
         string? framework,
-        string source)
+        string source,
+        bool isTestProject)
     {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(convention);
@@ -486,7 +488,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         var invalidMethodDeclarations = methodDeclarations
             .Where(declaration =>
                 !convention.IsValidMethodName(declaration.Name)
-                && !(declaration.IsTestMethod
+                && !((declaration.IsTestMethod || isTestProject)
                     && IsValidDescriptiveTestMethodName(declaration.Name)))
             .ToArray();
 

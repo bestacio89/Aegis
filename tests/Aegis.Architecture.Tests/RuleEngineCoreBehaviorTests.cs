@@ -74,7 +74,7 @@ public sealed class RuleEngineCoreBehaviorTests
             {
                 ["EvaluationScope"] = "Project",
                 ["Evidence.CircularDependencyCount"] =
-                    $"Dependency graph contains {circularDependencyCount:0} circular dependency cycle(s)."
+                    "No source-backed circular dependency count was emitted."
             }
         };
 

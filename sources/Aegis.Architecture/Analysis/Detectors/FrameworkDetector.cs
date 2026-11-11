@@ -8,7 +8,8 @@ internal static class FrameworkDetector
 {
     public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
     {
-        ctx.FrontendFrameworkDiscoveryComplete = true;
+        ctx.FrontendFrameworkDiscoveryComplete =
+            !ctx.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
 
         var deps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 

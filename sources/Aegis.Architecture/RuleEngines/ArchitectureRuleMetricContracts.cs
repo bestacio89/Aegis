@@ -507,9 +507,9 @@ internal static class ArchitectureRuleMetricContracts
         {
             reason =
                 $"Rule '{rule.Id}' is not applicable because the repository is " +
-                "classified as a multi-project mixed/library system without any " +
-                "recognized architectural layer roles. Configure project roles " +
-                "before enforcing layer-boundary rules.";
+                "classified as a multi-project mixed/library system without a " +
+                "sufficiently distinct architectural layer model. At least two " +
+                "recognized roles are required before enforcing layer-boundary rules.";
 
             return false;
         }

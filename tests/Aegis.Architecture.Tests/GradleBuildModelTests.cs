@@ -1,4 +1,5 @@
 using Aegis.Architecture.Analysis;
+using Aegis.Shared.Architecture.Enums;
 using Xunit;
 
 namespace Aegis.Architecture.Tests;
@@ -156,4 +157,61 @@ public sealed class GradleBuildModelTests
             Directory.Delete(root, recursive: true);
         }
     }
+    [Fact]
+    public void Detect_classifies_gradle_generated_sources_only_when_source_set_ownership_is_evident()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleGenerated_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"), "rootProject.name = \"generated-fixture\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), "plugins { id(\"java\") }");
+
+            WriteJavaSource(root, "src/main/java/example/Production.java");
+            WriteJavaSource(root, "src/test/java/example/ProductionTest.java");
+            WriteJavaSource(root, "build/generated/sources/annotationProcessor/java/main/example/GeneratedMapper.java");
+            WriteJavaSource(root, "build/generated/sources/annotationProcessor/java/test/example/GeneratedTestMapper.java");
+            WriteJavaSource(root, "build/generated/sources/opaque/example/UnknownOwnership.java");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.Contains(model.SourceRoots, sourceRoot =>
+                sourceRoot.Origin == ProjectSourceRootOrigin.Conventional
+                && sourceRoot.Ownership == ProjectSourceRootOwnership.Production
+                && !sourceRoot.IsGenerated
+                && sourceRoot.Directory == Path.Combine(root, "src", "main", "java"));
+            Assert.Contains(model.SourceRoots, sourceRoot =>
+                sourceRoot.Origin == ProjectSourceRootOrigin.GeneratedConvention
+                && sourceRoot.Ownership == ProjectSourceRootOwnership.Production
+                && sourceRoot.IsGenerated
+                && sourceRoot.Directory == Path.Combine(root, "build", "generated", "sources", "annotationProcessor", "java", "main"));
+            Assert.Contains(model.SourceRoots, sourceRoot =>
+                sourceRoot.Origin == ProjectSourceRootOrigin.GeneratedConvention
+                && sourceRoot.Ownership == ProjectSourceRootOwnership.Test
+                && sourceRoot.IsGenerated
+                && sourceRoot.Directory == Path.Combine(root, "build", "generated", "sources", "annotationProcessor", "java", "test"));
+            Assert.Contains(model.SourceRoots, sourceRoot =>
+                sourceRoot.Ownership == ProjectSourceRootOwnership.Unknown
+                && sourceRoot.IsGenerated
+                && sourceRoot.Directory == Path.Combine(root, "build", "generated", "sources", "opaque"));
+            Assert.Contains(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleGeneratedSourceOwnershipUnknown");
+            Assert.Equal(model.SourceRoots, module.SourceRoots);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static void WriteJavaSource(string root, string relativePath)
+    {
+        var path = Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "package example; final class Fixture {}");
+    }
+
+
 }

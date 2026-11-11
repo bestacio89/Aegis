@@ -662,4 +662,16 @@ public sealed class FactoryPatternEvaluator
 
         return Math.Round(score * 100, 2);
     }
+
+    private sealed record SourceFile(
+        string Source,
+        string Sanitized,
+        string Language,
+        string ProjectScopePath);
+
+    private sealed record InterfaceEvidence(
+        string FilePath,
+        int LineNumber,
+        string SourceLine);
+
 }

@@ -78,6 +78,10 @@ public sealed class ArchitecturalPerformanceEvaluator
         @"\b(?:System\.Threading\.Tasks\.)?(?:Task|ValueTask)(?:\s*<[^;=(){}]+>)?\??\s+(?<name>@?[A-Za-z_][A-Za-z0-9_]*)\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex ReaderVariableDeclarationRegex = new(
+        @"\b(?:System\.IO\.)?(?:StreamReader|TextReader)\s+(?<name>@?[A-Za-z_][A-Za-z0-9_]*)\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex NonCodeRegex = new(
         """"(?s)(?:\x22{3}.*?\x22{3}|\x27{3}.*?\x27{3}|\x60(?:\\.|[^\x60\\])*\x60|@?"(?:""|\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|//[^\r\n]*|/\*.*?\*/|\#[^\r\n]*)"""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -86,7 +90,7 @@ public sealed class ArchitecturalPerformanceEvaluator
 
     private static readonly Regex SyncIORegex =
         new(
-            @"\b(?:(?:System\.IO\.)?File\.(?:ReadAllText|ReadAllBytes|ReadAllLines|WriteAllText|WriteAllBytes|WriteAllLines|OpenRead|OpenWrite|Open|CreateText)|ReadToEnd|readFileSync|Files\.readAll(?:Bytes|Lines|String)?|open)\s*\(",
+            @"\b(?:(?:System\.IO\.)?File\.(?:ReadAllText|ReadAllBytes|ReadAllLines|WriteAllText|WriteAllBytes|WriteAllLines|OpenRead|OpenWrite|Open|CreateText)|readFileSync|Files\.readAll(?:Bytes|Lines|String)?|open)\s*\(",
             RegexOptions.IgnoreCase |
             RegexOptions.Compiled |
             RegexOptions.CultureInvariant);
@@ -295,6 +299,21 @@ public sealed class ArchitecturalPerformanceEvaluator
 
             matches.AddRange(waitRegex.Matches(content).Cast<Match>());
             matches.AddRange(resultRegex.Matches(content).Cast<Match>());
+        }
+
+        var readerVariables = ReaderVariableDeclarationRegex.Matches(content)
+            .Select(match => match.Groups["name"].Value.TrimStart('@'))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var variable in readerVariables)
+        {
+            var escaped = Regex.Escape(variable);
+            var readToEndRegex = new Regex(
+                $@"\b{escaped}\s*\.\s*ReadToEnd\s*\(",
+                RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+            matches.AddRange(readToEndRegex.Matches(content).Cast<Match>());
         }
 
         return matches

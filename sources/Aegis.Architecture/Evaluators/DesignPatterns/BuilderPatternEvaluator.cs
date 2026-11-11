@@ -329,10 +329,10 @@ public sealed class BuilderPatternEvaluator
         result.Metadata["EvaluationScope"] = FileScope;
         result.Metadata["MeasurementMethod"] =
             "Lexical analysis of builder-like class declarations and member-body signals.";
-        result.Metadata["PatternVerified"] = false.ToString();
-        result.Metadata["ImmutabilityVerified"] = false.ToString();
-        result.Metadata["SemanticAnalysisPerformed"] = false.ToString();
-        result.Metadata["AnalysisComplete"] = bool.TrueString;
+        result.Metadata["PatternVerified"] = "false";
+        result.Metadata["ImmutabilityVerified"] = "false";
+        result.Metadata["SemanticAnalysisPerformed"] = "false";
+        result.Metadata["AnalysisComplete"] = "true";
         result.Metadata["BuilderPatternMeasurement"] =
             "A builder candidate requires a Build method. Fluent chaining is reported as an informational convention and is not required for compliance.";
         result.Metadata["BuilderMutabilityInterpretation"] =
@@ -451,11 +451,11 @@ public sealed class BuilderPatternEvaluator
         result.Metadata["EvaluationScope"] = ProjectScope;
         result.Metadata["MeasurementMethod"] =
             "Project-level aggregation of lexical builder-pattern candidate evidence.";
-        result.Metadata["PatternVerified"] = false.ToString();
-        result.Metadata["ImmutabilityVerified"] = false.ToString();
+        result.Metadata["PatternVerified"] = "false";
+        result.Metadata["ImmutabilityVerified"] = "false";
         var analysisComplete = unreadableFileCount == 0
             && analyzedFileCount == discoveredFileCount;
-        result.Metadata["AnalysisComplete"] = analysisComplete.ToString();
+        result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
         result.Metadata["AnalysisStatus"] = analysisComplete
             ? "Completed"
             : "CompletedWithDiagnostics";

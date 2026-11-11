@@ -95,10 +95,9 @@ internal static class LayerDetector
     {
         var projectIdentifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        AddIdentifiers(projectIdentifiers, module.Name);
-
         if (!string.IsNullOrWhiteSpace(module.ProjectFile))
         {
+            AddIdentifiers(projectIdentifiers, module.Name);
             AddIdentifiers(
                 projectIdentifiers,
                 Path.GetFileNameWithoutExtension(module.ProjectFile));

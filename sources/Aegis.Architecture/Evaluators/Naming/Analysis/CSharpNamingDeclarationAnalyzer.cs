@@ -243,7 +243,10 @@ public sealed class CSharpNamingDeclarationAnalyzer : INamingDeclarationAnalyzer
                 isPublic,
                 modifiers.Any(SyntaxKind.StaticKeyword),
                 isConstant,
-                isTestMethod));
+                isTestMethod,
+                accessibility.RawKind == 0
+                    ? "Default"
+                    : accessibility.ValueText));
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Aegis.Architecture.Diagnostics;
+using Aegis.Architecture.Evaluators.Analysis;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
@@ -158,11 +159,12 @@ public sealed class ComplexityEvaluator
                 continue;
 
             var framework = ResolveFrameworkForFile(file, projectPath, Context);
+            var sanitizedContent = SourceCodeMasker.Mask(content);
             var methods = language.Equals(
                 "Python",
                 StringComparison.OrdinalIgnoreCase)
-                ? ExtractPythonMethods(content)
-                : ExtractBraceLanguageMethods(content, language);
+                ? ExtractPythonMethods(sanitizedContent)
+                : ExtractBraceLanguageMethods(sanitizedContent, language);
 
             foreach (var method in methods)
             {

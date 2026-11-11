@@ -26,6 +26,26 @@ internal static class DomainDetector
             return;
         }
 
+        // A separate Blazor web host is a frontend application even though
+        // its project uses the ASP.NET Core Web SDK. Preserve the full-stack
+        // classification when an API and a Blazor host coexist with unrelated
+        // repository modules such as a Unity client.
+        var webModules = applicationModules
+            .Where(module => string.Equals(
+                module.ProjectKind,
+                "WebApplication",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (webModules.Length > 1
+            && webModules.Any(module => module.Frameworks.Contains(
+                "Blazor",
+                StringComparer.OrdinalIgnoreCase)))
+        {
+            ctx.DomainType = "FullStack";
+            return;
+        }
+
         // Supporting class libraries do not turn a web or frontend application
         // into a heterogeneous product. They are part of its project topology.
         if (projectKinds.Contains("WebApplication", StringComparer.OrdinalIgnoreCase)

@@ -525,3 +525,65 @@ This is CI evidence for the current J1 implementation slice, not acceptance of J
 - Trace and correct framework/dependency pipeline ordering so framework analysis consumes the intended structured dependency evidence without relying on path-name heuristics.
 
 **Checkpoint decision:** proceed with J1 hardening and completion. Do not begin J2 production integration until J1 acceptance criteria are demonstrated across Maven and Gradle fixtures.
+
+---
+
+# J1 implementation checkpoint — Maven, Gradle and framework hardening — 2026-11-11
+
+**Status: validated implementation progress; J1 remains in progress and is not accepted.**
+
+## Implemented since the previous J1 checkpoint
+
+### Maven
+
+- Resolve local imported BOMs against a repository-wide POM coordinate index. Imported dependency-management entries retain their source POM provenance; unresolved external BOMs remain explicit diagnostics.
+- Index project coordinates once instead of repeatedly resolving every POM for each BOM import. Duplicate local coordinates produce an ambiguity diagnostic rather than arbitrary selection.
+- Resolve declared reactor module paths to scanned child POM files. Preserve declared paths and separately expose resolved reactor module files; unresolved property paths, invalid paths and missing modules are diagnosed.
+- Separate applied build plugins from pluginManagement declarations. Parent inheritance remains represented independently for both inventories.
+
+### Gradle
+
+- Exercise the Groovy DSL independently, including plugin declarations, direct/platform/project dependencies, test configurations, annotation processors, toolchains and conventional source sets.
+- Harden static version-catalog parsing: diagnose unsupported multiline TOML, invalid entries, missing files/read failures and unresolved version references; support plugin version references and shorthand library coordinates with inline versions.
+- Scope version catalogs to the nearest owning Gradle build root. Independent Gradle roots may reuse the same alias without cross-project coordinate or version leakage.
+- Keep unsupported declarations explicitly incomplete; do not execute Gradle scripts or plugins.
+
+### Framework evidence
+
+- Move dependency discovery before framework classification so structured build evidence is available at the correct pipeline stage.
+- Classify Spring Boot, Spring Framework, Quarkus, Micronaut, Jakarta EE and Hibernate from module-owned Maven/Gradle coordinates.
+- Remove the Java framework path-name heuristic. Preserve module-level framework signals and select a deterministic primary framework identity.
+- Java module classification is independent of the repository's primary language, so mixed-language repositories do not lose Java framework evidence.
+
+## Validation evidence
+
+All three workflows passed on head 2aea9e017332291f407651ade5102ed2c0879206:
+
+| Workflow | Run | Result |
+|---|---:|---|
+| Non-WPF quality gates — all non-WPF tests and production builds | 43090498831 | Success |
+| WPF build validation | 43090498963 | Success |
+| Java semantic engine spike — JDT and JavaParser, source-only and controlled external classpath | 43090498908 | Success |
+
+The test suite includes regression coverage for:
+- Maven local BOM import, managed version and source provenance.
+- Maven applied plugins versus pluginManagement.
+- Maven reactor module resolution and missing module diagnostics.
+- Framework classification from dependency coordinates rather than path names.
+- Gradle Groovy DSL declarations.
+- Unsupported multiline catalog syntax and plugin version references.
+- Independent Gradle build roots with colliding catalog aliases.
+
+This is validation of the current implementation, **not J1 acceptance**.
+
+## Remaining J1 work
+
+- Generated source roots and their production/test ownership for Maven and Gradle.
+- Full included-build membership and ownership modelling, beyond root discovery and build-scoped catalog selection.
+- External Maven parent/BOM resolution semantics and richer property inheritance. Remote repositories remain outside static inspection.
+- Maven profile-aware effective models; inactive/conditional profile content must remain explicit rather than guessed.
+- Gradle custom source sets, generated roots, advanced catalog constraints and additional DSL constructs.
+- Final declared-versus-resolved dependency model review and broad representative fixture coverage.
+- Re-run the full Maven/Gradle acceptance matrix and unchanged .NET regression suite after the remaining work.
+
+**Checkpoint decision:** continue J1. J2 production semantic-engine integration remains blocked until the J1 acceptance criteria are demonstrated.

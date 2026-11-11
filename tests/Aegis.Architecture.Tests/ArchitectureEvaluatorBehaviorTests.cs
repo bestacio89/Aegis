@@ -524,8 +524,14 @@ public sealed class ArchitectureEvaluatorBehaviorTests
                     {
                         for (var inner = 0; inner < 10; inner++)
                         {
-                            System.Threading.Thread.Sleep(1);
-                            System.IO.File.ReadAllText("fixture.txt");
+                            for (var nested = 0; nested < 10; nested++)
+                            {
+                                for (var deepest = 0; deepest < 10; deepest++)
+                                {
+                                    System.Threading.Thread.Sleep(1);
+                                    System.IO.File.ReadAllText("fixture.txt");
+                                }
+                            }
                         }
                     }
 

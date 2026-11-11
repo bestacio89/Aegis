@@ -1,5 +1,5 @@
 using Aegis.Architecture.Analysis.Detectors;
-﻿
+
 using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;

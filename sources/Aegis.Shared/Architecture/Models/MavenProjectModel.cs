@@ -34,6 +34,8 @@ public sealed class MavenProjectModel
 
     public List<Dependency> AnnotationProcessorPaths { get; init; } = [];
 
+    public List<ProjectSourceRoot> SourceRoots { get; init; } = [];
+
     public List<string> ProfileIds { get; init; } = [];
 
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];

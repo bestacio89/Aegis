@@ -147,7 +147,14 @@ public final class SemanticEngineBenchmark {
         long started = System.nanoTime();
 
         for (Path sourceFile : sourceFiles) {
-            ParseResult<CompilationUnit> parseResult = parser.parse(sourceFile);
+            ParseResult<CompilationUnit> parseResult;
+            try {
+                parseResult = parser.parse(sourceFile);
+            } catch (IOException parseFailure) {
+                diagnostics++;
+                continue;
+            }
+
             diagnostics += parseResult.getProblems().size();
             if (parseResult.getResult().isEmpty()) {
                 continue;

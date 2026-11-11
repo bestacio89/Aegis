@@ -92,6 +92,100 @@ public sealed class GradleBuildModelTests
     }
 
     [Fact]
+    public void Detect_expands_catalog_bundles_and_resolves_rich_version_constraints()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleRichCatalog_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "gradle"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"rich-catalog\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    alias(libs.plugins.example)
+                }
+                dependencies {
+                    implementation(libs.bundles.web)
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "gradle", "libs.versions.toml"), """
+                [versions]
+                spring = { strictly = "6.2.8", prefer = "6.2.9", reject = ["6.2.7"] }
+                junit = { require = "5.12.2" }
+                plugin = { prefer = "1.4.0" }
+
+                [libraries]
+                spring-core = { module = "org.springframework:spring-core", version.ref = "spring" }
+                spring-web = { module = "org.springframework:spring-web", version = { strictly = "6.2.8", prefer = "6.2.9" } }
+                junit-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
+
+                [bundles]
+                web = ["spring-core", "spring-web", "junit-api"]
+
+                [plugins]
+                example = { id = "org.example.plugin", version.ref = "plugin" }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.Equal(3, model.Dependencies.Count);
+            Assert.Contains(model.Dependencies, dependency =>
+                dependency.Artifact == "spring-core" && dependency.Version == "6.2.8"
+                && dependency.CatalogAlias == "spring.core");
+            Assert.Contains(model.Dependencies, dependency =>
+                dependency.Artifact == "spring-web" && dependency.Version == "6.2.8");
+            Assert.Contains(model.Dependencies, dependency =>
+                dependency.Artifact == "junit-jupiter-api" && dependency.Version == "5.12.2");
+            Assert.Contains(model.Plugins, plugin =>
+                plugin.Id == "org.example.plugin" && plugin.Version == "1.4.0");
+            Assert.True(model.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_reports_missing_catalog_bundle_members_and_version_references()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleBrokenCatalog_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "gradle"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle"), "rootProject.name = 'broken-catalog'");
+            File.WriteAllText(Path.Combine(root, "build.gradle"), """
+                dependencies {
+                    implementation(libs.bundles.web)
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "gradle", "libs.versions.toml"), """
+                [libraries]
+                known = { module = "org.example:known", version.ref = "missing-version" }
+
+                [bundles]
+                web = ["known", "missing-library"]
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.False(model.IsComplete);
+            Assert.Contains(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleVersionCatalogVersionReferenceNotResolved");
+            Assert.Contains(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleVersionCatalogBundleMemberNotResolved");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_marks_dynamic_dependency_declarations_as_incomplete()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisGradleDynamic_{Guid.NewGuid():N}");

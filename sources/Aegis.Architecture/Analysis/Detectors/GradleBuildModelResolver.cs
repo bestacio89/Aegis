@@ -242,6 +242,40 @@ internal static class GradleBuildModelResolver
                 continue;
             }
 
+            var bundleAlias = Regex.Match(
+                argument, @"^libs\\.bundles\\.(?<alias>[A-Za-z0-9_.-]+)$",
+                RegexOptions.CultureInvariant);
+            if (bundleAlias.Success)
+            {
+                var bundleKey = NormalizeAlias(bundleAlias.Groups["alias"].Value);
+                if (!catalog.Bundles.TryGetValue(bundleKey, out var members))
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleDependencyBundleNotResolved",
+                        $"Dependency bundle alias '{bundleKey}' is not present in the discovered version catalog.",
+                        buildFile));
+                    continue;
+                }
+
+                foreach (var member in members)
+                {
+                    if (!catalog.Libraries.TryGetValue(member, out var library))
+                    {
+                        diagnostics.Add(Diagnostic(
+                            "GradleDependencyAliasNotResolved",
+                            $"Library alias '{member}' referenced by bundle '{bundleKey}' is not present in the discovered version catalog.",
+                            buildFile));
+                        continue;
+                    }
+
+                    result.Add(new GradleBuildModel.Dependency(
+                        configuration, library.Group, library.Artifact, library.Version,
+                        null, member, isPlatform, isEnforcedPlatform, isAnnotationProcessor, line.Trim()));
+                }
+
+                continue;
+            }
+
             var catalogAlias = CatalogAlias.Match(argument);
             if (catalogAlias.Success)
             {
@@ -368,6 +402,7 @@ internal static class GradleBuildModelResolver
             var libraries = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var plugins = new Dictionary<string, VersionCatalog.Plugin>(StringComparer.OrdinalIgnoreCase);
             var pendingLibraries = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var bundles = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             var skippingMultilineEntry = false;
 
             try
@@ -420,16 +455,16 @@ internal static class GradleBuildModelResolver
 
                     if (section.Equals("versions", StringComparison.OrdinalIgnoreCase))
                     {
-                        var literal = QuotedNotation.Match(value);
-                        if (literal.Success)
+                        var resolvedVersion = ReadCatalogVersion(value);
+                        if (resolvedVersion is not null)
                         {
-                            versions[alias] = literal.Groups["notation"].Value;
+                            versions[alias] = resolvedVersion;
                         }
                         else
                         {
                             diagnostics.Add(Diagnostic(
                                 "GradleVersionCatalogVersionNotStatic",
-                                $"Version alias '{alias}' does not use a supported literal string value.",
+                                $"Version alias '{alias}' does not contain a supported literal version or rich version constraint.",
                                 file));
                         }
                     }
@@ -455,6 +490,26 @@ internal static class GradleBuildModelResolver
                                 file));
                         }
                     }
+                    else if (section.Equals("bundles", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var members = Regex.Matches(value, @"['""](?<alias>[^'""]+)['""]")
+                            .Cast<Match>()
+                            .Select(match => NormalizeAlias(match.Groups["alias"].Value))
+                            .ToList();
+                        var remainder = Regex.Replace(value, @"['""][^'""]+['""]", string.Empty)
+                            .Trim().Trim('[', ']', ',');
+                        if (!value.StartsWith('[') || !value.EndsWith(']')
+                            || remainder.Length > 0 || members.Count == 0)
+                        {
+                            diagnostics.Add(Diagnostic(
+                                "GradleVersionCatalogBundleNotStatic",
+                                $"Bundle alias '{alias}' does not use a supported literal string array.",
+                                file));
+                            continue;
+                        }
+
+                        bundles[alias] = members;
+                    }
                     else if (section.Equals("plugins", StringComparison.OrdinalIgnoreCase))
                     {
                         var id = Regex.Match(value, @"id\s*=\s*['""](?<id>[^'""]+)['""]");
@@ -467,21 +522,8 @@ internal static class GradleBuildModelResolver
                             continue;
                         }
 
-                        var version = CatalogVersion.Match(value);
-                        var versionReference = CatalogVersionReference.Match(value);
-                        var resolvedVersion = version.Success
-                            ? version.Groups["version"].Value
-                            : versionReference.Success
-                                ? versions.GetValueOrDefault(NormalizeAlias(versionReference.Groups["reference"].Value))
-                                : null;
-
-                        if (versionReference.Success && resolvedVersion is null)
-                        {
-                            diagnostics.Add(Diagnostic(
-                                "GradleVersionCatalogVersionReferenceNotResolved",
-                                $"Plugin alias '{alias}' references missing version alias '{versionReference.Groups["reference"].Value}'.",
-                                file));
-                        }
+                        var resolvedVersion = ResolveCatalogEntryVersion(
+                            value, versions, "Plugin", alias, file, diagnostics);
 
                         plugins[alias] = new VersionCatalog.Plugin(
                             id.Groups["id"].Value,
@@ -512,26 +554,26 @@ internal static class GradleBuildModelResolver
                     continue;
                 }
 
-                var version = CatalogVersion.Match(entry.Value);
-                var versionReference = CatalogVersionReference.Match(entry.Value);
                 var resolvedVersion = coordinates.Length == 3
                     ? coordinates[2]
-                    : version.Success
-                        ? version.Groups["version"].Value
-                        : versionReference.Success
-                            ? versions.GetValueOrDefault(NormalizeAlias(versionReference.Groups["reference"].Value))
-                            : null;
-
-                if (versionReference.Success && resolvedVersion is null)
-                {
-                    diagnostics.Add(Diagnostic(
-                        "GradleVersionCatalogVersionReferenceNotResolved",
-                        $"Library alias '{entry.Key}' references missing version alias '{versionReference.Groups["reference"].Value}'.",
-                        file));
-                }
+                    : ResolveCatalogEntryVersion(
+                        entry.Value, versions, "Library", entry.Key, file, diagnostics);
 
                 result.Libraries[entry.Key] = new VersionCatalog.Library(
                     coordinates[0], coordinates[1], resolvedVersion);
+            }
+
+            foreach (var entry in bundles)
+            {
+                foreach (var member in entry.Value.Where(member => !libraries.ContainsKey(member)))
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleVersionCatalogBundleMemberNotResolved",
+                        $"Bundle alias '{entry.Key}' references missing library alias '{member}'.",
+                        file));
+                }
+
+                result.Bundles[entry.Key] = entry.Value;
             }
 
             foreach (var entry in plugins)
@@ -539,6 +581,69 @@ internal static class GradleBuildModelResolver
         }
 
         return result;
+    }
+
+    private static string? ResolveCatalogEntryVersion(
+        string value,
+        IReadOnlyDictionary<string, string> versions,
+        string entryKind,
+        string alias,
+        string file,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        var versionReference = CatalogVersionReference.Match(value);
+        if (versionReference.Success)
+        {
+            var reference = NormalizeAlias(versionReference.Groups["reference"].Value);
+            if (versions.TryGetValue(reference, out var referencedVersion))
+                return referencedVersion;
+
+            diagnostics.Add(Diagnostic(
+                "GradleVersionCatalogVersionReferenceNotResolved",
+                entryKind + " alias '" + alias + "' references missing version alias '" + reference + "'.",
+                file));
+            return null;
+        }
+
+        var directVersion = CatalogVersion.Match(value);
+        if (directVersion.Success)
+            return directVersion.Groups["version"].Value;
+
+        var richVersion = Regex.Match(
+            value,
+            @"version\\s*=\\s*\\{(?<constraint>[^{}]*)\\}",
+            RegexOptions.CultureInvariant);
+        if (richVersion.Success)
+        {
+            var resolved = ReadCatalogVersion("{" + richVersion.Groups["constraint"].Value + "}");
+            if (resolved is not null)
+                return resolved;
+
+            diagnostics.Add(Diagnostic(
+                "GradleVersionCatalogRichVersionNotStatic",
+                entryKind + " alias '" + alias + "' has no supported strictly, require, or prefer literal version.",
+                file));
+        }
+
+        return null;
+    }
+
+    private static string? ReadCatalogVersion(string value)
+    {
+        var literal = QuotedNotation.Match(value);
+        if (literal.Success)
+            return literal.Groups["notation"].Value;
+
+        var strict = Regex.Match(value, @"strictly\\s*=\\s*['""](?<version>[^'""]+)['""]");
+        if (strict.Success)
+            return strict.Groups["version"].Value;
+
+        var required = Regex.Match(value, @"require\\s*=\\s*['""](?<version>[^'""]+)['""]");
+        if (required.Success)
+            return required.Groups["version"].Value;
+
+        var preferred = Regex.Match(value, @"prefer\\s*=\\s*['""](?<version>[^'""]+)['""]");
+        return preferred.Success ? preferred.Groups["version"].Value : null;
     }
 
     private static List<GradleBuildModel.SourceSet> ParseExplicitSourceSets(
@@ -1115,6 +1220,7 @@ internal static class GradleBuildModelResolver
     {
         public Dictionary<string, Library> Libraries { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, Plugin> Plugins { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, List<string>> Bundles { get; } = new(StringComparer.OrdinalIgnoreCase);
         public sealed record Library(string Group, string Artifact, string? Version);
         public sealed record Plugin(string Id, string? Version);
     }

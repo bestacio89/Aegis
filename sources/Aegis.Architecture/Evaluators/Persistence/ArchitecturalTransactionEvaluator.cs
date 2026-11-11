@@ -134,6 +134,7 @@ public sealed class ArchitecturalTransactionEvaluator
 
         var analyzedFileResults = new List<ArchitectureEvaluatorResult>();
         var unreadableFileCount = 0;
+        var unreadableFilePaths = new List<string>();
 
         foreach (var file in files)
         {
@@ -154,6 +155,7 @@ public sealed class ArchitecturalTransactionEvaluator
             catch (IOException exception)
             {
                 unreadableFileCount++;
+                unreadableFilePaths.Add(file);
                 _logger.LogWarning(
                     exception,
                     "{Evaluator} could not read {FilePath}.",
@@ -164,6 +166,7 @@ public sealed class ArchitecturalTransactionEvaluator
             catch (UnauthorizedAccessException exception)
             {
                 unreadableFileCount++;
+                unreadableFilePaths.Add(file);
                 _logger.LogWarning(
                     exception,
                     "{Evaluator} has no access to {FilePath}.",
@@ -182,7 +185,8 @@ public sealed class ArchitecturalTransactionEvaluator
             projectPath,
             files.Count,
             analyzedFileResults,
-            unreadableFileCount);
+            unreadableFileCount,
+            unreadableFilePaths);
 
 
         _logger.LogInformation(
@@ -375,7 +379,8 @@ public sealed class ArchitecturalTransactionEvaluator
         string projectPath,
         int discoveredFileCount,
         IReadOnlyCollection<ArchitectureEvaluatorResult> analyzedFileResults,
-        int unreadableFileCount)
+        int unreadableFileCount,
+        IReadOnlyCollection<string> unreadableFilePaths)
     {
         var analyzedCount = analyzedFileResults.Count;
         var analysisComplete = unreadableFileCount == 0
@@ -438,6 +443,9 @@ public sealed class ArchitecturalTransactionEvaluator
         {
             summary.Metadata["IncompleteReason"] =
                 $"{unreadableFileCount} unreadable file(s); {analyzedCount} of {discoveredFileCount} source file(s) analyzed.";
+            summary.Metadata["UnreadableFilePaths"] = string.Join(
+                Environment.NewLine,
+                unreadableFilePaths.Take(20));
         }
         else
         {

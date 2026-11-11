@@ -192,7 +192,7 @@ public sealed class BuilderPatternEvaluator
                 var fluentSignatureCount = fluentSignatureMatches.Length;
                 var mutationCount = mutationMatches.Length;
                 var readonlyIndicatorCount = readonlyMatches.Length;
-                var language = DetectLanguage(file);
+                var language = ResolveLanguageForFile(file);
                 var framework = ResolveFrameworkForFile(file, projectPath, context);
                 var classBodyStart = GetClassBodyStart(
                     sanitized,
@@ -300,8 +300,8 @@ public sealed class BuilderPatternEvaluator
         result.Target = className;
         result.Language = language;
         result.Framework = framework;
-        result.Layer = ResolveLayer(file);
-        result.DetectionConfidence = context?.Confidence ?? 0;
+        result.Layer = ResolveLayerForFile(file);
+        result.DetectionConfidence = Context?.Confidence ?? 0;
         result.Category = "DesignPattern";
 
         result.Metrics["HasBuildMethod"] = hasBuildMethod ? 1 : 0;

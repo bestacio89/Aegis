@@ -93,7 +93,7 @@ pathArg.DefaultValueFactory = _ =>
 
 var policyOpt = new Option<string?>(
     "--policy",
-    "Optional Aegis policy file path");
+    "Optional policy override. Evaluator settings must match the split policy documents under config/.");
 
 
 analyzeCmd.Arguments.Add(pathArg);

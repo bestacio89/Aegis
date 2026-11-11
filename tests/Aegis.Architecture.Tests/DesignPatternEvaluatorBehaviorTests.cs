@@ -337,6 +337,48 @@ public sealed class DesignPatternEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task RepositoryEvaluator_recognizes_generic_abstractions_with_multiple_type_parameters()
+    {
+        using var project = new TemporaryProject();
+        project.Write("Abstractions/Repositories/Contracts/IArasAggregateRepository.cs", """
+            public interface IArasAggregateRepository<TAggregate, TEvent>
+                where TAggregate : AggregateRoot<TEvent>, IAggregateRoot<TEvent>, new()
+                where TEvent : IDomainEvent
+            {
+                Task<TAggregate?> GetAsync(Guid id, CancellationToken cancellationToken = default);
+            }
+            """);
+        project.Write("Abstractions/Repositories/Implementations/ArasAggregateRepository.cs", """
+            public abstract class ArasAggregateRepository<TAggregate, TDomainEvent>
+                : IArasAggregateRepository<TAggregate, TDomainEvent>
+                where TAggregate : AggregateRoot<TDomainEvent>, IAggregateRoot<TDomainEvent>, new()
+                where TDomainEvent : IDomainEvent
+            {
+                private readonly IArasAggregateContext _context;
+
+                protected ArasAggregateRepository(IArasAggregateContext context)
+                {
+                    _context = context;
+                }
+
+                public virtual Task<TAggregate?> GetAsync(Guid id, CancellationToken cancellationToken = default)
+                    => _context.GetAggregateAsync<TAggregate, TDomainEvent>(id, cancellationToken);
+            }
+            """);
+
+        var results = await Evaluate(project, "RepositoryPatternEvaluator");
+        var result = Assert.Single(
+            results,
+            item => item.Metadata.GetValueOrDefault("RepositoryName") == "ArasAggregateRepository");
+
+        Assert.Equal(1, result.Metrics["InterfaceAdherence"]);
+        Assert.Equal(bool.TrueString, result.Metadata["HasMatchingAbstraction"]);
+        Assert.Contains(
+            "IArasAggregateRepository.cs",
+            result.Metadata["Evidence.InterfaceAdherence"]);
+    }
+
+    [Fact]
     public async Task StrategyEvaluator_detects_strategy_abstraction_and_implementation()
     {
         using var project = new TemporaryProject();

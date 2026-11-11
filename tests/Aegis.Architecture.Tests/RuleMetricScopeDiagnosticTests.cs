@@ -219,11 +219,12 @@ public sealed class RuleMetricScopeDiagnosticTests
             new ProjectArchitectureContext(),
             [status]);
 
-        Assert.Contains("AEG-DES-STRAT001", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-DES-STRAT001", outcome.Stats.DisabledByPolicyReasons.Keys);
+        Assert.DoesNotContain("AEG-DES-STRAT001", outcome.Stats.RulesNotApplicable);
         Assert.DoesNotContain("AEG-DES-STRAT001", outcome.Stats.RulesNotEvaluated);
         Assert.Contains(
             "disabled by the active policy",
-            outcome.Stats.NotApplicableReasons["AEG-DES-STRAT001"],
+            outcome.Stats.DisabledByPolicyReasons["AEG-DES-STRAT001"],
             StringComparison.OrdinalIgnoreCase);
     }
 
@@ -308,7 +309,7 @@ public sealed class RuleMetricScopeDiagnosticTests
 
     [Theory]
     [InlineData("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount", "AEG-DES-CMD001")]
-    [InlineData("ObserverPatternEvaluator", "AnalyzedComponents", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-OBS001")]
+    [InlineData("ObserverPatternEvaluator", "ObserverCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-OBS001")]
     [InlineData("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-SING001")]
     [InlineData("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-STRAT001")]
     [InlineData("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-STRAT002")]

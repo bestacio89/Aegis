@@ -400,8 +400,10 @@ public sealed class DocumentationEvaluator :
         var root = syntaxTree.GetRoot();
 
         var declarations = root.DescendantNodes()
-            .OfType<MemberDeclarationSyntax>()
-            .Where(IsPublicCSharpDeclaration)
+            .Where(node =>
+                node is EnumMemberDeclarationSyntax
+                || node is MemberDeclarationSyntax member
+                    && IsPublicCSharpDeclaration(member))
             .ToArray();
 
         var documented = 0;
@@ -444,9 +446,6 @@ public sealed class DocumentationEvaluator :
     private static bool IsPublicCSharpDeclaration(
         MemberDeclarationSyntax declaration)
     {
-        if (declaration is EnumMemberDeclarationSyntax)
-            return true;
-
         if (declaration is BaseTypeDeclarationSyntax
             or DelegateDeclarationSyntax)
         {

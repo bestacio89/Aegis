@@ -832,7 +832,19 @@ public sealed record SeedEntry(int Id);");
             FindRepositoryRoot(),
             $"AegisDesignPatternBehavior_{Guid.NewGuid():N}");
 
-        public TemporaryProject() => Directory.CreateDirectory(Root);
+        public TemporaryProject()
+        {
+            Directory.CreateDirectory(Root);
+            File.WriteAllText(
+                Path.Combine(Root, "Fixture.csproj"),
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net10.0</TargetFramework>
+                  </PropertyGroup>
+                </Project>
+                """);
+        }
 
         public string Write(string relativePath, string content)
         {

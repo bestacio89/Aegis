@@ -628,9 +628,9 @@ public sealed class ProjectArchitectureContextDetectorTests
 
         var context = ProjectArchitectureContextDetector.Detect(directory.Path);
 
-        Assert.Equal(2, context.ProductionDependencies.Count);
+        Assert.Single(context.ProductionDependencies);
         Assert.Single(context.TestDependencies);
-        Assert.Equal(3, context.Dependencies.Count);
+        Assert.Equal(2, context.Dependencies.Count);
 
         var productionRelationship = Assert.Single(
             context.ProductionDependencies,

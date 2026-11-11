@@ -211,17 +211,45 @@ internal static class MavenProjectModelResolver
                 managed: true,
                 inherited: false,
                 sourceProjectFile: fullPath);
-            MergeDependencies(managed, localManaged);
 
             foreach (var bom in localManaged.Where(dependency =>
                          dependency.Type.Equals("pom", StringComparison.OrdinalIgnoreCase)
                          && dependency.Scope.Equals("import", StringComparison.OrdinalIgnoreCase)))
             {
-                diagnostics.Add(Diagnostic(
-                    "MavenBomNotResolved",
-                    $"Imported BOM '{bom.GroupId}:{bom.ArtifactId}:{bom.Version}' is declared but its model is not available locally.",
-                    fullPath));
+                var importedBom = FindLocalBomModel(
+                    bom,
+                    fullPath,
+                    knownPomFiles,
+                    cache,
+                    visiting);
+
+                if (importedBom is null)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "MavenBomNotResolved",
+                        $"Imported BOM '{bom.GroupId}:{bom.ArtifactId}:{bom.Version}' is not available as a matching local POM. Remote repositories are not queried.",
+                        fullPath));
+                    continue;
+                }
+
+                if (!importedBom.IsComplete)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "MavenBomModelIncomplete",
+                        $"Imported BOM '{bom.GroupId}:{bom.ArtifactId}:{bom.Version}' has incomplete model evidence; only statically available managed entries are projected.",
+                        importedBom.ProjectFile));
+                }
+
+                MergeDependencies(
+                    managed,
+                    importedBom.ManagedDependencies.Where(dependency =>
+                        !(dependency.Type.Equals("pom", StringComparison.OrdinalIgnoreCase)
+                          && dependency.Scope.Equals("import", StringComparison.OrdinalIgnoreCase))));
             }
+
+            // Project-local dependency management takes precedence over imported
+            // BOM entries, which in turn extend the inherited parent model.
+            MergeDependencies(managed, localManaged);
 
             var effectiveDependencies = parentModel?.Dependencies
                 .Select(dependency => dependency with { IsInherited = true })
@@ -327,6 +355,40 @@ internal static class MavenProjectModelResolver
         {
             visiting.Remove(fullPath);
         }
+    }
+
+    private static MavenProjectModel? FindLocalBomModel(
+        MavenProjectModel.Dependency bom,
+        string importingProjectFile,
+        IReadOnlySet<string> knownPomFiles,
+        IDictionary<string, MavenProjectModel> cache,
+        ISet<string> visiting)
+    {
+        if (string.IsNullOrWhiteSpace(bom.GroupId)
+            || string.IsNullOrWhiteSpace(bom.ArtifactId)
+            || string.IsNullOrWhiteSpace(bom.Version)
+            || PropertyReference.IsMatch(bom.GroupId)
+            || PropertyReference.IsMatch(bom.ArtifactId)
+            || PropertyReference.IsMatch(bom.Version))
+        {
+            return null;
+        }
+
+        foreach (var candidate in knownPomFiles)
+        {
+            if (PathsEqual(candidate, importingProjectFile))
+                continue;
+
+            var candidateModel = Resolve(candidate, knownPomFiles, cache, visiting);
+            if (string.Equals(candidateModel.ProjectCoordinates.GroupId, bom.GroupId, StringComparison.Ordinal)
+                && string.Equals(candidateModel.ProjectCoordinates.ArtifactId, bom.ArtifactId, StringComparison.Ordinal)
+                && string.Equals(candidateModel.ProjectCoordinates.Version, bom.Version, StringComparison.Ordinal))
+            {
+                return candidateModel;
+            }
+        }
+
+        return null;
     }
 
     private static List<MavenProjectModel.Dependency> ParseDependencies(

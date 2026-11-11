@@ -48,6 +48,27 @@ public sealed class MavenProjectModelTests
                 </project>
                 """);
 
+            var bomDirectory = Path.Combine(root, "bom");
+            Directory.CreateDirectory(bomDirectory);
+            File.WriteAllText(Path.Combine(bomDirectory, "pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>org.example.build</groupId>
+                  <artifactId>fixture-bom</artifactId>
+                  <version>1.0.0</version>
+                  <packaging>pom</packaging>
+                  <dependencyManagement>
+                    <dependencies>
+                      <dependency>
+                        <groupId>org.example</groupId>
+                        <artifactId>bom-managed</artifactId>
+                        <version>7.8.9</version>
+                      </dependency>
+                    </dependencies>
+                  </dependencyManagement>
+                </project>
+                """);
+
             File.WriteAllText(Path.Combine(serviceDirectory, "pom.xml"), """
                 <project>
                   <modelVersion>4.0.0</modelVersion>
@@ -59,7 +80,22 @@ public sealed class MavenProjectModelTests
                   </parent>
                   <artifactId>fixture-service</artifactId>
                   <properties><service.revision>${project.version}</service.revision></properties>
+                  <dependencyManagement>
+                    <dependencies>
+                      <dependency>
+                        <groupId>org.example.build</groupId>
+                        <artifactId>fixture-bom</artifactId>
+                        <version>1.0.0</version>
+                        <type>pom</type>
+                        <scope>import</scope>
+                      </dependency>
+                    </dependencies>
+                  </dependencyManagement>
                   <dependencies>
+                    <dependency>
+                      <groupId>org.example</groupId>
+                      <artifactId>bom-managed</artifactId>
+                    </dependency>
                     <dependency>
                       <groupId>org.springframework</groupId>
                       <artifactId>spring-context</artifactId>
@@ -80,6 +116,15 @@ public sealed class MavenProjectModelTests
                     </dependency>
                   </dependencies>
                   <build>
+                    <pluginManagement>
+                      <plugins>
+                        <plugin>
+                          <groupId>org.example.build</groupId>
+                          <artifactId>managed-codegen-plugin</artifactId>
+                          <version>2.0.0</version>
+                        </plugin>
+                      </plugins>
+                    </pluginManagement>
                     <plugins>
                       <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
@@ -96,15 +141,6 @@ public sealed class MavenProjectModelTests
                         </configuration>
                       </plugin>
                     </plugins>
-                    <pluginManagement>
-                      <plugins>
-                        <plugin>
-                          <groupId>org.example.build</groupId>
-                          <artifactId>managed-codegen-plugin</artifactId>
-                          <version>2.0.0</version>
-                        </plugin>
-                      </plugins>
-                    </pluginManagement>
                   </build>
                 </project>
                 """);
@@ -127,6 +163,14 @@ public sealed class MavenProjectModelTests
                 item.Name == "org.example:parent-api"
                 && !item.IsDirect
                 && item.Provenance.Any(provenance => provenance.FilePath == Path.Combine(parentDirectory, "pom.xml")));
+
+            var bomManaged = Assert.Single(model.Dependencies, dependency =>
+                dependency.ArtifactId == "bom-managed");
+            Assert.Equal("7.8.9", bomManaged.Version);
+            Assert.True(bomManaged.IsVersionManaged);
+            Assert.Contains(model.ManagedDependencies, dependency =>
+                dependency.ArtifactId == "bom-managed"
+                && dependency.SourceProjectFile == Path.Combine(bomDirectory, "pom.xml"));
 
             var spring = Assert.Single(model.Dependencies, dependency =>
                 dependency.ArtifactId == "spring-context");

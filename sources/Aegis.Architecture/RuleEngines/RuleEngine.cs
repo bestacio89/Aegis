@@ -100,8 +100,11 @@ public sealed class RuleEngine
             context.ProjectName);
 
         var facts = new List<ArchitectureEvaluatorResult>();
-        var diagnostics = new List<AnalysisDiagnostic>();
-        var scopes = DiscoverProjectScopes(projectPath, context);
+        var diagnostics = context.DiscoveryDiagnostics.ToList();
+        var scopes = DiscoverProjectScopes(
+            projectPath,
+            context,
+            diagnostics);
         var executions = new List<(IEvaluator Evaluator, string Path, ProjectArchitectureContext Context)>();
 
         foreach (var evaluator in _evaluators)
@@ -461,7 +464,8 @@ public sealed class RuleEngine
 
     private IReadOnlyList<AnalysisScope> DiscoverProjectScopes(
         string projectPath,
-        ProjectArchitectureContext rootContext)
+        ProjectArchitectureContext rootContext,
+        ICollection<AnalysisDiagnostic> diagnostics)
     {
         var root = Path.GetFullPath(projectPath);
         var modules = rootContext.Modules
@@ -494,6 +498,28 @@ public sealed class RuleEngine
             {
                 var moduleContext = ProjectArchitectureContextDetector.Detect(path);
 
+                var combinedDiscoveryDiagnostics = rootContext.DiscoveryDiagnostics
+                    .Concat(moduleContext.DiscoveryDiagnostics)
+                    .GroupBy(diagnostic => (
+                        diagnostic.Code,
+                        diagnostic.Target,
+                        diagnostic.Message))
+                    .Select(group => group.First())
+                    .ToList();
+
+                moduleContext.DiscoveryDiagnostics = combinedDiscoveryDiagnostics;
+
+                foreach (var diagnostic in combinedDiscoveryDiagnostics)
+                {
+                    if (!diagnostics.Any(existing =>
+                            string.Equals(existing.Code, diagnostic.Code, StringComparison.Ordinal)
+                            && string.Equals(existing.Target, diagnostic.Target, StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(existing.Message, diagnostic.Message, StringComparison.Ordinal)))
+                    {
+                        diagnostics.Add(diagnostic);
+                    }
+                }
+
                 // Keep technology applicability local to this project, while
                 // retaining the repository-wide graph and module inventory.
                 // Otherwise project-scoped evaluators lose cross-project
@@ -511,6 +537,16 @@ public sealed class RuleEngine
                 or ArgumentException
                 or NotSupportedException)
             {
+                diagnostics.Add(new AnalysisDiagnostic
+                {
+                    Code = "ProjectScopeDiscoveryFailed",
+                    Component = nameof(ProjectArchitectureContextDetector),
+                    Message = "The module context could not be detected; module-specific evaluators were not executed.",
+                    Target = path,
+                    ExceptionType = exception.GetType().FullName,
+                    AffectsCoverage = true
+                });
+
                 _logger.LogWarning(
                     exception,
                     "Could not detect project context for module {Path}; module-specific evaluators will not run.",

@@ -587,3 +587,43 @@ This is validation of the current implementation, **not J1 acceptance**.
 - Re-run the full Maven/Gradle acceptance matrix and unchanged .NET regression suite after the remaining work.
 
 **Checkpoint decision:** continue J1. J2 production semantic-engine integration remains blocked until the J1 acceptance criteria are demonstrated.
+
+
+---
+
+# J1-A implementation checkpoint — generated source roots — 2026-11-11
+
+**Status: implementation committed; validation is pending. J1-A is not accepted.**
+
+## Implemented
+
+- Added a language-neutral ProjectSourceRoot evidence model with explicit Production, Test and Unknown ownership.
+- Source-root origin is retained as Conventional, Explicit, GeneratedConvention or Observed.
+- Source-root evidence records whether Java files were observed and the build/source manifest that supplied the evidence.
+- Maven discovery now models conventional src/main/java and src/test/java, literal custom sourceDirectory and testSourceDirectory declarations, and observed target/generated-sources / target/generated-test-sources roots.
+- Gradle discovery now models conventional Java source sets and observed build/generated/sources roots. A generated root is assigned to a source set only when the standard Gradle generator/language/source-set path positions provide evidence.
+- Ambiguous Gradle generated roots remain visible with Unknown ownership and a coverage-affecting diagnostic; package names are not used to infer source-set ownership.
+- Each module exposes the same source-root evidence as its Maven or Gradle build model. Build scripts and plugins remain unexecuted.
+
+## Automated coverage added
+
+- Maven conventional production/test roots.
+- Maven generated production/test roots.
+- Gradle conventional production roots.
+- Gradle generated production/test roots using the standard generated-source layout.
+- Gradle generated roots without source-set evidence remain Unknown and produce a diagnostic.
+- Module-level and build-model source-root projections are asserted to remain consistent.
+
+## Known limitations
+
+- Maven custom roots are currently limited to literal sourceDirectory and testSourceDirectory values; dynamic property expressions remain unresolved.
+- Maven generated-root discovery is based on observed conventional target/generated-sources and target/generated-test-sources paths. Build-helper plugin executions and arbitrary generator output directories are not interpreted yet.
+- Gradle custom sourceSets DSL expressions are not evaluated. Unsupported custom source directories remain explicitly incomplete.
+- Gradle generated-root ownership is only assigned for the supported conventional generated path layout. Other layouts remain Unknown.
+- Generated roots are evidence inventory at this stage; this work does not yet change every downstream evaluator's source-file inclusion policy. J1-A must verify production/test consumers before acceptance.
+
+## Validation
+
+Implementation and focused tests have been pushed to the existing Java support branch. Final-head non-WPF, WPF and semantic-engine workflows must complete successfully before this checkpoint can be accepted.
+
+**Checkpoint decision:** continue J1-A validation and hardening. J1-B and J2 remain blocked.

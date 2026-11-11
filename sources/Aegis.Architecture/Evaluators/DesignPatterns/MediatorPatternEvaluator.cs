@@ -590,6 +590,8 @@ public sealed class MediatorPatternEvaluator
                 ["DiscoveredFiles"] = discoveredFiles,
                 ["AnalyzedFiles"] = analyzedFiles,
                 ["UnreadableFiles"] = unreadableFiles,
+                ["MediatorImplementationCount"] = fileMetrics.Count(metrics =>
+                    metrics.ContainsKey("CouplingRisk")),
                 ["AverageComplianceScore"] = averageCompliance,
                 ["FilesWithDirectCouplingSignals"] = filesWithCouplingSignals,
                 ["DirectCouplingSignalRate"] = couplingSignalRate,

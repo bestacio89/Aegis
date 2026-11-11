@@ -85,12 +85,25 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
 
-    private static readonly Regex SyncIORegex =
+    private static readonly Regex DotNetSyncIORegex =
         new(
-            @"\b(?:(?:System\.IO\.)?File\.(?:ReadAllText|ReadAllBytes|ReadAllLines|WriteAllText|WriteAllBytes|WriteAllLines|OpenRead|OpenWrite|Open|CreateText)|readFileSync|Files\.readAll(?:Bytes|Lines|String)?|open)\s*\(",
-            RegexOptions.IgnoreCase |
-            RegexOptions.Compiled |
-            RegexOptions.CultureInvariant);
+            @"\b(?:(?:System\.IO\.)?File\.(?:ReadAllText|ReadAllBytes|ReadAllLines|WriteAllText|WriteAllBytes|WriteAllLines|OpenRead|OpenWrite|Open|CreateText))\s*\(",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex JavaSyncIORegex =
+        new(
+            @"\bFiles\.(?:readAllBytes|readAllLines|readString|write)\s*\(",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex PythonSyncIORegex =
+        new(
+            @"\bopen\s*\(",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex JavaScriptSyncIORegex =
+        new(
+            @"\b(?:readFileSync|writeFileSync)\s*\(",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
 
 
@@ -155,7 +168,9 @@ public sealed class ArchitecturalPerformanceEvaluator
             ".java",
             ".py",
             ".ts",
-            ".js");
+            ".tsx",
+            ".js",
+            ".jsx");
 
 
 
@@ -166,41 +181,40 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
 
+        var unreadableFiles = new List<string>();
+
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
-
+            string content;
             try
             {
-                var content =
-                    await File.ReadAllTextAsync(
-                        file,
-                        token);
-
-
-                results.Add(
-                    EvaluateFile(
-                        file,
-                        content));
+                content = await File.ReadAllTextAsync(file, token);
             }
-            catch (Exception ex)
+            catch (OperationCanceledException)
+                when (token.IsCancellationRequested)
             {
-                _logger.LogDebug(
-                    ex,
-                    "Unable to evaluate file {File}",
-                    file);
+                throw;
             }
+            catch (IOException exception)
+            {
+                unreadableFiles.Add(file);
+                _logger.LogWarning(exception, "Unable to read source file {FilePath}.", file);
+                continue;
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                unreadableFiles.Add(file);
+                _logger.LogWarning(exception, "Access denied while reading source file {FilePath}.", file);
+                continue;
+            }
+
+            results.Add(EvaluateFile(file, content));
         }
 
-
-
-        if (results.Count > 0)
-        {
-            AddSummary(
-                results,
-                projectPath);
-        }
+        if (results.Count > 0 || unreadableFiles.Count > 0)
+            AddSummaries(results, projectPath, unreadableFiles);
 
 
 
@@ -222,7 +236,7 @@ public sealed class ArchitecturalPerformanceEvaluator
         var language = DetectLanguage(file);
         var sanitized = SourceCodeMasker.Mask(content);
         var score = AnalyzePerformanceSignals(sanitized);
-        var blockingMatches = FindBlockingOperations(sanitized);
+        var blockingMatches = FindBlockingOperations(sanitized, language);
         var evidenceItems = blockingMatches
             .Select(match =>
             {
@@ -233,7 +247,6 @@ public sealed class ArchitecturalPerformanceEvaluator
             .ToArray();
 
         var result = CreateResult(file, "Performance");
-        result.ProjectName = Context?.ProjectName;
         result.Language = language;
         result.Framework = Context?.Framework;
         var owningModule = Context?.Modules
@@ -278,45 +291,62 @@ public sealed class ArchitecturalPerformanceEvaluator
         return result;
     }
 
-    private static List<Match> FindBlockingOperations(string content)
+    private static List<Match> FindBlockingOperations(
+        string content,
+        string language)
     {
-        var matches = BlockingRegex.Matches(content)
-            .Cast<Match>()
-            .Concat(SyncIORegex.Matches(content).Cast<Match>())
-            .ToList();
+        var matches = new List<Match>();
 
-        var taskVariables = TaskVariableDeclarationRegex.Matches(content)
-            .Select(match => match.Groups["name"].Value.TrimStart('@'))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
+        var blockingMatches = BlockingRegex.Matches(content);
+        matches.AddRange(blockingMatches.Cast<Match>());
 
-        foreach (var variable in taskVariables)
+        var syncIoRegex = language switch
         {
-            var escaped = Regex.Escape(variable);
-            var waitRegex = new Regex(
-                $@"\b{escaped}\s*\.\s*Wait\s*\(",
-                RegexOptions.Compiled | RegexOptions.CultureInvariant);
-            var resultRegex = new Regex(
-                $@"\b{escaped}\s*\.\s*Result\b",
-                RegexOptions.Compiled | RegexOptions.CultureInvariant);
+            "C#" => DotNetSyncIORegex,
+            "Java" => JavaSyncIORegex,
+            "Python" => PythonSyncIORegex,
+            "TypeScript" or "JavaScript" => JavaScriptSyncIORegex,
+            _ => null
+        };
 
-            matches.AddRange(waitRegex.Matches(content).Cast<Match>());
-            matches.AddRange(resultRegex.Matches(content).Cast<Match>());
-        }
+        if (syncIoRegex is not null)
+            matches.AddRange(syncIoRegex.Matches(content).Cast<Match>());
 
-        var readerVariables = ReaderVariableDeclarationRegex.Matches(content)
-            .Select(match => match.Groups["name"].Value.TrimStart('@'))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
-        foreach (var variable in readerVariables)
+        if (language == "C#")
         {
-            var escaped = Regex.Escape(variable);
-            var readToEndRegex = new Regex(
-                $@"\b{escaped}\s*\.\s*ReadToEnd\s*\(",
-                RegexOptions.Compiled | RegexOptions.CultureInvariant);
+            var taskVariables = TaskVariableDeclarationRegex.Matches(content)
+                .Select(match => match.Groups["name"].Value.TrimStart('@'))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
 
-            matches.AddRange(readToEndRegex.Matches(content).Cast<Match>());
+            foreach (var variable in taskVariables)
+            {
+                var escaped = Regex.Escape(variable);
+                var waitRegex = new Regex(
+                    $@"\b{escaped}\s*\.\s*Wait\s*\(",
+                    RegexOptions.Compiled | RegexOptions.CultureInvariant);
+                var resultRegex = new Regex(
+                    $@"\b{escaped}\s*\.\s*Result\b",
+                    RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+                matches.AddRange(waitRegex.Matches(content).Cast<Match>());
+                matches.AddRange(resultRegex.Matches(content).Cast<Match>());
+            }
+
+            var readerVariables = ReaderVariableDeclarationRegex.Matches(content)
+                .Select(match => match.Groups["name"].Value.TrimStart('@'))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+            foreach (var variable in readerVariables)
+            {
+                var escaped = Regex.Escape(variable);
+                var readToEndRegex = new Regex(
+                    $@"\b{escaped}\s*\.\s*ReadToEnd\s*\(",
+                    RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+                matches.AddRange(readToEndRegex.Matches(content).Cast<Match>());
+            }
         }
 
         return matches
@@ -451,56 +481,163 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
 
-    private static void AddSummary(
+    private void AddSummaries(
         List<ArchitectureEvaluatorResult> results,
-        string projectPath)
+        string projectPath,
+        IReadOnlyCollection<string> unreadableFiles)
     {
-        var analyzedFiles =
-            results.Count;
+        var fileResults = results.ToArray();
+        var modules = Context?.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .OrderByDescending(module => module.Path.Length)
+            .ToArray() ?? [];
 
-
-
-        var health =
-            results.Average(
-                x =>
-                    x.Metrics.GetValueOrDefault(
-                        "PerformanceHealthIndex",
-                        0));
-
-
-
-        results.Add(
-            new ArchitectureEvaluatorResult(
-                "PerformanceEvaluator",
-                projectPath)
+        if (modules.Length == 0)
+        {
+            if (fileResults.Length > 0 || unreadableFiles.Count > 0)
             {
-                Category =
-                    "PerformanceSummary",
+                results.Add(CreateProjectSummary(
+                    Context?.ProjectName ?? Path.GetFileName(projectPath),
+                    Path.GetFullPath(projectPath),
+                    "Unknown",
+                    Context?.Framework,
+                    fileResults,
+                    unreadableFiles));
+            }
 
-                Metrics =
+            return;
+        }
+
+        foreach (var module in modules)
+        {
+            var moduleResults = fileResults
+                .Where(result =>
                 {
-                    ["AnalyzedFiles"] =
-                        analyzedFiles,
+                    var file = result.Metadata.GetValueOrDefault("FilePath");
+                    var owner = modules.FirstOrDefault(candidate =>
+                        !string.IsNullOrWhiteSpace(file)
+                        && IsSameOrDescendantPath(file, candidate.Path));
+                    return ReferenceEquals(owner, module);
+                })
+                .ToArray();
 
-                    ["AveragePerformanceHealthIndex"] =
-                        health,
-
-                    ["EfficiencyHealthIndex"] =
-                        health
-                },
-
-                Metadata =
+            var moduleUnreadable = unreadableFiles
+                .Where(file =>
                 {
-                    ["Evaluator"] =
-                        "PerformanceEvaluator",
+                    var owner = modules.FirstOrDefault(candidate =>
+                        IsSameOrDescendantPath(file, candidate.Path));
+                    return ReferenceEquals(owner, module);
+                })
+                .ToArray();
 
-                    ["EvaluationScope"] =
-                        BaseArchitectureEvaluator.ProjectScope
-                }
-            });
+            if (moduleResults.Length == 0 && moduleUnreadable.Length == 0)
+                continue;
+
+            results.Add(CreateProjectSummary(
+                module.Name,
+                module.Path,
+                module.ProjectKind,
+                module.Framework,
+                moduleResults,
+                moduleUnreadable));
+        }
+
+        var unownedResults = fileResults
+            .Where(result =>
+            {
+                var file = result.Metadata.GetValueOrDefault("FilePath");
+                return string.IsNullOrWhiteSpace(file)
+                    || !modules.Any(module =>
+                        IsSameOrDescendantPath(file, module.Path));
+            })
+            .ToArray();
+
+        var unownedUnreadable = unreadableFiles
+            .Where(file => !modules.Any(module =>
+                IsSameOrDescendantPath(file, module.Path)))
+            .ToArray();
+
+        if (unownedResults.Length > 0 || unownedUnreadable.Length > 0)
+        {
+            results.Add(CreateProjectSummary(
+                Context?.ProjectName ?? Path.GetFileName(projectPath),
+                Path.GetFullPath(projectPath),
+                "Unknown",
+                Context?.Framework,
+                unownedResults,
+                unownedUnreadable));
+        }
     }
 
+    private ArchitectureEvaluatorResult CreateProjectSummary(
+        string projectName,
+        string projectPath,
+        string projectKind,
+        string? framework,
+        IReadOnlyCollection<ArchitectureEvaluatorResult> fileResults,
+        IReadOnlyCollection<string> unreadableFiles)
+    {
+        var health = fileResults.Count == 0
+            ? 0
+            : Math.Round(
+                fileResults.Average(result =>
+                    result.Metrics.GetValueOrDefault("PerformanceHealthIndex")),
+                2);
 
+        var evidence = fileResults
+            .SelectMany(result =>
+            {
+                var fileName = Path.GetFileName(
+                    result.Metadata.GetValueOrDefault("FilePath") ?? result.Target);
+                return (result.Evidence ?? string.Empty)
+                    .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(item => $"{fileName}: {item}");
+            })
+            .Take(100)
+            .ToArray();
+
+        var complete = unreadableFiles.Count == 0;
+
+        return new ArchitectureEvaluatorResult(Name, projectName)
+        {
+            ProjectName = projectName,
+            Category = "PerformanceSummary",
+            Evidence = evidence.Length == 0
+                ? null
+                : string.Join(Environment.NewLine, evidence),
+            Metrics =
+            {
+                ["DiscoveredFiles"] = fileResults.Count + unreadableFiles.Count,
+                ["AnalyzedFiles"] = fileResults.Count,
+                ["UnreadableFiles"] = unreadableFiles.Count,
+                ["DiagnosticCount"] = unreadableFiles.Count,
+                ["AveragePerformanceHealthIndex"] = health,
+                ["PerformanceHealthIndex"] = health,
+                ["EfficiencyHealthIndex"] = health
+            },
+            Metadata =
+            {
+                [EvaluationScopeMetadataKey] = ProjectScope,
+                ["ProjectName"] = projectName,
+                ["ProjectPath"] = projectPath,
+                ["ProjectKind"] = projectKind,
+                ["Framework"] = framework ?? "Unknown",
+                ["Evaluator"] = Name,
+                ["AnalysisComplete"] = complete.ToString(),
+                ["AnalysisStatus"] = complete
+                    ? "Completed"
+                    : "CompletedWithDiagnostics",
+                ["AnalysisMethod"] = "SourcePatternHeuristic",
+                ["Diagnostics"] = complete
+                    ? string.Empty
+                    : $"Unable to read {unreadableFiles.Count} source file(s) during performance analysis.",
+                ["Evidence.PerformanceHealthIndex"] =
+                    string.Join(Environment.NewLine, evidence),
+                ["EvidenceSummary.PerformanceHealthIndex"] =
+                    $"Analyzed {fileResults.Count} of {fileResults.Count + unreadableFiles.Count} discovered source files."
+            }
+        };
+    }
 
     private static double ComputePerformanceHealth(
         double algorithmic,

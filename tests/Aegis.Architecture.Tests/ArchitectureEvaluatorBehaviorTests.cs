@@ -467,6 +467,8 @@ public sealed class ArchitectureEvaluatorBehaviorTests
                         System.Console.WriteLine("Thread.Sleep(100); File.ReadAllText(path);");
                     }
 
+                    _ = await System.IO.File.ReadAllTextAsync("fixture.txt");
+
                     // Thread.Sleep(100); File.ReadAllText(path); Task.Wait();
                 }
             }
@@ -486,6 +488,43 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.Equal(0, fileResult.Metrics["BlockingIOCount"]);
         Assert.Equal(100, fileResult.Metrics["ConcurrencyScore"]);
         Assert.Equal(100, fileResult.Metrics["IOMaturityScore"]);
+    }
+
+    [Fact]
+    public async Task PerformanceEvaluator_flags_only_typed_task_waits_and_preserves_call_evidence()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/TypedTaskFixture.cs", """
+            public sealed class TypedTaskFixture
+            {
+                public void Execute(System.Threading.Tasks.Task<int> operation, Request request)
+                {
+                    operation.Wait();
+                    var value = operation.Result;
+                    var status = request.Result;
+                }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+
+        var finding = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "TypedTaskFixture.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal(2, finding.Metrics["BlockingIOCount"]);
+        Assert.True(finding.LineNumber is > 0);
+        Assert.Contains("operation.Wait()", finding.Evidence);
+        Assert.Contains("operation.Result", finding.Evidence);
+        Assert.Contains("operation.Wait()", finding.Metadata["CodeSnippet.BlockingIOCount"]);
     }
 
     [Fact]

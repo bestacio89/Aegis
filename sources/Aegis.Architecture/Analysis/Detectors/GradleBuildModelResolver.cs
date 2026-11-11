@@ -132,6 +132,8 @@ internal static class GradleBuildModelResolver
                     buildFile));
             }
 
+            var sourceRoots = DiscoverSourceRoots(module.Path, files, sourceSets, buildFile, diagnostics);
+
             var model = new GradleBuildModel
             {
                 BuildFile = buildFile,
@@ -141,11 +143,13 @@ internal static class GradleBuildModelResolver
                 Plugins = plugins,
                 Dependencies = dependencies,
                 SourceSets = sourceSets,
+                SourceRoots = sourceRoots,
                 JavaToolchainVersion = toolchain,
                 Diagnostics = diagnostics,
                 IsComplete = diagnostics.Count == 0
             };
             module.GradleBuildModel = model;
+            module.SourceRoots = model.SourceRoots;
             AddDependencyEvidence(context, module, model);
         }
     }
@@ -536,6 +540,95 @@ internal static class GradleBuildModelResolver
         }
 
         return result;
+    }
+
+    private static List<ProjectSourceRoot> DiscoverSourceRoots(
+        string modulePath,
+        IReadOnlyCollection<string> files,
+        IReadOnlyCollection<GradleBuildModel.SourceSet> sourceSets,
+        string buildFile,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        var roots = new Dictionary<string, ProjectSourceRoot>(PathComparer);
+
+        foreach (var sourceSet in sourceSets)
+        {
+            var ownership = sourceSet.IsTest
+                ? ProjectSourceRootOwnership.Test
+                : ProjectSourceRootOwnership.Production;
+            foreach (var directory in sourceSet.JavaSourceDirectories)
+            {
+                var fullDirectory = Path.GetFullPath(directory);
+                roots[fullDirectory] = new ProjectSourceRoot
+                {
+                    Directory = fullDirectory,
+                    Ownership = ownership,
+                    Origin = ProjectSourceRootOrigin.Conventional,
+                    IsGenerated = false,
+                    ContainsJavaSources = files.Any(file =>
+                        Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
+                        && IsSameOrDescendantPath(file, fullDirectory)),
+                    EvidenceFile = buildFile
+                };
+            }
+        }
+
+        foreach (var sourceFile in files.Where(file =>
+                     Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)))
+        {
+            var relative = Path.GetRelativePath(modulePath, sourceFile)
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var buildIndex = Array.FindIndex(relative, segment =>
+                segment.Equals("build", StringComparison.OrdinalIgnoreCase));
+            if (buildIndex < 0 || buildIndex + 2 >= relative.Length
+                || !relative[buildIndex + 1].Equals("generated", StringComparison.OrdinalIgnoreCase)
+                || !relative[buildIndex + 2].Equals("sources", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var sourceSetIndex = Array.FindLastIndex(relative, segment =>
+                segment.Equals("main", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("test", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("integrationTest", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("testFixtures", StringComparison.OrdinalIgnoreCase));
+
+            ProjectSourceRootOwnership ownership;
+            int rootLength;
+            if (sourceSetIndex > buildIndex + 2)
+            {
+                ownership = relative[sourceSetIndex].Equals("main", StringComparison.OrdinalIgnoreCase)
+                    ? ProjectSourceRootOwnership.Production
+                    : ProjectSourceRootOwnership.Test;
+                rootLength = sourceSetIndex + 1;
+            }
+            else
+            {
+                // A generated directory without an identifiable Gradle source set
+                // remains visible but is not assigned to production or test.
+                ownership = ProjectSourceRootOwnership.Unknown;
+                rootLength = Math.Min(relative.Length, buildIndex + 4);
+                diagnostics.Add(Diagnostic(
+                    "GradleGeneratedSourceOwnershipUnknown",
+                    $"Generated Java source '{sourceFile}' is under a generated-sources directory without an identifiable source-set owner.",
+                    sourceFile));
+            }
+
+            var directory = Path.GetFullPath(Path.Combine(
+                modulePath,
+                Path.Combine(relative.Take(rootLength).ToArray())));
+            roots[directory] = new ProjectSourceRoot
+            {
+                Directory = directory,
+                Ownership = ownership,
+                Origin = ProjectSourceRootOrigin.GeneratedConvention,
+                IsGenerated = true,
+                ContainsJavaSources = true,
+                EvidenceFile = buildFile
+            };
+        }
+
+        return roots.Values
+            .OrderBy(root => root.Directory, PathComparer)
+            .ToList();
     }
 
     private static List<GradleBuildModel.SourceSet> DiscoverConventionalSourceSets(

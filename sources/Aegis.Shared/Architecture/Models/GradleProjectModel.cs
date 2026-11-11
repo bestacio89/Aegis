@@ -31,7 +31,7 @@ public sealed class GradleProjectModel
     public sealed record IncludedBuild(
         string BuildPath,
         string Directory,
-        bool IsDiscovered,
-        string? SettingsFile,
-        string? RootProjectName);
+        bool IsDiscovered = false,
+        string? SettingsFile = null,
+        string? RootProjectName = null);
 }

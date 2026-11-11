@@ -109,7 +109,6 @@ internal static class ModuleDetector
             });
         }
 
-        context.IsMultiModule = context.Modules.Count > 1;
         PopulateOwnedLanguages(context.Modules, files);
     }
 

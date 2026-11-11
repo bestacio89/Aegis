@@ -27,10 +27,18 @@ public sealed class ArchitectureReportCoverageTests
             [ArchitectureRuleCategory.Architecture] = 88.04
         });
 
-        Assert.Equal(Math.Round(29.0 / 76.0 * 100.0, 2), report.Metrics.RuleEvaluationCoverage, 2);
+        // Project evaluation coverage uses supported, applicable rules as its denominator.
+        // Unsupported rules remain visible through the separate capability-coverage metric.
         Assert.Equal(
-            Math.Round(88.04 * 29.0 / 76.0, 2),
+            Math.Round(29.0 / 53.0 * 100.0, 2),
+            report.Metrics.RuleEvaluationCoverage,
+            2);
+        Assert.Equal(
+            Math.Round(88.04 * 29.0 / 53.0, 2),
             report.Metrics.CoverageAdjustedHealthIndex);
+        Assert.Equal(
+            Math.Round(53.0 / 76.0 * 100.0, 2),
+            report.Metrics.RuleCapabilityCoverage);
         Assert.False(report.Metrics.AssessmentComplete);
         Assert.Equal(88.04, report.Metrics.ProjectHealthIndex);
         Assert.True(report.Metrics.HasAssessmentEvidence);

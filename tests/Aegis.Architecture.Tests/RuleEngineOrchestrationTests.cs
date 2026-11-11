@@ -23,13 +23,16 @@ public sealed class RuleEngineOrchestrationTests
                 new ArchitectureEvaluatorResult("CircularDependencyEvaluator", "SampleProject")
                 {
                     Category = "Architecture",
+                    Evidence = "Dependency cycle: Orders -> Payments -> Orders.",
                     Metrics = new Dictionary<string, double>
                     {
                         ["CircularDependencyCount"] = 1
                     },
                     Metadata = new Dictionary<string, string>
                     {
-                        ["EvaluationScope"] = "Project"
+                        ["EvaluationScope"] = "Project",
+                        ["Evidence.CircularDependencyCount"] =
+                            "Dependency cycle: Orders -> Payments -> Orders."
                     }
                 }
             ]));

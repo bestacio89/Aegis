@@ -20,10 +20,10 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             /// <summary>Documented service.</summary>
             public class DocumentationFixture
             {
-                /// <summary>Documented operation.</summary>
                 // public void CommentedOutOperation() { }
                 private string _example = "public void StringLiteralOperation() { }";
 
+                /// <summary>Documented operation.</summary>
                 [System.Obsolete]
                 public void DocumentedOperation() { }
 

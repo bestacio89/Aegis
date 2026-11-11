@@ -107,7 +107,9 @@ internal static class LayerDetector
 
         foreach (var file in moduleFiles)
         {
-            var relativePath = Path.GetRelativePath(module.Path, file);
+            var relativePath = Path.GetRelativePath(
+                Path.GetFullPath(module.Path),
+                Path.GetFullPath(file));
             var directory = Path.GetDirectoryName(relativePath);
 
             if (string.IsNullOrWhiteSpace(directory))

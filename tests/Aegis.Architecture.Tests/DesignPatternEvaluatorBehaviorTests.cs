@@ -144,7 +144,44 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.True(result.Metrics.ContainsKey("RepositoryComplianceScore"));
         Assert.True(result.Metrics["MethodCount"] >= 1);
         Assert.True(result.Metrics.ContainsKey("AsyncCompliance"));
+        Assert.Equal(0, result.Metrics["LeakRisk"]);
         Assert.True(result.Metadata.ContainsKey("HasMatchingAbstraction"));
+        Assert.Equal("FileMetrics", result.Metadata["EvidenceScope.InterfaceAdherence"]);
+        Assert.Contains("IOrderRepository", result.Metadata["Evidence.InterfaceAdherence"]);
+        Assert.Contains("DbContext", result.Metadata["ExternalTransportInterpretation"]);
+    }
+
+    [Fact]
+    public async Task RepositoryEvaluator_resolves_abstractions_across_files_within_the_same_project()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Contracts/IOrderRepository.cs", """
+            public interface IOrderRepository
+            {
+                Task<Order> GetAsync(int id);
+            }
+            """);
+        project.Write("back/Persistence/OrderRepository.cs", """
+            public sealed class OrderRepository : IOrderRepository
+            {
+                private readonly HttpClient _httpClient;
+
+                public OrderRepository(HttpClient httpClient) => _httpClient = httpClient;
+
+                public Task<Order> GetAsync(int id) => _httpClient.GetFromJsonAsync<Order>($"/orders/{id}");
+            }
+            """);
+
+        var results = await Evaluate(project, "RepositoryPatternEvaluator");
+        var result = Assert.Single(
+            results,
+            item => item.Metadata.GetValueOrDefault("RepositoryName") == "OrderRepository");
+
+        Assert.Equal(1, result.Metrics["InterfaceAdherence"]);
+        Assert.Equal(1, result.Metrics["LeakRisk"]);
+        Assert.Contains("IOrderRepository.cs", result.Metadata["Evidence.InterfaceAdherence"]);
+        Assert.Contains("HttpClient", result.Metadata["Evidence.LeakRisk"]);
+        Assert.True(result.LineNumber is > 0);
     }
 
     [Fact]

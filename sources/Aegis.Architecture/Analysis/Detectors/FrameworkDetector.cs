@@ -107,20 +107,13 @@ internal static class FrameworkDetector
         // The repository-level framework is an aggregate. If its projects use
         // different frameworks, do not publish one project's framework as the
         // identity of the entire repository.
-        foreach (var framework in ctx.Modules.SelectMany(module => module.Frameworks))
+        foreach (var framework in ctx.ProductionModules.SelectMany(module => module.Frameworks))
             AddFramework(ctx, framework);
 
         // EF Core is a data-access capability on the .NET platform, not a
         // separate application framework. Normalize it for repository-wide
         // aggregation while retaining the precise module-level value.
-        var nonTestModules = ctx.Modules
-            .Where(module =>
-                !module.IsTestProject
-                && !string.Equals(
-                    module.ProjectKind,
-                    "Test",
-                    StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var nonTestModules = ctx.ProductionModules;
 
         var hostModules = nonTestModules
             .Where(module => module.ProjectKind is

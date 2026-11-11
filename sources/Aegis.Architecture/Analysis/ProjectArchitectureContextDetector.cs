@@ -65,7 +65,8 @@ public static class ProjectArchitectureContextDetector
 
         DependencyDetector.Analyze(
             ctx,
-            files);
+            files,
+            includeProjectReferences: false);
 
 
         LayerDetector.Analyze(
@@ -299,13 +300,25 @@ public static class ProjectArchitectureContextDetector
         ctx.MetadataMap["DetectedDependencies"] =
             ctx.DetectedDependencies.Count.ToString();
 
+        ctx.MetadataMap["ProductionDependencyCount"] =
+            ctx.ProductionDependencies.Count.ToString();
+
+        ctx.MetadataMap["TestDependencyCount"] =
+            ctx.TestDependencies.Count.ToString();
+
 
         ctx.MetadataMap["DetectedLayers"] =
             ctx.Layers.Count.ToString();
 
 
         ctx.MetadataMap["DetectedModules"] =
-            ctx.Modules.Count.ToString();
+            ctx.ProductionModules.Count.ToString();
+
+        ctx.MetadataMap["DetectedTestProjects"] =
+            ctx.TestModules.Count.ToString();
+
+        ctx.MetadataMap["DetectedTestSupportModules"] =
+            ctx.TestSupportModules.Count.ToString();
 
         ctx.MetadataMap["ProjectKindBreakdown"] =
             JsonSerializer.Serialize(ctx.Modules
@@ -322,6 +335,7 @@ public static class ProjectArchitectureContextDetector
                     module.Frameworks,
                     module.TargetFrameworks,
                     module.IsTestProject,
+                    module.IsTestSupport,
                     module.IsWebProject
                 }));
 

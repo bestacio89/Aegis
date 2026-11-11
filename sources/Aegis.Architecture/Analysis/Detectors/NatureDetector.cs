@@ -9,19 +9,31 @@ internal static class NatureDetector
         ArgumentNullException.ThrowIfNull(ctx);
         ArgumentNullException.ThrowIfNull(files);
 
-        if (ctx.Modules.Count > 1)
+        if (ctx.ProductionModules.Count > 1)
         {
             ctx.Nature = "MultiProject";
             return;
         }
 
-        var project = ctx.Modules.SingleOrDefault();
+        var project = ctx.ProductionModules.SingleOrDefault();
+
+        if (project is null && ctx.TestSupportModules.Count > 0)
+        {
+            ctx.Nature = "Library";
+            return;
+        }
+
+        if (project is null && ctx.TestModules.Count > 0)
+        {
+            ctx.Nature = "TestSuite";
+            return;
+        }
         if (project is not null)
         {
             ctx.Nature = project.ProjectKind switch
             {
                 "Test" => "TestSuite",
-                "ClassLibrary" => "Library",
+                "ClassLibrary" or "TestSupport" => "Library",
                 "WebApplication" => "Service",
                 "FrontendApplication" => "FrontendApp",
                 "DesktopApplication" => "DesktopApp",

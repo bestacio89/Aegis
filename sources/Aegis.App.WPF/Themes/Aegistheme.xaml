@@ -117,6 +117,22 @@
         <Setter Property="FontSize" Value="12"/>
     </Style>
 
+    <Style x:Key="Grid.LedgerRow" TargetType="DataGridRow">
+        <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource Brush.Line}"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource Brush.PanelElevated}"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="#20384D"/>
+                <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <Style x:Key="Grid.LedgerHeader" TargetType="DataGridColumnHeader">
         <Setter Property="Background" Value="{StaticResource Brush.PanelElevated}"/>
         <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}"/>

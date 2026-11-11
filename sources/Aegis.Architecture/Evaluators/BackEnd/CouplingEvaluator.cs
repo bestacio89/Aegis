@@ -67,7 +67,7 @@ public sealed class CouplingEvaluator
             DiagnosticLevel.Trace,
             "Evaluating architectural and external dependency coupling.");
 
-        var architecturalDependencies = context.Dependencies.ToList();
+        var architecturalDependencies = context.ProductionDependencies.ToList();
 
         var forbiddenCount = 0;
         var allowedCount = 0;

@@ -60,7 +60,7 @@ public sealed class DependencyGraphEvaluator
                 results);
         }
 
-        var relations = context.Dependencies.ToList();
+        var relations = context.ProductionDependencies.ToList();
 
         AegisDiagnostics.Report(
             Name,

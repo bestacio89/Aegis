@@ -33,15 +33,16 @@ internal static class ArchitectureDetector
             return;
         }
 
-        var serviceProjectCount = ctx.Modules.Count(module =>
+        var productionModules = ctx.ProductionModules;
+        var serviceProjectCount = productionModules.Count(module =>
             module.ProjectKind == "WebApplication"
             || module.ProjectKind == "Executable");
 
         if (hasMediator && hasEfCore) ctx.ArchitectureStyle = "CQRS";
         else if (hasEfCore && ctx.Layer == "Infrastructure") ctx.ArchitectureStyle = "Clean";
-        else if (ctx.DomainType == "FullStack" && ctx.Modules.Count > 1)
+        else if (ctx.DomainType == "FullStack" && productionModules.Count > 1)
             ctx.ArchitectureStyle = "Multi-Project Full-Stack";
-        else if (serviceProjectCount == 1 && ctx.Modules.Count > 1)
+        else if (serviceProjectCount == 1 && productionModules.Count > 1)
             ctx.ArchitectureStyle = "Modular Monolith";
         else if ((hasMassTr || hasKafka || hasRabbit || hasAzureSB || hasNServiceBus)
             && serviceProjectCount > 1)

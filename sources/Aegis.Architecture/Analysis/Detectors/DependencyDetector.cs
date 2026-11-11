@@ -9,7 +9,8 @@ internal static class DependencyDetector
 {
     public static void Analyze(
         ProjectArchitectureContext ctx,
-        List<string> files)
+        List<string> files,
+        bool includeProjectReferences = true)
     {
         var dependencies = new HashSet<string>(
             ctx.DetectedDependencies,
@@ -40,7 +41,7 @@ internal static class DependencyDetector
         // Package manifests populate DetectedDependencies only. Internal
         // architecture edges come from explicit project references, never from
         // package names or package versions.
-        if (ctx.Modules.Count > 0)
+        if (includeProjectReferences && ctx.Modules.Count > 0)
             AnalyzeDotNetProjectReferences(ctx, files);
     }
 
@@ -84,9 +85,7 @@ internal static class DependencyDetector
             if (sourceModule is null)
                 continue;
 
-            var sourceLayer = sourceModule.Layers.FirstOrDefault()?.Name;
-            if (string.IsNullOrWhiteSpace(sourceLayer))
-                continue;
+            var sourceLayer = sourceModule.Layers.FirstOrDefault()?.Name ?? "Unclassified";
 
             foreach (var reference in document.Descendants()
                          .Where(element => element.Name.LocalName == "ProjectReference"))
@@ -109,26 +108,37 @@ internal static class DependencyDetector
                 if (targetModule is null)
                     continue;
 
-                var targetLayer = targetModule.Layers.FirstOrDefault()?.Name;
-                if (string.IsNullOrWhiteSpace(targetLayer))
-                    continue;
+                var targetLayer = targetModule.Layers.FirstOrDefault()?.Name ?? "Unclassified";
+
+                // Preserve every project relationship as evidence. A relationship
+                // involving a test project is test-scoped even when its other
+                // endpoint is a production component.
+                var scope = sourceModule.IsTestProject || sourceModule.IsTestSupport
+                    || targetModule.IsTestProject || targetModule.IsTestSupport
+                    ? "Test"
+                    : "Production";
 
                 context.Dependencies.Add(new ArchitectureDependencyContext
                 {
                     Source = sourceModule.Name,
                     SourceLayer = sourceLayer,
+                    SourceProjectPath = Path.GetFullPath(sourceModule.Path),
                     Target = targetModule.Name,
                     TargetLayer = targetLayer,
+                    TargetProjectPath = Path.GetFullPath(targetModule.Path),
                     DependencyType = "ProjectReference",
-                    File = projectFile
+                    Scope = scope,
+                    File = Path.GetFullPath(projectFile)
                 });
             }
         }
 
         var unique = context.Dependencies
             .GroupBy(dependency =>
-                    $"{dependency.DependencyType}|{dependency.File}|{dependency.Source}|{dependency.Target}",
-                StringComparer.OrdinalIgnoreCase)
+                    $"{dependency.DependencyType}|{dependency.File}|{dependency.SourceProjectPath}|{dependency.TargetProjectPath}|{dependency.Source}|{dependency.Target}|{dependency.Scope}",
+                OperatingSystem.IsWindows()
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal)
             .Select(group => group.First())
             .ToArray();
 
@@ -139,7 +149,9 @@ internal static class DependencyDetector
         string.Equals(
             Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
             Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            StringComparison.OrdinalIgnoreCase);
+            OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal);
 
     private static void AnalyzeDotNet(
         ProjectArchitectureContext ctx,

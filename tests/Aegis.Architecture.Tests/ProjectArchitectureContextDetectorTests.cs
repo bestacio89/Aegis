@@ -341,10 +341,16 @@ public sealed class ProjectArchitectureContextDetectorTests
             module => module.Name == "Franz.Common.Tests");
 
         Assert.False(supportModule.IsTestProject);
-        Assert.NotEqual("Test", supportModule.ProjectKind);
+        Assert.True(supportModule.IsTestSupport);
+        Assert.Equal("TestSupport", supportModule.ProjectKind);
+        Assert.Equal("Tests", Assert.Single(supportModule.Layers).Name);
         Assert.True(testsModule.IsTestProject);
         Assert.Equal("Test", testsModule.ProjectKind);
         Assert.Equal("Test", testsModule.Type);
+        Assert.Equal("Library", context.DomainType);
+        Assert.Empty(context.ProductionModules);
+        Assert.Single(context.TestSupportModules);
+        Assert.Single(context.TestModules);
     }
 
     [Fact]
@@ -532,6 +538,262 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Contains(context.Modules, module =>
             module.Type == "Unity"
             && string.Equals(module.Path, Path.Combine(directory.Path, "UnityClient"), StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Detect_classifies_foundational_runtime_and_abstraction_modules_as_infrastructure()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var moduleNames = new[]
+        {
+            "Franz.Common",
+            "Franz.Common.Mediator",
+            "Franz.Common.Mediator.SourceGenerator",
+            "Franz.Common.Mediator.OpenTelemetry",
+            "Franz.Common.Mediator.Polly",
+            "Franz.Common.Messaging",
+            "Franz.Common.Messaging.Kafka",
+            "Franz.Common.Messaging.RabbitMQ",
+            "Franz.Common.Messaging.Sagas",
+            "Franz.Common.Messaging.AzureEventBus",
+            "Franz.Common.Messaging.AzureEventGrid",
+            "Franz.Common.Messaging.AzureEventHubs",
+            "Franz.Common.Messaging.Bootstrap",
+            "Franz.Common.Messaging.EntityFramework",
+            "Franz.Common.Messaging.Hosting",
+            "Franz.Common.Messaging.Hosting.Azure",
+            "Franz.Common.Messaging.Hosting.Kafka",
+            "Franz.Common.Messaging.Hosting.Mediator",
+            "Franz.Common.Messaging.Hosting.RabbitMQ",
+            "Franz.Common.Messaging.Identity",
+            "Franz.Common.Messaging.MassTransit",
+            "Franz.Common.Messaging.MultiTenancy",
+            "Franz.Common.Http",
+            "Franz.Common.Http.Client",
+            "Franz.Common.Http.Authentication",
+            "Franz.Common.Http.Refit",
+            "Franz.Common.Http.Headers",
+            "Franz.Common.Http.EntityFramework",
+            "Franz.Common.Http.MultiTenancy",
+            "Franz.Common.Http.Messaging",
+            "Franz.Common.Http.Documentation",
+            "Franz.Common.Http.Bootstrap",
+            "Franz.Common.Http.Identity",
+            "Franz.Common.Serialization",
+            "Franz.Common.Reflection",
+            "Franz.Common.DependencyInjection",
+            "Franz.Common.Bootstrap",
+            "Franz.Common.Hosting",
+            "Franz.Common.AzureCosmosDB",
+            "Franz.Common.EntityFramework",
+            "Franz.Common.EntityFramework.MariaDB",
+            "Franz.Common.EntityFramework.Oracle",
+            "Franz.Common.EntityFramework.PostGres",
+            "Franz.Common.EntityFramework.SQLServer",
+            "Franz.Common.MongoDB",
+            "Franz.Common.Grpc",
+            "Franz.Common.Grpc.AspNetCore",
+            "Franz.Common.Aras",
+            "Franz.Common.Mapping",
+            "Franz.Common.Mapping.Generators",
+            "Franz.Common.IO",
+            "Franz.Common.Caching",
+            "Franz.Common.Logging",
+            "Franz.Common.Identity",
+            "Franz.Common.SSO",
+            "Franz.Common.MultiTenancy",
+            "Franz.Common.Base.Abstractions"
+        };
+
+        foreach (var moduleName in moduleNames)
+        {
+            var modulePath = Path.Combine(directory.Path, "src", moduleName);
+            Directory.CreateDirectory(modulePath);
+
+            File.WriteAllText(
+                Path.Combine(modulePath, $"{moduleName}.csproj"),
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(
+                Path.Combine(modulePath, "Component.cs"),
+                "public sealed class Component { }");
+        }
+
+        var contractPath = Path.Combine(directory.Path, "src", "Franz.Common.Http.Contracts");
+        Directory.CreateDirectory(contractPath);
+        File.WriteAllText(
+            Path.Combine(contractPath, "Franz.Common.Http.Contracts.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal(moduleNames.Length + 1, context.Modules.Count);
+        foreach (var moduleName in moduleNames)
+        {
+            var module = Assert.Single(context.Modules, item => item.Name == moduleName);
+            Assert.Equal("Infrastructure", module.Type);
+            Assert.Equal("Infrastructure", Assert.Single(module.Layers).Name);
+        }
+
+        var contractsModule = Assert.Single(
+            context.Modules,
+            module => module.Name == "Franz.Common.Http.Contracts");
+        Assert.Equal("Contracts", contractsModule.Type);
+        Assert.Equal("Contracts", Assert.Single(contractsModule.Layers).Name);
+    }
+
+    [Fact]
+    public void Detect_classifies_business_and_transport_neutral_contract_package_families()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var expectedLayers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Franz.Common.Business"] = "Domain",
+            ["Franz.Common.Headers"] = "Contracts",
+            ["Franz.Common.Errors"] = "Contracts",
+            ["Franz.Common.Annotations"] = "Contracts"
+        };
+
+        foreach (var moduleName in expectedLayers.Keys)
+        {
+            var modulePath = Path.Combine(directory.Path, "sources", moduleName);
+            Directory.CreateDirectory(modulePath);
+            File.WriteAllText(
+                Path.Combine(modulePath, $"{moduleName}.csproj"),
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                </Project>
+                """);
+        }
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        foreach (var expected in expectedLayers)
+        {
+            var module = Assert.Single(
+                context.Modules,
+                candidate => candidate.Name == expected.Key);
+            Assert.Equal(expected.Value, module.Type);
+            Assert.Equal(expected.Value, Assert.Single(module.Layers).Name);
+        }
+    }
+
+    [Fact]
+    public void Detect_classifies_projects_under_test_directories_as_test_scope_without_name_or_sdk_hints()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var testProjectPath = Path.Combine(directory.Path, "tests", "IntegrationHarness");
+        Directory.CreateDirectory(testProjectPath);
+        File.WriteAllText(
+            Path.Combine(testProjectPath, "IntegrationHarness.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+        var module = Assert.Single(context.Modules);
+
+        Assert.True(module.IsTestProject);
+        Assert.Equal("Test", module.ProjectKind);
+        Assert.Equal("Test", module.Type);
+        Assert.Equal("Tests", Assert.Single(module.Layers).Name);
+        Assert.Empty(context.Layers);
+        Assert.Empty(context.ProductionModules);
+        Assert.Single(context.TestModules);
+    }
+
+    [Fact]
+    public void Detect_preserves_test_project_relationships_without_mixing_them_into_production_architecture()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var httpRoot = Path.Combine(directory.Path, "sources", "Franz.Common.Http");
+        var serializationRoot = Path.Combine(directory.Path, "sources", "Franz.Common.Serialization");
+        var testsRoot = Path.Combine(directory.Path, "tests", "Franz.Common.Http.Tests");
+        Directory.CreateDirectory(httpRoot);
+        Directory.CreateDirectory(serializationRoot);
+        Directory.CreateDirectory(testsRoot);
+
+        File.WriteAllText(
+            Path.Combine(serializationRoot, "Franz.Common.Serialization.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+
+        File.WriteAllText(
+            Path.Combine(httpRoot, "Franz.Common.Http.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <ProjectReference Include="..\Franz.Common.Serialization\Franz.Common.Serialization.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        File.WriteAllText(
+            Path.Combine(testsRoot, "Franz.Common.Http.Tests.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <IsTestProject>true</IsTestProject>
+              </PropertyGroup>
+              <ItemGroup>
+                <ProjectReference Include="..\..\sources\Franz.Common.Http\Franz.Common.Http.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Single(context.ProductionDependencies);
+        Assert.Single(context.TestDependencies);
+        Assert.Equal(2, context.Dependencies.Count);
+        Assert.Equal(2, context.ProductionModules.Count);
+        Assert.Single(context.TestModules);
+        Assert.DoesNotContain(context.Layers, layer => layer.Name == "Tests");
+        Assert.Equal("Tests", Assert.Single(
+            context.TestModules.Single().Layers).Name);
+
+        var productionRelationship = Assert.Single(
+            context.ProductionDependencies,
+            dependency => dependency.Source == "Franz.Common.Http");
+        Assert.Equal("Production", productionRelationship.Scope);
+        Assert.Equal("Infrastructure", productionRelationship.SourceLayer);
+        Assert.Equal("Infrastructure", productionRelationship.TargetLayer);
+        Assert.Equal(
+            Path.GetFullPath(httpRoot),
+            productionRelationship.SourceProjectPath);
+        Assert.Equal(
+            Path.GetFullPath(serializationRoot),
+            productionRelationship.TargetProjectPath);
+
+        var testRelationship = Assert.Single(context.TestDependencies);
+        Assert.Equal("Test", testRelationship.Scope);
+        Assert.Equal("Tests", testRelationship.SourceLayer);
+        Assert.Equal("Infrastructure", testRelationship.TargetLayer);
+        Assert.Equal(
+            Path.GetFullPath(testsRoot),
+            testRelationship.SourceProjectPath);
+        Assert.Equal(
+            Path.GetFullPath(httpRoot),
+            testRelationship.TargetProjectPath);
     }
 
     private sealed class TemporaryDirectory : IDisposable

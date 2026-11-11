@@ -12,8 +12,4 @@ public interface IRuleResultRepository : IScopedDependency
     Task AddBatchAsync(
         IEnumerable<RuleResultEntity> results,
         CancellationToken token = default);
-    Task<List<RuleResultEntity>> GetPreviousReportAsync(
-        string project,
-        DateTimeOffset currentReportDate,
-        CancellationToken token);
 }

@@ -68,16 +68,40 @@ public sealed class ProjectArchitectureContext
     /// </summary>
     public List<ProjectModuleContext> Modules { get; set; } = new();
 
+    /// <summary>Modules that belong to the production architecture.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ProjectModuleContext> ProductionModules =>
+        Modules.Where(module =>
+            !module.IsTestProject
+            && !module.IsTestSupport
+            && !string.Equals(module.Type, "Test", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(module.Type, "TestSupport", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(module.ProjectKind, "TestSupport", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
+    /// <summary>Test projects retained for source analysis and evidence.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ProjectModuleContext> TestModules =>
+        Modules.Where(module =>
+            module.IsTestProject
+            || string.Equals(module.Type, "Test", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
+    /// <summary>Reusable test-support packages, distinct from test projects.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ProjectModuleContext> TestSupportModules =>
+        Modules.Where(module =>
+            module.IsTestSupport
+            || string.Equals(module.Type, "TestSupport", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(module.ProjectKind, "TestSupport", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
 
     /// <summary>
-    /// Logical architecture layers detected.
-    /// Examples:
-    /// API
-    /// Application
-    /// Contracts
-    /// Domain
-    /// Infrastructure
-    /// Tests
+    /// Logical layers in the production architecture. Test projects and
+    /// test-support modules retain their own Tests layer on ProjectModuleContext.
     /// </summary>
     public List<ProjectLayerContext> Layers { get; set; } = new();
 
@@ -86,7 +110,7 @@ public sealed class ProjectArchitectureContext
 
 
     public bool IsMultiModule =>
-        Modules.Count > 1;
+        ProductionModules.Count > 1;
 
 
 
@@ -129,6 +153,82 @@ public sealed class ProjectArchitectureContext
     /// Evaluators consume this graph instead of discovering dependencies.
     /// </summary>
     public List<ArchitectureDependencyContext> Dependencies { get; set; } = new();
+
+    /// <summary>
+    /// Production-to-production relationships used to describe the deployed
+    /// architecture. Test-project relationships are intentionally excluded.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitectureDependencyContext> ProductionDependencies =>
+        Dependencies
+            .Where(dependency =>
+                string.Equals(
+                    dependency.Scope,
+                    "Production",
+                    StringComparison.OrdinalIgnoreCase)
+                && !IsTestScopedDependency(dependency))
+            .ToArray();
+
+    /// <summary>
+    /// Relationships involving at least one test project or test-support module.
+    /// These remain available for findings and the relationship ledger, but are
+    /// not production architecture edges.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitectureDependencyContext> TestDependencies =>
+        Dependencies
+            .Where(dependency =>
+                string.Equals(
+                    dependency.Scope,
+                    "Test",
+                    StringComparison.OrdinalIgnoreCase)
+                || IsTestScopedDependency(dependency))
+            .ToArray();
+
+    private bool IsTestScopedDependency(ArchitectureDependencyContext dependency) =>
+        IsTestOrSupportModule(dependency.SourceProjectPath, dependency.Source)
+        || IsTestOrSupportModule(dependency.TargetProjectPath, dependency.Target);
+
+    private bool IsTestOrSupportModule(string projectPath, string moduleName)
+    {
+        ProjectModuleContext? module = null;
+
+        if (!string.IsNullOrWhiteSpace(projectPath))
+        {
+            var normalizedPath = Path.GetFullPath(projectPath);
+            var pathComparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            module = Modules.FirstOrDefault(candidate =>
+                !string.IsNullOrWhiteSpace(candidate.Path)
+                && string.Equals(
+                    Path.GetFullPath(candidate.Path),
+                    normalizedPath,
+                    pathComparison));
+        }
+        else
+        {
+            var matchingModules = Modules
+                .Where(candidate => string.Equals(
+                    candidate.Name,
+                    moduleName,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToArray();
+
+            if (matchingModules.Length == 1)
+                module = matchingModules[0];
+        }
+
+        return module is not null
+            && (module.IsTestProject
+                || module.IsTestSupport
+                || string.Equals(module.Type, "Test", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(module.Type, "TestSupport", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(module.ProjectKind, "TestSupport", StringComparison.OrdinalIgnoreCase));
+    }
 
 
 
@@ -251,7 +351,9 @@ public sealed class ProjectArchitectureContext
             TargetRuntime,
             BuildSystem = BuildSystem.ToString(),
 
-            Modules = Modules.Count,
+            Modules = ProductionModules.Count,
+            TestProjects = TestModules.Count,
+            TestSupportModules = TestSupportModules.Count,
             Layers = Layers.Select(x => x.Name),
 
             ArchitectureStyle,
@@ -259,6 +361,8 @@ public sealed class ProjectArchitectureContext
 
             BoundaryCount = Boundaries.Count,
             DependencyCount = Dependencies.Count,
+            ProductionDependencyCount = ProductionDependencies.Count,
+            TestDependencyCount = TestDependencies.Count,
 
             Confidence,
             DetectionStrategy,

@@ -74,7 +74,7 @@ public sealed class ArchitecturalEvaluator :
                 []);
         }
 
-        var dependencies = Context.Dependencies.ToList();
+        var dependencies = Context.ProductionDependencies.ToList();
         var results = new List<ArchitectureEvaluatorResult>();
 
         var classifiedCount = 0;

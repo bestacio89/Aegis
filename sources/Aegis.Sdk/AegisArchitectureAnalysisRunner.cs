@@ -536,6 +536,7 @@ public sealed class AegisArchitectureAnalysisRunner
                 Severity = result.Severity,
                 Category = result.Category.ToString(),
                 Target = Path.GetFileName(result.FilePath),
+                SourceFile = result.FilePath,
                 Message = result.Message,
                 ImpactScore = result.ImpactScore,
                 WeightedImpact = result.WeightedImpact,
@@ -566,49 +567,60 @@ public sealed class AegisArchitectureAnalysisRunner
     {
         try
         {
-            var previous = await _customReportRepo.GetLatestAsync(token)
-                .ConfigureAwait(false);
+            var previousReport = await _customReportRepo.GetPreviousForProjectAsync(
+                currentReport.ProjectPath,
+                currentReport.ScanDate,
+                currentReport.Id,
+                token).ConfigureAwait(false);
 
-            if (previous is null || previous.Id == currentReport.Id)
+            if (previousReport is null)
             {
                 _logger.LogInformation(
-                    "No previous report to compare with.");
+                    "No previous report exists for project {ProjectPath}.",
+                    currentReport.ProjectPath);
 
                 return;
             }
 
-            var previousResults =
-                await _customRuleResultRepo.GetPreviousReportAsync(
-                    currentReport.ProjectName,
-                    currentReport.DateCreated,
-                    token).ConfigureAwait(false);
+            var currentResults = await _customRuleResultRepo.GetViolationsByReportIdAsync(
+                currentReport.Id,
+                token).ConfigureAwait(false);
 
-            var currentResults =
-                await _customRuleResultRepo.GetViolationsByReportIdAsync(
-                    currentReport.Id,
-                    token).ConfigureAwait(false);
+            var previousResultsWithSourcePaths = previousReport.RuleResults
+                .Where(result => !string.IsNullOrWhiteSpace(result.SourceFile))
+                .Select(CreateSourceIdentity)
+                .ToHashSet(ViolationIdentityComparer.Instance);
 
-            var previousViolationKeys =
-                new HashSet<(string RuleId, string Project)>(
-                    previousResults.Select(
-                        result => (result.RuleId, result.Project)));
+            // Older persisted reports did not populate SourceFile. Their basename
+            // is the only available identity, so retain a deliberate legacy fallback.
+            var previousLegacyResults = previousReport.RuleResults
+                .Where(result => string.IsNullOrWhiteSpace(result.SourceFile))
+                .Select(CreateTargetIdentity)
+                .ToHashSet(ViolationIdentityComparer.Instance);
 
             var newViolations = currentResults
                 .Where(current =>
-                    !previousViolationKeys.Contains(
-                        (current.RuleId, current.Project)))
+                    !previousResultsWithSourcePaths.Contains(CreateSourceIdentity(current))
+                    && !previousLegacyResults.Contains(CreateTargetIdentity(current)))
                 .ToList();
+
+            _logger.LogInformation(
+                "Compared report {CurrentReportId} with project-scoped previous report {PreviousReportId}.",
+                currentReport.Id,
+                previousReport.Id);
 
             if (newViolations.Count > 0)
             {
                 _logger.LogWarning(
-                    "{Count} new violations detected.",
-                    newViolations.Count);
+                    "{Count} new violations detected for project {ProjectPath}.",
+                    newViolations.Count,
+                    currentReport.ProjectPath);
             }
             else
             {
                 _logger.LogInformation(
-                    "No new violations introduced.");
+                    "No new violations introduced for project {ProjectPath}.",
+                    currentReport.ProjectPath);
             }
         }
         catch (OperationCanceledException)
@@ -620,7 +632,44 @@ public sealed class AegisArchitectureAnalysisRunner
         {
             _logger.LogError(
                 exception,
-                "Failed report comparison.");
+                "Failed report comparison for project {ProjectPath}.",
+                currentReport.ProjectPath);
         }
     }
+
+    private static ViolationIdentity CreateSourceIdentity(RuleResultEntity result) =>
+        new(result.RuleId, result.SourceFile ?? result.Target, result.Category, result.Domain);
+
+    private static ViolationIdentity CreateTargetIdentity(RuleResultEntity result) =>
+        new(result.RuleId, result.Target, result.Category, result.Domain);
+
+    private readonly record struct ViolationIdentity(
+        string RuleId,
+        string Target,
+        string Category,
+        string? Domain);
+
+    private sealed class ViolationIdentityComparer : IEqualityComparer<ViolationIdentity>
+    {
+        private static StringComparer FilePathComparer =>
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+        public static ViolationIdentityComparer Instance { get; } = new();
+
+        public bool Equals(ViolationIdentity left, ViolationIdentity right) =>
+            StringComparer.OrdinalIgnoreCase.Equals(left.RuleId, right.RuleId)
+            && FilePathComparer.Equals(left.Target, right.Target)
+            && StringComparer.OrdinalIgnoreCase.Equals(left.Category, right.Category)
+            && StringComparer.OrdinalIgnoreCase.Equals(left.Domain, right.Domain);
+
+        public int GetHashCode(ViolationIdentity value) =>
+            HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(value.RuleId),
+                FilePathComparer.GetHashCode(value.Target),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(value.Category),
+                value.Domain is null
+                    ? 0
+                    : StringComparer.OrdinalIgnoreCase.GetHashCode(value.Domain));
+    }
+
 }

@@ -59,7 +59,7 @@ internal static class ModuleDetector
                 Path = modulePath,
                 ProjectFile = primaryProjectFile,
                 ProjectFiles = projectFiles,
-                Type = DetectModuleType(modulePath, moduleName)
+                Type = DetectModuleType(context.RootPath, modulePath, moduleName)
             };
 
             var dotNetProject = projectFiles.FirstOrDefault(file =>
@@ -87,6 +87,14 @@ internal static class ModuleDetector
                 module.Type = "Test";
                 module.ProjectKind = "Test";
                 module.IsLibrary = false;
+            }
+            else if (string.Equals(
+                         module.Type,
+                         "TestSupport",
+                         StringComparison.OrdinalIgnoreCase))
+            {
+                module.IsTestSupport = true;
+                module.ProjectKind = "TestSupport";
             }
 
             // Preserve a project-level aggregate when multiple concrete
@@ -465,10 +473,35 @@ internal static class ModuleDetector
         return Path.GetFileNameWithoutExtension(projectFile);
     }
 
-    private static string DetectModuleType(string path, string moduleName)
+    private static string DetectModuleType(
+        string rootPath,
+        string path,
+        string moduleName)
     {
+        // A project nested under an explicit test directory within the scanned
+        // repository is test scope even when its name or build metadata omits it.
+        var relativePath = Path.GetRelativePath(
+            Path.GetFullPath(rootPath),
+            Path.GetFullPath(path));
+
+        if (relativePath
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                StringSplitOptions.RemoveEmptyEntries)
+            .Any(segment => segment.Equals("test", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("tests", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Test";
+        }
+
         var pathName = Path.GetFileName(
             Path.TrimEndingDirectorySeparator(path)).ToLowerInvariant();
+
+        if (pathName.Contains("testsupport", StringComparison.Ordinal)
+            || pathName.Equals("testing", StringComparison.Ordinal)
+            || pathName.EndsWith(".testing", StringComparison.Ordinal))
+        {
+            return "TestSupport";
+        }
 
         var pathType = DetectModuleTypeFromName(pathName);
         return pathType != "Unknown"
@@ -487,6 +520,23 @@ internal static class ModuleDetector
         {
             return "Test";
         }
+
+        if (name.Equals("testing", StringComparison.Ordinal)
+            || name.EndsWith(".testing", StringComparison.Ordinal)
+            || name.Contains("testsupport", StringComparison.Ordinal))
+        {
+            return "TestSupport";
+        }
+        // Explicit contract packages take precedence over the technical family
+        // names used by adapters such as Http.Contracts.
+        if (name.Contains("contracts", StringComparison.Ordinal)
+            || name.Contains("annotations", StringComparison.Ordinal)
+            || (name.EndsWith(".headers", StringComparison.Ordinal)
+                && !name.Split('.').Contains("http", StringComparer.Ordinal))
+            || (name.EndsWith(".errors", StringComparison.Ordinal)
+                && !name.Split('.').Contains("http", StringComparer.Ordinal)))
+            return "Contracts";
+
         if (name.EndsWith(".api", StringComparison.Ordinal)
             || name.EndsWith("api", StringComparison.Ordinal))
             return "Api";
@@ -494,15 +544,55 @@ internal static class ModuleDetector
             || name.EndsWith(".app", StringComparison.Ordinal))
             return "Application";
         if (name.Contains("domain", StringComparison.Ordinal)
+            || name.Contains("business", StringComparison.Ordinal)
             || name.EndsWith(".core", StringComparison.Ordinal))
             return "Domain";
+        // Foundational runtime capabilities and platform adapters belong to
+        // infrastructure even when their package names omit "Infrastructure".
         if (name.Contains("infrastructure", StringComparison.Ordinal)
             || name.Contains("persistence", StringComparison.Ordinal)
-            || name.Contains("database", StringComparison.Ordinal))
+            || name.Contains("database", StringComparison.Ordinal)
+            || name.Contains("mediator", StringComparison.Ordinal)
+            || name.Contains("messaging", StringComparison.Ordinal)
+            || name.Contains("http", StringComparison.Ordinal)
+            || name.Contains("refit", StringComparison.Ordinal)
+            || name.Contains("serialization", StringComparison.Ordinal)
+            || name.Contains("serializer", StringComparison.Ordinal)
+            || name.Contains("reflection", StringComparison.Ordinal)
+            || name.Contains("dependencyinjection", StringComparison.Ordinal)
+            || name.Contains("bootstrap", StringComparison.Ordinal)
+            || name.Contains("hosting", StringComparison.Ordinal)
+            || name.Contains("entityframework", StringComparison.Ordinal)
+            || name.Contains("cosmos", StringComparison.Ordinal)
+            || name.Contains("mongodb", StringComparison.Ordinal)
+            || name.Contains("grpc", StringComparison.Ordinal)
+            || name.Contains("aras", StringComparison.Ordinal)
+            || name.Contains("mapping", StringComparison.Ordinal)
+            || name.Split('.').Contains("io", StringComparer.Ordinal)
+            || name.Contains("opentelemetry", StringComparison.Ordinal)
+            || name.Contains("polly", StringComparison.Ordinal)
+            || name.Contains("kafka", StringComparison.Ordinal)
+            || name.Contains("rabbitmq", StringComparison.Ordinal)
+            || name.Contains("masstransit", StringComparison.Ordinal)
+            || name.Contains("sagas", StringComparison.Ordinal)
+            || name.Contains("azureevent", StringComparison.Ordinal)
+            || name.Contains("multitenancy", StringComparison.Ordinal)
+            || name.Contains("identity", StringComparison.Ordinal)
+            || name.Contains("sso", StringComparison.Ordinal)
+            || name.Equals("franz.common", StringComparison.Ordinal)
+            || name.Contains("caching", StringComparison.Ordinal)
+            || name.Contains("cache", StringComparison.Ordinal)
+            || name.Contains("logging", StringComparison.Ordinal)
+            || name.Contains("security", StringComparison.Ordinal)
+            || name.Contains("integration", StringComparison.Ordinal)
+            || name.Contains("transport", StringComparison.Ordinal)
+            || name.Contains("storage", StringComparison.Ordinal)
+            || name.Contains("observability", StringComparison.Ordinal)
+            || name.Contains("resilience", StringComparison.Ordinal)
+            || name.Contains("abstractions", StringComparison.Ordinal)
+            || name.EndsWith(".base", StringComparison.Ordinal)
+            || name.StartsWith("base.", StringComparison.Ordinal))
             return "Infrastructure";
-        if (name.Contains("contracts", StringComparison.Ordinal)
-            || name.Contains("abstractions", StringComparison.Ordinal))
-            return "Contracts";
         if (name.Contains("consumer", StringComparison.Ordinal)
             || name.Contains("worker", StringComparison.Ordinal)
             || name.Contains("background", StringComparison.Ordinal))

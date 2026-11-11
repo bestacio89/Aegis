@@ -134,7 +134,9 @@ internal static class DependencyDetector
         var unique = context.Dependencies
             .GroupBy(dependency =>
                     $"{dependency.DependencyType}|{dependency.File}|{dependency.SourceProjectPath}|{dependency.TargetProjectPath}|{dependency.Source}|{dependency.Target}|{dependency.Scope}",
-                StringComparer.OrdinalIgnoreCase)
+                OperatingSystem.IsWindows()
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal)
             .Select(group => group.First())
             .ToArray();
 

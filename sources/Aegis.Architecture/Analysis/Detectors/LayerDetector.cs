@@ -245,6 +245,7 @@ internal static class LayerDetector
             "consumer" => "Consumer",
             "client" => "Client",
             "test" => "Tests",
+            "testsupport" => "Tests",
             "unity" => "Client",
             _ => null
         };

@@ -94,6 +94,7 @@ public sealed class FacadePatternEvaluator
         """,
         RegexOptions.Compiled |
         RegexOptions.CultureInvariant |
+        RegexOptions.Multiline |
         RegexOptions.IgnorePatternWhitespace);
 
     private static readonly Regex ConstructorRegex = new(

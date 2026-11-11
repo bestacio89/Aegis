@@ -370,6 +370,7 @@ public sealed class RuleMetricScopeDiagnosticTests
     {
         var policy = new AegisArchitecturePolicy();
         policy.Architecture.DesignPatterns.EnforceCommandPattern = true;
+        policy.Architecture.DesignPatterns.EnforceMediatorPattern = true;
         policy.Architecture.DesignPatterns.EnforceObserverPattern = true;
         policy.Architecture.DesignPatterns.EnforceStrategyPattern = true;
 

@@ -275,7 +275,20 @@ public sealed class RuleEngineCoreBehaviorTests
         Assert.Contains("AEG-DES-STRAT002", outcome.Stats.RulesNotApplicable);
         Assert.DoesNotContain("AEG-DES-STRAT001", outcome.Stats.RulesNotEvaluated);
         Assert.DoesNotContain("AEG-DES-STRAT002", outcome.Stats.RulesNotEvaluated);
-        Assert.True(outcome.Stats.EvaluationCoverage <= 100);
+
+        summary.Metrics["StrategyCount"] = 1;
+        var candidateOutcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            policy).EvaluateDetailed(
+                new ProjectArchitectureContext { Language = "C#" },
+                [summary]);
+
+        Assert.Equal(
+            outcome.Stats.RulesApplicable + 2,
+            candidateOutcome.Stats.RulesApplicable);
+        Assert.True(
+            outcome.Stats.EvaluationCoverage > candidateOutcome.Stats.EvaluationCoverage,
+            "Rules proven inapplicable must be excluded from the coverage denominator.");
     }
 
     [Fact]

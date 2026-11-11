@@ -1,4 +1,5 @@
 using Aegis.Architecture.Evaluators.DesignPatterns;
+using Aegis.Architecture.RuleEngines;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -74,6 +75,49 @@ public sealed class RemainingPatternEvaluatorBehaviorTests
         Assert.Equal(0, result.Metrics["LeakRisk"]);
         Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
         AssertAllMetricsAreFinite(results);
+    }
+
+    [Fact]
+    public async Task ObserverPatternEvaluator_marks_unsubscribe_rule_not_applicable_without_subscriptions()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/OrderPublisher.cs", """
+            public sealed class OrderPublisher
+            {
+                public void Publish(OrderCreated message) { }
+            }
+
+            public sealed class OrderCreated { }
+            """);
+
+        var policy = new AegisArchitecturePolicy();
+        policy.Architecture.DesignPatterns.EnforceObserverPattern = true;
+        var evaluator = new ObserverPatternEvaluator(
+            NullLogger<ObserverPatternEvaluator>.Instance,
+            Options.Create(policy));
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project, "C#", "ASP.NET"))).ToArray();
+
+        var fileFact = Assert.Single(
+            results,
+            item => item.Metadata.GetValueOrDefault("EvaluationScope") == "File");
+        Assert.DoesNotContain("ObserverUnsubscribeMissingCount", fileFact.Metrics.Keys);
+
+        var summary = Assert.Single(
+            results,
+            item => item.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+        Assert.Equal(0, summary.Metrics["ObserverCandidateCount"]);
+
+        var outcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            policy).EvaluateDetailed(
+                CreateContext(project, "C#", "ASP.NET"),
+                results);
+
+        Assert.Contains("AEG-DES-OBS001", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-DES-OBS001", outcome.Stats.RulesNotEvaluated);
     }
 
     [Fact]

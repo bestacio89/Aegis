@@ -68,12 +68,25 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
 
-    private static readonly Regex BlockingRegex =
+    private static readonly Regex DotNetBlockingRegex =
         new(
-            @"\b(?:Thread\.Sleep|Task\.WaitAll|Task\.WaitAny|time\.sleep)\s*\(|\b[A-Za-z_][A-Za-z0-9_]*\.GetAwaiter\(\)\.GetResult\s*\(",
-            RegexOptions.IgnoreCase |
-            RegexOptions.Compiled |
-            RegexOptions.CultureInvariant);
+            @"\b(?:Thread\.Sleep|Task\.WaitAll|Task\.WaitAny)\s*\(|\b[A-Za-z_][A-Za-z0-9_]*\.GetAwaiter\(\)\.GetResult\s*\(",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex JavaBlockingRegex =
+        new(
+            @"\bThread\.sleep\s*\(",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex PythonBlockingRegex =
+        new(
+            @"\btime\.sleep\s*\(",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex JavaScriptBlockingRegex =
+        new(
+            @"\bAtomics\.wait\s*\(",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex TaskVariableDeclarationRegex = new(
         @"\b(?:System\.Threading\.Tasks\.)?(?:Task|ValueTask)(?:\s*<[^;=(){}]+>)?\??\s+(?<name>@?[A-Za-z_][A-Za-z0-9_]*)\b",
@@ -88,7 +101,7 @@ public sealed class ArchitecturalPerformanceEvaluator
     private static readonly Regex DotNetSyncIORegex =
         new(
             @"\b(?:(?:System\.IO\.)?File\.(?:ReadAllText|ReadAllBytes|ReadAllLines|WriteAllText|WriteAllBytes|WriteAllLines|OpenRead|OpenWrite|Open|CreateText))\s*\(",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex JavaSyncIORegex =
         new(
@@ -297,8 +310,9 @@ public sealed class ArchitecturalPerformanceEvaluator
     {
         var matches = new List<Match>();
 
-        var blockingMatches = BlockingRegex.Matches(content);
-        matches.AddRange(blockingMatches.Cast<Match>());
+        var blockingRegex = GetBlockingRegex(language);
+        if (blockingRegex is not null)
+            matches.AddRange(blockingRegex.Matches(content).Cast<Match>());
 
         var syncIoRegex = language switch
         {
@@ -482,9 +496,19 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
 
+    private static Regex? GetBlockingRegex(string language) =>
+        language switch
+        {
+            "C#" => DotNetBlockingRegex,
+            "Java" => JavaBlockingRegex,
+            "Python" => PythonBlockingRegex,
+            "TypeScript" or "JavaScript" => JavaScriptBlockingRegex,
+            _ => null
+        };
+
     private static bool HasBlockingCalls(string content, string language)
     {
-        if (BlockingRegex.IsMatch(content))
+        if (GetBlockingRegex(language)?.IsMatch(content) == true)
             return true;
 
         if (!string.Equals(language, "C#", StringComparison.OrdinalIgnoreCase))

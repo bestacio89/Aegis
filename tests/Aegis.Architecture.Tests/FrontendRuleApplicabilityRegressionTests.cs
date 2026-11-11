@@ -85,7 +85,15 @@ public sealed class FrontendRuleApplicabilityRegressionTests
                 ["EvaluationScope"] = "File",
                 ["FilePath"] = "Views/Orders/Index.cshtml",
                 ["Framework"] = "Razor",
-                ["Language"] = "C#"
+                ["Language"] = "C#",
+                ["Evidence.PresentationSeparationScore"] =
+                    "Razor view delegates presentation state to its view model.",
+                ["Evidence.ViewModelScore"] =
+                    "The view consumes a dedicated view model.",
+                ["Evidence.DataIsolationScore"] =
+                    "The view does not access persistence services directly.",
+                ["EvidenceLine.PresentationSeparationScore"] = "12",
+                ["CodeSnippet.PresentationSeparationScore"] = "@model OrderViewModel"
             }
         };
 
@@ -164,7 +172,11 @@ public sealed class FrontendRuleApplicabilityRegressionTests
                 ["EvaluationScope"] = "File",
                 ["FilePath"] = "src/Orders.tsx",
                 ["Framework"] = "React",
-                ["Language"] = "TypeScript"
+                ["Language"] = "TypeScript",
+                ["Evidence.ComplexityScore"] =
+                    "Orders.tsx contains a component with excessive conditional complexity.",
+                ["EvidenceLine.ComplexityScore"] = "8",
+                ["CodeSnippet.ComplexityScore"] = "if (loading) { ... }"
             }
         };
 

@@ -573,13 +573,9 @@ internal static class GradleBuildModelResolver
             }
         }
 
-        foreach (var sourceFile in files.Where(file =>
-                     Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)))
+        var generatedSourceFiles = DiscoverGeneratedJavaFiles(modulePath, diagnostics);
+        foreach (var sourceFile in generatedSourceFiles)
         {
-            var moduleBuildDirectory = Path.Combine(modulePath, "build");
-            if (!IsSameOrDescendantPath(sourceFile, moduleBuildDirectory))
-                continue;
-
             var relative = Path.GetRelativePath(modulePath, sourceFile)
                 .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var buildIndex = 0;
@@ -645,6 +641,66 @@ internal static class GradleBuildModelResolver
         return roots.Values
             .OrderBy(root => root.Directory, PathComparer)
             .ToList();
+    }
+
+    /// <summary>
+    /// Inspects only Gradle's generated Java source subtree. These files remain
+    /// excluded from repository-wide governed-file analysis and file counts.
+    /// </summary>
+    private static IReadOnlyCollection<string> DiscoverGeneratedJavaFiles(
+        string modulePath,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        var generatedSourcesDirectory = Path.GetFullPath(Path.Combine(
+            modulePath, "build", "generated", "sources"));
+        if (!Directory.Exists(generatedSourcesDirectory))
+            return [];
+
+        var discoveredFiles = new List<string>();
+        var pendingDirectories = new Stack<string>();
+        pendingDirectories.Push(generatedSourcesDirectory);
+
+        while (pendingDirectories.Count > 0)
+        {
+            var directory = pendingDirectories.Pop();
+            try
+            {
+                if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                    continue;
+
+                foreach (var file in Directory.EnumerateFiles(
+                             directory, "*", SearchOption.TopDirectoryOnly))
+                {
+                    if (!Path.GetExtension(file).Equals(
+                            ".java", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var fullPath = Path.GetFullPath(file);
+                    if (!IsSameOrDescendantPath(fullPath, generatedSourcesDirectory))
+                        continue;
+
+                    if ((File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) == 0)
+                        discoveredFiles.Add(fullPath);
+                }
+
+                foreach (var child in Directory.EnumerateDirectories(
+                             directory, "*", SearchOption.TopDirectoryOnly))
+                {
+                    if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0)
+                        pendingDirectories.Push(child);
+                }
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleGeneratedSourceDiscoveryFailed",
+                    $"Generated Java source discovery could not inspect '{directory}': {exception.Message}",
+                    directory));
+            }
+        }
+
+        return discoveredFiles;
     }
 
     private static List<GradleBuildModel.SourceSet> DiscoverConventionalSourceSets(

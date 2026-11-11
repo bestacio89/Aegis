@@ -406,7 +406,7 @@ public sealed class ArchitectureEvaluatorBehaviorTests
                 public void Execute(Microsoft.Extensions.Logging.ILogger logger, string orderId)
                 {
                     // logger.LogCritical("commented {OrderId}", orderId);
-                    var example = "logger.LogCritical(\\\"string literal\\\")";
+                    var example = "logger.LogCritical(string literal)";
                     logger.LogInformation("Processing order {OrderId}", orderId);
                     System.Console.WriteLine($"Order {orderId}");
                 }

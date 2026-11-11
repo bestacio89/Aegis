@@ -48,6 +48,7 @@ internal static class MavenProjectModelResolver
                 continue;
 
             module.MavenModel = model;
+            module.SourceRoots = model.SourceRoots;
             if (!string.IsNullOrWhiteSpace(model.ProjectCoordinates.ArtifactId))
                 module.Name = model.ProjectCoordinates.ArtifactId;
             module.ProjectKind = model.Packaging.Equals("war", StringComparison.OrdinalIgnoreCase)
@@ -338,6 +339,8 @@ internal static class MavenProjectModelResolver
                     fullPath));
             }
 
+            var sourceRoots = DiscoverSourceRoots(root, fullPath, files, properties, diagnostics);
+
             var model = new MavenProjectModel
             {
                 ProjectFile = fullPath,
@@ -355,6 +358,7 @@ internal static class MavenProjectModelResolver
                 Plugins = plugins,
                 ManagedPlugins = managedPlugins,
                 AnnotationProcessorPaths = processorPaths,
+                SourceRoots = sourceRoots,
                 ProfileIds = profileIds,
                 Diagnostics = diagnostics,
                 IsComplete = diagnostics.Count == 0
@@ -563,6 +567,119 @@ internal static class MavenProjectModelResolver
                     managed);
             })
             .ToList();
+    }
+
+    private static List<ProjectSourceRoot> DiscoverSourceRoots(
+        XElement project,
+        string projectFile,
+        IReadOnlyCollection<string> files,
+        IReadOnlyDictionary<string, string> properties,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        var projectDirectory = Path.GetDirectoryName(projectFile)!;
+        var roots = new Dictionary<string, ProjectSourceRoot>(PathComparer);
+
+        void AddRoot(
+            string directory,
+            ProjectSourceRootOwnership ownership,
+            ProjectSourceRootOrigin origin,
+            bool generated,
+            string evidenceFile,
+            bool includeWhenEmpty)
+        {
+            var fullDirectory = Path.GetFullPath(directory);
+            var containsJava = files.Any(file =>
+                Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
+                && IsSameOrDescendantPath(file, fullDirectory));
+            if (!containsJava && !includeWhenEmpty)
+                return;
+
+            roots[fullDirectory] = new ProjectSourceRoot
+            {
+                Directory = fullDirectory,
+                Ownership = ownership,
+                Origin = origin,
+                IsGenerated = generated,
+                ContainsJavaSources = containsJava,
+                EvidenceFile = evidenceFile
+            };
+        }
+
+        AddRoot(Path.Combine(projectDirectory, "src", "main", "java"),
+            ProjectSourceRootOwnership.Production, ProjectSourceRootOrigin.Conventional,
+            false, projectFile, false);
+        AddRoot(Path.Combine(projectDirectory, "src", "test", "java"),
+            ProjectSourceRootOwnership.Test, ProjectSourceRootOrigin.Conventional,
+            false, projectFile, false);
+
+        var build = Child(project, "build");
+        foreach (var (elementName, ownership) in new[]
+                 {
+                     ("sourceDirectory", ProjectSourceRootOwnership.Production),
+                     ("testSourceDirectory", ProjectSourceRootOwnership.Test)
+                 })
+        {
+            var declared = ResolveValue(Value(build, elementName), properties);
+            if (string.IsNullOrWhiteSpace(declared))
+                continue;
+
+            if (PropertyReference.IsMatch(declared))
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenSourceRootNotStaticallyResolved",
+                    $"The configured {elementName} contains an unresolved property expression.",
+                    projectFile));
+                continue;
+            }
+
+            AddRoot(Path.IsPathRooted(declared)
+                    ? declared
+                    : Path.Combine(projectDirectory, declared),
+                ownership,
+                ProjectSourceRootOrigin.Explicit,
+                declared.Contains("generated", StringComparison.OrdinalIgnoreCase),
+                projectFile,
+                true);
+        }
+
+        foreach (var sourceFile in files.Where(file =>
+                     Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)))
+        {
+            var relative = Path.GetRelativePath(projectDirectory, sourceFile)
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var targetIndex = Array.FindIndex(relative, segment =>
+                segment.Equals("target", StringComparison.OrdinalIgnoreCase));
+            if (targetIndex < 0 || targetIndex + 1 >= relative.Length)
+                continue;
+
+            var generatedDirectory = relative[targetIndex + 1];
+            var ownership = generatedDirectory.Equals("generated-test-sources", StringComparison.OrdinalIgnoreCase)
+                ? ProjectSourceRootOwnership.Test
+                : generatedDirectory.Equals("generated-sources", StringComparison.OrdinalIgnoreCase)
+                    ? ProjectSourceRootOwnership.Production
+                    : ProjectSourceRootOwnership.Unknown;
+            if (ownership == ProjectSourceRootOwnership.Unknown)
+                continue;
+
+            var rootLength = Math.Min(relative.Length, targetIndex + 3);
+            var root = Path.Combine(projectDirectory,
+                Path.Combine(relative.Take(rootLength).ToArray()));
+            AddRoot(root, ownership, ProjectSourceRootOrigin.GeneratedConvention,
+                true, projectFile, false);
+        }
+
+        return roots.Values
+            .OrderBy(root => root.Directory, PathComparer)
+            .ToList();
+    }
+
+    private static bool IsSameOrDescendantPath(string path, string root)
+    {
+        var relative = Path.GetRelativePath(root, path);
+        return !Path.IsPathRooted(relative)
+            && relative != ".."
+            && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+            && !relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
     }
 
     private static List<MavenProjectModel.Plugin> ParsePlugins(

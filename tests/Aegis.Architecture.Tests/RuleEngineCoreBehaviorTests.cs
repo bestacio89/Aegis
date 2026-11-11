@@ -240,8 +240,8 @@ public sealed class RuleEngineCoreBehaviorTests
             []);
 
         Assert.Equal(76, ArchitectureRuleRegistry.All.Count);
-        Assert.Equal(26, outcome.Stats.RulesUnsupported);
-        Assert.Equal(48, outcome.Stats.RulesApplicable);
+        Assert.Equal(28, outcome.Stats.RulesUnsupported);
+        Assert.Equal(46, outcome.Stats.RulesApplicable);
         Assert.Equal(74, outcome.Stats.NotEvaluatedReasons.Count);
         Assert.Equal(74, outcome.Stats.RulesNotEvaluated.Count);
         Assert.Equal(2, outcome.Stats.RulesNotApplicable.Count);

@@ -292,7 +292,7 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
     [Fact]
-    public void EvaluateDetailed_marks_layer_boundary_rules_not_applicable_when_policy_disables_them()
+    public void EvaluateDetailed_marks_layer_boundary_rules_disabled_when_policy_disables_them()
     {
         var policy = new AegisArchitecturePolicy();
         policy.Architecture.EnforceLayerBoundaries = false;
@@ -316,11 +316,12 @@ public sealed class RuleEngineCoreBehaviorTests
             NullLogger<RuleEngineCore>.Instance,
             policy).EvaluateDetailed(context, []);
 
-        Assert.Contains("AEG-ARCH-R2", outcome.Stats.RulesNotApplicable);
-        Assert.Contains("AEG-ARCH-R3", outcome.Stats.RulesNotApplicable);
-        Assert.Contains("AEG-ARCH-R5", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-ARCH-R2", outcome.Stats.DisabledByPolicyReasons.Keys);
+        Assert.Contains("AEG-ARCH-R3", outcome.Stats.DisabledByPolicyReasons.Keys);
+        Assert.Contains("AEG-ARCH-R5", outcome.Stats.DisabledByPolicyReasons.Keys);
+        Assert.DoesNotContain("AEG-ARCH-R2", outcome.Stats.RulesNotApplicable);
         Assert.Contains(
-            outcome.Stats.NotApplicableReasons,
+            outcome.Stats.DisabledByPolicyReasons,
             pair => pair.Key == "AEG-ARCH-R2"
                 && pair.Value.Contains("disabled", StringComparison.OrdinalIgnoreCase));
     }

@@ -653,8 +653,28 @@ internal static class GradleBuildModelResolver
     {
         var generatedSourcesDirectory = Path.GetFullPath(Path.Combine(
             modulePath, "build", "generated", "sources"));
-        if (!Directory.Exists(generatedSourcesDirectory))
+        try
+        {
+            if ((File.GetAttributes(generatedSourcesDirectory) & FileAttributes.ReparsePoint) != 0)
+                return [];
+        }
+        catch (DirectoryNotFoundException)
+        {
             return [];
+        }
+        catch (FileNotFoundException)
+        {
+            return [];
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleGeneratedSourceDiscoveryFailed",
+                $"Generated Java source discovery could not inspect '{generatedSourcesDirectory}': {exception.Message}",
+                generatedSourcesDirectory));
+            return [];
+        }
 
         var discoveredFiles = new List<string>();
         var pendingDirectories = new Stack<string>();

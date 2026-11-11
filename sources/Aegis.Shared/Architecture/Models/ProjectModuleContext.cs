@@ -30,6 +30,9 @@ public sealed class ProjectModuleContext
 
     public bool IsTestProject { get; set; }
 
+    /// <summary>Identifies reusable utilities intended exclusively for tests.</summary>
+    public bool IsTestSupport { get; set; }
+
     public bool IsWebProject { get; set; }
 
     public bool IsExecutable { get; set; }

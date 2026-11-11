@@ -52,4 +52,60 @@ public sealed class PolicyRegistrationTests
         Assert.True(designPatternPolicy.EnforceStrategyPattern);
         Assert.True(designPatternPolicy.EnforceObserverPattern);
     }
+    [Fact]
+    public void AddAegisPolicies_loads_the_policy_directory_when_optional_documents_are_missing()
+    {
+        var configurationDirectory = Path.Combine(AppContext.BaseDirectory, "config");
+        var architecturePath = Path.Combine(configurationDirectory, "architecture.policy.json");
+        var directoryExisted = Directory.Exists(configurationDirectory);
+        var previousArchitectureDocument = File.Exists(architecturePath)
+            ? File.ReadAllText(architecturePath)
+            : null;
+
+        try
+        {
+            Directory.CreateDirectory(configurationDirectory);
+            File.WriteAllText(
+                architecturePath,
+                """
+                {
+                  "EnforceLayerBoundaries": true,
+                  "DesignPatterns": {
+                    "EnforceCommandPattern": true
+                  }
+                }
+                """);
+
+            var services = new ServiceCollection();
+            services.AddAegisPolicies();
+
+            using var provider = services.BuildServiceProvider();
+            var policy = provider
+                .GetRequiredService<IOptions<AegisArchitecturePolicy>>()
+                .Value;
+
+            Assert.True(policy.Architecture.EnforceLayerBoundaries);
+            Assert.True(policy.Architecture.DesignPatterns.EnforceCommandPattern);
+        }
+        finally
+        {
+            if (previousArchitectureDocument is null)
+            {
+                if (File.Exists(architecturePath))
+                    File.Delete(architecturePath);
+            }
+            else
+            {
+                File.WriteAllText(architecturePath, previousArchitectureDocument);
+            }
+
+            if (!directoryExisted
+                && Directory.Exists(configurationDirectory)
+                && !Directory.EnumerateFileSystemEntries(configurationDirectory).Any())
+            {
+                Directory.Delete(configurationDirectory);
+            }
+        }
+    }
+
 }

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Aegis.Architecture.Diagnostics;
+using Aegis.Architecture.Evaluators.Analysis;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
@@ -59,9 +60,7 @@ public sealed class ComplexityEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "ASP.NET",
-        "Spring Boot",
-        "FastAPI"
+        "LanguageAgnostic"
     ];
 
     public ComplexityEvaluator(
@@ -90,20 +89,11 @@ public sealed class ComplexityEvaluator
             return [];
         }
 
-        var language = Context.Language;
-        var extensions = GetExtensions(language);
-
-        if (extensions.Length == 0)
-        {
-            _logger.LogWarning(
-                "{Evaluator}: unsupported language {Language}.",
-                Name,
-                language);
-
-            return [];
-        }
-
-        var files = ResolveSourceFiles(projectPath, extensions)
+        var files = ResolveSourceFiles(
+                projectPath,
+                ".cs",
+                ".java",
+                ".py")
             .Where(IsEligibleSourceFile)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -122,7 +112,7 @@ public sealed class ComplexityEvaluator
             Name,
             DiagnosticLevel.Trace,
             $"Analyzing complexity for {files.Count} files " +
-            $"({language}/{Context.Framework}).");
+            $"({files.Select(DetectLanguage).Distinct(StringComparer.OrdinalIgnoreCase).Count()} language(s)).");
 
         var results = new List<ArchitectureEvaluatorResult>();
         var analyzedMethods = 0;
@@ -164,11 +154,17 @@ public sealed class ComplexityEvaluator
 
             token.ThrowIfCancellationRequested();
 
+            var language = DetectLanguage(file);
+            if (!SupportedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            var framework = ResolveFrameworkForFile(file, projectPath, Context);
+            var sanitizedContent = SourceCodeMasker.Mask(content);
             var methods = language.Equals(
                 "Python",
                 StringComparison.OrdinalIgnoreCase)
-                ? ExtractPythonMethods(content)
-                : ExtractBraceLanguageMethods(content, language);
+                ? ExtractPythonMethods(sanitizedContent)
+                : ExtractBraceLanguageMethods(sanitizedContent, language);
 
             foreach (var method in methods)
             {
@@ -193,7 +189,10 @@ public sealed class ComplexityEvaluator
                         method.StartLine,
                         metrics.Complexity,
                         metrics.LineCount,
-                        violations));
+                        violations,
+                        content,
+                        language,
+                        framework));
             }
         }
 
@@ -234,15 +233,17 @@ public sealed class ComplexityEvaluator
         int startLine,
         int complexity,
         int lines,
-        IReadOnlyCollection<string> violations)
+        IReadOnlyCollection<string> violations,
+        string source,
+        string language,
+        string? framework)
     {
         var result = CreateResult(
             file,
             "ComplexityMeasurement");
 
-        result.ProjectName = Context?.ProjectName;
-        result.Language = Context?.Language;
-        result.Framework = Context?.Framework;
+        result.Language = language;
+        result.Framework = framework;
         result.Layer = ResolveLayer(file);
         result.DetectionConfidence = Context?.Confidence ?? 0;
 
@@ -264,14 +265,47 @@ public sealed class ComplexityEvaluator
         result.Metadata["MaxLinesThreshold"] =
             _policy.MaxLinesPerMethod.ToString(
                 CultureInfo.InvariantCulture);
-        result.Metadata["Language"] = Context?.Language ?? "Unknown";
-        result.Metadata["Framework"] = Context?.Framework ?? "Unknown";
+        result.Metadata["Language"] = language;
+        result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["Layer"] = ResolveLayer(file) ?? "Unknown";
         result.Metadata["MeasurementMethod"] = "SourcePatternHeuristic";
         result.Metadata["Interpretation"] =
             "Estimated complexity and physical method size; not compiler-backed analysis.";
 
+        var sourceLine = GetSourceLine(source, startLine);
+        var evidence =
+            $"Method '{methodName}' at line {startLine} has estimated cyclomatic complexity {complexity} " +
+            $"and {lines} non-empty source line(s).";
+
+        result.LineNumber = startLine;
+        result.Evidence = evidence;
+        result.Metadata["Evidence.EstimatedCyclomaticComplexity"] =
+            $"{evidence} Source: {sourceLine}";
+        result.Metadata["EvidenceLine.EstimatedCyclomaticComplexity"] =
+            startLine.ToString(CultureInfo.InvariantCulture);
+        result.Metadata["CodeSnippet.EstimatedCyclomaticComplexity"] = sourceLine;
+        result.Metadata["Evidence.MethodLineCount"] =
+            $"{evidence} Source: {sourceLine}";
+        result.Metadata["EvidenceLine.MethodLineCount"] =
+            startLine.ToString(CultureInfo.InvariantCulture);
+        result.Metadata["CodeSnippet.MethodLineCount"] = sourceLine;
+
         return result;
+    }
+
+    private static string GetSourceLine(string source, int lineNumber)
+    {
+        if (lineNumber <= 0)
+            return string.Empty;
+
+        using var reader = new StringReader(source);
+        for (var currentLine = 1; currentLine < lineNumber; currentLine++)
+        {
+            if (reader.ReadLine() is null)
+                return string.Empty;
+        }
+
+        return reader.ReadLine()?.Trim() ?? string.Empty;
     }
 
     private static (int Complexity, int LineCount) MeasureMethod(
@@ -713,16 +747,14 @@ public sealed class ComplexityEvaluator
         return new string(chars);
     }
 
-    private static string[] GetExtensions(string language)
-    {
-        return language switch
+    private static string DetectLanguage(string file) =>
+        Path.GetExtension(file).ToLowerInvariant() switch
         {
-            "C#" => [".cs"],
-            "Java" => [".java"],
-            "Python" => [".py"],
-            _ => []
+            ".cs" => "C#",
+            ".java" => "Java",
+            ".py" => "Python",
+            _ => "Unknown"
         };
-    }
 
     private static bool IsEligibleSourceFile(string file)
     {

@@ -1,5 +1,5 @@
-﻿using System.Text;
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
+using Aegis.Architecture.Evaluators.Analysis;
 
 using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Models;
@@ -64,14 +64,7 @@ public sealed class BuilderPatternEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "ASP.NET",
-        "Spring",
-        "Angular",
-        "FastAPI",
-        "DDD",
-        "Hexagonal",
-        "Microservices",
-        "EventDriven"
+        "LanguageAgnostic"
     ];
 
     public BuilderPatternEvaluator(
@@ -157,9 +150,7 @@ public sealed class BuilderPatternEvaluator
 
             token.ThrowIfCancellationRequested();
 
-            var sanitized = SanitizeCode(
-                content,
-                Path.GetExtension(file));
+            var sanitized = SourceCodeMasker.Mask(content);
 
             var isPython = file.EndsWith(
                 ".py",
@@ -180,25 +171,33 @@ public sealed class BuilderPatternEvaluator
                     continue;
                 }
 
-                var buildMethodCount = BuildMethodRegex
-                    .Matches(classBlock)
-                    .Count;
+                var buildMatches = BuildMethodRegex.Matches(classBlock)
+                    .Cast<Match>()
+                    .ToArray();
+                var fluentReturnMatches = FluentReturnRegex.Matches(classBlock)
+                    .Cast<Match>()
+                    .ToArray();
+                var fluentSignatureMatches = FluentSignatureRegex.Matches(classBlock)
+                    .Cast<Match>()
+                    .ToArray();
+                var mutationMatches = MutationRegex.Matches(classBlock)
+                    .Cast<Match>()
+                    .ToArray();
+                var readonlyMatches = ReadonlyIndicatorRegex.Matches(classBlock)
+                    .Cast<Match>()
+                    .ToArray();
 
-                var fluentReturnCount = FluentReturnRegex
-                    .Matches(classBlock)
-                    .Count;
-
-                var fluentSignatureCount = FluentSignatureRegex
-                    .Matches(classBlock)
-                    .Count;
-
-                var mutationCount = MutationRegex
-                    .Matches(classBlock)
-                    .Count;
-
-                var readonlyIndicatorCount = ReadonlyIndicatorRegex
-                    .Matches(classBlock)
-                    .Count;
+                var buildMethodCount = buildMatches.Length;
+                var fluentReturnCount = fluentReturnMatches.Length;
+                var fluentSignatureCount = fluentSignatureMatches.Length;
+                var mutationCount = mutationMatches.Length;
+                var readonlyIndicatorCount = readonlyMatches.Length;
+                var language = ResolveLanguageForFile(file);
+                var framework = ResolveFrameworkForFile(file, projectPath, context);
+                var classBodyStart = GetClassBodyStart(
+                    sanitized,
+                    match.Index,
+                    isPython);
 
                 var nameSuggestsBuilder = className.EndsWith(
                     "Builder",
@@ -234,7 +233,17 @@ public sealed class BuilderPatternEvaluator
                         nameSuggestsBuilder,
                         hasFluentReturns,
                         hasMutationSignals,
-                        hasReadonlySignals));
+                        hasReadonlySignals,
+                        language,
+                        framework,
+                        content,
+                        sanitized,
+                        match,
+                        classBodyStart,
+                        buildMatches,
+                        fluentReturnMatches,
+                        mutationMatches,
+                        readonlyMatches));
 
                 candidateTypes++;
             }
@@ -274,17 +283,25 @@ public sealed class BuilderPatternEvaluator
         bool nameSuggestsBuilder,
         bool hasFluentReturns,
         bool hasMutationSignals,
-        bool hasReadonlySignals)
+        bool hasReadonlySignals,
+        string language,
+        string? framework,
+        string source,
+        string sanitizedSource,
+        Match classMatch,
+        int classBodyStart,
+        IReadOnlyCollection<Match> buildMatches,
+        IReadOnlyCollection<Match> fluentReturnMatches,
+        IReadOnlyCollection<Match> mutationMatches,
+        IReadOnlyCollection<Match> readonlyMatches)
     {
-        var context = Context;
-
         var result = CreateResult(file, "DesignPattern");
 
-        result.ProjectName = context?.ProjectName;
-        result.Language = context?.Language;
-        result.Framework = context?.Framework;
-        result.Layer = ResolveLayer(file);
-        result.DetectionConfidence = context?.Confidence ?? 0;
+        result.Target = className;
+        result.Language = language;
+        result.Framework = framework;
+        result.Layer = ResolveLayerForFile(file);
+        result.DetectionConfidence = Context?.Confidence ?? 0;
         result.Category = "DesignPattern";
 
         result.Metrics["HasBuildMethod"] = hasBuildMethod ? 1 : 0;
@@ -298,25 +315,85 @@ public sealed class BuilderPatternEvaluator
         result.Metrics["HasMutationSignals"] = hasMutationSignals ? 1 : 0;
         result.Metrics["HasReadonlySignals"] = hasReadonlySignals ? 1 : 0;
 
-        // Score only confidently identified builder candidates. Build() and
-        // fluent chaining are independently required signals; mutation without
-        // a fluent return is reported separately rather than treating every
-        // state mutation as a violation.
+        // Build() is the structural requirement. Fluent chaining is optional
+        // and is retained as an informational signal only.
         result.Metrics["BuilderPatternComplianceIndex"] =
-            (hasBuildMethod ? 50d : 0d) + (hasFluentReturns ? 50d : 0d);
+            hasBuildMethod ? 100d : 0d;
         result.Metrics["BuilderMutabilityViolationCount"] =
             hasMutationSignals && !hasFluentReturns ? 1d : 0d;
 
         result.Metadata["FilePath"] = file;
         result.Metadata["BuilderClassName"] = className;
-        result.Metadata["Language"] = context?.Language ?? "Unknown";
-        result.Metadata["Framework"] = context?.Framework ?? "Unknown";
+        result.Metadata["Language"] = language;
+        result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["EvaluationScope"] = FileScope;
         result.Metadata["MeasurementMethod"] =
             "Lexical analysis of builder-like class declarations and member-body signals.";
-        result.Metadata["PatternVerified"] = false.ToString();
-        result.Metadata["ImmutabilityVerified"] = false.ToString();
-        result.Metadata["SemanticAnalysisPerformed"] = false.ToString();
+        result.Metadata["PatternVerified"] = "false";
+        result.Metadata["ImmutabilityVerified"] = "false";
+        result.Metadata["SemanticAnalysisPerformed"] = "false";
+        result.Metadata["AnalysisComplete"] = "true";
+        result.Metadata["BuilderPatternMeasurement"] =
+            "A builder candidate requires a Build method. Fluent chaining is reported as an informational convention and is not required for compliance.";
+        result.Metadata["BuilderMutabilityInterpretation"] =
+            "Diagnostic only. Internal mutation is normal during builder configuration and does not prove externally exposed mutable state.";
+
+        var classLine = GetLineNumber(sanitizedSource, classMatch.Index);
+        var classSnippet = GetSourceLine(source, classLine);
+        var buildEvidence = BuildMatchEvidence(
+            "Build method",
+            buildMatches,
+            sanitizedSource,
+            source,
+            classBodyStart);
+        var fluentEvidence = BuildMatchEvidence(
+            "Fluent return",
+            fluentReturnMatches,
+            sanitizedSource,
+            source,
+            classBodyStart);
+        var mutationEvidence = BuildMatchEvidence(
+            "State mutation",
+            mutationMatches,
+            sanitizedSource,
+            source,
+            classBodyStart);
+        var readonlyEvidence = BuildMatchEvidence(
+            "Readonly/immutable indicator",
+            readonlyMatches,
+            sanitizedSource,
+            source,
+            classBodyStart);
+
+        var complianceEvidence =
+            $"Builder '{className}' has {buildMethodCount} Build method(s); " +
+            $"fluent returns {fluentReturnCount} (informational); compliance index " +
+            $"{result.Metrics["BuilderPatternComplianceIndex"]:0.##}/100.";
+        AddMetricEvidence(
+            result,
+            "BuilderPatternComplianceIndex",
+            $"{complianceEvidence}{Environment.NewLine}{buildEvidence}{Environment.NewLine}{fluentEvidence}",
+            classLine,
+            classSnippet);
+        AddMetricEvidence(
+            result,
+            "BuilderMutabilityViolationCount",
+            $"Mutation signals: {mutationCount}; readonly/immutable indicators: {readonlyIndicatorCount}. " +
+            "This is a lexical diagnostic and does not establish externally visible mutability." +
+            $"{Environment.NewLine}{mutationEvidence}{Environment.NewLine}{readonlyEvidence}",
+            mutationMatches.Count > 0
+                ? GetLineNumber(sanitizedSource, classBodyStart + mutationMatches.First().Index)
+                : classLine,
+            mutationMatches.Count > 0
+                ? GetSourceLine(
+                    source,
+                    GetLineNumber(sanitizedSource, classBodyStart + mutationMatches.First().Index))
+                : classSnippet);
+
+        result.Evidence = string.Join(
+            Environment.NewLine,
+            new[] { complianceEvidence, buildEvidence, fluentEvidence, mutationEvidence, readonlyEvidence });
+        result.LineNumber = classLine;
 
         return result;
     }
@@ -374,10 +451,88 @@ public sealed class BuilderPatternEvaluator
         result.Metadata["EvaluationScope"] = ProjectScope;
         result.Metadata["MeasurementMethod"] =
             "Project-level aggregation of lexical builder-pattern candidate evidence.";
-        result.Metadata["PatternVerified"] = false.ToString();
-        result.Metadata["ImmutabilityVerified"] = false.ToString();
+        result.Metadata["PatternVerified"] = "false";
+        result.Metadata["ImmutabilityVerified"] = "false";
+        var analysisComplete = unreadableFileCount == 0
+            && analyzedFileCount == discoveredFileCount;
+        result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
+        result.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "CompletedWithDiagnostics";
 
         return result;
+    }
+
+    private static int GetClassBodyStart(
+        string source,
+        int classIndex,
+        bool isPython)
+    {
+        if (isPython)
+        {
+            var headerEnd = source.IndexOf('\n', classIndex);
+            return headerEnd < 0 ? source.Length : headerEnd + 1;
+        }
+
+        var openingBrace = source.IndexOf('{', classIndex);
+        return openingBrace < 0 ? classIndex : openingBrace + 1;
+    }
+
+    private static string BuildMatchEvidence(
+        string label,
+        IReadOnlyCollection<Match> matches,
+        string sanitizedSource,
+        string source,
+        int bodyStart)
+    {
+        if (matches.Count == 0)
+            return $"No {label.ToLowerInvariant()} signals were detected.";
+
+        return string.Join(
+            Environment.NewLine,
+            matches.Take(50).Select(match =>
+            {
+                var line = GetLineNumber(sanitizedSource, bodyStart + match.Index);
+                return $"Line {line}: {GetSourceLine(source, line)}";
+            }));
+    }
+
+    private static void AddMetricEvidence(
+        ArchitectureEvaluatorResult result,
+        string metricKey,
+        string evidence,
+        int lineNumber,
+        string codeSnippet)
+    {
+        result.Metadata[$"Evidence.{metricKey}"] = evidence;
+        result.Metadata[$"EvidenceSummary.{metricKey}"] = evidence;
+        result.Metadata[$"EvidenceScope.{metricKey}"] = "FileMetrics";
+        result.Metadata[$"EvidenceLine.{metricKey}"] =
+            lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        result.Metadata[$"CodeSnippet.{metricKey}"] = codeSnippet;
+    }
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position && index < content.Length; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        return lineNumber > 0 && lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
     }
 
     private string? ResolveLayer(string file)
@@ -519,243 +674,5 @@ public sealed class BuilderPatternEvaluator
         return true;
     }
 
-    /// <summary>
-    /// Masks comments and string/character literals while preserving newlines
-    /// and source offsets. This supports common C#, Java, TypeScript, and
-    /// Python syntax but is not a complete language lexer.
-    /// </summary>
-    private static string SanitizeCode(
-        string content,
-        string extension)
-    {
-        var isPython = extension.Equals(
-            ".py",
-            StringComparison.OrdinalIgnoreCase);
 
-        var buffer = new StringBuilder(content);
-        var inLineComment = false;
-        var inBlockComment = false;
-        var inString = false;
-        var inCharacter = false;
-        var verbatimString = false;
-        var rawQuoteCount = 0;
-
-        for (var index = 0; index < content.Length; index++)
-        {
-            var current = content[index];
-            var next = index + 1 < content.Length
-                ? content[index + 1]
-                : '\0';
-
-            if (inLineComment)
-            {
-                if (current == '\n')
-                {
-                    inLineComment = false;
-                }
-                else if (current != '\r')
-                {
-                    buffer[index] = ' ';
-                }
-
-                continue;
-            }
-
-            if (inBlockComment)
-            {
-                if (current == '*' && next == '/')
-                {
-                    buffer[index] = ' ';
-                    buffer[index + 1] = ' ';
-                    index++;
-                    inBlockComment = false;
-                    continue;
-                }
-
-                if (current is not '\r' and not '\n')
-                {
-                    buffer[index] = ' ';
-                }
-
-                continue;
-            }
-
-            if (inString)
-            {
-                if (rawQuoteCount > 0)
-                {
-                    if (current == '"'
-                        && CountConsecutiveQuotes(content, index) >= rawQuoteCount)
-                    {
-                        for (var offset = 0; offset < rawQuoteCount; offset++)
-                        {
-                            buffer[index + offset] = ' ';
-                        }
-
-                        index += rawQuoteCount - 1;
-                        inString = false;
-                        rawQuoteCount = 0;
-                        continue;
-                    }
-
-                    if (current is not '\r' and not '\n')
-                    {
-                        buffer[index] = ' ';
-                    }
-
-                    continue;
-                }
-
-                if (verbatimString && current == '"' && next == '"')
-                {
-                    buffer[index] = ' ';
-                    buffer[index + 1] = ' ';
-                    index++;
-                    continue;
-                }
-
-                if (!verbatimString && current == '\\')
-                {
-                    buffer[index] = ' ';
-
-                    if (index + 1 < content.Length)
-                    {
-                        if (content[index + 1] is not '\r' and not '\n')
-                        {
-                            buffer[index + 1] = ' ';
-                        }
-
-                        index++;
-                    }
-
-                    continue;
-                }
-
-                if (current == '"')
-                {
-                    buffer[index] = ' ';
-                    inString = false;
-                    verbatimString = false;
-                    continue;
-                }
-
-                if (current is not '\r' and not '\n')
-                {
-                    buffer[index] = ' ';
-                }
-
-                continue;
-            }
-
-            if (inCharacter)
-            {
-                if (current == '\\')
-                {
-                    buffer[index] = ' ';
-
-                    if (index + 1 < content.Length)
-                    {
-                        if (content[index + 1] is not '\r' and not '\n')
-                        {
-                            buffer[index + 1] = ' ';
-                        }
-
-                        index++;
-                    }
-
-                    continue;
-                }
-
-                if (current == '\'')
-                {
-                    buffer[index] = ' ';
-                    inCharacter = false;
-                    continue;
-                }
-
-                if (current is not '\r' and not '\n')
-                {
-                    buffer[index] = ' ';
-                }
-
-                continue;
-            }
-
-            if (isPython && current == '#')
-            {
-                buffer[index] = ' ';
-                inLineComment = true;
-                continue;
-            }
-
-            if (!isPython && current == '/' && next == '/')
-            {
-                buffer[index] = ' ';
-                buffer[index + 1] = ' ';
-                index++;
-                inLineComment = true;
-                continue;
-            }
-
-            if (!isPython && current == '/' && next == '*')
-            {
-                buffer[index] = ' ';
-                buffer[index + 1] = ' ';
-                index++;
-                inBlockComment = true;
-                continue;
-            }
-
-            if (current == '"')
-            {
-                var quoteCount = CountConsecutiveQuotes(content, index);
-
-                if (quoteCount >= 3)
-                {
-                    rawQuoteCount = quoteCount;
-                    inString = true;
-
-                    for (var offset = 0; offset < quoteCount; offset++)
-                    {
-                        buffer[index + offset] = ' ';
-                    }
-
-                    index += quoteCount - 1;
-                    continue;
-                }
-
-                verbatimString = !isPython
-                    && index > 0
-                    && content[index - 1] == '@';
-
-                inString = true;
-                buffer[index] = ' ';
-                continue;
-            }
-
-            if (current == '\'')
-            {
-                inCharacter = true;
-                buffer[index] = ' ';
-            }
-        }
-
-        return buffer.ToString();
-    }
-
-    private static int CountConsecutiveQuotes(
-        string content,
-        int startIndex)
-    {
-        var count = 0;
-
-        for (var index = startIndex;
-             index < content.Length && content[index] == '"';
-             index++)
-        {
-            count++;
-        }
-
-        return count;
-    }
 }

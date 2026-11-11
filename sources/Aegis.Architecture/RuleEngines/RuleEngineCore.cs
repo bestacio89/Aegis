@@ -81,6 +81,9 @@ public sealed class RuleEngineCore
         var notApplicableReasons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        var disabledByPolicyReasons =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         var unsupportedRuleReasons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -97,21 +100,45 @@ public sealed class RuleEngineCore
                 continue;
             }
 
+            if (!ArchitectureRuleMetricContracts.TryGetPolicyApplicability(
+                    rule.Id,
+                    _policy,
+                    out var policyApplicabilityReason))
+            {
+                disabledByPolicyReasons[rule.Id] = policyApplicabilityReason;
+                continue;
+            }
+
+            // A complete project summary proving that a candidate-dependent
+            // rule has no applicable candidates takes precedence over the
+            // rule's semantic support status. With no candidate, the rule is
+            // not applicable; with candidates, its producer contract still
+            // determines whether the measurement is currently supportable.
+            var nonNullFacts = factList
+                .Where(fact => fact is not null)
+                .ToList();
+
+            if (ArchitectureRuleMetricContracts.TryGetNoCandidateDisposition(
+                    rule.Id,
+                    nonNullFacts,
+                    context,
+                    out var noCandidateReason)
+                || ArchitectureRuleMetricContracts.TryGetExplicitNoApplicableDisposition(
+                    rule.Id,
+                    nonNullFacts,
+                    context,
+                    out noCandidateReason))
+            {
+                notApplicableReasons[rule.Id] = noCandidateReason;
+                continue;
+            }
+
             var producerDisposition =
                 ArchitectureRuleMetricContracts.GetProducerContractDisposition(rule.Id);
 
             if (producerDisposition is not null)
             {
                 unsupportedRuleReasons[rule.Id] = producerDisposition;
-                continue;
-            }
-
-            if (ArchitectureRuleMetricContracts.TryGetNoCandidateDisposition(
-                    rule.Id,
-                    factList.Where(fact => fact is not null).ToList(),
-                    out var noCandidateReason))
-            {
-                notApplicableReasons[rule.Id] = noCandidateReason;
                 continue;
             }
 
@@ -139,6 +166,8 @@ public sealed class RuleEngineCore
         var skippedMetricContractFailures = 0;
         var metricContractFailureReasons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var insufficientEvidenceReasons =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var factsWithoutMatchingScopedMetrics = 0;
         var factsWithMetricsAtWrongScope = 0;
         var factsWithKnownMetricsWithoutEligibleRule = 0;
@@ -160,9 +189,9 @@ public sealed class RuleEngineCore
                 projectSummaryFacts++;
             }
 
-            var filePath =
-                fact.Metadata?.GetValueOrDefault(FilePathKey)
-                ?? fact.Target;
+            // A target may be a symbol, module, or aggregate identifier.
+            // Only explicit source-path fields are valid file-location evidence.
+            var filePath = ResolveEvidenceFilePath(fact);
 
             var domain = isProjectFact
                 ? "Project"
@@ -268,10 +297,48 @@ public sealed class RuleEngineCore
                     continue;
                 }
 
+                if (IsIncompleteFact(fact))
+                {
+                    const string reason =
+                        "The evaluator reported incomplete analysis; partial metrics cannot be treated as passes or violations.";
+
+                    insufficientEvidenceReasons[rule.Id] = reason;
+                    evaluations.Add(CreateInsufficientEvidenceEvaluation(
+                        rule,
+                        fact,
+                        domain,
+                        metricKey,
+                        metricValue,
+                        threshold,
+                        reason));
+                    continue;
+                }
+
                 var isViolation = IsViolation(
                     rule.Operator,
                     metricValue,
                     threshold);
+
+                // A compliant measurement may contribute to coverage when
+                // analysis completed. A violation must always carry traceable
+                // source evidence before it can become a finding.
+                if (isViolation && !HasEvidenceForMetric(fact, metricKey, rule.Scope))
+                {
+                    var reason =
+                        $"The evaluator emitted violating metric '{metricKey}' without traceable " +
+                        "source evidence for this rule scope.";
+
+                    insufficientEvidenceReasons[rule.Id] = reason;
+                    evaluations.Add(CreateInsufficientEvidenceEvaluation(
+                        rule,
+                        fact,
+                        domain,
+                        metricKey,
+                        metricValue,
+                        threshold,
+                        reason));
+                    continue;
+                }
 
                 var evaluatedAt = DateTimeOffset.UtcNow;
 
@@ -360,22 +427,14 @@ public sealed class RuleEngineCore
 
         var totalChecks = checksPassed + checksViolated;
 
-        var rulesNotEvaluated = _rules
-            .Where(rule =>
-                !evaluatedRuleIds.Contains(rule.Id)
-                && !notApplicableReasons.ContainsKey(rule.Id))
+        var rulesNotEvaluated = applicableRules
+            .Where(rule => !evaluatedRuleIds.Contains(rule.Id))
             .Select(rule => rule.Id)
             .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var notEvaluatedReasons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (ruleId, reason) in unsupportedRuleReasons)
-        {
-            notEvaluatedReasons[ruleId] =
-                $"Rule '{ruleId}' is not evaluable because its producer contract is unsupported: {reason}";
-        }
 
         var eligibleFacts = factList
             .Where(fact => fact is not null)
@@ -462,6 +521,8 @@ public sealed class RuleEngineCore
             notEvaluatedReasons[rule.Id] =
                 metricContractFailureReasons.TryGetValue(rule.Id, out var metricContractFailure)
                     ? metricContractFailure
+                    : insufficientEvidenceReasons.TryGetValue(rule.Id, out var insufficientEvidenceReason)
+                        ? insufficientEvidenceReason
                     : producerDisposition is not null
                         ? producerDisposition
                 : disabledProducerFact is not null
@@ -497,6 +558,8 @@ public sealed class RuleEngineCore
         {
             RulesRegistered = _rules.Count,
             RulesApplicable = applicableRules.Count,
+            RulesDisabledByPolicy = disabledByPolicyReasons.Count,
+            DisabledByPolicyReasons = disabledByPolicyReasons,
             RulesUnsupported = unsupportedRuleReasons.Count,
             MetricContractFailures = skippedMetricContractFailures,
             UnsupportedRuleReasons = unsupportedRuleReasons,
@@ -676,11 +739,31 @@ public sealed class RuleEngineCore
 
         var filePath = rule.Scope == RuleEvaluationScope.Project
             ? string.Empty
-            : fact.Metadata?.GetValueOrDefault(FilePathKey)
-              ?? fact.Target;
+            : ResolveEvidenceFilePath(fact) ?? string.Empty;
 
         var @namespace =
             fact.Metadata?.GetValueOrDefault("Namespace");
+
+        var evidenceKey = $"Evidence.{metric}";
+        var snippetKey = $"CodeSnippet.{metric}";
+        var lineKey = $"EvidenceLine.{metric}";
+        var evidenceText = fact.Metadata?.GetValueOrDefault(evidenceKey)
+            ?? fact.Evidence;
+        var evidence = string.IsNullOrWhiteSpace(evidenceText)
+            ? new List<string>()
+            : evidenceText.Split(
+                Environment.NewLine,
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+
+        var codeSnippet = fact.Metadata?.GetValueOrDefault(snippetKey);
+        var lineNumber = int.TryParse(
+            fact.Metadata?.GetValueOrDefault(lineKey),
+            out var evidenceLine)
+            ? evidenceLine
+            : fact.Metrics.Count == 1
+                ? fact.LineNumber
+                : null;
 
         return new ArchitectureRuleresult(
             rule.Id,
@@ -699,8 +782,133 @@ public sealed class RuleEngineCore
             Target = rule.Scope == RuleEvaluationScope.Project
                 ? fact.ProjectName ?? fact.Target
                 : fact.Target,
-            AnalyzerVersion = context.DetectorVersion
+            AnalyzerVersion = context.DetectorVersion,
+            LineNumber = rule.Scope == RuleEvaluationScope.Project ? null : lineNumber,
+            CodeSnippet = codeSnippet ?? string.Empty,
+            Evidence = evidence,
+            Recommendation = rule.Recommendation
         };
+    }
+
+    private static bool IsIncompleteFact(ArchitectureEvaluatorResult fact)
+    {
+        var metadata = fact.Metadata;
+        if (metadata is null)
+            return false;
+
+        if (string.Equals(
+                metadata.GetValueOrDefault("AnalysisComplete"),
+                "false",
+                StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var status = metadata.GetValueOrDefault("AnalysisStatus");
+        return status is not null
+            && (status.Equals("Incomplete", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("Partial", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("CompletedWithDiagnostics", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool HasEvidenceForMetric(
+        ArchitectureEvaluatorResult fact,
+        string metricKey,
+        RuleEvaluationScope scope)
+    {
+        var metadata = fact.Metadata;
+        var metricEvidence = metadata?.GetValueOrDefault($"Evidence.{metricKey}");
+        var metricSnippet = metadata?.GetValueOrDefault($"CodeSnippet.{metricKey}");
+        var evidenceScope = metadata?.GetValueOrDefault($"EvidenceScope.{metricKey}");
+        var genericEvidence = fact.Evidence ?? metadata?.GetValueOrDefault("Evidence");
+
+        var hasMetricEvidence =
+            !string.IsNullOrWhiteSpace(metricEvidence)
+            || !string.IsNullOrWhiteSpace(metricSnippet);
+        var hasUnambiguousGenericEvidence =
+            !string.IsNullOrWhiteSpace(genericEvidence)
+            && fact.Metrics.Count == 1;
+
+        if (!hasMetricEvidence && !hasUnambiguousGenericEvidence)
+            return false;
+
+        if (scope == RuleEvaluationScope.Project)
+        {
+            if (string.Equals(
+                    metadata?.GetValueOrDefault("AnalysisComplete"),
+                    bool.FalseString,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        var filePath = ResolveEvidenceFilePath(fact);
+        if (string.IsNullOrWhiteSpace(filePath))
+            return false;
+
+        if (string.Equals(
+                evidenceScope,
+                "FileName",
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                evidenceScope,
+                "FileMetrics",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return hasMetricEvidence;
+        }
+
+        if (int.TryParse(
+                metadata?.GetValueOrDefault($"EvidenceLine.{metricKey}"),
+                out var evidenceLine)
+            && evidenceLine > 0)
+        {
+            return hasMetricEvidence;
+        }
+
+        return hasUnambiguousGenericEvidence
+            && fact.LineNumber is > 0;
+    }
+
+    private static RuleEvaluationResult CreateInsufficientEvidenceEvaluation(
+        ArchitectureRuleDefinition rule,
+        ArchitectureEvaluatorResult fact,
+        string domain,
+        string metricKey,
+        double observedValue,
+        double threshold,
+        string reason) =>
+        new()
+        {
+            RuleId = rule.Id,
+            RuleName = rule.Name,
+            MetricKey = metricKey,
+            Status = RuleEvaluationStatus.InsufficientEvidence,
+            Scope = rule.Scope.ToString(),
+            Target = IsProjectSummary(fact)
+                ? fact.ProjectName ?? fact.Target
+                : fact.Target,
+            Domain = domain,
+            ObservedValue = observedValue,
+            Threshold = threshold,
+            ComparisonOperator = rule.Operator.ToString(),
+            ReasonCode = "InsufficientEvidence",
+            Reason = reason,
+            Evaluator = fact.Source,
+            EvaluatedAt = DateTimeOffset.UtcNow
+        };
+
+    private static string? ResolveEvidenceFilePath(
+        ArchitectureEvaluatorResult fact)
+    {
+        if (!string.IsNullOrWhiteSpace(fact.File))
+            return fact.File;
+
+        var metadataPath = fact.Metadata?.GetValueOrDefault(FilePathKey);
+        return string.IsNullOrWhiteSpace(metadataPath)
+            ? null
+            : metadataPath;
     }
 
     private static string ResolveLayer(

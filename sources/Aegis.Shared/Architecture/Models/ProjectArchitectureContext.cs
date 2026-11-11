@@ -48,6 +48,13 @@ public sealed class ProjectArchitectureContext
 
     public List<string> DetectedFrameworks { get; set; } = new();
 
+    /// <summary>
+    /// Indicates whether frontend framework discovery completed without
+    /// unreadable or malformed package manifests. A negative result means
+    /// absence of frontend signals cannot establish rule inapplicability.
+    /// </summary>
+    public bool FrontendFrameworkDiscoveryComplete { get; set; }
+
     public List<string> DetectedDependencies { get; set; } = new();
 
 

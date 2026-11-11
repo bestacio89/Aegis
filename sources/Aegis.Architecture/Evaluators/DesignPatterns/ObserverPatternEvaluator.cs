@@ -187,6 +187,7 @@ public sealed class ObserverPatternEvaluator
             DetectEventFramework(contents.Values);
 
         var analyzedComponents = 0;
+        var observerCandidateCount = 0;
         var componentsWithLeakRisk = 0;
         var componentsWithPolling = 0;
         var complianceScores = new List<double>();
@@ -228,6 +229,11 @@ public sealed class ObserverPatternEvaluator
             }
 
             analyzedComponents++;
+
+            if (subscribeCount > 0)
+            {
+                observerCandidateCount++;
+            }
 
             // This is a heuristic signal, not proof of a memory leak.
             var leakRisk =
@@ -276,7 +282,16 @@ public sealed class ObserverPatternEvaluator
             result.Metrics["PublishCount"] = publishCount;
             result.Metrics["SubscriptionCount"] = subscribeCount;
             result.Metrics["LifecycleManaged"] = hasLifecycle ? 1 : 0;
-            result.Metrics["ObserverUnsubscribeMissingCount"] = leakRisk;
+
+            // This rule is defined over subscription candidates, not every
+            // event-driven component. Omitting the rule metric from publishers,
+            // handlers, and polling-only components lets the project summary
+            // prove NotApplicable when no subscriptions exist.
+            if (subscribeCount > 0)
+            {
+                result.Metrics["ObserverUnsubscribeMissingCount"] = leakRisk;
+            }
+
             // Retained as a descriptive heuristic for legacy consumers; rules
             // use the observer-specific metric to avoid collisions with other patterns.
             result.Metrics["LeakRisk"] = leakRisk;
@@ -324,6 +339,7 @@ public sealed class ObserverPatternEvaluator
         summary.Metrics["AnalyzedFiles"] = contents.Count;
         summary.Metrics["UnreadableFiles"] = unreadableFiles;
         summary.Metrics["AnalyzedComponents"] = analyzedComponents;
+        summary.Metrics["ObserverCandidateCount"] = observerCandidateCount;
         summary.Metrics["AverageComplianceScore"] = averageCompliance;
         summary.Metrics["ComponentsWithLeakRisk"] = componentsWithLeakRisk;
         summary.Metrics["ComponentLeakRiskRate"] = leakRate;
@@ -336,6 +352,12 @@ public sealed class ObserverPatternEvaluator
         summary.Metadata["EventFramework"] = projectEventFramework;
         summary.Metadata["SemanticAnalysisPerformed"] = bool.FalseString;
         summary.Metadata["HexagonalAlignmentEvaluated"] = bool.FalseString;
+        var analysisComplete = unreadableFiles == 0
+            && contents.Count == files.Count;
+        summary.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
+        summary.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "Incomplete";
 
         results.Add(summary);
 

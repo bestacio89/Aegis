@@ -1,0 +1,12 @@
+{
+  "AegisSecurity": {
+    "EnableOsProbes": true,
+    "EnableNetworkProbes": true,
+    "EnableTlsProbes": true,
+    "EnableFileSystemProbes": true,
+    "EnableCloudProbes": true,
+    "EnableWcfProbes": true,
+    "EngineVersion": "1.0.0-alpha",
+    "PolicyVersion": "v1.0"
+  }
+}

@@ -416,7 +416,6 @@ public sealed class CohesionEvaluator
         }
 
         var depth = 0;
-        var state = LexicalState.Code;
         var sanitized = SanitizeBraceLanguageText(content);
 
         // Use the sanitized copy for brace matching so braces inside common

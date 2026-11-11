@@ -71,7 +71,7 @@ public sealed class ConfigurationDocumentService
         ["EnforceSafeRequireUsage"] = "Checks Node.js module loading against the configured safe require/import convention.",
         ["EnforceLayerBoundaries"] = "Enables checks that dependencies follow the configured layer direction rules.",
         ["AllowedDependencies"] = "Maps each source layer to the layers it is allowed to depend on. An empty array means no outgoing layer dependencies are allowed.",
-        ["LayerHints"] = "Maps layer names to naming hints used to recognize projects, folders, or namespaces belonging to each layer.",
+        ["LayerHints"] = "Maps layer names to exact project-name and folder-path hints. A unique project-name hint overrides inferred module type; folder hints classify otherwise untyped modules. Multiple matching roles remain unclassified until the hints are made unambiguous.",
         ["EnforcementByLanguage"] = "Sets language-specific enforcement: Strict enforces rules, Advisory reports warnings, and Ignored skips evaluation.",
         ["MaxCyclomaticComplexity"] = "Maximum permitted cyclomatic complexity for a method before the evaluator reports a finding.",
         ["MaxLinesPerMethod"] = "Maximum permitted method length in lines.",
@@ -503,8 +503,8 @@ public sealed class ConfigurationDocumentService
         while (current is not null)
         {
             var candidate = Path.Combine(current.FullName, "config");
-            if (File.Exists(Path.Combine(current.FullName, "Aegis.Wpf.csproj")) &&
-                PolicyDescriptors.All(descriptor => File.Exists(Path.Combine(candidate, descriptor.FileName))))
+            if (File.Exists(Path.Combine(current.FullName, "Aegis.Wpf.csproj"))
+                && File.Exists(Path.Combine(candidate, "architecture.policy.json")))
             {
                 return candidate;
             }
@@ -513,11 +513,6 @@ public sealed class ConfigurationDocumentService
         }
 
         var outputDirectory = Path.Combine(AppContext.BaseDirectory, "config");
-        if (PolicyDescriptors.All(descriptor => File.Exists(Path.Combine(outputDirectory, descriptor.FileName))))
-        {
-            return outputDirectory;
-        }
-
         return outputDirectory;
     }
 

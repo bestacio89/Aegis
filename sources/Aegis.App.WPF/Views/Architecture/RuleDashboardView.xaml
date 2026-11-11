@@ -91,14 +91,14 @@
         <StackPanel>
           <TextBlock Text="RULE EVALUATION ACCOUNTING" Style="{StaticResource Text.Eyebrow}"
                      Foreground="{StaticResource Brush.AccentStructural}"/>
-          <UniformGrid Columns="4" Margin="-6,8,-6,0">
+          <UniformGrid Columns="3" Margin="-6,8,-6,0">
             <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
               <StackPanel><TextBlock Text="REGISTERED" Style="{StaticResource Text.Eyebrow}"/>
                 <TextBlock Text="{Binding RegisteredRules}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
             </Border>
             <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
-              <StackPanel><TextBlock Text="APPLICABLE" Style="{StaticResource Text.Eyebrow}"/>
-                <TextBlock Text="{Binding ApplicableRules}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
+              <StackPanel><TextBlock Text="IN SCOPE" Style="{StaticResource Text.Eyebrow}"/>
+                <TextBlock Text="{Binding InScopeRules}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
             </Border>
             <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
               <StackPanel><TextBlock Text="EVALUATED" Style="{StaticResource Text.Eyebrow}"/>
@@ -115,6 +115,10 @@
             <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
               <StackPanel><TextBlock Text="UNSUPPORTED" Style="{StaticResource Text.Eyebrow}"/>
                 <TextBlock Text="{Binding UnsupportedRules}" Style="{StaticResource Text.KpiValue}" FontSize="22" Foreground="{StaticResource Brush.StatusCritical}"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+              <StackPanel><TextBlock Text="DISABLED BY POLICY" Style="{StaticResource Text.Eyebrow}"/>
+                <TextBlock Text="{Binding DisabledRules}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
             </Border>
             <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
               <StackPanel><TextBlock Text="RULE ERRORS" Style="{StaticResource Text.Eyebrow}"/>

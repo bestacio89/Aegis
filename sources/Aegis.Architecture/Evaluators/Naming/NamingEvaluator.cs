@@ -1,5 +1,5 @@
 using Aegis.Architecture.Analysis.Detectors;
-﻿
+
 using System.Text.RegularExpressions;
 
 using Aegis.Architecture.Evaluators;
@@ -348,7 +348,13 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                     fileContext.Framework,
                     token).ConfigureAwait(false);
 
-                results.Add(EvaluateCSharpFile(file, analysis, convention, fileContext.Framework));
+                results.Add(EvaluateCSharpFile(
+                        file,
+                        analysis,
+                        convention,
+                        fileContext.Framework,
+                        content,
+                        IsTestProjectFile(file)));
             }
             else
             {
@@ -384,7 +390,9 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         string file,
         NamingAnalysisResult analysis,
         INamingConventionPolicy convention,
-        string? framework)
+        string? framework,
+        string source,
+        bool isTestProject)
     {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(convention);
@@ -428,8 +436,11 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             .Select(declaration => declaration.Name)
             .ToArray();
 
-        var methodNames = declarations
+        var methodDeclarations = declarations
             .Where(declaration => declaration.Kind == NamingDeclarationKind.Method)
+            .ToArray();
+
+        var methodNames = methodDeclarations
             .Select(declaration => declaration.Name)
             .ToList();
 
@@ -454,19 +465,62 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             .Select(declaration => declaration.Name)
             .ToList();
 
-        var typeViolations = typeNames.Count(name => !convention.IsValidTypeName(name));
-        var interfaceViolations = interfaceNames.Count(name => !convention.IsValidInterfaceName(name));
-        var methodViolations = methodNames.Count(name => !convention.IsValidMethodName(name));
-        var variableViolations = variableNames.Count(name => !convention.IsValidVariableName(name));
-        var fieldViolations = fieldDeclarations.Count(declaration =>
-            convention is UnityNamingConventionPolicy
-                ? !convention.IsValidVariableName(declaration.Name)
-                    && !convention.IsValidTypeName(declaration.Name)
-                : declaration.IsPublic
-                    ? !convention.IsValidTypeName(declaration.Name)
-                    : !convention.IsValidVariableName(declaration.Name));
-        var propertyViolations = propertyNames.Count(name => !convention.IsValidTypeName(name));
-        var constantViolations = constantNames.Count(name => !convention.IsValidConstantName(name));
+        var typeDeclarations = declarations
+            .Where(declaration => declaration.Kind is
+                NamingDeclarationKind.Type
+                or NamingDeclarationKind.Struct
+                or NamingDeclarationKind.Record
+                or NamingDeclarationKind.Enum
+                or NamingDeclarationKind.Delegate)
+            .ToArray();
+        var invalidTypeDeclarations = typeDeclarations
+            .Where(declaration => !convention.IsValidTypeName(declaration.Name))
+            .ToArray();
+        var typeViolations = invalidTypeDeclarations.Length;
+
+        var interfaceDeclarations = declarations
+            .Where(declaration => declaration.Kind == NamingDeclarationKind.Interface)
+            .ToArray();
+        var invalidInterfaceDeclarations = interfaceDeclarations
+            .Where(declaration => !convention.IsValidInterfaceName(declaration.Name))
+            .ToArray();
+        var interfaceViolations = invalidInterfaceDeclarations.Length;
+        var invalidMethodDeclarations = methodDeclarations
+            .Where(declaration =>
+                !convention.IsValidMethodName(declaration.Name)
+                && !((declaration.IsTestMethod || isTestProject)
+                    && IsValidDescriptiveTestMethodName(declaration.Name)))
+            .ToArray();
+
+        var methodViolations = invalidMethodDeclarations.Length;
+        var variableDeclarations = declarations
+            .Where(declaration => declaration.Kind is
+                NamingDeclarationKind.LocalVariable
+                or NamingDeclarationKind.Parameter)
+            .ToArray();
+        var invalidVariableDeclarations = variableDeclarations
+            .Where(declaration => !convention.IsValidVariableName(declaration.Name))
+            .ToArray();
+        var variableViolations = invalidVariableDeclarations.Length;
+        var invalidFieldDeclarations = fieldDeclarations
+            .Where(declaration => !IsValidFieldName(declaration, convention))
+            .ToArray();
+        var fieldViolations = invalidFieldDeclarations.Length;
+
+        var propertyDeclarations = declarations
+            .Where(declaration => declaration.Kind == NamingDeclarationKind.Property)
+            .ToArray();
+        var invalidPropertyDeclarations = propertyDeclarations
+            .Where(declaration => !convention.IsValidTypeName(declaration.Name))
+            .ToArray();
+        var propertyViolations = invalidPropertyDeclarations.Length;
+        var constantDeclarations = declarations
+            .Where(declaration => declaration.Kind == NamingDeclarationKind.Constant)
+            .ToArray();
+        var invalidConstantDeclarations = constantDeclarations
+            .Where(declaration => !convention.IsValidConstantName(declaration.Name))
+            .ToArray();
+        var constantViolations = invalidConstantDeclarations.Length;
 
         var typeScore = ComputeScore(typeNames.Count, typeViolations);
         var interfaceScore = ComputeScore(interfaceNames.Length, interfaceViolations);
@@ -491,6 +545,20 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
         result.Metrics["FileNamingCompliance"] = fileScore;
         result.Metrics["DeclarationsAnalyzed"] = declarationCount;
+
+        if (fileScore < 100)
+        {
+            var fileName = Path.GetFileName(file);
+            var fileEvidence =
+                $"File name '{fileName}' does not satisfy the active naming convention.";
+
+            result.Evidence = string.IsNullOrWhiteSpace(result.Evidence)
+                ? fileEvidence
+                : $"{result.Evidence}{Environment.NewLine}{fileEvidence}";
+            result.Metadata["Evidence.FileNamingCompliance"] = fileEvidence;
+            result.Metadata["CodeSnippet.FileNamingCompliance"] = fileName;
+            result.Metadata["EvidenceScope.FileNamingCompliance"] = "FileName";
+        }
 
         // Partial syntax analysis can discover declarations while missing or
         // misclassifying others. Never convert incomplete evidence into a score
@@ -557,6 +625,33 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             ? "NoDeclarations"
             : analysis.Status.ToString();
 
+        AddNamingEvidence(result, "TypeNamingCompliance", invalidTypeDeclarations, source);
+        AddNamingEvidence(result, "InterfaceNamingCompliance", invalidInterfaceDeclarations, source);
+        AddNamingEvidence(result, "MethodNamingCompliance", invalidMethodDeclarations, source);
+        AddNamingEvidence(result, "VariableNamingCompliance", invalidVariableDeclarations, source);
+        AddNamingEvidence(result, "FieldNamingCompliance", invalidFieldDeclarations, source);
+        AddNamingEvidence(result, "PropertyNamingCompliance", invalidPropertyDeclarations, source);
+        AddNamingEvidence(result, "ConstantNamingCompliance", invalidConstantDeclarations, source);
+
+        var allNamingViolations = invalidTypeDeclarations
+            .Concat(invalidInterfaceDeclarations)
+            .Concat(invalidMethodDeclarations)
+            .Concat(invalidVariableDeclarations)
+            .Concat(invalidFieldDeclarations)
+            .Concat(invalidPropertyDeclarations)
+            .Concat(invalidConstantDeclarations)
+            .ToArray();
+        AddNamingEvidence(result, "NamingComplianceScore", allNamingViolations, source);
+
+        if (allNamingViolations.Length > 0)
+        {
+            var firstViolation = allNamingViolations
+                .OrderBy(declaration => declaration.StartLine)
+                .First();
+            result.LineNumber = firstViolation.StartLine;
+            result.Evidence = GetSourceLine(source, firstViolation.StartLine);
+        }
+
         result.Metadata["TypesAnalyzed"] = typeNames.Count.ToString();
         result.Metadata["InterfacesAnalyzed"] = interfaceNames.Length.ToString();
         result.Metadata["MethodsAnalyzed"] = methodNames.Count.ToString();
@@ -566,6 +661,83 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         result.Metadata["ConstantsAnalyzed"] = constantNames.Count.ToString();
 
         return result;
+    }
+
+    private static bool IsValidFieldName(
+        NamingDeclaration declaration,
+        INamingConventionPolicy convention)
+    {
+        if (convention is UnityNamingConventionPolicy)
+        {
+            return convention.IsValidVariableName(declaration.Name)
+                || convention.IsValidTypeName(declaration.Name);
+        }
+
+        if (declaration.Accessibility.Equals(
+                "public",
+                StringComparison.OrdinalIgnoreCase))
+            return convention.IsValidTypeName(declaration.Name);
+
+        // Private, protected and internal C# fields commonly use _camelCase.
+        // The convention applies to the identifier after that prefix.
+        var candidate = declaration.Name.StartsWith('_')
+            ? declaration.Name[1..]
+            : declaration.Name;
+
+        return convention.IsValidVariableName(candidate);
+    }
+
+    private static bool IsValidDescriptiveTestMethodName(string name) =>
+        Regex.IsMatch(
+            name,
+            @"^[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+$",
+            RegexOptions.CultureInvariant,
+            TimeSpan.FromMilliseconds(100));
+
+    private static void AddNamingEvidence(
+        ArchitectureEvaluatorResult result,
+        string metricKey,
+        IEnumerable<NamingDeclaration> declarations,
+        string source)
+    {
+        var evidence = declarations
+            .OrderBy(declaration => declaration.StartLine)
+            .ThenBy(declaration => declaration.StartColumn)
+            .Select(declaration =>
+            {
+                var snippet = GetSourceLine(source, declaration.StartLine);
+                return $"Line {declaration.StartLine}: {declaration.Kind} '{declaration.Name}' — {snippet}";
+            })
+            .ToArray();
+
+        if (evidence.Length == 0)
+            return;
+
+        var first = declarations
+            .OrderBy(declaration => declaration.StartLine)
+            .ThenBy(declaration => declaration.StartColumn)
+            .First();
+
+        result.Metadata[$"Evidence.{metricKey}"] =
+            string.Join(Environment.NewLine, evidence);
+        result.Metadata[$"EvidenceLine.{metricKey}"] =
+            first.StartLine.ToString();
+        result.Metadata[$"CodeSnippet.{metricKey}"] =
+            GetSourceLine(source, first.StartLine);
+    }
+
+    private static string GetSourceLine(string source, int lineNumber)
+    {
+        if (lineNumber <= 0)
+            return string.Empty;
+
+        var lines = source.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        return lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
     }
 
     private ArchitectureEvaluatorResult EvaluateFile(

@@ -1,6 +1,8 @@
 ﻿
 using System.Text.RegularExpressions;
 
+using Aegis.Architecture.Evaluators.Analysis;
+
 using Aegis.Architecture.Evaluators;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -14,25 +16,6 @@ namespace Aegis.Architecture.Evaluators.Infrastructure;
 public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 {
     private readonly LoggingPolicy _policy;
-
-    private static readonly HashSet<string> ExcludedDirectories =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".git",
-            ".vs",
-            ".idea",
-            "bin",
-            "obj",
-            "node_modules",
-            "dist",
-            "build",
-            "coverage",
-            "vendor",
-            "packages",
-            "__pycache__",
-            ".venv",
-            "venv"
-        };
 
     private static readonly Regex LoggingCallRx = new(
         """
@@ -140,10 +123,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
         if (!_policy.Enabled)
         {
-            _logger.LogInformation(
-                "{Evaluator} is disabled by policy.",
-                Name);
-
+            _logger.LogInformation("{Evaluator} is disabled by policy.", Name);
             return results;
         }
 
@@ -153,33 +133,32 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 "{Evaluator} skipped: project directory does not exist: {ProjectPath}",
                 Name,
                 projectPath);
-
             return results;
         }
 
         var sourceFiles = ResolveSourceFiles(
                 projectPath,
-                ".cs",
-                ".java",
-                ".py",
-                ".ts",
-                ".tsx",
-                ".js",
-                ".jsx")
+                ".cs", ".java", ".py", ".ts", ".tsx", ".js", ".jsx")
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var analyzedFileCount = 0;
-        var loggingFileCount = 0;
-        var failedFileCount = 0;
+        var scopes = new Dictionary<string, ProjectLoggingScope>(
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (var file in sourceFiles)
         {
             token.ThrowIfCancellationRequested();
-            analyzedFileCount++;
+
+            var projectScope = ResolveProjectScope(file, projectPath);
+            if (!scopes.TryGetValue(projectScope.Path, out var scope))
+            {
+                scope = new ProjectLoggingScope(projectScope);
+                scopes.Add(projectScope.Path, scope);
+            }
+
+            scope.AnalyzedFileCount++;
 
             string content;
-
             try
             {
                 content = await File.ReadAllTextAsync(file, token);
@@ -191,91 +170,67 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             }
             catch (IOException exception)
             {
-                failedFileCount++;
-
-                _logger.LogDebug(
-                    exception,
-                    "Unable to read source file {FilePath}.",
-                    file);
-
+                scope.FailedFileCount++;
+                _logger.LogDebug(exception, "Unable to read source file {FilePath}.", file);
                 continue;
             }
             catch (UnauthorizedAccessException exception)
             {
-                failedFileCount++;
-
-                _logger.LogDebug(
-                    exception,
-                    "Access denied while reading source file {FilePath}.",
-                    file);
-
+                scope.FailedFileCount++;
+                _logger.LogDebug(exception, "Access denied while reading source file {FilePath}.", file);
                 continue;
             }
 
             var language = DetectLanguage(file);
-            var loggingCalls = LoggingCallRx.Matches(content);
-
-            // Files without recognizable logging calls do not contribute
-            // artificial zeroes or perfect scores to logging-quality averages.
+            var code = SourceCodeMasker.Mask(content);
+            var loggingCalls = LoggingCallRx.Matches(code);
             if (loggingCalls.Count == 0)
-            {
                 continue;
-            }
 
-            loggingFileCount++;
+            scope.LoggingFileCount++;
 
-            var structuredScore =
-                EvaluateStructuredLogging(content, language);
+            var structuredScore = EvaluateStructuredLogging(content, code, language);
+            var levelScore = EvaluateLogLevels(code);
+            var noiseScore = EvaluateLoggingNoise(content, code, language);
+            var integrityScore = ComputeIntegrity(
+                structuredScore,
+                levelScore,
+                noiseScore);
 
-            var levelScore =
-                EvaluateLogLevels(content);
-
-            var noiseScore =
-                EvaluateLoggingNoise(content, language);
-
-            var integrityScore =
-                ComputeIntegrity(
-                    structuredScore,
-                    levelScore,
-                    noiseScore);
-
-            results.Add(
-                CreateFileResult(
-                    file,
-                    language,
-                    loggingCalls.Count,
-                    structuredScore,
-                    levelScore,
-                    noiseScore,
-                    integrityScore));
+            scope.FileResults.Add(CreateFileResult(
+                file,
+                scope.Identity,
+                language,
+                loggingCalls,
+                content,
+                structuredScore,
+                levelScore,
+                noiseScore,
+                integrityScore));
         }
 
-        if (results.Count > 0)
+        if (scopes.Count == 0)
         {
-            results.Add(
-                CreateSummaryResult(
-                    projectPath,
-                    results.ToArray(),
-                    analyzedFileCount,
-                    loggingFileCount,
-                    failedFileCount));
+            var projectScope = ResolveProjectScope(projectPath, projectPath);
+            scopes.Add(
+                projectScope.Path,
+                new ProjectLoggingScope(projectScope));
         }
-        else
+
+        foreach (var scope in scopes.Values)
         {
-            results.Add(
-                CreateEmptySummaryResult(
-                    projectPath,
-                    analyzedFileCount,
-                    loggingFileCount,
-                    failedFileCount));
+            results.AddRange(scope.FileResults);
+
+            results.Add(scope.FileResults.Count > 0
+                ? CreateSummaryResult(scope)
+                : CreateEmptySummaryResult(scope));
         }
 
         _logger.LogInformation(
-            "{Evaluator} completed. Source files: {SourceFiles}; files with logging calls: {LoggingFiles}; unreadable files: {FailedFiles}; result entries: {ResultCount}.",
+            "{Evaluator} completed. Projects: {ProjectCount}; source files: {SourceFiles}; result entries: {ResultCount}.",
             Name,
-            analyzedFileCount,
-            loggingFileCount,
-            failedFileCount,
+            scopes.Count,
+            sourceFiles.Count,
             results.Count);
 
         return results;
@@ -283,63 +238,98 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
     private ArchitectureEvaluatorResult CreateFileResult(
         string file,
+        ProjectIdentity identity,
         string language,
-        int loggingCallCount,
+        MatchCollection loggingCalls,
+        string content,
         double structured,
         double levels,
         double noise,
         double integrity)
     {
-        return new ArchitectureEvaluatorResult(Name, file)
+        var evidenceItems = loggingCalls
+            .Cast<Match>()
+            .Select(call =>
+            {
+                var lineNumber = GetLineNumber(content, call.Index);
+                return $"Line {lineNumber}: {call.Value.Trim()} — {GetSourceLine(content, lineNumber)}";
+            })
+            .ToArray();
+
+        var result = CreateResult(file, "Infrastructure");
+        result.ProjectName = identity.Name;
+        result.Language = language;
+        result.Framework = identity.Framework;
+        result.Layer = ResolveLayerForFile(file);
+        result.Metrics["LoggingCallCount"] = loggingCalls.Count;
+        result.Metrics["StructuredLoggingScore"] = structured;
+        result.Metrics["LogLevelComplianceScore"] = levels;
+        result.Metrics["LoggingNoiseScore"] = noise;
+        result.Metrics["LoggingIntegrityScore"] = integrity;
+
+        result.Metadata["FileName"] = Path.GetFileName(file);
+        result.Metadata["FilePath"] = file;
+        result.Metadata["ProjectName"] = identity.Name;
+        result.Metadata["ProjectPath"] = identity.Path;
+        result.Metadata["ProjectKind"] = identity.ProjectKind;
+        result.Metadata["Language"] = language;
+        result.Metadata["Framework"] = identity.Framework ?? "Unknown";
+        result.Metadata["Layer"] = result.Layer ?? "Unknown";
+        result.Metadata["PolicyEnabled"] = _policy.Enabled.ToString().ToLowerInvariant();
+        result.Metadata["EvaluationScope"] = FileScope;
+        result.Metadata["AnalysisComplete"] = "true";
+        result.Metadata["AnalysisStatus"] = "Completed";
+
+        if (evidenceItems.Length > 0)
         {
-            Category = "Infrastructure",
+            var firstLine = GetLineNumber(content, loggingCalls[0].Index);
+            result.LineNumber = firstLine;
+            result.Evidence = string.Join(Environment.NewLine, evidenceItems);
+            result.Metadata["Evidence.LoggingIntegrityScore"] =
+                string.Join(Environment.NewLine, evidenceItems);
+            result.Metadata["EvidenceLine.LoggingIntegrityScore"] =
+                firstLine.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            result.Metadata["CodeSnippet.LoggingIntegrityScore"] =
+                GetSourceLine(content, firstLine);
+        }
 
-            Metrics =
-            {
-                ["LoggingCallCount"] = loggingCallCount,
-                ["StructuredLoggingScore"] = structured,
-                ["LogLevelComplianceScore"] = levels,
-                ["LoggingNoiseScore"] = noise,
-                ["LoggingIntegrityScore"] = integrity
-            },
-
-            Metadata =
-            {
-                ["FileName"] = Path.GetFileName(file),
-                ["Target"] = file,
-                ["Language"] = language,
-                ["Frameworks"] = string.Join(
-                    ", ",
-                    DetectFrameworks(language)),
-                ["PolicyEnabled"] = _policy.Enabled.ToString(),
-                ["EvaluationScope"] = FileScope,
-            }
-        };
+        return result;
     }
 
     private ArchitectureEvaluatorResult CreateSummaryResult(
-        string projectPath,
-        IReadOnlyCollection<ArchitectureEvaluatorResult> results,
-        int analyzedFileCount,
-        int loggingFileCount,
-        int failedFileCount)
+        ProjectLoggingScope scope)
     {
-        var integrity = Average(results, "LoggingIntegrityScore");
-        var structured = Average(results, "StructuredLoggingScore");
-        var levels = Average(results, "LogLevelComplianceScore");
-        var noise = Average(results, "LoggingNoiseScore");
+        var integrity = Average(scope.FileResults, "LoggingIntegrityScore");
+        var structured = Average(scope.FileResults, "StructuredLoggingScore");
+        var levels = Average(scope.FileResults, "LogLevelComplianceScore");
+        var noise = Average(scope.FileResults, "LoggingNoiseScore");
+        var evidence = scope.FileResults
+            .SelectMany(result =>
+            {
+                var filePath = result.Metadata.GetValueOrDefault("FilePath");
+                var relativePath = string.IsNullOrWhiteSpace(filePath)
+                    ? result.Target
+                    : Path.GetRelativePath(scope.Identity.Path, filePath);
 
-        return new ArchitectureEvaluatorResult(Name, projectPath)
+                return (result.Evidence ?? string.Empty)
+                    .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(item => $"{relativePath}: {item}");
+            })
+            .Take(100)
+            .ToArray();
+
+        var summary = new ArchitectureEvaluatorResult(Name, scope.Identity.Name)
         {
+            ProjectName = scope.Identity.Name,
             Category = "InfrastructureSummary",
-
+            Evidence = string.Join(Environment.NewLine, evidence),
             Metrics =
             {
-                ["SourceFilesScanned"] = analyzedFileCount,
-                ["FilesWithLoggingCalls"] = loggingFileCount,
-                ["FilesWithLoggingResults"] = results.Count,
-                ["UnreadableFiles"] = failedFileCount,
-                ["DiagnosticCount"] = failedFileCount,
+                ["SourceFilesScanned"] = scope.AnalyzedFileCount,
+                ["FilesWithLoggingCalls"] = scope.LoggingFileCount,
+                ["FilesWithLoggingResults"] = scope.FileResults.Count,
+                ["UnreadableFiles"] = scope.FailedFileCount,
+                ["DiagnosticCount"] = scope.FailedFileCount,
                 ["AverageIntegrityScore"] = integrity,
                 ["LoggingIntegrityScore"] = integrity,
                 ["AverageStructuredLogging"] = structured,
@@ -347,209 +337,176 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 ["AverageLoggingNoiseScore"] = noise,
                 ["ObservabilityHealthIndex"] = integrity
             },
-
             Metadata =
             {
                 [EvaluationScopeMetadataKey] = ProjectScope,
+                ["ProjectName"] = scope.Identity.Name,
+                ["ProjectPath"] = scope.Identity.Path,
+                ["ProjectKind"] = scope.Identity.ProjectKind,
+                ["Framework"] = scope.Identity.Framework ?? "Unknown",
                 ["Evaluator"] = Name,
-                ["PolicyEnabled"] = _policy.Enabled.ToString(),
-                ["SupportedFrameworks"] = string.Join(
-                    ", ",
-                    SupportedFrameworks),
-                ["AnalysisComplete"] = (failedFileCount == 0).ToString(),
-                ["AnalysisStatus"] = failedFileCount == 0
+                ["PolicyEnabled"] = _policy.Enabled.ToString().ToLowerInvariant(),
+                ["SupportedFrameworks"] = string.Join(", ", SupportedFrameworks),
+                ["AnalysisComplete"] = (scope.FailedFileCount == 0).ToString().ToLowerInvariant(),
+                ["AnalysisStatus"] = scope.FailedFileCount == 0
                     ? "Completed"
                     : "CompletedWithDiagnostics",
-                ["Diagnostics"] = failedFileCount == 0
+                ["Diagnostics"] = scope.FailedFileCount == 0
                     ? string.Empty
-                    : $"Unable to read {failedFileCount} source file(s) during logging analysis.",
+                    : $"Unable to read {scope.FailedFileCount} source file(s) during logging analysis.",
                 ["ScoringNote"] =
-                    "Scores are heuristic indicators based on files containing recognized logging calls."
+                    "Scores are heuristic indicators based on recognized logging calls.",
+                ["Evidence.LoggingIntegrityScore"] =
+                    string.Join(Environment.NewLine, evidence),
+                ["EvidenceSummary.LoggingIntegrityScore"] =
+                    $"{scope.LoggingFileCount} of {scope.AnalyzedFileCount} analyzed source files contain recognized logging calls."
+            }
+        };
+
+        return summary;
+    }
+
+    private ArchitectureEvaluatorResult CreateEmptySummaryResult(
+        ProjectLoggingScope scope)
+    {
+        return new ArchitectureEvaluatorResult(Name, scope.Identity.Name)
+        {
+            ProjectName = scope.Identity.Name,
+            Category = "InfrastructureSummary",
+            Metrics =
+            {
+                ["SourceFilesScanned"] = scope.AnalyzedFileCount,
+                ["FilesWithLoggingCalls"] = scope.LoggingFileCount,
+                ["FilesWithLoggingResults"] = 0,
+                ["UnreadableFiles"] = scope.FailedFileCount,
+                ["DiagnosticCount"] = scope.FailedFileCount
+            },
+            Metadata =
+            {
+                [EvaluationScopeMetadataKey] = ProjectScope,
+                ["ProjectName"] = scope.Identity.Name,
+                ["ProjectPath"] = scope.Identity.Path,
+                ["ProjectKind"] = scope.Identity.ProjectKind,
+                ["Framework"] = scope.Identity.Framework ?? "Unknown",
+                ["Evaluator"] = Name,
+                ["PolicyEnabled"] = _policy.Enabled.ToString().ToLowerInvariant(),
+                ["EvaluationStatus"] = scope.AnalyzedFileCount == 0
+                    ? "NoSourceFilesFound"
+                    : scope.LoggingFileCount == 0
+                        ? "NoRecognizedLoggingCalls"
+                        : "NoFilesEvaluated",
+                ["AnalysisComplete"] = (scope.FailedFileCount == 0).ToString().ToLowerInvariant(),
+                ["AnalysisStatus"] = scope.FailedFileCount == 0
+                    ? "Completed"
+                    : "CompletedWithDiagnostics",
+                ["Diagnostics"] = scope.FailedFileCount == 0
+                    ? string.Empty
+                    : $"Unable to read {scope.FailedFileCount} source file(s) during logging analysis."
             }
         };
     }
 
-    private ArchitectureEvaluatorResult CreateEmptySummaryResult(
-        string projectPath,
-        int analyzedFileCount,
-        int loggingFileCount,
-        int failedFileCount)
+    private ProjectIdentity ResolveProjectScope(string file, string projectPath)
     {
-        return new ArchitectureEvaluatorResult(Name, projectPath)
-        {
-            Category = "InfrastructureSummary",
+        var module = Context?.Modules
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Path))
+            .OrderByDescending(candidate => candidate.Path.Length)
+            .FirstOrDefault(candidate => IsSameOrDescendantPath(file, candidate.Path));
 
-            Metrics =
-            {
-                ["SourceFilesScanned"] = analyzedFileCount,
-                ["FilesWithLoggingCalls"] = loggingFileCount,
-                ["FilesWithLoggingResults"] = 0,
-                ["UnreadableFiles"] = failedFileCount,
-                ["DiagnosticCount"] = failedFileCount
-            },
-
-            Metadata =
-            {
-                ["Evaluator"] = Name,
-                ["PolicyEnabled"] = _policy.Enabled.ToString(),
-                ["EvaluationStatus"] =
-                    analyzedFileCount == 0
-                        ? "NoSourceFilesFound"
-                        : loggingFileCount == 0
-                            ? "NoRecognizedLoggingCalls"
-                            : "NoFilesEvaluated",
-                ["AnalysisComplete"] = (failedFileCount == 0).ToString(),
-                ["AnalysisStatus"] = failedFileCount == 0
-                    ? "Completed"
-                    : "CompletedWithDiagnostics",
-                ["Diagnostics"] = failedFileCount == 0
-                    ? string.Empty
-                    : $"Unable to read {failedFileCount} source file(s) during logging analysis.",
-                ["EvaluationScope"] = ProjectScope
-            }
-        };
+        return module is null
+            ? new ProjectIdentity(
+                Context?.ProjectName ?? Path.GetFileName(projectPath),
+                Path.GetFullPath(projectPath),
+                "Unknown",
+                Context?.Framework)
+            : new ProjectIdentity(
+                module.Name,
+                module.Path,
+                module.ProjectKind,
+                module.Framework);
     }
 
     private double EvaluateStructuredLogging(
         string content,
+        string code,
         string language)
     {
         if (!_policy.RequireStructuredLogging)
-        {
             return 100;
-        }
 
-        var calls = LoggingCallRx.Matches(content);
-
+        var calls = LoggingCallRx.Matches(code);
         if (calls.Count == 0)
-        {
             return 100;
-        }
 
-        var structuredCalls = 0;
-        var parameterizedCalls = 0;
-        var interpolatedCalls = 0;
+        var positiveCalls = 0;
 
         foreach (Match call in calls)
         {
-            var windowLength = Math.Min(
-                500,
-                content.Length - call.Index);
-
+            var windowLength = Math.Min(500, content.Length - call.Index);
             if (windowLength <= 0)
-            {
                 continue;
-            }
 
             var window = content.Substring(call.Index, windowLength);
-
-            // These checks are intentionally conservative heuristics:
-            // AST-backed analysis would be required to associate every
-            // message template and argument list with complete accuracy.
             var hasTemplate = StructuredTemplateRx.IsMatch(window);
-            var hasPythonParameters =
-                language == "Python" &&
-                PythonParameterizedLoggingRx.IsMatch(window);
+            var hasPythonParameters = language == "Python"
+                && PythonParameterizedLoggingRx.IsMatch(window);
 
-            var hasInterpolation =
-                InterpolatedStringRx.IsMatch(window);
-
-            if (hasTemplate)
-            {
-                structuredCalls++;
-            }
-            else if (hasPythonParameters)
-            {
-                parameterizedCalls++;
-            }
-            else if (hasInterpolation)
-            {
-                interpolatedCalls++;
-            }
+            if (hasTemplate || hasPythonParameters)
+                positiveCalls++;
         }
 
-        // Structured message templates and parameterized Python logging
-        // are positive evidence. Interpolation is not counted as structured.
-        var positiveCalls = structuredCalls + parameterizedCalls;
-
-        return Math.Round(
-            100.0 * positiveCalls / calls.Count,
-            2);
+        return Math.Round(100.0 * positiveCalls / calls.Count, 2);
     }
 
-    private double EvaluateLogLevels(string content)
+    private double EvaluateLogLevels(string code)
     {
         if (!_policy.RequireLogLevels)
-        {
             return 100;
-        }
 
-        var calls = LogLevelRx.Matches(content);
+        var loggingCalls = LoggingCallRx.Matches(code);
+        if (loggingCalls.Count == 0)
+            return 100;
 
-        if (calls.Count == 0)
-        {
-            // The caller already established that a recognizable logging
-            // call exists; no recognized level-specific call is neutral
-            // evidence rather than proof of compliance.
+        var recognizedLevelCalls = LogLevelRx.Matches(code).Count;
+        if (recognizedLevelCalls == 0)
             return 50;
-        }
-
-        var recognizedLevelCalls = calls.Count;
 
         return Math.Round(
-            100.0 * recognizedLevelCalls / calls.Count,
+            100.0 * recognizedLevelCalls / loggingCalls.Count,
             2);
     }
 
     private double EvaluateLoggingNoise(
         string content,
+        string code,
         string language)
     {
         if (!_policy.WarnInterpolatedStrings)
-        {
             return 100;
-        }
 
-        var calls = LoggingCallRx.Matches(content);
-
+        var calls = LoggingCallRx.Matches(code);
         if (calls.Count == 0)
-        {
             return 100;
-        }
 
         var interpolatedCalls = 0;
 
         foreach (Match call in calls)
         {
-            var windowLength = Math.Min(
-                500,
-                content.Length - call.Index);
-
+            var windowLength = Math.Min(500, content.Length - call.Index);
             if (windowLength <= 0)
-            {
                 continue;
-            }
 
             var window = content.Substring(call.Index, windowLength);
-
-            var interpolated =
-                InterpolatedStringRx.IsMatch(window);
-
-            var pythonPercentFormatting =
-                language == "Python" &&
-                PythonParameterizedLoggingRx.IsMatch(window);
+            var interpolated = InterpolatedStringRx.IsMatch(window);
+            var pythonPercentFormatting = language == "Python"
+                && PythonParameterizedLoggingRx.IsMatch(window);
 
             if (interpolated && !pythonPercentFormatting)
-            {
                 interpolatedCalls++;
-            }
         }
 
         var ratio = (double)interpolatedCalls / calls.Count;
-
-        return Math.Round(
-            Math.Clamp(100.0 * (1.0 - ratio), 0, 100),
-            2);
+        return Math.Round(Math.Clamp(100.0 * (1.0 - ratio), 0, 100), 2);
     }
 
     private static double ComputeIntegrity(
@@ -558,10 +515,55 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
         double noise)
     {
         return Math.Round(
-            structured * 0.50 +
-            levels * 0.25 +
-            noise * 0.25,
+            structured * 0.50
+            + levels * 0.25
+            + noise * 0.25,
             2);
+    }
+
+    private static int GetLineNumber(string content, int index)
+    {
+        if (index < 0 || index > content.Length)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        var lineNumber = 1;
+        for (var position = 0; position < index; position++)
+        {
+            if (content[position] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        if (lineNumber < 1)
+            throw new ArgumentOutOfRangeException(nameof(lineNumber));
+
+        using var reader = new StringReader(content);
+        for (var currentLine = 1; currentLine < lineNumber; currentLine++)
+        {
+            if (reader.ReadLine() is null)
+                return string.Empty;
+        }
+
+        return reader.ReadLine() ?? string.Empty;
+    }
+
+    private sealed record ProjectIdentity(
+        string Name,
+        string Path,
+        string ProjectKind,
+        string? Framework);
+
+    private sealed class ProjectLoggingScope(ProjectIdentity identity)
+    {
+        public ProjectIdentity Identity { get; } = identity;
+        public List<ArchitectureEvaluatorResult> FileResults { get; } = [];
+        public int AnalyzedFileCount { get; set; }
+        public int LoggingFileCount { get; set; }
+        public int FailedFileCount { get; set; }
     }
 
     private static double Average(

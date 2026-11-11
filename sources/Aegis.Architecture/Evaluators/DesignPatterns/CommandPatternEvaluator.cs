@@ -545,6 +545,12 @@ public sealed class CommandPatternEvaluator
         result.Metadata["MeasurementMethod"] =
             "Project-level aggregation of command candidate results.";
         result.Metadata["ComplianceScoreIsHeuristic"] = true.ToString();
+        var analysisComplete = unreadableFileCount == 0
+            && analyzedFileCount == discoveredFileCount;
+        result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
+        result.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "Incomplete";
 
         return result;
     }

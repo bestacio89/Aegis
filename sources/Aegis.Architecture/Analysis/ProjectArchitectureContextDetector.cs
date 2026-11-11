@@ -2,13 +2,22 @@
 
 using Aegis.Architecture.Analysis.Detectors;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Policies.Architecture;
 
 namespace Aegis.Architecture.Analysis;
 
 public static class ProjectArchitectureContextDetector
 {
-    public static ProjectArchitectureContext Detect(string rootPath)
+    public static ProjectArchitectureContext Detect(string rootPath) =>
+        Detect(rootPath, new ArchitecturePolicy());
+
+    public static ProjectArchitectureContext Detect(
+        string rootPath,
+        ArchitecturePolicy architecturePolicy)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+        ArgumentNullException.ThrowIfNull(architecturePolicy);
+
         var ctx = new ProjectArchitectureContext
         {
             ProjectName =
@@ -42,6 +51,13 @@ public static class ProjectArchitectureContextDetector
             files);
 
 
+        // Discover project boundaries before framework aggregation so a
+        // mixed repository does not inherit one project's framework identity.
+        ModuleDetector.Analyze(
+            ctx,
+            files);
+
+
         FrameworkDetector.Analyze(
             ctx,
             files);
@@ -52,19 +68,10 @@ public static class ProjectArchitectureContextDetector
             files);
 
 
-
-        // ===============================================================
-        // Structural Detection
-        // ===============================================================
-
-        ModuleDetector.Analyze(
-            ctx,
-            files);
-
-
         LayerDetector.Analyze(
             ctx,
-            files);
+            files,
+            architecturePolicy);
 
 
         DomainDetector.Analyze(
@@ -131,7 +138,10 @@ public static class ProjectArchitectureContextDetector
         ArchitectureConfidenceEvaluator.Evaluate(
             ctx);
 
-
+        // Framework-specific rules may be classified as not applicable only
+        // after source discovery completed without coverage-affecting failures.
+        ctx.FrontendFrameworkDiscoveryComplete =
+            !ctx.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
 
         PopulateContextMetadata(
             ctx,
@@ -283,6 +293,9 @@ public static class ProjectArchitectureContextDetector
             JsonSerializer.Serialize(ctx.ExcludedEntriesByReason);
 
 
+        ctx.MetadataMap["FrontendFrameworkDiscoveryComplete"] =
+            ctx.FrontendFrameworkDiscoveryComplete.ToString().ToLowerInvariant();
+
         ctx.MetadataMap["DetectedDependencies"] =
             ctx.DetectedDependencies.Count.ToString();
 
@@ -294,6 +307,23 @@ public static class ProjectArchitectureContextDetector
         ctx.MetadataMap["DetectedModules"] =
             ctx.Modules.Count.ToString();
 
+        ctx.MetadataMap["ProjectKindBreakdown"] =
+            JsonSerializer.Serialize(ctx.Modules
+                .GroupBy(module => module.ProjectKind, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Count()));
+
+        ctx.MetadataMap["DetectedProjectFrameworks"] =
+            JsonSerializer.Serialize(ctx.Modules
+                .Select(module => new
+                {
+                    module.Name,
+                    module.ProjectKind,
+                    module.Framework,
+                    module.Frameworks,
+                    module.TargetFrameworks,
+                    module.IsTestProject,
+                    module.IsWebProject
+                }));
 
         ctx.MetadataMap["LastModified"] =
             files

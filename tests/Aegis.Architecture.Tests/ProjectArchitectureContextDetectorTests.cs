@@ -149,7 +149,10 @@ public sealed class ProjectArchitectureContextDetectorTests
 
         Assert.Equal("C#", context.Language);
         Assert.Equal(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.DotNet, context.BuildSystem);
-        Assert.Equal(".NET (EF Core)", context.Framework);
+        Assert.Equal(".NET", context.Framework);
+        Assert.Contains(context.Modules, module =>
+            module.ProjectFile == project
+            && module.Framework == ".NET (EF Core)");
         Assert.Contains(context.DetectedDependencies, dependency =>
             dependency.Contains("EntityFrameworkCore", StringComparison.OrdinalIgnoreCase));
         Assert.Empty(context.Dependencies);
@@ -175,6 +178,55 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Contains(context.PatternsDetected, pattern => pattern == "Repository Pattern");
         Assert.Contains(context.PatternsDetected, pattern => pattern == "Dependency Injection");
         Assert.Equal(context.Modules.Count.ToString(), context.MetadataMap["DetectedModules"]);
+    }
+
+    [Fact]
+    public void Detect_resolves_nested_source_files_to_their_nearest_project_manifest()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var libraryProject = Path.Combine(directory.Path, "Library", "Library.csproj");
+        var testProject = Path.Combine(directory.Path, "Library.Tests", "Library.Tests.csproj");
+        var nestedSource = Path.Combine(directory.Path, "Library", "Handlers", "OrderHandler.cs");
+        var testSource = Path.Combine(directory.Path, "Library.Tests", "Handlers", "OrderHandlerTests.cs");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(libraryProject)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(testProject)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(nestedSource)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(testSource)!);
+
+        File.WriteAllText(libraryProject, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(testProject, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <IsTestProject>true</IsTestProject>
+              </PropertyGroup>
+              <ItemGroup><PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" /></ItemGroup>
+            </Project>
+            """);
+        File.WriteAllText(nestedSource, "public sealed class OrderHandler { }");
+        File.WriteAllText(testSource, "public sealed class OrderHandlerTests { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        var library = Assert.Single(context.Modules, module => module.Name == "Library");
+        var tests = Assert.Single(context.Modules, module => module.Name == "Library.Tests");
+
+        Assert.Equal("ClassLibrary", library.ProjectKind);
+        Assert.False(library.IsTestProject);
+        Assert.Contains("C#", library.Languages);
+        Assert.Contains(nestedSource, library.Layers.Single().Files);
+
+        Assert.Equal("Test", tests.ProjectKind);
+        Assert.True(tests.IsTestProject);
+        Assert.Equal("Test", tests.Type);
+        Assert.Contains(testSource, tests.Layers.Single().Files);
+        Assert.DoesNotContain(testSource, library.Layers.Single().Files);
     }
 
     [Fact]
@@ -250,6 +302,52 @@ public sealed class ProjectArchitectureContextDetectorTests
     }
 
     [Fact]
+    public void Detect_distinguishes_test_projects_from_testing_support_libraries()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var testingLibrary = Path.Combine(directory.Path, "sources", "Franz.Common.Testing");
+        var testProject = Path.Combine(directory.Path, "tests", "Franz.Common.Tests");
+        Directory.CreateDirectory(testingLibrary);
+        Directory.CreateDirectory(testProject);
+
+        File.WriteAllText(
+            Path.Combine(testingLibrary, "Franz.Common.Testing.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(
+            Path.Combine(testingLibrary, "UnitTest.cs"),
+            "public abstract class UnitTest { }");
+        File.WriteAllText(
+            Path.Combine(testProject, "Franz.Common.Tests.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(
+            Path.Combine(testProject, "EntityTests.cs"),
+            "public sealed class EntityTests { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+        var supportModule = Assert.Single(
+            context.Modules,
+            module => module.Name == "Franz.Common.Testing");
+        var testsModule = Assert.Single(
+            context.Modules,
+            module => module.Name == "Franz.Common.Tests");
+
+        Assert.False(supportModule.IsTestProject);
+        Assert.NotEqual("Test", supportModule.ProjectKind);
+        Assert.True(testsModule.IsTestProject);
+        Assert.Equal("Test", testsModule.ProjectKind);
+        Assert.Equal("Test", testsModule.Type);
+    }
+
+    [Fact]
     public void Detect_classifies_server_hosted_blazor_as_full_stack_not_backend_only()
     {
         using var directory = new TemporaryDirectory();
@@ -274,10 +372,52 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Equal("ASP.NET Core", context.Framework);
         Assert.Contains("Blazor", context.DetectedFrameworks);
         Assert.Contains("ASP.NET Core", context.DetectedFrameworks);
+        var module = Assert.Single(context.Modules);
+        Assert.Equal("Multi-Framework", module.Framework);
+        Assert.Contains("Blazor", module.Frameworks);
+        Assert.Contains("ASP.NET Core", module.Frameworks);
         Assert.Equal("FullStack", context.DomainType);
     }
 
  
+    [Fact]
+    public void Detect_excludes_test_projects_from_repository_primary_framework_aggregation()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var webRoot = Path.Combine(directory.Path, "src", "Web");
+        var testsRoot = Path.Combine(directory.Path, "tests", "Web.Tests");
+        Directory.CreateDirectory(webRoot);
+        Directory.CreateDirectory(testsRoot);
+
+        File.WriteAllText(
+            Path.Combine(webRoot, "Web.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(
+            Path.Combine(testsRoot, "Web.Tests.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <IsTestProject>true</IsTestProject>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal("ASP.NET Core", context.Framework);
+        Assert.Contains(context.Modules, module =>
+            module.Name == "Web.Tests" && module.IsTestProject);
+    }
+
     [Fact]
     public void Detect_discovers_frontend_manifests_without_overwriting_backend_identity()
     {
@@ -328,9 +468,17 @@ public sealed class ProjectArchitectureContextDetectorTests
         var context = ProjectArchitectureContextDetector.Detect(directory.Path);
 
         Assert.Equal("C#", context.Language);
-        Assert.Equal("ASP.NET Core", context.Framework);
+        Assert.Equal("Multi-Framework", context.Framework);
         Assert.Contains("ASP.NET Core", context.DetectedFrameworks);
         Assert.Contains("Angular", context.DetectedFrameworks);
+        Assert.Equal("FullStack", context.DomainType);
+        Assert.Equal("MultiProject", context.Nature);
+        Assert.Contains(context.Modules, module =>
+            module.Name == "Server" && module.Framework == "ASP.NET Core");
+        Assert.Contains(context.Modules, module =>
+            module.Name == "client" && module.Framework == "Angular");
+        Assert.Contains(context.Modules, module =>
+            module.Name == "admin" && module.Framework == "Angular");
         Assert.Contains(context.DetectedDependencies, dependency =>
             dependency.Equals("Microsoft.EntityFrameworkCore", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(context.DetectedDependencies, dependency =>
@@ -375,11 +523,12 @@ public sealed class ProjectArchitectureContextDetectorTests
 
         var context = ProjectArchitectureContextDetector.Detect(directory.Path);
 
-        Assert.Equal("ASP.NET Core", context.Framework);
+        Assert.Equal("Multi-Framework", context.Framework);
         Assert.Contains("ASP.NET Core", context.DetectedFrameworks);
         Assert.Contains("Blazor", context.DetectedFrameworks);
         Assert.Contains("Unity", context.DetectedFrameworks);
-        Assert.Equal("FullStack", context.DomainType);
+        Assert.Equal("Mixed", context.DomainType);
+        Assert.Equal("MultiProject", context.Nature);
         Assert.Contains(context.Modules, module =>
             module.Type == "Unity"
             && string.Equals(module.Path, Path.Combine(directory.Path, "UnityClient"), StringComparison.OrdinalIgnoreCase));

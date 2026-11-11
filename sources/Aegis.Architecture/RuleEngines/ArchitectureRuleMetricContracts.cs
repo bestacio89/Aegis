@@ -1,6 +1,8 @@
 
+using Aegis.Architecture.Analysis;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Rules;
 
 namespace Aegis.Architecture.RuleEngines;
@@ -40,19 +42,14 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-ARCH-R11"] = ["DocumentationEvaluator"],
                 ["AEG-BACK-R2"] = ["ComplexityEvaluator"],
                 ["AEG-BACK-R3"] = ["DependencyGraphEvaluator"],
-                ["AEG-BACK-R4"] = ["ErrorHandlingEvaluator"],
                 ["AEG-BACK-R5"] = ["MaintainabilityEvaluator"],
 
-                ["AEG-DES-ADM001"] = ["AnemicDomainModelEvaluator"],
                 ["AEG-DES-BLD001"] = ["BuilderPatternEvaluator"],
-                ["AEG-DES-BLD002"] = ["BuilderPatternEvaluator"],
                 ["AEG-DES-CMD001"] = ["CommandPatternEvaluator"],
                 ["AEG-DES-DEC001"] = ["DecoratorPatternEvaluator"],
                 ["AEG-DES-FAC001"] = ["FacadePatternEvaluator"],
                 ["AEG-DES-FAC002"] = ["FacadePatternEvaluator"],
-                ["AEG-DES-FACR001"] = ["FactoryPatternEvaluator"],
                 ["AEG-DES-GOD001"] = ["GodClassEvaluator"],
-                ["AEG-DES-MEDI001"] = ["MediatorPatternEvaluator"],
                 ["AEG-DES-OBS001"] = ["ObserverPatternEvaluator"],
                 ["AEG-DES-REPO001"] = ["RepositoryPatternEvaluator"],
                 ["AEG-DES-SING001"] = ["SingletonPatternEvaluator"],
@@ -92,20 +89,43 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-TXN-R1"] = ["ArchitecturalTransactionEvaluator"],
             };
 
-    private static readonly IReadOnlyDictionary<string, (string Producer, string CandidateMetric, string UnreadableMetric, string DiscoveredMetric)>
+    private static readonly IReadOnlyDictionary<string, (string Producer, string CandidateMetric, string UnreadableMetric, string AnalyzedMetric, string DiscoveredMetric)>
         CandidateApplicabilityContracts =
-            new Dictionary<string, (string, string, string, string)>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, (string, string, string, string, string)>(StringComparer.OrdinalIgnoreCase)
             {
-                ["AEG-DES-BLD001"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
-                ["AEG-DES-BLD002"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
-                ["AEG-DES-CMD001"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "DiscoveredFileCount"),
-                ["AEG-DES-DEC001"] = ("DecoratorPatternEvaluator", "DecoratorCandidateCount", "UnreadableFiles", "DiscoveredFiles")
+                ["AEG-DES-BLD001"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-BLD002"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-CMD001"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-CMD002"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-DEC001"] = ("DecoratorPatternEvaluator", "DecoratorCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-DEC002"] = ("DecoratorPatternEvaluator", "DecoratorCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-FAC001"] = ("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-FAC002"] = ("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-FACR001"] = ("FactoryPatternEvaluator", "FactoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-FACR002"] = ("FactoryPatternEvaluator", "FactoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-GOD001"] = ("GodClassEvaluator", "ClassCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-MEDI001"] = ("MediatorPatternEvaluator", "MediatorImplementationCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-MEDI002"] = ("MediatorPatternEvaluator", "MediatorImplementationCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-OBS001"] = ("ObserverPatternEvaluator", "ObserverCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-OBS002"] = ("ObserverPatternEvaluator", "ObserverCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-REPO001"] = ("RepositoryPatternEvaluator", "RepositoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-REPO002"] = ("RepositoryPatternEvaluator", "RepositoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-SING001"] = ("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-SING002"] = ("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-STRAT001"] = ("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-STRAT002"] = ("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles")
             };
 
     private static readonly IReadOnlyDictionary<string, string>
         UnsupportedRuleProducerContracts =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
+                ["AEG-BACK-R4"] =
+                    "ErrorHandlingEvaluator currently measures catch/except blocks without recognized logging or rethrowing indicators. This is not operation-level error-handling coverage and can misclassify legitimate fallback handling; retain as diagnostic until semantic handling analysis exists.",
+                ["AEG-DES-ADM001"] =
+                    "AnemicDomainModelEvaluator currently emits lexical state-to-method heuristics and explicitly does not establish domain-model role or behavior semantics. Keep the metric diagnostic-only until candidate identification and behavior analysis are compiler-backed.",
+                ["AEG-DES-MEDI001"] =
+                    "MediatorPatternEvaluator currently emits lexical adoption and service-like call signals, not a validated mediator-coupling index. Pattern usage or service-like calls alone do not prove excessive mediator centralization.",
                 ["AEG-DES-CIRC001"] =
                     "No dedicated pattern-circular-reference producer exists yet; CircularDependencyEvaluator measures module dependency cycles and is not a semantic substitute.",
                 ["AEG-DES-OVER001"] =
@@ -121,7 +141,9 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-DEPS-R3"] = "UnusedReferenceEvaluator does not establish actual code usage; a manifest parse is not proof that a reference is unused.",
                 ["AEG-DEPS-R4"] = "PackageVersionEvaluator does not emit a comparable major-version drift metric.",
                 ["AEG-DES-DEC002"] = "DecoratorPatternEvaluator does not currently measure decorator self-reference; structural delegation signals are not a substitute.",
-                ["AEG-DES-REPO002"] = "RepositoryPatternEvaluator's persistence/transport indicators include legitimate repository behavior and do not prove prohibited external I/O.",
+                ["AEG-DES-REPO002"] = "RepositoryPatternEvaluator currently emits external transport indicators, not a dedicated RepositoryIOOperationCount. The rule requires operation-level evidence of prohibited file/network I/O inside repository implementations.",
+                ["AEG-DES-FACR001"] = "FactoryPatternEvaluator's composite score penalizes instantiation and concrete return expressions inside factory implementations, where construction is expected. Without signature and type resolution it cannot distinguish a correct factory returning an abstraction from a direct construction leak; keep diagnostic-only until semantic factory-boundary analysis exists.",
+                ["AEG-DES-BLD002"] = "BuilderPatternEvaluator treats internal mutation without a fluent return as a mutability violation. Builder implementations commonly mutate internal state while being configured; this heuristic does not prove externally exposed mutable state, so keep diagnostic-only until member accessibility and object-state semantics are resolved.",
                 ["AEG-DES-FACR002"] = "FactoryPatternEvaluator measures instantiation inside factory candidates, where construction is expected; it does not measure direct construction outside a factory boundary.",
                 ["AEG-DES-CMD002"] = "CommandPatternEvaluator pairs command and handler names but does not measure handler overloads.",
                 ["AEG-DES-MEDI002"] = "MediatorPatternEvaluator does not resolve direct handler calls independently from service-like coupling signals.",
@@ -156,6 +178,92 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-FRONT-R11"] = FrontendScope.CrossFramework
             };
 
+    private static readonly IReadOnlyDictionary<string, Func<AegisArchitecturePolicy, bool>>
+        RulePolicyEnablementContracts =
+            new Dictionary<string, Func<AegisArchitecturePolicy, bool>>(
+                StringComparer.OrdinalIgnoreCase)
+            {
+                ["AEG-ARCH-R1"] = policy => policy.CircularDependency.Enabled,
+                ["AEG-ARCH-R2"] = policy => policy.Architecture.EnforceLayerBoundaries,
+                ["AEG-ARCH-R3"] = policy => policy.Architecture.EnforceLayerBoundaries,
+                ["AEG-ARCH-R5"] = policy => policy.Architecture.EnforceLayerBoundaries,
+                ["AEG-ARCH-R8"] = policy => policy.Architecture.DesignPatterns.DetectGodClasses,
+                ["AEG-ARCH-R10"] = policy => policy.Security.Enabled,
+
+                ["AEG-BACK-R5"] = policy =>
+                    policy.Maintainability.MinMaintainabilityIndex > 0,
+
+                ["AEG-DES-BLD001"] = policy => policy.Architecture.DesignPatterns.EnforceBuilderPattern,
+                ["AEG-DES-BLD002"] = policy =>
+                    policy.Architecture.DesignPatterns.EnforceBuilderPattern
+                    && policy.Architecture.DesignPatterns.SuggestImmutability,
+                ["AEG-DES-CMD001"] = policy => policy.Architecture.DesignPatterns.EnforceCommandPattern,
+                ["AEG-DES-CMD002"] = policy => policy.Architecture.DesignPatterns.EnforceCommandPattern,
+                ["AEG-DES-DEC001"] = policy => policy.Architecture.DesignPatterns.EnforceDecoratorPattern,
+                ["AEG-DES-DEC002"] = policy => policy.Architecture.DesignPatterns.EnforceDecoratorPattern,
+                ["AEG-DES-FAC001"] = policy => policy.Architecture.DesignPatterns.EnforceFacadePattern,
+                ["AEG-DES-FAC002"] = policy => policy.Architecture.DesignPatterns.EnforceFacadePattern,
+                ["AEG-DES-FACR001"] = policy => policy.Architecture.DesignPatterns.EnforceFactoryPattern,
+                ["AEG-DES-FACR002"] = policy => policy.Architecture.DesignPatterns.EnforceFactoryPattern,
+                ["AEG-DES-MEDI001"] = policy => policy.Architecture.DesignPatterns.EnforceMediatorPattern,
+                ["AEG-DES-MEDI002"] = policy => policy.Architecture.DesignPatterns.EnforceMediatorPattern,
+                ["AEG-DES-ADM001"] = policy => policy.Architecture.DesignPatterns.DetectAnemicDomainModels,
+                ["AEG-DES-CIRC001"] = policy => policy.Architecture.DesignPatterns.DetectCircularDependencies,
+                ["AEG-DES-GOD001"] = policy => policy.Architecture.DesignPatterns.DetectGodClasses,
+                ["AEG-DES-OBS001"] = policy =>
+                    policy.Architecture.DesignPatterns.EnforceObserverPattern
+                    && policy.Architecture.DesignPatterns.DetectLeakingSubscriptions,
+                ["AEG-DES-OBS002"] = policy => policy.Architecture.DesignPatterns.EnforceObserverPattern,
+                ["AEG-DES-REPO001"] = policy => policy.Architecture.DesignPatterns.EnforceRepositoryPattern,
+                ["AEG-DES-REPO002"] = policy => policy.Architecture.DesignPatterns.EnforceRepositoryPattern,
+                ["AEG-DES-SING001"] = policy => policy.Architecture.DesignPatterns.EnforceSingletonPattern,
+                ["AEG-DES-SING002"] = policy => policy.Architecture.DesignPatterns.EnforceSingletonPattern,
+                ["AEG-DES-STRAT001"] = policy =>
+                    policy.Architecture.DesignPatterns.EnforceStrategyPattern
+                    && policy.Architecture.DesignPatterns.DetectConditionalStrategySwitch,
+                ["AEG-DES-STRAT002"] = policy => policy.Architecture.DesignPatterns.EnforceStrategyPattern,
+
+                ["AEG-INF-R1"] = policy => policy.Configuration.Enabled,
+                ["AEG-INF-R2"] = policy => policy.Logging.Enabled,
+
+                ["AEG-DEPS-R1"] = policy => policy.Dependency.Enabled && policy.Dependency.CheckOutdatedPackages,
+                ["AEG-DEPS-R2"] = policy => policy.Dependency.Enabled && policy.Dependency.CheckOutdatedPackages,
+                ["AEG-DEPS-R3"] = policy => policy.Dependency.Enabled && policy.Dependency.CheckUnusedReferences,
+                ["AEG-DEPS-R4"] = policy => policy.Dependency.Enabled && policy.Dependency.CheckOutdatedPackages,
+
+                ["AEG-FRONT-R1"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R2"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R3"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R4"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R5"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R6"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R7"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R8"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R9"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R10"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R11"] = policy => policy.Frontend.Enabled,
+
+                ["AEG-NAM-R1"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R2"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R3"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R4"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R5"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R6"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R7"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R8"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R9"] = policy => policy.Naming.Enabled,
+
+                ["AEG-PERF-R1"] = policy => policy.Performance.Enabled,
+                ["AEG-PERF-R2"] = policy => policy.Performance.Enabled,
+                ["AEG-PERF-R3"] = policy => policy.Performance.Enabled,
+                ["AEG-PERF-R4"] = policy => policy.Performance.Enabled,
+
+                ["AEG-TXN-R1"] = policy => policy.Transaction.Enabled,
+                ["AEG-TXN-R2"] = policy => policy.Transaction.Enabled,
+                ["AEG-TXN-R3"] = policy => policy.Transaction.Enabled,
+                ["AEG-TXN-R4"] = policy => policy.Transaction.Enabled
+            };
+
     public static string? GetProducerContractDisposition(string ruleId)
     {
         if (RuleProducerContracts.ContainsKey(ruleId))
@@ -165,6 +273,29 @@ internal static class ArchitectureRuleMetricContracts
             return reason;
 
         return $"No producer-to-rule contract is registered for rule '{ruleId}'.";
+    }
+
+    public static bool TryGetPolicyApplicability(
+        string ruleId,
+        AegisArchitecturePolicy policy,
+        out string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ruleId);
+        ArgumentNullException.ThrowIfNull(policy);
+
+        reason = string.Empty;
+
+        if (!RulePolicyEnablementContracts.TryGetValue(ruleId, out var isEnabled)
+            || isEnabled(policy))
+        {
+            return true;
+        }
+
+        reason =
+            $"Rule '{ruleId}' is disabled by the active policy and was excluded " +
+            "from applicability and evaluation coverage.";
+
+        return false;
     }
 
     public static bool IsDeclaredProducer(string ruleId, string producerName)
@@ -184,15 +315,20 @@ internal static class ArchitectureRuleMetricContracts
     public static bool TryGetNoCandidateDisposition(
         string ruleId,
         IReadOnlyCollection<ArchitectureEvaluatorResult> facts,
+        ProjectArchitectureContext context,
         out string reason)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ruleId);
         ArgumentNullException.ThrowIfNull(facts);
+        ArgumentNullException.ThrowIfNull(context);
 
         reason = string.Empty;
 
-        if (!CandidateApplicabilityContracts.TryGetValue(ruleId, out var contract))
+        if (!CandidateApplicabilityContracts.TryGetValue(ruleId, out var contract)
+            || context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
+        {
             return false;
+        }
 
         var summaries = facts
             .Where(fact =>
@@ -208,6 +344,28 @@ internal static class ArchitectureRuleMetricContracts
             .ToList();
 
         if (summaries.Count == 0)
+            return false;
+
+        // A zero-candidate summary is conclusive only when every discovered
+        // project scope produced one. Missing summaries may indicate an
+        // evaluator that did not run or a scope that failed before evidence
+        // collection; neither proves that the repository has no candidates.
+        var expectedScopeCount = context.Modules.Count > 0
+            ? context.Modules.Count
+            : 1;
+
+        if (summaries.Count != expectedScopeCount)
+            return false;
+
+        var summaryScopes = summaries
+            .Select(summary => !string.IsNullOrWhiteSpace(summary.ProjectName)
+                ? summary.ProjectName
+                : summary.Target ?? string.Empty)
+            .Where(scope => !string.IsNullOrWhiteSpace(scope))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        if (summaryScopes != summaries.Count)
             return false;
 
         var rule = ArchitectureRuleRegistry.All.FirstOrDefault(candidate =>
@@ -238,10 +396,13 @@ internal static class ArchitectureRuleMetricContracts
                 || candidates > 0
                 || !TryGetMetric(summary.Metrics, contract.UnreadableMetric, out var unreadable)
                 || unreadable > 0
+                || !TryGetMetric(summary.Metrics, contract.AnalyzedMetric, out var analyzed)
                 || !TryGetMetric(summary.Metrics, contract.DiscoveredMetric, out var discovered)
                 || !double.IsFinite(candidates)
                 || !double.IsFinite(unreadable)
-                || !double.IsFinite(discovered))
+                || !double.IsFinite(analyzed)
+                || !double.IsFinite(discovered)
+                || analyzed != discovered)
             {
                 return false;
             }
@@ -263,6 +424,66 @@ internal static class ArchitectureRuleMetricContracts
         reason =
             $"Rule '{ruleId}' is not applicable because {contract.Producer} " +
             $"found no applicable candidates in {summaries.Count} fully readable project scope(s).";
+
+        return true;
+    }
+
+    /// <summary>
+    /// Recognizes a completed documentation scan in which no project scope
+    /// contains public declarations to document. This is an applicability
+    /// outcome, not a zero-percent documentation score.
+    /// </summary>
+    public static bool TryGetExplicitNoApplicableDisposition(
+        string ruleId,
+        IReadOnlyCollection<ArchitectureEvaluatorResult> facts,
+        ProjectArchitectureContext context,
+        out string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ruleId);
+        ArgumentNullException.ThrowIfNull(facts);
+        ArgumentNullException.ThrowIfNull(context);
+
+        reason = string.Empty;
+
+        if (!string.Equals(
+                ruleId,
+                "AEG-ARCH-R11",
+                StringComparison.OrdinalIgnoreCase)
+            || context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
+        {
+            return false;
+        }
+
+        var documentationFacts = facts
+            .Where(fact =>
+                string.Equals(
+                    fact.Source,
+                    "DocumentationEvaluator",
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    fact.Metadata?.GetValueOrDefault("EvaluationScope"),
+                    "Project",
+                    StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (documentationFacts.Count == 0
+            || documentationFacts.Any(fact =>
+                TryGetMetric(fact.Metrics, "DocumentationCoverage", out _)
+                || !string.Equals(
+                    fact.Metadata?.GetValueOrDefault("EvaluatorExecutionStatus"),
+                    "NoApplicableDeclarations",
+                    StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(
+                    fact.Metadata?.GetValueOrDefault("AnalysisComplete"),
+                    "true",
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        reason =
+            "Documentation coverage is not applicable because every completed " +
+            "documentation scope contained no eligible public declarations.";
 
         return true;
     }
@@ -388,12 +609,12 @@ internal static class ArchitectureRuleMetricContracts
     }
 
     /// <summary>
-    /// Determines whether a frontend rule is compatible with the detected
-    /// frontend family.
+    /// Determines whether a rule is compatible with the detected repository
+    /// context, including language-specific, architectural-layer, and frontend
+    /// framework applicability.
     ///
-    /// Unknown technology is not treated as proof that a rule is inapplicable.
-    /// A positively identified, different frontend family excludes a
-    /// framework-specific rule.
+    /// Unknown or incomplete technology discovery is not treated as proof
+    /// that a rule is inapplicable.
     /// </summary>
     public static bool TryGetApplicability(
         ArchitectureRuleDefinition rule,
@@ -408,6 +629,18 @@ internal static class ArchitectureRuleMetricContracts
         if (IsCSharpOnlyNamingRule(rule.Id) && !HasCSharpEvidence(context))
         {
             reason = $"Rule '{rule.Id}' applies only when the repository contains C# field/property declarations.";
+            return false;
+        }
+
+        if (IsLayerBoundaryRule(rule.Id)
+            && ArchitectureLayerApplicability.IsMultiProjectWithoutLayerBoundaryModel(context))
+        {
+            reason =
+                $"Rule '{rule.Id}' is not applicable because the repository is " +
+                "classified as a multi-project mixed/library system without a " +
+                "sufficiently distinct architectural layer model. At least two " +
+                "recognized roles are required before enforcing layer-boundary rules.";
+
             return false;
         }
 
@@ -438,14 +671,24 @@ internal static class ArchitectureRuleMetricContracts
         // detected family independently; do not make every frontend ruleset
         // eligible merely because the repository contains multiple modules.
         // Individual facts are still checked against their own framework below.
+        var frontendDiscoveryComplete =
+            context.FrontendFrameworkDiscoveryComplete
+            && !context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
 
-        // No recognized family means applicability remains unknown.
         if (detectedFamilies.Length == 0)
-            return true;
+        {
+            if (!frontendDiscoveryComplete)
+                return true;
 
-        // R11 is the shared complexity rule for React and Razor files, which
-        // have no dedicated complexity rule in this ruleset. Angular and Blazor
-        // use their dedicated rules; per-file applicability prevents metric reuse.
+            reason =
+                $"Rule '{rule.Id}' is not applicable because frontend framework " +
+                "discovery completed without identifying a supported frontend family.";
+
+            return false;
+        }
+
+        // R11 is the shared complexity rule for React and Razor files. A
+        // negative family decision is safe only after complete discovery.
         if (targetScope == FrontendScope.CrossFramework)
         {
             if (detectedFamilies.Any(family =>
@@ -454,20 +697,14 @@ internal static class ArchitectureRuleMetricContracts
                 return true;
             }
 
-            var onlyDedicatedFamilies = detectedFamilies.All(family =>
-                family is FrontendScope.Angular or FrontendScope.Blazor);
+            if (!frontendDiscoveryComplete)
+                return true;
 
-            if (onlyDedicatedFamilies)
-            {
-                reason =
-                    $"Rule '{rule.Id}' is not applicable because the detected " +
-                    "frontend families have dedicated complexity rules; the " +
-                    "shared ComplexityScore metric would duplicate their checks.";
+            reason =
+                $"Rule '{rule.Id}' is not applicable because complete frontend " +
+                "discovery found no React or Razor files for the shared complexity rule.";
 
-                return false;
-            }
-
-            return true;
+            return false;
         }
 
         var targetFamily = targetScope switch
@@ -483,10 +720,12 @@ internal static class ArchitectureRuleMetricContracts
         if (detectedFamilies.Contains(targetFamily))
             return true;
 
+        if (!frontendDiscoveryComplete)
+            return true;
+
         reason =
             $"Rule '{rule.Id}' targets frontend family '{targetFamily}', " +
-            $"but the detected family/families are " +
-            $"[{string.Join(", ", detectedFamilies)}].";
+            $"but complete discovery found only [{string.Join(", ", detectedFamilies)}].";
 
         return false;
     }
@@ -594,6 +833,11 @@ internal static class ArchitectureRuleMetricContracts
 
         return false;
     }
+
+    private static bool IsLayerBoundaryRule(string ruleId) =>
+        ruleId.Equals("AEG-ARCH-R2", StringComparison.OrdinalIgnoreCase)
+        || ruleId.Equals("AEG-ARCH-R3", StringComparison.OrdinalIgnoreCase)
+        || ruleId.Equals("AEG-ARCH-R5", StringComparison.OrdinalIgnoreCase);
 
     private static bool HasCSharpEvidence(ProjectArchitectureContext context) =>
         string.Equals(context.Language, "C#", StringComparison.OrdinalIgnoreCase)

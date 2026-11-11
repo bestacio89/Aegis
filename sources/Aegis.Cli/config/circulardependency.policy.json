@@ -1,0 +1,8 @@
+{
+  "CircularDependency": {
+    "Enabled": true,
+    "MaxDependencyDepth": 8,
+    "TreatAsError": true,
+    "CrossLanguageDetection": true
+  }
+}

@@ -20,7 +20,11 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             /// <summary>Documented service.</summary>
             public class DocumentationFixture
             {
+                // public void CommentedOutOperation() { }
+                private string _example = "public void StringLiteralOperation() { }";
+
                 /// <summary>Documented operation.</summary>
+                [System.Obsolete]
                 public void DocumentedOperation() { }
 
                 public void UndocumentedOperation() { }
@@ -39,8 +43,60 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.Equal(3, summary.Metrics["TotalDeclarations"]);
         Assert.Equal(2, summary.Metrics["DocumentedDeclarations"]);
         Assert.Equal(1, summary.Metrics["MissingDocumentation"]);
-        Assert.Equal(200d / 3d, summary.Metrics["DocumentationCoverage"], precision: 5);
+        Assert.Equal(Math.Round(200d / 3d, 2), summary.Metrics["DocumentationCoverage"]);
         Assert.Equal("Completed", summary.Metadata["AnalysisStatus"]);
+        Assert.Contains("DocumentationFixture.cs", summary.Evidence);
+        Assert.Contains("UndocumentedOperation", summary.Evidence);
+        Assert.Contains("DocumentedOperation", summary.Evidence);
+        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
+    }
+
+    [Fact]
+    public async Task DocumentationEvaluator_emits_project_scoped_evidence_and_excludes_test_projects()
+    {
+        using var project = new TemporaryProject();
+        project.Write("Library/Library.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("Library/Production.cs", """
+            public sealed class Production
+            {
+                public void Execute() { }
+            }
+            """);
+        project.Write("Library.Tests/Library.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <IsTestProject>true</IsTestProject>
+              </PropertyGroup>
+              <ItemGroup><PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" /></ItemGroup>
+            </Project>
+            """);
+        project.Write("Library.Tests/ProductionTests.cs", """
+            public sealed class ProductionTests
+            {
+                public void TestOperation() { }
+            }
+            """);
+
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(project.Root);
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "DocumentationEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(project.Root, context)).ToArray();
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+
+        Assert.Equal("Library", summary.ProjectName);
+        Assert.Equal(2, summary.Metrics["TotalDeclarations"]);
+        Assert.Contains("Production.cs", summary.Evidence);
+        Assert.DoesNotContain("ProductionTests.cs", summary.Evidence);
+        Assert.True(summary.Metadata["AnalysisComplete"] == "true");
     }
 
     [Fact]
@@ -68,6 +124,14 @@ public sealed class ArchitectureEvaluatorBehaviorTests
 }}";
 
         project.Write("back/ComplexityFixture.cs", source);
+        project.Write("back/Noise.cs", """
+            public sealed class Noise
+            {
+                // public int CommentedMethod(bool value) { if (value) return 1; }
+                private const string Example =
+                    "public int FakeMethod(bool value) { if (value) return 1; }";
+            }
+            """);
 
         using var provider = CreateProvider();
         using var scope = provider.CreateScope();
@@ -81,6 +145,55 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.True(finding.Metrics["CyclomaticComplexity"] > 10);
         Assert.Equal(1, finding.Metrics["ComplexityFinding"]);
         Assert.Equal("SourcePatternHeuristic", finding.Metadata["MeasurementMethod"]);
+        Assert.False(string.IsNullOrWhiteSpace(finding.File));
+        Assert.True(finding.LineNumber is > 0);
+        Assert.Contains("HighComplexity", finding.Evidence);
+        Assert.Contains("HighComplexity", finding.Metadata["CodeSnippet.EstimatedCyclomaticComplexity"]);
+    }
+
+    [Fact]
+    public async Task ComplexityEvaluator_uses_project_boundaries_and_excludes_test_projects()
+    {
+        using var project = new TemporaryProject();
+        project.Write("Library/Library.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("Library/Production.cs", """
+            public sealed class Production
+            {
+                public void Execute() { }
+            }
+            """);
+        project.Write("Library.Tests/Library.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <IsTestProject>true</IsTestProject>
+              </PropertyGroup>
+              <ItemGroup><PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" /></ItemGroup>
+            </Project>
+            """);
+        project.Write("Library.Tests/ProductionTests.cs", """
+            public sealed class ProductionTests
+            {
+                public void TestOperation() { }
+            }
+            """);
+
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(project.Root);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "ComplexityEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(project.Root, context)).ToArray();
+
+        Assert.Contains(results, result =>
+            result.Metadata.GetValueOrDefault("MethodName") == "Execute");
+        Assert.DoesNotContain(results, result =>
+            result.Metadata.GetValueOrDefault("MethodName") == "TestOperation");
     }
 
     [Fact]
@@ -153,6 +266,11 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.Equal(1, fileResult.Metrics["SwallowedExceptions"]);
         Assert.Equal(1, summary.Metrics["FilesAnalyzed"]);
         Assert.Equal(1, summary.Metrics["TotalCatchBlocks"]);
+        Assert.Equal(0, summary.Metrics["ErrorHandlingCoverage"]);
+        Assert.Contains("catch", fileResult.Evidence, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Evidence.SwallowedExceptions", fileResult.Metadata.Keys);
+        Assert.Contains("ErrorHandlingFixture.cs", summary.Evidence);
+        Assert.Contains("Evidence.ErrorHandlingCoverage", summary.Metadata.Keys);
     }
 
     [Fact]
@@ -235,6 +353,87 @@ public sealed class ArchitectureEvaluatorBehaviorTests
 
 
     [Fact]
+    public async Task NamingEvaluator_applies_test_method_naming_only_to_test_project_scope()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Library.Tests/Library.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("back/Library.Tests/LibraryTests.cs", """
+            public sealed class LibraryTests
+            {
+                public void Given_InventoryIsAvailable_When_OrderIsCreated_Then_ReturnsCreatedOrder() { }
+            }
+            """);
+        project.Write("back/Library/Library.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("back/Library/LibraryService.cs", """
+            public sealed class LibraryService
+            {
+                public void Create_Order() { }
+            }
+            """);
+
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(project.Root);
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "NamingEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(project.Root, context)).ToArray();
+        var testResult = Assert.Single(results, result =>
+            result.Target.Contains("LibraryTests.cs", StringComparison.OrdinalIgnoreCase));
+        var productionResult = Assert.Single(results, result =>
+            result.Target.Contains("LibraryService.cs", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(100, testResult.Metrics["MethodNamingCompliance"]);
+        Assert.Equal(0, productionResult.Metrics["MethodNamingCompliance"]);
+        Assert.Contains("Create_Order", productionResult.Metadata["Evidence.MethodNamingCompliance"]);
+    }
+
+    [Fact]
+    public async Task NamingEvaluator_accepts_descriptive_test_methods_and_private_field_conventions()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/NamingFixture.cs", """
+            public sealed class NamingFixture
+            {
+                private readonly object _clock = new();
+                internal readonly object _logger = new();
+                public string invalidField = string.Empty;
+
+                [Xunit.Fact]
+                public void CreateOrder_WhenInventoryIsAvailable_ReturnsCreatedOrder() { }
+
+                public void CreateFixture() { }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "NamingEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+
+        var finding = Assert.Single(
+            results,
+            result => result.Target.Contains("NamingFixture.cs", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(100, finding.Metrics["MethodNamingCompliance"]);
+        Assert.Equal(100, finding.Metrics["FileNamingCompliance"]);
+        Assert.Equal(100.0 / 3.0 * 2.0, finding.Metrics["FieldNamingCompliance"], 2);
+        Assert.Contains("invalidField", finding.Metadata["Evidence.FieldNamingCompliance"]);
+        Assert.DoesNotContain("_clock", finding.Metadata["Evidence.FieldNamingCompliance"]);
+        Assert.DoesNotContain("_logger", finding.Metadata["Evidence.FieldNamingCompliance"]);
+    }
+
+    [Fact]
     public async Task NamingEvaluator_keeps_application_source_in_a_directory_named_temp()
     {
         using var project = new TemporaryProject();
@@ -266,6 +465,8 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             {
                 public void Execute(Microsoft.Extensions.Logging.ILogger logger, string orderId)
                 {
+                    // logger.LogCritical("commented {OrderId}", orderId);
+                    var example = "logger.LogCritical(string literal)";
                     logger.LogInformation("Processing order {OrderId}", orderId);
                     System.Console.WriteLine($"Order {orderId}");
                 }
@@ -294,14 +495,16 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             results,
             result => result.Metrics.ContainsKey("LoggingCallCount"));
 
-        Assert.True(fileResult.Metrics["LoggingCallCount"] >= 2);
+        Assert.Equal(2, fileResult.Metrics["LoggingCallCount"]);
+        Assert.True(fileResult.LineNumber is > 0);
+        Assert.Contains("LogInformation", fileResult.Evidence);
         Assert.DoesNotContain(results, result =>
             result.Target.Contains("External.cs", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal(
-            1,
-            Assert.Single(results, result =>
-                result.Metrics.ContainsKey("SourceFilesScanned"))
-                .Metrics["SourceFilesScanned"]);
+        var summary = Assert.Single(results, result =>
+            result.Metrics.ContainsKey("SourceFilesScanned"));
+        Assert.Equal(1, summary.Metrics["SourceFilesScanned"]);
+        Assert.Contains("LoggingFixture.cs", summary.Evidence);
+        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
         Assert.True(fileResult.Metrics.ContainsKey("StructuredLoggingScore"));
         Assert.Contains(results, result =>
             result.Metrics.ContainsKey("ObservabilityHealthIndex"));
@@ -321,8 +524,14 @@ public sealed class ArchitectureEvaluatorBehaviorTests
                     {
                         for (var inner = 0; inner < 10; inner++)
                         {
-                            System.Threading.Thread.Sleep(1);
-                            System.IO.File.ReadAllText("fixture.txt");
+                            for (var nested = 0; nested < 10; nested++)
+                            {
+                                for (var deepest = 0; deepest < 10; deepest++)
+                                {
+                                    System.Threading.Thread.Sleep(1);
+                                    System.IO.File.ReadAllText("fixture.txt");
+                                }
+                            }
                         }
                     }
 
@@ -366,6 +575,8 @@ public sealed class ArchitectureEvaluatorBehaviorTests
                         System.Console.WriteLine("Thread.Sleep(100); File.ReadAllText(path);");
                     }
 
+                    _ = await System.IO.File.ReadAllTextAsync("fixture.txt");
+
                     // Thread.Sleep(100); File.ReadAllText(path); Task.Wait();
                 }
             }
@@ -385,6 +596,271 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.Equal(0, fileResult.Metrics["BlockingIOCount"]);
         Assert.Equal(100, fileResult.Metrics["ConcurrencyScore"]);
         Assert.Equal(100, fileResult.Metrics["IOMaturityScore"]);
+    }
+
+    [Fact]
+    public async Task PerformanceEvaluator_flags_only_typed_task_waits_and_preserves_call_evidence()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/TypedTaskFixture.cs", """
+            public sealed class TypedTaskFixture
+            {
+                public void Execute(System.Threading.Tasks.Task<int> operation, Request request)
+                {
+                    operation.Wait();
+                    var value = operation.Result;
+                    var status = request.Result;
+                }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+
+        var finding = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "TypedTaskFixture.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal(2, finding.Metrics["BlockingIOCount"]);
+        Assert.True(finding.LineNumber is > 0);
+        Assert.Contains("operation.Wait()", finding.Evidence);
+        Assert.Contains("operation.Result", finding.Evidence);
+        Assert.Contains("operation.Wait()", finding.Metadata["CodeSnippet.BlockingIOCount"]);
+    }
+
+    [Fact]
+    public async Task PerformanceEvaluator_emits_independent_project_summaries_for_multi_project_repositories()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/LibraryA/LibraryA.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("back/LibraryA/OrderService.cs", """
+            public sealed class OrderService
+            {
+                public void Execute() { }
+            }
+            """);
+        project.Write("back/LibraryB/LibraryB.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("back/LibraryB/CustomerService.cs", """
+            public sealed class CustomerService
+            {
+                public void Execute() { }
+            }
+            """);
+
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(project.Root);
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(project.Root, context)).ToArray();
+        var summaries = results
+            .Where(result => result.Category == "PerformanceSummary")
+            .ToArray();
+
+        Assert.Equal(2, summaries.Length);
+        Assert.Contains(summaries, summary =>
+            summary.ProjectName == "LibraryA"
+            && summary.Metrics["AnalyzedFiles"] == 1
+            && summary.Metadata["ProjectPath"].EndsWith(
+                Path.Combine("back", "LibraryA"),
+                StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(summaries, summary =>
+            summary.ProjectName == "LibraryB"
+            && summary.Metrics["AnalyzedFiles"] == 1
+            && summary.Metadata["ProjectPath"].EndsWith(
+                Path.Combine("back", "LibraryB"),
+                StringComparison.OrdinalIgnoreCase));
+        Assert.All(summaries, summary =>
+            Assert.Equal("true", summary.Metadata["AnalysisComplete"]));
+    }
+
+    [Fact]
+    public async Task PerformanceEvaluator_resolves_concrete_frameworks_within_multi_framework_projects()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Web/Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("back/Web/Pages/Counter.razor", """
+            @page "/counter"
+            <h1>Counter</h1>
+            """);
+        project.Write("back/Web/Pages/Counter.razor.cs", """
+            public sealed class Counter
+            {
+                public void Increment() { }
+            }
+            """);
+        project.Write("back/Web/OrderService.cs", """
+            public sealed class OrderService
+            {
+                public void Execute() { }
+            }
+            """);
+
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(project.Root);
+        var module = Assert.Single(context.Modules, candidate => candidate.Name == "Web");
+        Assert.Equal("Multi-Framework", module.Framework);
+        Assert.Contains("ASP.NET Core", module.Frameworks);
+        Assert.Contains("Blazor", module.Frameworks);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(project.Root, context)).ToArray();
+        var razorCode = Assert.Single(results, result =>
+            result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "Counter.razor.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+        var serverCode = Assert.Single(results, result =>
+            result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "OrderService.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal("Blazor", razorCode.Framework);
+        Assert.Equal("ASP.NET Core", serverCode.Framework);
+        Assert.DoesNotContain(results, result => result.Framework == "Multi-Framework");
+    }
+
+    [Fact]
+    public async Task PerformanceEvaluator_does_not_require_async_for_loops_without_io()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Calculation.cs", """
+            public sealed class Calculation
+            {
+                public int Calculate(int count)
+                {
+                    var total = 0;
+                    for (var index = 0; index < count; index++)
+                        total += index;
+
+                    return total;
+                }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+        var finding = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "Calculation.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal(100, finding.Metrics["AsyncMaturityScore"]);
+        Assert.Equal(100, finding.Metrics["PerformanceHealthIndex"]);
+        Assert.Equal("FileMetrics", finding.Metadata["EvidenceScope.AsyncMaturityScore"]);
+        Assert.Contains("does not imply an async requirement", finding.Metadata["AsyncMaturityInterpretation"]);
+    }
+
+    [Fact]
+    public async Task PerformanceEvaluator_distinguishes_sequential_loops_from_nested_loops()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/LoopFixture.cs", """
+            public sealed class LoopFixture
+            {
+                public void Execute(int count)
+                {
+                    for (var first = 0; first < count; first++)
+                    {
+                        Consume(first);
+                    }
+
+                    for (var second = 0; second < count; second++)
+                    {
+                        Consume(second);
+                    }
+
+                    for (var outer = 0; outer < count; outer++)
+                    {
+                        for (var inner = 0; inner < count; inner++)
+                        {
+                            Consume(outer + inner);
+                        }
+                    }
+                }
+
+                private void Consume(int value) { }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+        var finding = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "LoopFixture.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal(2, finding.Metrics["MaximumLoopNestingDepth"]);
+        Assert.Equal(100, finding.Metrics["AlgorithmicEfficiencyScore"]);
+        Assert.Equal(0, finding.Metrics["LoopBodyLengthSignalCount"]);
+    }
+
+    [Fact]
+    public async Task PerformanceEvaluator_preserves_async_and_health_evidence_for_blocking_io()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/BlockingIoFixture.cs", """
+            public sealed class BlockingIoFixture
+            {
+                public void Load(string path)
+                {
+                    var contents = System.IO.File.ReadAllText(path);
+                    Thread.Sleep(100);
+                }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+        var finding = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "BlockingIoFixture.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal(2, finding.Metrics["BlockingIOCount"]);
+        Assert.True(finding.Metrics["AsyncMaturityScore"] < 85);
+        Assert.Equal("FileMetrics", finding.Metadata["EvidenceScope.AsyncMaturityScore"]);
+        Assert.Contains("ReadAllText", finding.Metadata["Evidence.AsyncMaturityScore"]);
+        Assert.Contains("Thread.Sleep", finding.Metadata["Evidence.AsyncMaturityScore"]);
+        Assert.Contains("ReadAllText", finding.Metadata["Evidence.PerformanceHealthIndex"]);
     }
 
     [Fact]
@@ -417,12 +893,30 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         var results = (await evaluator.EvaluateAsync(project.Root, CreateContext(project))).ToArray();
         var fileResult = Assert.Single(
             results,
-            result => result.Metrics.ContainsKey("TransactionIntegrityIndex")
+            result => result.Metrics.ContainsKey("TransactionIntegrityScore")
                 && result.Metadata.GetValueOrDefault("FileName") == "TransactionFixture.cs");
 
         Assert.Equal("True", fileResult.Metadata["ContainsTransactionScope"]);
+        Assert.Equal("File", fileResult.Metadata["EvaluationScope"]);
         Assert.Equal(60, fileResult.Metrics["CommitScore"]);
         Assert.Equal(60, fileResult.Metrics["RollbackScore"]);
+
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+
+        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
+        Assert.Equal("Completed", summary.Metadata["AnalysisStatus"]);
+        Assert.Equal(1, summary.Metrics["DiscoveredFiles"]);
+        Assert.Equal(1, summary.Metrics["AnalyzedFiles"]);
+        Assert.Equal(0, summary.Metrics["UnreadableFiles"]);
+        Assert.Equal(
+            fileResult.Metrics["TransactionIntegrityScore"],
+            summary.Metrics["TransactionIntegrityIndex"]);
+        Assert.Contains(
+            "Arithmetic mean",
+            summary.Metadata["Evidence.TransactionIntegrityIndex"]);
+
         AssertAllMetricsAreFinite(results);
     }
 

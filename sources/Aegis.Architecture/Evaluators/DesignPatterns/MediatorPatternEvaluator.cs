@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 
 using Aegis.Architecture.Diagnostics;
 using Aegis.Architecture.Evaluators;
+using Aegis.Architecture.Evaluators.Analysis;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -42,6 +43,7 @@ public sealed class MediatorPatternEvaluator
         ".cs",
         ".java",
         ".ts",
+        ".tsx",
         ".py"
     ];
 
@@ -55,6 +57,10 @@ public sealed class MediatorPatternEvaluator
         RegexOptions.CultureInvariant |
         RegexOptions.Multiline);
 
+    private static readonly Regex MediatorImplementationRegex = new(
+        @"\bclass\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*Mediator)\b[^{}]*\{|\bclass\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*)\b[^{}]*(?::|implements)\s*[^{}]*\bI[A-Za-z0-9_$]*Mediator\b[^{}]*\{",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex MediatorHandlerContractRegex = new(
         @"\bI(?:Request|Command|Query|Notification)Handler\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -65,24 +71,6 @@ public sealed class MediatorPatternEvaluator
 
     private static readonly Regex ServiceLikeMemberCallRegex = new(
         @"(?<receiver>_?[A-Za-z_$][A-Za-z0-9_$]*)\s*\.\s*(?<method>[A-Za-z_$][A-Za-z0-9_$]*)\s*\(",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly Regex StringLiteralRegex = new(
-        """
-        @"(?:""|[^"])*"|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`
-        """,
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly Regex BlockCommentRegex = new(
-        @"/\*[\s\S]*?\*/",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly Regex LineCommentRegex = new(
-        @"//[^\r\n]*",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly Regex PythonCommentRegex = new(
-        @"\#[^\r\n]*",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public MediatorPatternEvaluator(
@@ -106,15 +94,7 @@ public sealed class MediatorPatternEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "ASP.NET",
-        "Spring",
-        "NestJS",
-        "Angular",
-        "FastAPI",
-        "CleanArchitecture",
-        "Hexagonal",
-        "DDD",
-        "Microservices"
+        "LanguageAgnostic"
     ];
 
     protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
@@ -124,28 +104,14 @@ public sealed class MediatorPatternEvaluator
     {
         var results = new List<ArchitectureEvaluatorResult>();
 
-        var contextLanguage = Context?.Language ?? "Unknown";
-
-        if (_policy.MediatorApplicableLanguages.TryGetValue(
-                contextLanguage,
-                out var enabled)
-            && !enabled)
-        {
-            AegisDiagnostics.Report(
-                Name,
-                DiagnosticLevel.Trace,
-                $"Mediator evaluation disabled for {contextLanguage}.");
-
-            return results;
-        }
-
         if (Context is null)
             return results;
 
         var files = ResolveSourceFiles(projectPath, Extensions);
-
-        var readableContents = new Dictionary<string, string>(
-            StringComparer.OrdinalIgnoreCase);
+        var readableContents = new Dictionary<
+            string,
+            (string Source, string Sanitized, string Language)>(
+                StringComparer.OrdinalIgnoreCase);
 
         var unreadableFiles = 0;
 
@@ -156,36 +122,37 @@ public sealed class MediatorPatternEvaluator
             try
             {
                 var source = await File.ReadAllTextAsync(file, token);
-                readableContents[file] = SanitizeSource(
+                var language = ResolveLanguage(file);
+                readableContents[file] = (
                     source,
-                    ResolveLanguage(file));
+                    SourceCodeMasker.Mask(source),
+                    language);
             }
             catch (OperationCanceledException)
+                when (token.IsCancellationRequested)
             {
                 throw;
             }
-            catch (IOException ex)
+            catch (IOException exception)
             {
                 unreadableFiles++;
-
                 _logger.LogWarning(
-                    ex,
+                    exception,
                     "Unable to read {FilePath} during mediator evaluation.",
                     file);
             }
-            catch (UnauthorizedAccessException ex)
+            catch (UnauthorizedAccessException exception)
             {
                 unreadableFiles++;
-
                 _logger.LogWarning(
-                    ex,
+                    exception,
                     "Access denied to {FilePath} during mediator evaluation.",
                     file);
             }
         }
 
         var mediatorFramework = DetectMediatorFramework(
-            readableContents.Values);
+            readableContents.Values.Select(item => item.Sanitized));
 
         var fileMetrics = new List<Dictionary<string, double>>();
 
@@ -193,16 +160,52 @@ public sealed class MediatorPatternEvaluator
         {
             token.ThrowIfCancellationRequested();
 
-            var content = entry.Value;
-            var language = ResolveLanguage(entry.Key);
+            var file = entry.Key;
+            var source = entry.Value.Source;
+            var content = entry.Value.Sanitized;
+            var language = entry.Value.Language;
 
-            var handlerCount = CountHandlerClasses(content, language);
-            var mediatorCalls = CountMediatorCalls(content);
-            var handlerContractCount =
-                MediatorHandlerContractRegex.Matches(content).Count;
+            if (_policy.MediatorApplicableLanguages.TryGetValue(
+                    language,
+                    out var enabled)
+                && !enabled)
+            {
+                continue;
+            }
 
-            var directCouplingCalls = CountDirectServiceLikeCalls(content);
-            var portReferences = PortRegex.Matches(content).Count;
+            var handlerMatches = FindHandlerMatches(content, language);
+            var mediatorMatches = FindMediatorCallMatches(content);
+            var contractMatches = MediatorHandlerContractRegex.Matches(content)
+                .Cast<Match>()
+                .ToArray();
+            var portMatches = PortRegex.Matches(content)
+                .Cast<Match>()
+                .ToArray();
+
+            var mediatorImplementation = language is "Python"
+                ? null
+                : MediatorImplementationRegex.Match(content);
+            if (mediatorImplementation is { Success: false })
+                mediatorImplementation = null;
+
+            IReadOnlyCollection<Match> directMatches = mediatorImplementation is null
+                ? Array.Empty<Match>()
+                : FindDirectServiceLikeMatches(content, mediatorImplementation);
+
+            var handlerCount = handlerMatches.Count;
+            var mediatorCalls = mediatorMatches.Count;
+            var handlerContractCount = contractMatches.Length;
+            var directCouplingCalls = directMatches.Count;
+            var portReferences = portMatches.Length;
+
+            var hasMediatorImplementation = mediatorImplementation is not null;
+            var hasMediatorSignal = handlerCount > 0
+                || mediatorCalls > 0
+                || handlerContractCount > 0
+                || hasMediatorImplementation;
+
+            if (!hasMediatorSignal)
+                continue;
 
             var handlerDensity = handlerCount /
                 (double)Math.Max(1, _policy.MaxHandlersPerFile);
@@ -215,9 +218,12 @@ public sealed class MediatorPatternEvaluator
             var hasMediatorCalls = mediatorCalls > 0;
             var hasHandlerContract = handlerContractCount > 0;
 
-            // This is a lexical indicator, not proof that dependencies
-            // violate an architectural boundary.
-            var couplingRisk = directCouplingCalls > 0 ? 1.0 : 0.0;
+            // Coupling risk is only measured on an actual mediator implementation.
+            // A handler calling its injected repository/service is normal application
+            // behavior and is not evidence of a centralized mediator.
+            var couplingRisk = hasMediatorImplementation && directCouplingCalls > 0
+                ? 1.0
+                : 0.0;
             var portAlignment = portReferences > 0 ? 1.0 : 0.0;
 
             var compliance = ComputeCompliance(
@@ -235,21 +241,33 @@ public sealed class MediatorPatternEvaluator
                 ["UsesMediator"] = hasMediatorCalls ? 1 : 0,
                 ["HandlerDensity"] = handlerDensity,
                 ["MediatorUsageRatio"] = mediatorUsageRatio,
-                ["DirectServiceLikeCallCount"] = directCouplingCalls,
-                ["CouplingRisk"] = couplingRisk,
                 ["PortReferenceCount"] = portReferences,
                 ["HexagonalPortAlignment"] = portAlignment,
                 ["MediatorComplianceScore"] = compliance
             };
 
+            if (hasMediatorImplementation)
+            {
+                metrics["DirectServiceLikeCallCount"] = directCouplingCalls;
+                metrics["CouplingRisk"] = couplingRisk;
+            }
+
             fileMetrics.Add(metrics);
 
             results.Add(CreateFileResult(
                 projectPath,
-                entry.Key,
+                file,
                 language,
                 mediatorFramework,
-                metrics));
+                metrics,
+                source,
+                content,
+                mediatorImplementation,
+                handlerMatches,
+                mediatorMatches,
+                contractMatches,
+                directMatches,
+                portMatches));
         }
 
         results.Add(CreateSummary(
@@ -263,7 +281,7 @@ public sealed class MediatorPatternEvaluator
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Info,
-            $"Mediator evaluation completed: {fileMetrics.Count} files analyzed, " +
+            $"Mediator evaluation completed: {fileMetrics.Count} mediator-related files analyzed, " +
             $"{unreadableFiles} files unreadable.");
 
         return results;
@@ -274,27 +292,271 @@ public sealed class MediatorPatternEvaluator
         string file,
         string language,
         string mediatorFramework,
-        Dictionary<string, double> metrics)
+        Dictionary<string, double> metrics,
+        string source,
+        string sanitized,
+        Match? mediatorImplementation,
+        IReadOnlyCollection<Match> handlerMatches,
+        IReadOnlyCollection<Match> mediatorMatches,
+        IReadOnlyCollection<Match> contractMatches,
+        IReadOnlyCollection<Match> directMatches,
+        IReadOnlyCollection<Match> portMatches)
     {
-        var result = new ArchitectureEvaluatorResult(Name, file)
-        {
-            Target = projectPath,
-            Category = ArchitectureRuleCategory.DesignPatterns.ToString(),
-            Layer = ResolveLayer(file),
-            Metrics = metrics
-        };
+        var framework = ResolveFrameworkForFile(file, projectPath, Context!);
+        var result = CreateResult(file, ArchitectureRuleCategory.DesignPatterns.ToString());
+
+        result.Target = mediatorImplementation is null
+            ? Path.GetFileName(file)
+            : mediatorImplementation.Groups["name"].Value;
+        result.Language = language;
+        result.Framework = framework;
+        result.Layer = ResolveLayer(file);
+        result.DetectionConfidence = Context?.Confidence ?? 0;
+        result.Metrics = metrics;
 
         result.Metadata[FilePathMetadataKey] = file;
         result.Metadata[EvaluationScopeMetadataKey] = FileScope;
-        result.Metadata["Framework"] = mediatorFramework;
+        result.Metadata["Framework"] = framework ?? "Unknown";
+        result.Metadata["MediatorFramework"] = mediatorFramework;
         result.Metadata["Language"] = language;
-        result.Metadata["Layer"] = ResolveLayer(file);
+        result.Metadata["Layer"] = result.Layer ?? "Unknown";
         result.Metadata["ArchitectureStyle"] =
             Context?.ArchitectureStyle ?? "Unknown";
         result.Metadata["SemanticAnalysisPerformed"] = "false";
         result.Metadata["StructuralAnalysisHeuristic"] = "true";
+        result.Metadata["AnalysisComplete"] = "true";
+
+        var evidence = new List<string>();
+        AddMetricEvidence(
+            result,
+            evidence,
+            "HandlerCount",
+            handlerMatches,
+            source,
+            sanitized,
+            "No handler class declarations were detected in this file.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "MediatorCallCount",
+            mediatorMatches,
+            source,
+            sanitized,
+            "No configured mediator method calls were detected in this file.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "MediatorHandlerContractCount",
+            contractMatches,
+            source,
+            sanitized,
+            "No mediator handler contracts were detected in this file.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "PortReferenceCount",
+            portMatches,
+            source,
+            sanitized,
+            "No port-like interface references were detected in this file.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "MediatorUsageRatio",
+            mediatorMatches,
+            source,
+            sanitized,
+            "No configured mediator method calls were detected in this file.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "HexagonalPortAlignment",
+            portMatches,
+            source,
+            sanitized,
+            "No port-like interface references were detected in this file.");
+
+        if (mediatorImplementation is not null)
+        {
+            var className = mediatorImplementation.Groups["name"].Value;
+            var couplingDescription = directMatches.Count == 0
+                ? $"Mediator implementation '{className}' has no detected service-like member calls."
+                : $"Mediator implementation '{className}' contains {directMatches.Count} service-like member call(s).";
+
+            IReadOnlyCollection<Match> couplingMatches = directMatches.Count > 0
+                ? directMatches
+                : new[] { mediatorImplementation };
+
+            AddMetricEvidence(
+                result,
+                evidence,
+                "CouplingRisk",
+                couplingMatches,
+                source,
+                sanitized,
+                couplingDescription);
+
+            result.Metadata["EvidenceSummary.CouplingRisk"] = couplingDescription;
+            result.Metadata["Evidence.CouplingRisk"] =
+                $"{couplingDescription}{Environment.NewLine}" +
+                result.Metadata["Evidence.CouplingRisk"];
+        }
+
+        var complianceMatches = new List<Match>();
+        if (mediatorImplementation is not null)
+            complianceMatches.Add(mediatorImplementation);
+        complianceMatches.AddRange(handlerMatches);
+        complianceMatches.AddRange(mediatorMatches);
+        complianceMatches.AddRange(contractMatches);
+        complianceMatches.AddRange(directMatches);
+        complianceMatches.AddRange(portMatches);
+
+        var orderedComplianceMatches = complianceMatches
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToArray();
+
+        AddMetricEvidence(
+            result,
+            evidence,
+            "MediatorComplianceScore",
+            orderedComplianceMatches,
+            source,
+            sanitized,
+            "No mediator-related declarations or calls were detected in this file.");
+
+        result.Evidence = string.Join(Environment.NewLine, evidence);
+        result.LineNumber = mediatorImplementation is not null
+            ? GetLineNumber(sanitized, mediatorImplementation.Index)
+            : orderedComplianceMatches.Length > 0
+                ? GetLineNumber(sanitized, orderedComplianceMatches[0].Index)
+                : null;
 
         return result;
+    }
+
+    private static void AddMetricEvidence(
+        ArchitectureEvaluatorResult result,
+        ICollection<string> aggregateEvidence,
+        string metricKey,
+        IReadOnlyCollection<Match> matches,
+        string source,
+        string sanitized,
+        string emptyDescription)
+    {
+        var evidence = matches.Count == 0
+            ? emptyDescription
+            : string.Join(
+                Environment.NewLine,
+                matches.Take(50).Select(match =>
+                {
+                    var line = GetLineNumber(sanitized, match.Index);
+                    return $"Line {line}: {GetSourceLine(source, line)}";
+                }));
+
+        result.Metadata[$"Evidence.{metricKey}"] = evidence;
+        result.Metadata[$"EvidenceScope.{metricKey}"] = "FileMetrics";
+        aggregateEvidence.Add($"{metricKey}: {evidence}");
+
+        var first = matches.FirstOrDefault();
+        if (first is null)
+            return;
+
+        var lineNumber = GetLineNumber(sanitized, first.Index);
+        result.Metadata[$"EvidenceLine.{metricKey}"] =
+            lineNumber.ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
+        result.Metadata[$"CodeSnippet.{metricKey}"] =
+            GetSourceLine(source, lineNumber);
+    }
+
+    private static IReadOnlyCollection<Match> FindHandlerMatches(
+        string content,
+        string language)
+    {
+        var regex = language == "Python"
+            ? PythonHandlerClassRegex
+            : HandlerClassRegex;
+
+        return regex.Matches(content).Cast<Match>().ToArray();
+    }
+
+    private IReadOnlyCollection<Match> FindMediatorCallMatches(string content)
+    {
+        return _policy.MediatorMethodHints
+            .Where(hint => !string.IsNullOrWhiteSpace(hint))
+            .SelectMany(hint =>
+            {
+                var pattern = $@"\b{Regex.Escape(hint)}\s*\(";
+                return Regex.Matches(
+                        content,
+                        pattern,
+                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                    .Cast<Match>();
+            })
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToArray();
+    }
+
+    private static IReadOnlyCollection<Match> FindDirectServiceLikeMatches(
+        string content,
+        Match mediatorImplementation)
+    {
+        var openingBrace = content.IndexOf('{', mediatorImplementation.Index);
+        if (openingBrace < 0)
+            return [];
+
+        var closingBrace = FindMatchingBrace(content, openingBrace);
+        if (closingBrace < 0)
+            return [];
+
+        return ServiceLikeMemberCallRegex.Matches(content)
+            .Cast<Match>()
+            .Where(match =>
+                match.Index > openingBrace
+                && match.Index < closingBrace
+                && IsServiceLikeName(match.Groups["receiver"].Value.TrimStart('_')))
+            .ToArray();
+    }
+
+    private static int FindMatchingBrace(string content, int openingBrace)
+    {
+        var depth = 0;
+        for (var index = openingBrace; index < content.Length; index++)
+        {
+            if (content[index] == '{')
+                depth++;
+            else if (content[index] == '}' && --depth == 0)
+                return index;
+        }
+
+        return -1;
+    }
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position && index < content.Length; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        return lineNumber > 0 && lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
     }
 
     private ArchitectureEvaluatorResult CreateSummary(
@@ -328,6 +590,8 @@ public sealed class MediatorPatternEvaluator
                 ["DiscoveredFiles"] = discoveredFiles,
                 ["AnalyzedFiles"] = analyzedFiles,
                 ["UnreadableFiles"] = unreadableFiles,
+                ["MediatorImplementationCount"] = fileMetrics.Count(metrics =>
+                    metrics.ContainsKey("CouplingRisk")),
                 ["AverageComplianceScore"] = averageCompliance,
                 ["FilesWithDirectCouplingSignals"] = filesWithCouplingSignals,
                 ["DirectCouplingSignalRate"] = couplingSignalRate,
@@ -341,66 +605,22 @@ public sealed class MediatorPatternEvaluator
         summary.Metadata["MediatorFramework"] = mediatorFramework;
         summary.Metadata["SemanticAnalysisPerformed"] = "false";
         summary.Metadata["StructuralAnalysisHeuristic"] = "true";
+        var analysisComplete = unreadableFiles == 0 && analyzedFiles == discoveredFiles;
+        summary.Metadata["AnalysisComplete"] = analysisComplete.ToString();
+        summary.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "CompletedWithDiagnostics";
 
         return summary;
     }
 
-    private int CountMediatorCalls(string content)
-    {
-        var count = 0;
-
-        foreach (var hint in _policy.MediatorMethodHints)
-        {
-            if (string.IsNullOrWhiteSpace(hint))
-                continue;
-
-            var pattern = $@"\b{Regex.Escape(hint)}\s*\(";
-
-            count += Regex.Matches(
-                content,
-                pattern,
-                RegexOptions.IgnoreCase |
-                RegexOptions.CultureInvariant).Count;
-        }
-
-        return count;
-    }
-
-    private static int CountHandlerClasses(
-        string content,
-        string language)
-    {
-        var regex = language == "Python"
-            ? PythonHandlerClassRegex
-            : HandlerClassRegex;
-
-        return regex.Matches(content).Count;
-    }
-
-    private static int CountDirectServiceLikeCalls(string content)
-    {
-        var count = 0;
-
-        foreach (Match match in ServiceLikeMemberCallRegex.Matches(content))
-        {
-            var receiver = match.Groups["receiver"].Value.TrimStart('_');
-
-            if (IsServiceLikeName(receiver))
-                count++;
-        }
-
-        return count;
-    }
-
-    private static bool IsServiceLikeName(string name)
-    {
-        return name.EndsWith("Service", StringComparison.OrdinalIgnoreCase)
-            || name.EndsWith("Repository", StringComparison.OrdinalIgnoreCase)
-            || name.EndsWith("Client", StringComparison.OrdinalIgnoreCase)
-            || name.EndsWith("Handler", StringComparison.OrdinalIgnoreCase)
-            || name.EndsWith("Gateway", StringComparison.OrdinalIgnoreCase)
-            || name.EndsWith("Provider", StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool IsServiceLikeName(string name) =>
+        name.EndsWith("Service", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith("Repository", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith("Client", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith("Handler", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith("Gateway", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith("Provider", StringComparison.OrdinalIgnoreCase);
 
     private static string DetectMediatorFramework(
         IEnumerable<string> contents)
@@ -447,45 +667,6 @@ public sealed class MediatorPatternEvaluator
             ".py" => "Python",
             _ => "Unknown"
         };
-    }
-
-    private static string SanitizeSource(
-        string source,
-        string language)
-    {
-        var sanitized = StringLiteralRegex.Replace(
-            source,
-            match => PreserveLayout(match.Value));
-
-        if (language == "Python")
-        {
-            // Python triple-quoted strings/docstrings need a real lexer
-            // for complete handling; this only removes ordinary literals.
-            return PythonCommentRegex.Replace(
-                sanitized,
-                match => PreserveLayout(match.Value));
-        }
-
-        sanitized = BlockCommentRegex.Replace(
-            sanitized,
-            match => PreserveLayout(match.Value));
-
-        return LineCommentRegex.Replace(
-            sanitized,
-            match => PreserveLayout(match.Value));
-    }
-
-    private static string PreserveLayout(string value)
-    {
-        var chars = value.ToCharArray();
-
-        for (var i = 0; i < chars.Length; i++)
-        {
-            if (chars[i] is not '\r' and not '\n')
-                chars[i] = ' ';
-        }
-
-        return new string(chars);
     }
 
     private static double ComputeCompliance(

@@ -1,6 +1,7 @@
 ﻿
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using Aegis.Architecture.Analysis;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Infrastructure.Data;
@@ -12,6 +13,7 @@ using Aegis.Shared.Contracts;
 using Franz.Common.Business.Repositories;
 using Franz.Common.EntityFramework.Repositories;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Aegis.Sdk;
 
@@ -30,6 +32,7 @@ public sealed class AegisArchitectureAnalysisRunner
     private readonly IRuleResultRepository _customRuleResultRepo;
     private readonly IReportRepository _customReportRepo;
     private readonly IReadOnlyDictionary<string, IReportExporter> _exporters;
+    private readonly AegisArchitecturePolicy _configuredPolicy;
     private readonly ILogger<AegisArchitectureAnalysisRunner> _logger;
 
     public AegisArchitectureAnalysisRunner(
@@ -39,6 +42,7 @@ public sealed class AegisArchitectureAnalysisRunner
         IRuleResultRepository customRuleResultRepo,
         IReportRepository customReportRepo,
         IEnumerable<IReportExporter> exporters,
+        IOptions<AegisArchitecturePolicy> policyOptions,
         ILogger<AegisArchitectureAnalysisRunner> logger)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -47,6 +51,7 @@ public sealed class AegisArchitectureAnalysisRunner
         ArgumentNullException.ThrowIfNull(customRuleResultRepo);
         ArgumentNullException.ThrowIfNull(customReportRepo);
         ArgumentNullException.ThrowIfNull(exporters);
+        ArgumentNullException.ThrowIfNull(policyOptions);
         ArgumentNullException.ThrowIfNull(logger);
 
         _engine = engine;
@@ -54,6 +59,7 @@ public sealed class AegisArchitectureAnalysisRunner
         _reportRepo = reportRepo;
         _customRuleResultRepo = customRuleResultRepo;
         _customReportRepo = customReportRepo;
+        _configuredPolicy = policyOptions.Value;
         _logger = logger;
 
         var exporterList = exporters.ToList();
@@ -101,14 +107,46 @@ public sealed class AegisArchitectureAnalysisRunner
         {
             token.ThrowIfCancellationRequested();
 
-            Report(progress, 1, "Preparing", "Loading policy");
+            Report(progress, 1, "Preparing", "Resolving active policy snapshot");
 
-            var policy = await LoadPolicyAsync(policyPath, token)
-                .ConfigureAwait(false);
+            // The registered options instance is the same policy snapshot
+            // consumed by evaluator constructors. Using it by default keeps
+            // evaluator execution and rule interpretation on one policy.
+            var policy = string.IsNullOrWhiteSpace(policyPath)
+                ? _configuredPolicy
+                : await LoadPolicyAsync(policyPath, token).ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(policyPath)
+                && !HaveEquivalentEvaluatorSettings(_configuredPolicy, policy))
+            {
+                throw new InvalidOperationException(
+                    "The explicit policy file differs from the evaluator configuration " +
+                    "loaded from the split policy documents. Evaluators are constructed " +
+                    "from the split configuration and cannot safely consume a separate " +
+                    "policy snapshot. Update the split policy documents under config/ or " +
+                    "run without an explicit --policy override. No analysis was executed.");
+            }
 
             token.ThrowIfCancellationRequested();
 
             _engine.ApplyPolicy(policy);
+
+            var designPatterns = policy.Architecture.DesignPatterns;
+            _logger.LogInformation(
+                "Active design-pattern policy: Command={Command}, Strategy={Strategy}, " +
+                "Observer={Observer}, Singleton={Singleton}, Mediator={Mediator}.",
+                designPatterns.EnforceCommandPattern,
+                designPatterns.EnforceStrategyPattern,
+                designPatterns.EnforceObserverPattern,
+                designPatterns.EnforceSingletonPattern,
+                designPatterns.EnforceMediatorPattern);
+
+            if (!string.IsNullOrWhiteSpace(policyPath))
+            {
+                _logger.LogInformation(
+                    "Explicit policy file matches the active evaluator configuration; " +
+                    "the validated policy snapshot will be used for rule interpretation.");
+            }
 
             Report(progress, 4, "Preparing", "Policy applied");
 
@@ -118,7 +156,9 @@ public sealed class AegisArchitectureAnalysisRunner
 
             Report(progress, 5, "Detecting project", projectPath);
 
-            var context = ProjectArchitectureContextDetector.Detect(projectPath);
+            var context = ProjectArchitectureContextDetector.Detect(
+                projectPath,
+                policy.Architecture);
 
             _logger.LogInformation(
                 "Context detected: {Language}/{Framework} -> {Domain}/{Layer}",
@@ -250,13 +290,7 @@ public sealed class AegisArchitectureAnalysisRunner
         string? policyPath,
         CancellationToken token)
     {
-        if (string.IsNullOrWhiteSpace(policyPath))
-        {
-            policyPath = Path.Combine(
-                AppContext.BaseDirectory,
-                "config",
-                "aegis.policy.json");
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(policyPath);
 
         _logger.LogInformation(
             "Loading Aegis policy from {Path}",
@@ -274,44 +308,7 @@ public sealed class AegisArchitectureAnalysisRunner
 
         try
         {
-            using var document = JsonDocument.Parse(
-                json,
-                new JsonDocumentOptions
-                {
-                    CommentHandling = JsonCommentHandling.Skip,
-                    AllowTrailingCommas = true
-                });
-
-            if (document.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                throw new JsonException(
-                    "The policy document root must be a JSON object.");
-            }
-
-            var root = document.RootElement;
-
-            if (TryGetPropertyIgnoreCase(
-                    root,
-                    "AegisArchitecturePolicy",
-                    out var wrappedPolicy))
-            {
-                if (wrappedPolicy.ValueKind != JsonValueKind.Object)
-                {
-                    throw new JsonException(
-                        "'AegisArchitecturePolicy' must contain a JSON object.");
-                }
-
-                root = wrappedPolicy;
-            }
-
-            var policy = root.Deserialize<AegisArchitecturePolicy>(
-                PolicyJsonOptions);
-
-            if (policy is null)
-            {
-                throw new JsonException(
-                    "The policy document deserialized to null.");
-            }
+            var policy = DeserializePolicyDocument(json);
 
             _logger.LogInformation(
                 "Aegis policy loaded: {Name}, version {Version}, detail level {DetailLevel}",
@@ -333,6 +330,133 @@ public sealed class AegisArchitectureAnalysisRunner
                 "Analysis cannot safely continue with an assumed default policy.",
                 exception);
         }
+    }
+
+    internal static AegisArchitecturePolicy DeserializePolicyDocument(string json)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(json);
+
+        using var document = JsonDocument.Parse(
+            json,
+            new JsonDocumentOptions
+            {
+                CommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true
+            });
+
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException(
+                "The policy document root must be a JSON object.");
+        }
+
+        var root = document.RootElement;
+
+        var hasArchitectureWrapper = TryGetPropertyIgnoreCase(
+            root,
+            "AegisArchitecturePolicy",
+            out var architecturePolicy);
+
+        var hasLegacyWrapper = TryGetPropertyIgnoreCase(
+            root,
+            "AegisPolicy",
+            out var legacyPolicy);
+
+        if (hasArchitectureWrapper && hasLegacyWrapper)
+        {
+            throw new JsonException(
+                "The policy document cannot contain both 'AegisArchitecturePolicy' " +
+                "and 'AegisPolicy' wrappers.");
+        }
+
+        if (hasArchitectureWrapper || hasLegacyWrapper)
+        {
+            var wrappedPolicy = hasArchitectureWrapper
+                ? architecturePolicy
+                : legacyPolicy;
+
+            if (wrappedPolicy.ValueKind != JsonValueKind.Object)
+            {
+                var wrapperName = hasArchitectureWrapper
+                    ? "AegisArchitecturePolicy"
+                    : "AegisPolicy";
+
+                throw new JsonException(
+                    $"'{wrapperName}' must contain a JSON object.");
+            }
+
+            root = wrappedPolicy;
+        }
+
+        var policy = root.Deserialize<AegisArchitecturePolicy>(
+            PolicyJsonOptions);
+
+        return policy
+            ?? throw new JsonException(
+                "The policy document deserialized to null.");
+    }
+
+    private static bool HaveEquivalentEvaluatorSettings(
+        AegisArchitecturePolicy configuredPolicy,
+        AegisArchitecturePolicy requestedPolicy)
+    {
+        ArgumentNullException.ThrowIfNull(configuredPolicy);
+        ArgumentNullException.ThrowIfNull(requestedPolicy);
+
+        // Metadata and rule thresholds are intentionally excluded: thresholds
+        // are consumed by RuleEngineCore, while the remaining groups configure
+        // evaluator instances that were constructed from the registered options.
+        var configuredSettings = JsonSerializer.SerializeToNode(
+            new
+            {
+                configuredPolicy.Architecture,
+                configuredPolicy.Repository,
+                configuredPolicy.Security,
+                configuredPolicy.Maintainability,
+                configuredPolicy.Dependency,
+                configuredPolicy.Naming,
+                configuredPolicy.Complexity,
+                configuredPolicy.Cohesion,
+                configuredPolicy.Coupling,
+                configuredPolicy.ApiConsistency,
+                configuredPolicy.ErrorHandling,
+                configuredPolicy.Frontend,
+                configuredPolicy.DependencyGraph,
+                configuredPolicy.Node,
+                configuredPolicy.CircularDependency,
+                configuredPolicy.Configuration,
+                configuredPolicy.Logging,
+                configuredPolicy.Transaction,
+                configuredPolicy.Performance
+            },
+            PolicyJsonOptions);
+
+        var requestedSettings = JsonSerializer.SerializeToNode(
+            new
+            {
+                requestedPolicy.Architecture,
+                requestedPolicy.Repository,
+                requestedPolicy.Security,
+                requestedPolicy.Maintainability,
+                requestedPolicy.Dependency,
+                requestedPolicy.Naming,
+                requestedPolicy.Complexity,
+                requestedPolicy.Cohesion,
+                requestedPolicy.Coupling,
+                requestedPolicy.ApiConsistency,
+                requestedPolicy.ErrorHandling,
+                requestedPolicy.Frontend,
+                requestedPolicy.DependencyGraph,
+                requestedPolicy.Node,
+                requestedPolicy.CircularDependency,
+                requestedPolicy.Configuration,
+                requestedPolicy.Logging,
+                requestedPolicy.Transaction,
+                requestedPolicy.Performance
+            },
+            PolicyJsonOptions);
+
+        return JsonNode.DeepEquals(configuredSettings, requestedSettings);
     }
 
     private static bool TryGetPropertyIgnoreCase(

@@ -137,6 +137,9 @@ public sealed class RuleMetricScopeDiagnosticTests
         Assert.Equal(0, outcome.Stats.FactsWithMetricsAtWrongScope);
         Assert.Contains(
             "AEG-ARCH-R10",
+            outcome.Stats.UnsupportedRuleReasons.Keys);
+        Assert.DoesNotContain(
+            "AEG-ARCH-R10",
             outcome.Stats.RulesNotEvaluated);
     }
 
@@ -219,14 +222,12 @@ public sealed class RuleMetricScopeDiagnosticTests
             new ProjectArchitectureContext(),
             [status]);
 
-        Assert.Contains("AEG-DES-STRAT001", outcome.Stats.RulesNotEvaluated);
+        Assert.Contains("AEG-DES-STRAT001", outcome.Stats.DisabledByPolicyReasons.Keys);
+        Assert.DoesNotContain("AEG-DES-STRAT001", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-DES-STRAT001", outcome.Stats.RulesNotEvaluated);
         Assert.Contains(
-            "disabled by policy",
-            outcome.Stats.NotEvaluatedReasons["AEG-DES-STRAT001"],
-            StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(
-            "no file-scope evaluator fact",
-            outcome.Stats.NotEvaluatedReasons["AEG-DES-STRAT001"],
+            "disabled by the active policy",
+            outcome.Stats.DisabledByPolicyReasons["AEG-DES-STRAT001"],
             StringComparison.OrdinalIgnoreCase);
     }
 
@@ -235,9 +236,11 @@ public sealed class RuleMetricScopeDiagnosticTests
     [Fact]
     public void Repository_leak_risk_cannot_satisfy_observer_unsubscribe_rule()
     {
+        var policy = new AegisArchitecturePolicy();
+        policy.Architecture.DesignPatterns.EnforceObserverPattern = true;
         var engine = new RuleEngineCore(
             NullLogger<RuleEngineCore>.Instance,
-            new AegisArchitecturePolicy());
+            policy);
 
         var repositoryFact = new ArchitectureEvaluatorResult(
             "RepositoryPatternEvaluator",
@@ -305,6 +308,212 @@ public sealed class RuleMetricScopeDiagnosticTests
             "no applicable candidates",
             outcome.Stats.NotApplicableReasons["AEG-DES-BLD001"],
             StringComparison.OrdinalIgnoreCase);
+
+        var missingScopeContext = new ProjectArchitectureContext
+        {
+            Modules =
+            [
+                new ProjectModuleContext { Name = "ProjectA", Path = "src/ProjectA" },
+                new ProjectModuleContext { Name = "ProjectB", Path = "src/ProjectB" }
+            ]
+        };
+
+        var missingScopeOutcome = engine.EvaluateDetailed(
+            missingScopeContext,
+            [summary]);
+
+        Assert.DoesNotContain("AEG-DES-BLD001", missingScopeOutcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-DES-BLD001", missingScopeOutcome.Stats.RulesNotEvaluated);
+
+        var incompleteDiscoveryContext = new ProjectArchitectureContext
+        {
+            Modules =
+            [
+                new ProjectModuleContext { Name = "ProjectA", Path = "src/ProjectA" }
+            ],
+            DiscoveryDiagnostics =
+            [
+                new AnalysisDiagnostic
+                {
+                    Code = "ProjectDiscoveryIncomplete",
+                    Component = "ProjectArchitectureContextDetector",
+                    Message = "A project scope could not be fully discovered.",
+                    AffectsCoverage = true
+                }
+            ]
+        };
+
+        var incompleteDiscoveryOutcome = engine.EvaluateDetailed(
+            incompleteDiscoveryContext,
+            [summary]);
+
+        Assert.DoesNotContain("AEG-DES-BLD001", incompleteDiscoveryOutcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-DES-BLD001", incompleteDiscoveryOutcome.Stats.RulesNotEvaluated);
+    }
+
+    [Theory]
+    [InlineData("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount", "AEG-DES-CMD001")]
+    [InlineData("ObserverPatternEvaluator", "ObserverCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-OBS001")]
+    [InlineData("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-SING001")]
+    [InlineData("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-STRAT001")]
+    [InlineData("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-STRAT002")]
+    [InlineData("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-FAC001")]
+    [InlineData("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-FAC002")]
+    [InlineData("FactoryPatternEvaluator", "FactoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-FACR001")]
+    [InlineData("FactoryPatternEvaluator", "FactoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-FACR002")]
+    [InlineData("MediatorPatternEvaluator", "MediatorImplementationCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-MEDI001")]
+    [InlineData("RepositoryPatternEvaluator", "RepositoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-REPO001")]
+    public void Candidate_rules_are_not_applicable_only_after_every_source_file_was_analyzed(
+        string producer,
+        string candidateMetric,
+        string unreadableMetric,
+        string analyzedMetric,
+        string discoveredMetric,
+        string ruleId)
+    {
+        var policy = new AegisArchitecturePolicy();
+        policy.Architecture.DesignPatterns.EnforceCommandPattern = true;
+        policy.Architecture.DesignPatterns.EnforceMediatorPattern = true;
+        policy.Architecture.DesignPatterns.EnforceObserverPattern = true;
+        policy.Architecture.DesignPatterns.EnforceStrategyPattern = true;
+
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            policy);
+
+        var completeSummary = new ArchitectureEvaluatorResult(
+            producer,
+            "PatternSummary")
+        {
+            Category = "DesignPatternSummary",
+            Metrics = new Dictionary<string, double>
+            {
+                [candidateMetric] = 0,
+                [unreadableMetric] = 0,
+                [analyzedMetric] = 12,
+                [discoveredMetric] = 12
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project",
+                ["AnalysisComplete"] = "true",
+                ["AnalysisStatus"] = "Completed"
+            }
+        };
+
+        var completeOutcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [completeSummary]);
+
+        Assert.Contains(ruleId, completeOutcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain(ruleId, completeOutcome.Stats.RulesNotEvaluated);
+
+        var incompleteSummary = new ArchitectureEvaluatorResult(
+            producer,
+            "PatternSummary")
+        {
+            Category = "DesignPatternSummary",
+            Metrics = new Dictionary<string, double>
+            {
+                [candidateMetric] = 0,
+                [unreadableMetric] = 1,
+                [analyzedMetric] = 11,
+                [discoveredMetric] = 12
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project",
+                ["AnalysisComplete"] = "false",
+                ["AnalysisStatus"] = "Incomplete"
+            }
+        };
+
+        var incompleteOutcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [incompleteSummary]);
+
+        Assert.DoesNotContain(ruleId, incompleteOutcome.Stats.RulesNotApplicable);
+
+        if (incompleteOutcome.Stats.UnsupportedRuleReasons.ContainsKey(ruleId))
+        {
+            Assert.DoesNotContain(ruleId, incompleteOutcome.Stats.RulesNotEvaluated);
+        }
+        else
+        {
+            Assert.Contains(ruleId, incompleteOutcome.Stats.RulesNotEvaluated);
+        }
+    }
+
+    [Fact]
+    public void Layer_boundary_rules_are_not_applicable_to_mixed_repositories_without_layer_roles()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "Franz.Common",
+            Nature = "MultiProject",
+            DomainType = "Mixed",
+            ArchitectureStyle = "Multi-Project / Mixed",
+            Modules =
+            [
+                new ProjectModuleContext
+                {
+                    Name = "Franz.Common.Business",
+                    Path = "sources/Franz.Common.Business",
+                    ProjectKind = "ClassLibrary"
+                },
+                new ProjectModuleContext
+                {
+                    Name = "Franz.Common.AotSmokeTest",
+                    Path = "tests/Franz.Common.AotSmokeTest",
+                    ProjectKind = "Executable"
+                }
+            ],
+            Layers =
+            [
+                new ProjectLayerContext { Name = "Unclassified:Franz.Common.Business" },
+                new ProjectLayerContext { Name = "Unclassified:Franz.Common.AotSmokeTest" },
+                new ProjectLayerContext { Name = "Tests" }
+            ]
+        };
+
+        var outcome = engine.EvaluateDetailed(context, []);
+
+        Assert.Contains("AEG-ARCH-R2", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-ARCH-R3", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-ARCH-R5", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-ARCH-R2", outcome.Stats.RulesNotEvaluated);
+    }
+
+    [Fact]
+    public void Layer_boundary_rules_remain_applicable_when_a_layer_role_is_recognized()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var context = new ProjectArchitectureContext
+        {
+            ArchitectureStyle = "Multi-Project / Mixed",
+            Modules =
+            [
+                new ProjectModuleContext { Name = "Domain", Path = "src/Domain", ProjectKind = "ClassLibrary" },
+                new ProjectModuleContext { Name = "Infrastructure", Path = "src/Infrastructure", ProjectKind = "ClassLibrary" }
+            ],
+            Layers =
+            [
+                new ProjectLayerContext { Name = "Domain" },
+                new ProjectLayerContext { Name = "Infrastructure" }
+            ]
+        };
+
+        var outcome = engine.EvaluateDetailed(context, []);
+
+        Assert.DoesNotContain("AEG-ARCH-R2", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-ARCH-R2", outcome.Stats.RulesNotEvaluated);
     }
 
 }

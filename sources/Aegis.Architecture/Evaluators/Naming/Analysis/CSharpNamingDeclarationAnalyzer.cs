@@ -132,7 +132,11 @@ public sealed class CSharpNamingDeclarationAnalyzer : INamingDeclarationAnalyzer
 
         public override void VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
-            Add(node.Identifier, NamingDeclarationKind.Method, node.Modifiers);
+            Add(
+                node.Identifier,
+                NamingDeclarationKind.Method,
+                node.Modifiers,
+                isTestMethod: IsTestMethod(node));
             base.VisitMethodDeclaration(node);
         }
 
@@ -174,11 +178,38 @@ public sealed class CSharpNamingDeclarationAnalyzer : INamingDeclarationAnalyzer
             base.VisitParameter(node);
         }
 
+        private static bool IsTestMethod(MethodDeclarationSyntax method)
+        {
+            foreach (var attribute in method.AttributeLists.SelectMany(
+                         attributeList => attributeList.Attributes))
+            {
+                var attributeName = attribute.Name.ToString();
+                var separator = attributeName.LastIndexOf('.');
+                if (separator >= 0)
+                    attributeName = attributeName[(separator + 1)..];
+
+                if (attributeName is
+                    "Fact" or "FactAttribute"
+                    or "Theory" or "TheoryAttribute"
+                    or "Test" or "TestAttribute"
+                    or "TestCase" or "TestCaseAttribute"
+                    or "TestCaseSource" or "TestCaseSourceAttribute"
+                    or "TestMethod" or "TestMethodAttribute"
+                    or "DataTestMethod" or "DataTestMethodAttribute")
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private void Add(
             SyntaxToken identifier,
             NamingDeclarationKind kind,
             SyntaxTokenList modifiers,
-            bool isConstant = false)
+            bool isConstant = false,
+            bool isTestMethod = false)
         {
             _token.ThrowIfCancellationRequested();
             if (identifier.IsMissing || string.IsNullOrWhiteSpace(identifier.ValueText))
@@ -211,7 +242,11 @@ public sealed class CSharpNamingDeclarationAnalyzer : INamingDeclarationAnalyzer
                 Id,
                 isPublic,
                 modifiers.Any(SyntaxKind.StaticKeyword),
-                isConstant));
+                isConstant,
+                isTestMethod,
+                accessibility.RawKind == 0
+                    ? "Default"
+                    : accessibility.ValueText));
         }
     }
 }

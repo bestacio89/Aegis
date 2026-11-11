@@ -1,5 +1,5 @@
 using Aegis.Architecture.Analysis.Detectors;
-﻿
+
 using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
@@ -229,90 +229,148 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         }
     }
 
+    protected static string ResolveLanguageForFile(string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        return Path.GetExtension(filePath).ToLowerInvariant() switch
+        {
+            ".cs" => "C#",
+            ".java" => "Java",
+            ".py" => "Python",
+            ".ts" or ".tsx" => "TypeScript",
+            ".js" or ".jsx" => "JavaScript",
+            _ => "Unknown"
+        };
+    }
+
+    protected string? ResolveLayerForFile(string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        return Context?.Layers.FirstOrDefault(layer =>
+            layer.Files.Contains(filePath, StringComparer.OrdinalIgnoreCase))?.Name;
+    }
+
     protected static string? ResolveFrameworkForFile(
         string filePath,
         string projectPath,
         ProjectArchitectureContext context)
     {
-        if (filePath.EndsWith(".razor.cs", StringComparison.OrdinalIgnoreCase))
-            return "Blazor";
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
+        ArgumentNullException.ThrowIfNull(context);
 
         var extension = Path.GetExtension(filePath);
-        if (extension.Equals(".razor", StringComparison.OrdinalIgnoreCase))
+        if (extension.Equals(".razor", StringComparison.OrdinalIgnoreCase)
+            || filePath.EndsWith(".razor.cs", StringComparison.OrdinalIgnoreCase))
+        {
             return "Blazor";
+        }
+
         if (extension.Equals(".cshtml", StringComparison.OrdinalIgnoreCase))
             return "Razor";
+
+        if (IsWithinUnityProject(filePath, projectPath))
+            return "Unity";
+
+        var owningModule = context.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .OrderByDescending(module => module.Path.Length)
+            .FirstOrDefault(module => IsSameOrDescendantPath(filePath, module.Path));
+
+        var moduleFrameworks = owningModule?.Frameworks
+            ?? [];
+
         if (extension.Equals(".tsx", StringComparison.OrdinalIgnoreCase)
             || extension.Equals(".jsx", StringComparison.OrdinalIgnoreCase))
         {
-            return context.DetectedFrameworks.FirstOrDefault(framework =>
-                framework.Contains("React", StringComparison.OrdinalIgnoreCase));
-        }
-        if (extension.Equals(".ts", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".html", StringComparison.OrdinalIgnoreCase))
-        {
-            return context.DetectedFrameworks.FirstOrDefault(framework =>
-                framework.Contains("Angular", StringComparison.OrdinalIgnoreCase)
-                || framework.Contains("React", StringComparison.OrdinalIgnoreCase));
+            return FindFramework(moduleFrameworks, "React")
+                ?? (owningModule is null && context.Modules.Count == 0
+                    ? FindFramework(context.DetectedFrameworks, "React")
+                    : null);
         }
 
-        if (IsWithinUnityProject(filePath, projectPath))
+        if (extension.Equals(".ts", StringComparison.OrdinalIgnoreCase))
         {
-            // A repository can contain Unity under a nested directory such as
-            // sources/client. Detect the nearest Unity root, not only Assets
-            // directly beneath the repository-level scan root.
-            return "Unity";
+            var moduleClientFrameworks = moduleFrameworks
+                .Where(framework => framework is "Angular" or "React")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (moduleClientFrameworks.Length == 1)
+                return moduleClientFrameworks[0];
+
+            if (moduleClientFrameworks.Length > 1)
+                return null;
+
+            if (owningModule is not null || context.Modules.Count > 0)
+                return null;
+
+            var repositoryClientFrameworks = context.DetectedFrameworks
+                .Where(framework =>
+                    string.Equals(framework, "Angular", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(framework, "React", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            return repositoryClientFrameworks.Length == 1
+                ? repositoryClientFrameworks[0]
+                : null;
         }
 
-        // Use the closest project file when possible; this is more precise than
-        // inheriting the framework selected for the repository root.
-        try
+        if (extension.Equals(".html", StringComparison.OrdinalIgnoreCase))
         {
-            var directory = Directory.Exists(filePath)
-                ? filePath
-                : Path.GetDirectoryName(Path.GetFullPath(filePath));
-            var boundary = Path.GetFullPath(projectPath);
-            while (!string.IsNullOrWhiteSpace(directory))
+            return FindFramework(moduleFrameworks, "Angular")
+                ?? (owningModule is null && context.Modules.Count == 0
+                    ? FindFramework(context.DetectedFrameworks, "Angular")
+                    : null);
+        }
+
+        if (owningModule is not null)
+        {
+            if (!string.Equals(
+                    owningModule.Framework,
+                    "Multi-Framework",
+                    StringComparison.OrdinalIgnoreCase))
             {
-                var projectFile = Directory.EnumerateFiles(directory, "*.csproj", SearchOption.TopDirectoryOnly)
-                    .FirstOrDefault();
-                if (projectFile is not null)
-                {
-                    var document = System.Xml.Linq.XDocument.Load(projectFile);
-                    var sdk = document.Root?.Attribute("Sdk")?.Value ?? string.Empty;
-                    if (sdk.Contains("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase))
-                        return "ASP.NET Core";
-
-                    var packageNames = document.Descendants("PackageReference")
-                        .Select(reference => reference.Attribute("Include")?.Value
-                            ?? reference.Attribute("Update")?.Value ?? string.Empty)
-                        .ToArray();
-                    if (packageNames.Any(name => name.Contains("Blazor", StringComparison.OrdinalIgnoreCase)))
-                        return "Blazor";
-                    return ".NET";
-                }
-
-                if (string.Equals(directory.TrimEnd(Path.DirectorySeparatorChar), boundary.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
-                    break;
-
-                var parent = Directory.GetParent(directory)?.FullName;
-                if (parent is null || !parent.StartsWith(boundary, StringComparison.OrdinalIgnoreCase))
-                    break;
-                directory = parent;
+                return owningModule.Framework;
             }
-        }
-        catch (Exception exception) when (exception is IOException
-            or UnauthorizedAccessException
-            or System.Xml.XmlException
-            or ArgumentException
-            or NotSupportedException)
-        {
-            // Framework detection is best-effort; a read failure must not
-            // crash an otherwise valid evaluator run.
+
+            // Multi-Framework is an aggregate label, not a concrete technology.
+            // For C# files, resolve the owning project's server/runtime framework;
+            // Razor/Blazor and frontend files were resolved by extension above.
+            if (extension.Equals(".cs", StringComparison.OrdinalIgnoreCase))
+            {
+                return moduleFrameworks.FirstOrDefault(framework =>
+                    framework is "ASP.NET Core"
+                        or ".NET (EF Core)"
+                        or ".NET"
+                        or "WPF"
+                        or "Windows Forms");
+            }
+
+            return moduleFrameworks.Count == 1
+                ? moduleFrameworks[0]
+                : null;
         }
 
-        return context.Framework;
+        // The repository context is only a fallback when no project owns the
+        // file. A mixed repository must not assign its aggregate framework to
+        // every otherwise-unclassified source file.
+        return context.Modules.Count == 0
+            ? context.Framework
+            : null;
     }
+
+    private static string? FindFramework(
+        IEnumerable<string> frameworks,
+        string expected) =>
+        frameworks.FirstOrDefault(framework =>
+            string.Equals(
+                framework,
+                expected,
+                StringComparison.OrdinalIgnoreCase));
 
     private static bool IsWithinUnityProject(string filePath, string projectPath)
     {
@@ -381,25 +439,46 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
     /// </summary>
     protected IReadOnlyList<string> ResolveSourceFiles(
         string projectPath,
+        params string[] extensions) =>
+        ResolveSourceFiles(
+            projectPath,
+            includeTestProjects: false,
+            extensions: extensions);
+
+    protected IReadOnlyList<string> ResolveSourceFiles(
+        string projectPath,
+        bool includeTestProjects,
         params string[] extensions)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
         ArgumentNullException.ThrowIfNull(extensions);
 
         if (extensions.Length == 0)
-        {
             return [];
-        }
 
         return EnumerateGovernedFiles(projectPath)
             .Where(file => extensions.Any(extension =>
                 !string.IsNullOrWhiteSpace(extension)
-                && file.EndsWith(
-                    extension,
-                    StringComparison.OrdinalIgnoreCase)))
-            .Where(file => IsApplicationCode(file, projectPath))
+                && file.EndsWith(extension, StringComparison.OrdinalIgnoreCase)))
+            .Where(file =>
+                IsApplicationCode(file, projectPath)
+                || IsWithinDetectedModule(file))
+            .Where(file => includeTestProjects || !IsTestProjectFile(file))
             .ToList();
     }
+
+    protected bool IsTestProjectFile(string file) =>
+        Context?.Modules.Any(module =>
+            (module.IsTestProject
+                || string.Equals(
+                    module.ProjectKind,
+                    "Test",
+                    StringComparison.OrdinalIgnoreCase))
+            && IsSameOrDescendantPath(file, module.Path)) == true;
+
+    private bool IsWithinDetectedModule(string file) =>
+        Context?.Modules.Any(module =>
+            IsSameOrDescendantPath(file, module.Path)) == true;
 
     private static List<string> EnumerateGovernedFiles(string rootPath)
     {
@@ -657,11 +736,12 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(file);
 
-        return new ArchitectureEvaluatorResult(
+        var result = new ArchitectureEvaluatorResult(
             Name,
             Path.GetFileName(file))
         {
             Category = category,
+            File = file,
 
             Metrics = new Dictionary<string, double>(),
 
@@ -671,6 +751,43 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
                 [EvaluationScopeMetadataKey] = FileScope
             }
         };
+
+        var owningModule = Context?.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .OrderByDescending(module => module.Path.Length)
+            .FirstOrDefault(module => IsSameOrDescendantPath(file, module.Path));
+
+        if (owningModule is not null)
+        {
+            result.ProjectName = owningModule.Name;
+            result.Metadata["ProjectName"] = owningModule.Name;
+            result.Metadata["ProjectKind"] = owningModule.ProjectKind;
+            result.Metadata["IsTestProject"] = owningModule.IsTestProject.ToString();
+            result.Metadata["ProjectFile"] = owningModule.ProjectFile ?? string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(owningModule.Framework))
+                result.Metadata["Framework"] = owningModule.Framework;
+        }
+
+        return result;
+    }
+
+    protected static bool IsSameOrDescendantPath(
+        string candidate,
+        string parent)
+    {
+        var normalizedCandidate = Path.GetFullPath(candidate)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedParent = Path.GetFullPath(parent)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return string.Equals(
+                normalizedCandidate,
+                normalizedParent,
+                StringComparison.OrdinalIgnoreCase)
+            || normalizedCandidate.StartsWith(
+                normalizedParent + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

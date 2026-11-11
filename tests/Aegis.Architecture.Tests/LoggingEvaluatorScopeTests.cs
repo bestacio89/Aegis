@@ -52,7 +52,7 @@ public sealed class LoggingEvaluatorScopeTests
             Assert.Equal(1, summary.Metrics["SourceFilesScanned"]);
             Assert.Equal(0, summary.Metrics["DiagnosticCount"]);
             Assert.Equal("Completed", summary.Metadata["AnalysisStatus"]);
-            Assert.Equal("True", summary.Metadata["AnalysisComplete"]);
+            Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
         }
         finally
         {

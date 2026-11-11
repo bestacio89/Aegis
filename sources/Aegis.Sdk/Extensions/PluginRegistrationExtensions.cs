@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using Aegis.Security.Bootstrap;
 using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
 using Aegis.Shared.Architecture.Models.Policies.BackEnd;
@@ -29,6 +30,7 @@ public static class PluginRegistrationExtensions
         "architecture.policy.json",
         "repository.policy.json",
         "security.policy.json",
+        "security.runtime.json",
         "maintainability.policy.json",
         "dependency.policy.json",
         "naming.policy.json",
@@ -85,15 +87,33 @@ public static class PluginRegistrationExtensions
         IServiceCollection services,
         IConfiguration configuration)
     {
-        // Aggregate policy consumed by the architecture evaluators.
+        // Split policy documents are composed at their root sections. The
+        // architecture document itself is the ArchitecturePolicy object, so
+        // bind it from the root and then apply any legacy nested Architecture
+        // section as an explicit override.
         services.Configure<AegisArchitecturePolicy>(configuration);
         services.Configure<AegisArchitecturePolicy>(
             configuration.GetSection("AegisPolicyMetadata"));
 
-        // Independently injectable policy models.
-        services.Configure<ArchitecturePolicy>(configuration.GetSection("Architecture"));
+        services.Configure<ArchitecturePolicy>(configuration);
+        services.Configure<ArchitecturePolicy>(
+            configuration.GetSection("Architecture"));
+
+        services.AddOptions<AegisArchitecturePolicy>()
+            .Configure(policy =>
+            {
+                // Bind from the composed configuration rather than resolving
+                // ArchitecturePolicy as a concrete DI service. The latter is
+                // only registered as IOptions<ArchitecturePolicy> and would
+                // make options construction fail at runtime.
+                var architecture = new ArchitecturePolicy();
+                configuration.Bind(architecture);
+                configuration.GetSection("Architecture").Bind(architecture);
+                policy.Architecture = architecture;
+            });
         services.Configure<RepositoryPolicy>(configuration.GetSection("Repository"));
         services.Configure<SecurityPolicy>(configuration.GetSection("Security"));
+        services.Configure<AegisSecurityOptions>(configuration.GetSection("AegisSecurity"));
         services.Configure<MaintainabilityPolicy>(configuration.GetSection("Maintainability"));
         services.Configure<DependencyPolicy>(configuration.GetSection("Dependency"));
         services.Configure<NamingPolicy>(configuration.GetSection("Naming"));
@@ -110,6 +130,7 @@ public static class PluginRegistrationExtensions
         services.Configure<LoggingPolicy>(configuration.GetSection("Logging"));
         services.Configure<TransactionPolicy>(configuration.GetSection("Transaction"));
         services.Configure<PerformancePolicy>(configuration.GetSection("Performance"));
+        services.Configure<DesignPatternPolicy>(configuration.GetSection("DesignPatterns"));
         services.Configure<DesignPatternPolicy>(configuration.GetSection("Architecture:DesignPatterns"));
     }
 
@@ -124,7 +145,10 @@ public static class PluginRegistrationExtensions
 
             foreach (var fileName in PolicyFileNames)
             {
-                builder.AddJsonFile(fileName, optional: false, reloadOnChange: true);
+                // Individual policy documents are optional. A missing metadata
+                // or domain-specific document must not disable every policy
+                // file in the directory; typed policy defaults remain active.
+                builder.AddJsonFile(fileName, optional: true, reloadOnChange: true);
             }
         }
         else if (overrides is null)
@@ -157,8 +181,8 @@ public static class PluginRegistrationExtensions
                 (File.Exists(Path.Combine(current.FullName, "Aegis.Wpf.csproj")) ||
                  File.Exists(Path.Combine(current.FullName, "Aegis.Cli.csproj")));
 
-            if (hasProjectFile && PolicyFileNames.All(
-                    fileName => File.Exists(Path.Combine(configDirectory, fileName))))
+            if (hasProjectFile
+                && File.Exists(Path.Combine(configDirectory, "architecture.policy.json")))
             {
                 return configDirectory;
             }
@@ -167,8 +191,7 @@ public static class PluginRegistrationExtensions
         }
 
         var outputConfigDirectory = Path.Combine(AppContext.BaseDirectory, "config");
-        if (PolicyFileNames.All(fileName =>
-                File.Exists(Path.Combine(outputConfigDirectory, fileName))))
+        if (File.Exists(Path.Combine(outputConfigDirectory, "architecture.policy.json")))
         {
             return outputConfigDirectory;
         }

@@ -38,7 +38,8 @@ public sealed class FrontendRuleApplicabilityRegressionTests
             {
                 Language = "C#",
                 Framework = "Blazor",
-                DetectedFrameworks = ["Blazor"]
+                DetectedFrameworks = ["Blazor"],
+                FrontendFrameworkDiscoveryComplete = true
             },
             [fact]);
 
@@ -56,7 +57,7 @@ public sealed class FrontendRuleApplicabilityRegressionTests
 
         Assert.Contains("AEG-FRONT-R11", outcome.Stats.RulesNotApplicable);
         Assert.Contains(
-            "dedicated complexity rule",
+            "no React or Razor",
             outcome.Stats.NotApplicableReasons["AEG-FRONT-R11"],
             StringComparison.OrdinalIgnoreCase);
     }
@@ -85,7 +86,15 @@ public sealed class FrontendRuleApplicabilityRegressionTests
                 ["EvaluationScope"] = "File",
                 ["FilePath"] = "Views/Orders/Index.cshtml",
                 ["Framework"] = "Razor",
-                ["Language"] = "C#"
+                ["Language"] = "C#",
+                ["Evidence.PresentationSeparationScore"] =
+                    "Razor view delegates presentation state to its view model.",
+                ["Evidence.ViewModelScore"] =
+                    "The view consumes a dedicated view model.",
+                ["Evidence.DataIsolationScore"] =
+                    "The view does not access persistence services directly.",
+                ["EvidenceLine.PresentationSeparationScore"] = "12",
+                ["CodeSnippet.PresentationSeparationScore"] = "@model OrderViewModel"
             }
         };
 
@@ -126,6 +135,7 @@ public sealed class FrontendRuleApplicabilityRegressionTests
                 Language = "C#",
                 Framework = "ASP.NET Core",
                 DetectedFrameworks = ["ASP.NET Core", "Blazor", ".NET"],
+                FrontendFrameworkDiscoveryComplete = true,
                 Modules =
                 [
                     new ProjectModuleContext { Name = "Api", Path = "src/Api" },
@@ -164,7 +174,11 @@ public sealed class FrontendRuleApplicabilityRegressionTests
                 ["EvaluationScope"] = "File",
                 ["FilePath"] = "src/Orders.tsx",
                 ["Framework"] = "React",
-                ["Language"] = "TypeScript"
+                ["Language"] = "TypeScript",
+                ["Evidence.ComplexityScore"] =
+                    "Orders.tsx contains a component with excessive conditional complexity.",
+                ["EvidenceLine.ComplexityScore"] = "8",
+                ["CodeSnippet.ComplexityScore"] = "if (loading) { ... }"
             }
         };
 
@@ -242,6 +256,49 @@ public sealed class FrontendRuleApplicabilityRegressionTests
 
         Assert.Single(blazorEvaluations);
         Assert.Equal("Components/Orders.razor", blazorEvaluations[0].Target);
+    }
+
+    [Fact]
+    public void Frontend_rules_are_not_applicable_only_after_complete_framework_discovery()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var completeContext = new ProjectArchitectureContext
+        {
+            ProjectName = "BackendLibrary",
+            Language = "C#",
+            Framework = ".NET",
+            DetectedFrameworks = [".NET"],
+            FrontendFrameworkDiscoveryComplete = true,
+            FileCount = 120
+        };
+
+        var completeOutcome = engine.EvaluateDetailed(
+            completeContext,
+            []);
+
+        Assert.Contains("AEG-FRONT-R1", completeOutcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-FRONT-R11", completeOutcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-FRONT-R1", completeOutcome.Stats.RulesNotEvaluated);
+
+        var incompleteContext = new ProjectArchitectureContext
+        {
+            ProjectName = "UnknownFrontend",
+            Language = "C#",
+            Framework = ".NET",
+            DetectedFrameworks = [".NET"],
+            FrontendFrameworkDiscoveryComplete = false,
+            FileCount = 120
+        };
+
+        var incompleteOutcome = engine.EvaluateDetailed(
+            incompleteContext,
+            []);
+
+        Assert.DoesNotContain("AEG-FRONT-R1", incompleteOutcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-FRONT-R1", incompleteOutcome.Stats.RulesNotEvaluated);
     }
 
 }

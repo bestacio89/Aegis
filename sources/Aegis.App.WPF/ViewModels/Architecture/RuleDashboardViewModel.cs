@@ -62,11 +62,12 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
     [ObservableProperty] private int highCount;
     [ObservableProperty] private int mediumCount;
     [ObservableProperty] private string registeredRules = "n/a";
-    [ObservableProperty] private string applicableRules = "n/a";
+    [ObservableProperty] private string inScopeRules = "n/a";
     [ObservableProperty] private string evaluatedRules = "n/a";
     [ObservableProperty] private string notEvaluatedRules = "n/a";
     [ObservableProperty] private string notApplicableRules = "n/a";
     [ObservableProperty] private string unsupportedRules = "n/a";
+    [ObservableProperty] private string disabledRules = "n/a";
     [ObservableProperty] private string rulesWithErrors = "n/a";
     [ObservableProperty] private string metricContractFailures = "n/a";
     [ObservableProperty] private string ruleAccountingDetails = "Run an assessment to populate rule accounting.";
@@ -107,11 +108,12 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
 
             var stats = report.EvaluationStats;
             RegisteredRules = stats is null ? "n/a" : stats.RulesRegistered.ToString("N0");
-            ApplicableRules = stats is null ? "n/a" : (stats.RulesApplicable + stats.RulesUnsupported).ToString("N0");
+            InScopeRules = stats is null ? "n/a" : (stats.RulesApplicable + stats.RulesUnsupported).ToString("N0");
             EvaluatedRules = stats is null ? "n/a" : stats.RulesEvaluated.ToString("N0");
             NotEvaluatedRules = stats is null ? "n/a" : stats.RulesNotEvaluated.Count.ToString("N0");
             NotApplicableRules = stats is null ? "n/a" : stats.RulesNotApplicable.Count.ToString("N0");
             UnsupportedRules = stats is null ? "n/a" : stats.RulesUnsupported.ToString("N0");
+            DisabledRules = stats is null ? "n/a" : stats.RulesDisabledByPolicy.ToString("N0");
             RulesWithErrors = stats is null ? "n/a" : stats.RulesWithErrors.ToString("N0");
             MetricContractFailures = stats is null ? "n/a" : stats.MetricContractFailures.ToString("N0");
             RuleAccountingDetails = BuildRuleAccountingDetails(stats);
@@ -172,14 +174,18 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
             .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .Take(3)
             .Select(pair => $"Unsupported · {pair.Key}: {pair.Value}"));
-        var nonDuplicateNotEvaluatedReasons = stats.NotEvaluatedReasons
-            .Where(pair => !stats.UnsupportedRuleReasons.ContainsKey(pair.Key))
+        var notEvaluatedReasons = stats.NotEvaluatedReasons
             .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        details.AddRange(nonDuplicateNotEvaluatedReasons
+        details.AddRange(notEvaluatedReasons
             .Take(3)
             .Select(pair => $"Not evaluated · {pair.Key}: {pair.Value}"));
+
+        details.AddRange(stats.DisabledByPolicyReasons
+            .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(2)
+            .Select(pair => $"Disabled by policy · {pair.Key}: {pair.Value}"));
 
         details.AddRange(stats.NotApplicableReasons
             .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
@@ -188,11 +194,12 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
 
         if (details.Count == 0)
             return stats.RulesNotApplicable.Count > 0
-                ? $"No unsupported or unevaluated rules were recorded. {stats.RulesNotApplicable.Count:N0} rule(s) were classified as not applicable."
+                ? $"No unsupported, unevaluated or policy-disabled rules were recorded. {stats.RulesNotApplicable.Count:N0} rule(s) were classified as not applicable."
                 : "All recorded applicable rules have evaluation evidence.";
 
         var remaining = stats.UnsupportedRuleReasons.Count
-            + nonDuplicateNotEvaluatedReasons.Length
+            + notEvaluatedReasons.Length
+            + stats.DisabledByPolicyReasons.Count
             + stats.NotApplicableReasons.Count
             - details.Count;
         if (remaining > 0)

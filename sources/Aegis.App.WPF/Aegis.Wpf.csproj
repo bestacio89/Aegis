@@ -26,9 +26,10 @@
        ============================================= -->
   
  <ItemGroup>
-  <Content Include="config\**\*">
-    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-  </Content>
+  <Content Include="config/**/*">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
  </ItemGroup>
   
  <ItemGroup>
@@ -38,9 +39,7 @@
    <Page Remove="Resources\**" />
  </ItemGroup>
   
- <ItemGroup>
-   <Content Remove="config\apiconsistency.policy.json" />
- </ItemGroup>
+ 
   
  <ItemGroup>
    <Content Include="appsettings.json">

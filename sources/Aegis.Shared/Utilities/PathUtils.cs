@@ -38,8 +38,21 @@ namespace Aegis.Shared.Utilities
             if (string.IsNullOrEmpty(path))
                 return false;
 
-            return _excludedDirs.Any(ex =>
-                path.Contains(ex, StringComparison.OrdinalIgnoreCase));
+            var normalized = path.Replace(
+                Path.AltDirectorySeparatorChar,
+                Path.DirectorySeparatorChar);
+
+            var segments = normalized.Split(
+                Path.DirectorySeparatorChar,
+                StringSplitOptions.RemoveEmptyEntries);
+
+            // Match complete path segments, not substrings. Substring matching
+            // incorrectly excludes legitimate source files such as
+            // OrderBuilder.cs because "Builder" contains the word "build".
+            return segments.Any(segment =>
+                _excludedDirs.Contains(
+                    segment,
+                    StringComparer.OrdinalIgnoreCase));
         }
 
         /// <summary>

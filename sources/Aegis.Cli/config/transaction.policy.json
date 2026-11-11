@@ -1,0 +1,33 @@
+{
+  "Transaction": {
+    "Enabled": true,
+    "FrameworkHints": {
+      "C#": [
+        "TransactionScope",
+        "BeginTransaction",
+        "DbContextTransaction"
+      ],
+      "Java": [
+        "@Transactional",
+        "EntityManager.getTransaction()",
+        "Connection.setAutoCommit(false)"
+      ],
+      "Python": [
+        "session.begin()",
+        "with session:",
+        "with transaction.atomic()"
+      ],
+      "Node": [
+        "sequelize.transaction",
+        "mongoose.startSession"
+      ]
+    },
+    "RequireExplicitCommit": true,
+    "RequireRollbackOnFailure": true,
+    "WarnReadOnlyTransactions": true,
+    "DetectRawSqlConcatenation": true,
+    "AllowParameterizedQueriesOnly": true,
+    "MaxTransactionBlockLines": 100,
+    "DetectNestedTransactions": true
+  }
+}

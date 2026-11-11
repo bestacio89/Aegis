@@ -1,5 +1,6 @@
 ﻿
 using Aegis.Architecture.Evaluators;
+using Aegis.Architecture.Evaluators.Analysis;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -77,18 +78,6 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         @"(?<method>[A-Za-z_$][A-Za-z0-9_$]*)\s*\(",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private static readonly Regex StringAndCharacterLiteralRegex = new(
-        @"@""(?:""""|[^""])*""|""(?:\\.|[^""\\])*""|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly Regex LineCommentRegex = new(
-        @"//[^\r\n]*",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly Regex BlockCommentRegex = new(
-        @"/\*[\s\S]*?\*/",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
     public DecoratorPatternEvaluator(
         ILogger<DecoratorPatternEvaluator> logger,
         IOptions<AegisArchitecturePolicy> options)
@@ -111,12 +100,7 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
 
     public override string[] SupportedFrameworks =>
     [
-        "ASP.NET",
-        "Spring Boot",
-        "Angular",
-        "React",
-        "Vue",
-        "Node"
+        "LanguageAgnostic"
     ];
 
     protected override async Task<IEnumerable<ArchitectureEvaluatorResult>> EvaluateCoreAsync(
@@ -188,7 +172,7 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
             analyzedFiles++;
 
             var language = ResolveLanguage(file);
-            var sanitizedSource = SanitizeSource(source);
+            var sanitizedSource = SourceCodeMasker.Mask(source);
 
             foreach (Match classMatch in ClassDeclarationRegex.Matches(sanitizedSource))
             {
@@ -249,6 +233,11 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
                     file,
                     className,
                     language,
+                    source,
+                    sanitizedSource,
+                    classMatch,
+                    bodyStart,
+                    body,
                     analysis);
 
                 results.Add(result);
@@ -326,29 +315,23 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
             hasDecoratorSuffix
             && wrappedRole is not null;
 
+        // The decorator contract is the shared abstraction plus an actual
+        // wrapped-component delegation. Constructor injection is preferred,
+        // but property/setter injection is also valid and remains advisory.
         var structuralSignals = 0;
 
         if (hasAbstractionReference)
-        {
             structuralSignals++;
-        }
 
         if (hasWrappedComponent)
-        {
             structuralSignals++;
-        }
-
-        if (hasConstructorInjection)
-        {
-            structuralSignals++;
-        }
 
         var isDecoratorCandidate =
             hasDecoratorSuffix
-            || (structuralSignals >= 3 && hasWrappedComponent);
+            || (structuralSignals == 2 && hasWrappedComponent);
 
         var evidenceCount = structuralSignals;
-        var structuralScore = evidenceCount / 3.0 * 100.0;
+        var structuralScore = evidenceCount / 2.0 * 100.0;
 
         return new DecoratorAnalysis(
             IsDecoratorCandidate: isDecoratorCandidate,
@@ -454,14 +437,21 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         string file,
         string className,
         string language,
+        string source,
+        string sanitizedSource,
+        Match classMatch,
+        int bodyStart,
+        string body,
         DecoratorAnalysis analysis)
     {
-        var result = new ArchitectureEvaluatorResult(Name, className)
-        {
-            Target = projectPath,
-            
-            Category = ArchitectureRuleCategory.DesignPatterns.ToString()
-        };
+        var framework = ResolveFrameworkForFile(file, projectPath, Context!);
+        var result = CreateResult(file, ArchitectureRuleCategory.DesignPatterns.ToString());
+
+        result.Target = className;
+        result.Language = language;
+        result.Framework = framework;
+        result.Layer = ResolveLayer(file);
+        result.DetectionConfidence = Context?.Confidence ?? 0;
 
         result.Metrics["HasAbstractionReference"] =
             analysis.HasAbstractionReference ? 1 : 0;
@@ -534,9 +524,157 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         result.Metadata["NamingConventionVerified"] =
             analysis.HasDecoratorSuffix.ToString();
         result.Metadata["StructuralAnalysisHeuristic"] = "true";
-        result.Metadata["Layer"] = ResolveLayer(file);
+        result.Metadata["ConstructorInjectionIsAdvisory"] =
+            "A decorator may receive its wrapped component through constructor, property, or setter injection.";
+        result.Metadata["Layer"] = result.Layer ?? "Unclassified";
+        result.Metadata["Framework"] = framework ?? "Unknown";
+        result.Metadata["AnalysisComplete"] = bool.TrueString;
+
+        var classLine = GetLineNumber(sanitizedSource, classMatch.Index);
+        var classSnippet = GetSourceLine(source, classLine);
+        var memberMatches = MemberDeclarationRegex.Matches(body)
+            .Cast<Match>()
+            .ToArray();
+        var componentMatches = memberMatches
+            .Where(match =>
+                IsComponentRole(match.Groups["type"].Value)
+                || IsComponentRole(match.Groups["name"].Value))
+            .ToArray();
+        var componentNames = componentMatches
+            .Select(match => match.Groups["name"].Value)
+            .ToHashSet(StringComparer.Ordinal);
+        var delegationMatches = DelegationRegex.Matches(body)
+            .Cast<Match>()
+            .Where(match => componentNames.Contains(match.Groups["member"].Value))
+            .ToArray();
+        var constructorMatches = ConstructorKeywordRegex.Matches(body)
+            .Cast<Match>()
+            .Concat(CSharpConstructorRegex.Matches(body).Cast<Match>())
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .ToArray();
+
+        var abstractionEvidence =
+            $"Class declaration at line {classLine}: {classSnippet}. " +
+            $"Abstraction reference detected: {analysis.HasAbstractionReference}.";
+        var componentEvidence = BuildEvidence(
+            componentMatches,
+            source,
+            sanitizedSource,
+            bodyStart,
+            "No component-role member declarations were detected.");
+        var constructorEvidence = BuildEvidence(
+            constructorMatches,
+            source,
+            sanitizedSource,
+            bodyStart,
+            "No constructor injection signature was detected.");
+        var delegationEvidence = BuildEvidence(
+            delegationMatches,
+            source,
+            sanitizedSource,
+            bodyStart,
+            "No calls through a recognized wrapped component member were detected.");
+
+        var scoreEvidence =
+            $"Decorator '{className}' has {analysis.StructuralEvidenceCount}/3 structural signals; " +
+            $"delegation compliance score {analysis.StructuralComplianceScore:0.##}/100." +
+            $"{Environment.NewLine}{abstractionEvidence}" +
+            $"{Environment.NewLine}{componentEvidence}" +
+            $"{Environment.NewLine}{constructorEvidence}" +
+            $"{Environment.NewLine}{delegationEvidence}";
+
+        AddMetricEvidence(
+            result,
+            "DecoratorDelegationComplianceScore",
+            scoreEvidence,
+            delegationMatches.Length > 0
+                ? GetLineNumber(sanitizedSource, bodyStart + delegationMatches[0].Index)
+                : classLine,
+            delegationMatches.Length > 0
+                ? GetSourceLine(
+                    source,
+                    GetLineNumber(sanitizedSource, bodyStart + delegationMatches[0].Index))
+                : classSnippet);
+
+        AddMetricEvidence(
+            result,
+            "StructuralComplianceScore",
+            scoreEvidence,
+            classLine,
+            classSnippet);
+
+        if (analysis.HasDecoratorSuffix)
+        {
+            AddMetricEvidence(
+                result,
+                "DecoratorNamingCompliance",
+                $"Decorator name '{className}' maps to wrapped role '{analysis.WrappedRole}'.",
+                classLine,
+                classSnippet);
+        }
+
+        result.Evidence = scoreEvidence;
+        result.LineNumber = classLine;
 
         return result;
+    }
+
+    private static string BuildEvidence(
+        IReadOnlyCollection<Match> matches,
+        string source,
+        string sanitizedSource,
+        int bodyStart,
+        string emptyEvidence)
+    {
+        if (matches.Count == 0)
+            return emptyEvidence;
+
+        return string.Join(
+            Environment.NewLine,
+            matches.Take(50).Select(match =>
+            {
+                var line = GetLineNumber(sanitizedSource, bodyStart + match.Index);
+                return $"Line {line}: {GetSourceLine(source, line)}";
+            }));
+    }
+
+    private static void AddMetricEvidence(
+        ArchitectureEvaluatorResult result,
+        string metricKey,
+        string evidence,
+        int lineNumber,
+        string codeSnippet)
+    {
+        result.Metadata[$"Evidence.{metricKey}"] = evidence;
+        result.Metadata[$"EvidenceSummary.{metricKey}"] = evidence;
+        result.Metadata[$"EvidenceScope.{metricKey}"] = "FileMetrics";
+        result.Metadata[$"EvidenceLine.{metricKey}"] =
+            lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        result.Metadata[$"CodeSnippet.{metricKey}"] = codeSnippet;
+    }
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position && index < content.Length; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        return lineNumber > 0 && lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
     }
 
     private ArchitectureEvaluatorResult CreateSummary(
@@ -590,6 +728,12 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         summaryResult.Metadata["NamingConventionVerified"] =
             (namingApplicableCount > 0).ToString();
         summaryResult.Metadata["StructuralAnalysisHeuristic"] = "true";
+        var analysisComplete = unreadableFiles == 0
+            && analyzedFiles == discoveredFiles;
+        summaryResult.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
+        summaryResult.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "Incomplete";
 
         return summaryResult;
     }
@@ -625,41 +769,6 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
             ".ts" => "TypeScript",
             _ => "Unknown"
         };
-    }
-
-    private static string SanitizeSource(string source)
-    {
-        // This is a lexical heuristic, not a full parser. It masks common
-        // quoted literals and comments while preserving offsets and newlines.
-        var sanitized = StringAndCharacterLiteralRegex.Replace(
-            source,
-            match => PreserveLineBreaks(match.Value));
-
-        sanitized = BlockCommentRegex.Replace(
-            sanitized,
-            match => PreserveLineBreaks(match.Value));
-
-        sanitized = LineCommentRegex.Replace(
-            sanitized,
-            match => PreserveLineBreaks(match.Value));
-
-        return sanitized;
-    }
-
-    private static string PreserveLineBreaks(string value)
-    {
-        return string.Create(
-            value.Length,
-            value,
-            static (buffer, original) =>
-            {
-                for (var index = 0; index < original.Length; index++)
-                {
-                    buffer[index] = original[index] is '\r' or '\n'
-                        ? original[index]
-                        : ' ';
-                }
-            });
     }
 
     private static int FindMatchingBrace(

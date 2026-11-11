@@ -1,0 +1,26 @@
+{
+  "Configuration": {
+    "Enabled": true,
+    "RequiredFiles": [
+      "appsettings.json",
+      "appsettings.Development.json",
+      ".env"
+    ],
+    "EnforceEnvVariables": true,
+    "ForbiddenKeys": [
+      "password",
+      "secret",
+      "apikey",
+      "connectionstring",
+      "token"
+    ],
+    "DetectDuplicates": true,
+    "EnforceKeyCasing": true,
+    "ValidateSyntax": true,
+    "MaxFileSizeBytes": 2097152,
+    "RequirementsFiles": [
+      "requirements.txt",
+      "requirements-dev.txt"
+    ]
+  }
+}

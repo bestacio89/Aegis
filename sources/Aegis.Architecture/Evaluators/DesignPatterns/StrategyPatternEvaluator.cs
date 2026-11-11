@@ -429,6 +429,12 @@ public sealed class StrategyPatternEvaluator : BaseArchitectureEvaluator
         summary.Metadata["Evaluator"] = Name;
         summary.Metadata["PolicyEnabled"] =
             _policy.EnforceStrategyPattern.ToString();
+        var analysisComplete = unreadableFiles == 0
+            && analyzedFiles == files.Count;
+        summary.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
+        summary.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "Incomplete";
         summary.Metadata["SemanticAnalysisPerformed"] =
             bool.FalseString;
         summary.Metadata["EmptyImplementationSet"] =

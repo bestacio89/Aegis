@@ -8,6 +8,100 @@ internal static class DomainDetector
     {
         ArgumentNullException.ThrowIfNull(ctx);
 
+        var applicationModules = ctx.Modules
+            .Where(module => !module.IsTestProject
+                && !string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        var projectKinds = applicationModules
+            .Select(module => module.ProjectKind)
+            .Where(kind => !string.IsNullOrWhiteSpace(kind) && kind != "Unknown")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (projectKinds.Contains("WebApplication", StringComparer.OrdinalIgnoreCase)
+            && projectKinds.Contains("FrontendApplication", StringComparer.OrdinalIgnoreCase))
+        {
+            ctx.DomainType = "FullStack";
+            return;
+        }
+
+        // A separate Blazor web host is a frontend application even though
+        // its project uses the ASP.NET Core Web SDK. Preserve the full-stack
+        // classification when an API and a Blazor host coexist with unrelated
+        // repository modules such as a Unity client.
+        var webModules = applicationModules
+            .Where(module => string.Equals(
+                module.ProjectKind,
+                "WebApplication",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (webModules.Length > 1
+            && webModules.Any(module => module.Frameworks.Contains(
+                "Blazor",
+                StringComparer.OrdinalIgnoreCase)))
+        {
+            ctx.DomainType = "FullStack";
+            return;
+        }
+
+        // Supporting class libraries do not turn a web or frontend application
+        // into a heterogeneous product. They are part of its project topology.
+        if (projectKinds.Contains("WebApplication", StringComparer.OrdinalIgnoreCase)
+            && projectKinds.All(kind => kind is "WebApplication" or "ClassLibrary"))
+        {
+            ctx.DomainType = applicationModules.Any(module =>
+                module.Frameworks.Contains("Blazor", StringComparer.OrdinalIgnoreCase))
+                    ? "FullStack"
+                    : "Backend";
+            return;
+        }
+
+        if (projectKinds.Contains("FrontendApplication", StringComparer.OrdinalIgnoreCase)
+            && projectKinds.All(kind => kind is "FrontendApplication" or "ClassLibrary"))
+        {
+            ctx.DomainType = "Frontend";
+            return;
+        }
+
+        if (projectKinds.Contains("DesktopApplication", StringComparer.OrdinalIgnoreCase)
+            && projectKinds.All(kind => kind is "DesktopApplication" or "ClassLibrary"))
+        {
+            ctx.DomainType = "Desktop";
+            return;
+        }
+
+        if (projectKinds.Length > 1)
+        {
+            ctx.DomainType = "Mixed";
+            return;
+        }
+
+        if (projectKinds.Length == 1)
+        {
+            ctx.DomainType = projectKinds[0] switch
+            {
+                "ClassLibrary" => "Library",
+                "WebApplication" => "Backend",
+                "FrontendApplication" => "Frontend",
+                "DesktopApplication" => "Desktop",
+                "Executable" => "Application",
+                _ => ctx.DomainType ?? "Unknown"
+            };
+
+            if (ctx.DomainType != "Unknown")
+                return;
+        }
+
+        if (ctx.Modules.Count > 0
+            && ctx.Modules.All(module => module.IsTestProject
+                || string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase)))
+        {
+            ctx.DomainType = "Test";
+            return;
+        }
+
         var isBlazor = string.Equals(
                 ctx.Framework,
                 "Blazor",

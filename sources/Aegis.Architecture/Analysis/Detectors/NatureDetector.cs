@@ -6,6 +6,33 @@ internal static class NatureDetector
 {
     public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
     {
+        ArgumentNullException.ThrowIfNull(ctx);
+        ArgumentNullException.ThrowIfNull(files);
+
+        if (ctx.Modules.Count > 1)
+        {
+            ctx.Nature = "MultiProject";
+            return;
+        }
+
+        var project = ctx.Modules.SingleOrDefault();
+        if (project is not null)
+        {
+            ctx.Nature = project.ProjectKind switch
+            {
+                "Test" => "TestSuite",
+                "ClassLibrary" => "Library",
+                "WebApplication" => "Service",
+                "FrontendApplication" => "FrontendApp",
+                "DesktopApplication" => "DesktopApp",
+                "Executable" => "Application",
+                _ => "Generic"
+            };
+
+            if (ctx.Nature != "Generic")
+                return;
+        }
+
         bool sdk = files.Any(f => f.Contains($"{Path.DirectorySeparatorChar}sdk{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));
         bool tests = files.Any(f => f.Contains($"{Path.DirectorySeparatorChar}test{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));
         bool lib = files.Any(f => f.Contains($"{Path.DirectorySeparatorChar}lib{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));

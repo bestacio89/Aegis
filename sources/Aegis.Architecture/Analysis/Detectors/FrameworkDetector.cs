@@ -8,6 +8,9 @@ internal static class FrameworkDetector
 {
     public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
     {
+        ctx.FrontendFrameworkDiscoveryComplete =
+            !ctx.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
+
         var deps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         switch (ctx.Language)
@@ -73,8 +76,106 @@ internal static class FrameworkDetector
             ctx.DetectedDependencies = deps.ToList();
         }
 
+        var hasPackageManifest = files.Any(file =>
+            Path.GetFileName(file).Equals(
+                "package.json",
+                StringComparison.OrdinalIgnoreCase));
+
+        var hasUnclassifiedFrontendSource = files.Any(file =>
+            Path.GetExtension(file).ToLowerInvariant() is ".tsx" or ".jsx" or ".vue");
+        var isNodeLanguage = string.Equals(
+            ctx.Language,
+            "TypeScript/JavaScript",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (!hasPackageManifest
+            && (hasUnclassifiedFrontendSource || isNodeLanguage))
+        {
+            ctx.FrontendFrameworkDiscoveryComplete = false;
+        }
+
+        if (files.Any(file => Path.GetExtension(file).Equals(
+                ".cshtml",
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            AddFramework(ctx, "Razor");
+        }
+
         if (!string.IsNullOrWhiteSpace(ctx.Framework))
             AddFramework(ctx, ctx.Framework);
+
+        // The repository-level framework is an aggregate. If its projects use
+        // different frameworks, do not publish one project's framework as the
+        // identity of the entire repository.
+        foreach (var framework in ctx.Modules.SelectMany(module => module.Frameworks))
+            AddFramework(ctx, framework);
+
+        // EF Core is a data-access capability on the .NET platform, not a
+        // separate application framework. Normalize it for repository-wide
+        // aggregation while retaining the precise module-level value.
+        var nonTestModules = ctx.Modules
+            .Where(module =>
+                !module.IsTestProject
+                && !string.Equals(
+                    module.ProjectKind,
+                    "Test",
+                    StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        var hostModules = nonTestModules
+            .Where(module => module.ProjectKind is
+                "WebApplication" or
+                "FrontendApplication" or
+                "DesktopApplication" or
+                "Executable")
+            .ToArray();
+
+        var webModules = nonTestModules
+            .Where(module => string.Equals(
+                module.ProjectKind,
+                "WebApplication",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        // A split ASP.NET/Blazor web stack is one backend platform with a
+        // frontend host, even when the repository also contains an embedded
+        // Unity client. In contrast, a single Blazor web project beside an
+        // independent Unity project is genuinely multi-framework.
+        var isSplitBlazorWebStack = webModules.Length > 1
+            && webModules.Any(module => module.Frameworks.Contains(
+                "Blazor",
+                StringComparer.OrdinalIgnoreCase));
+
+        var hasOnlyHostsAndSupportingLibraries = nonTestModules.All(module =>
+            hostModules.Contains(module)
+            || string.Equals(
+                module.ProjectKind,
+                "ClassLibrary",
+                StringComparison.OrdinalIgnoreCase));
+
+        var frameworkModules = isSplitBlazorWebStack
+            ? webModules
+            : hostModules.Length > 0 && hasOnlyHostsAndSupportingLibraries
+                ? hostModules
+                : nonTestModules;
+
+        var projectFrameworks = frameworkModules
+            .Select(ResolveModulePrimaryFramework)
+            .Where(framework => !string.IsNullOrWhiteSpace(framework))
+            .Select(framework => string.Equals(
+                framework,
+                ".NET (EF Core)",
+                StringComparison.OrdinalIgnoreCase)
+                    ? ".NET"
+                    : framework!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (projectFrameworks.Length > 1)
+            ctx.Framework = "Multi-Framework";
+        else if (projectFrameworks.Length == 1)
+            ctx.Framework = projectFrameworks[0];
     }
 
     private static void DetectDotNetFramework(
@@ -157,6 +258,32 @@ internal static class FrameworkDetector
         }
     }
 
+    private static string? ResolveModulePrimaryFramework(ProjectModuleContext module)
+    {
+        if (!string.Equals(
+                module.Framework,
+                "Multi-Framework",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return module.Framework;
+        }
+
+        // A mixed module may expose a UI framework alongside its primary
+        // runtime. Prefer the runtime for repository identity; individual
+        // files retain their concrete framework through module.Frameworks.
+        return module.Frameworks.FirstOrDefault(framework =>
+                   string.Equals(framework, "ASP.NET Core", StringComparison.OrdinalIgnoreCase))
+            ?? module.Frameworks.FirstOrDefault(framework =>
+                   string.Equals(framework, ".NET (EF Core)", StringComparison.OrdinalIgnoreCase))
+            ?? module.Frameworks.FirstOrDefault(framework =>
+                   string.Equals(framework, ".NET", StringComparison.OrdinalIgnoreCase))
+            ?? module.Frameworks.FirstOrDefault(framework =>
+                   string.Equals(framework, "WPF", StringComparison.OrdinalIgnoreCase))
+            ?? module.Frameworks.FirstOrDefault(framework =>
+                   string.Equals(framework, "Windows Forms", StringComparison.OrdinalIgnoreCase))
+            ?? "Multi-Framework";
+    }
+
     private static void AddFramework(ProjectArchitectureContext context, string framework)
     {
         if (!context.DetectedFrameworks.Contains(framework, StringComparer.OrdinalIgnoreCase))
@@ -216,8 +343,11 @@ internal static class FrameworkDetector
                     or UnauthorizedAccessException
                     or InvalidOperationException)
             {
-                // A malformed package manifest is not evidence for a framework.
-                // Continue discovering other manifests in a mixed repository.
+                ctx.FrontendFrameworkDiscoveryComplete = false;
+
+                // A malformed or unreadable package manifest cannot establish
+                // that a frontend framework is absent. Continue with readable
+                // manifests while retaining the incomplete-discovery state.
             }
         }
 

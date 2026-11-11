@@ -132,37 +132,61 @@ public sealed class ArchitecturalTransactionEvaluator
 
 
 
+        var analyzedFileResults = new List<ArchitectureEvaluatorResult>();
+        var unreadableFileCount = 0;
+        var unreadableFilePaths = new List<string>();
+
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
 
+            string content;
 
-            var content =
-                await TryReadFileAsync(
-                    file,
-                    token);
-
-
-            if (content is null)
+            try
+            {
+                content = await File.ReadAllTextAsync(file, token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+                when (token.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (IOException exception)
+            {
+                unreadableFileCount++;
+                unreadableFilePaths.Add(file);
+                _logger.LogWarning(
+                    exception,
+                    "{Evaluator} could not read {FilePath}.",
+                    Name,
+                    file);
                 continue;
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                unreadableFileCount++;
+                unreadableFilePaths.Add(file);
+                _logger.LogWarning(
+                    exception,
+                    "{Evaluator} has no access to {FilePath}.",
+                    Name,
+                    file);
+                continue;
+            }
 
-
-
-            results.Add(
-                EvaluateFile(
-                    file,
-                    content));
+            var fileResult = EvaluateFile(file, content);
+            analyzedFileResults.Add(fileResult);
+            results.Add(fileResult);
         }
 
-
-
-        if (results.Count > 0)
-        {
-            AddSummary(
-                results,
-                projectPath);
-        }
-
+        AddSummary(
+            results,
+            projectPath,
+            files.Count,
+            analyzedFileResults,
+            unreadableFileCount,
+            unreadableFilePaths);
 
 
         _logger.LogInformation(
@@ -238,7 +262,7 @@ public sealed class ArchitecturalTransactionEvaluator
                 ["SafetyScore"] =
                     safetyScore * 100,
 
-                ["TransactionIntegrityIndex"] =
+                ["TransactionIntegrityScore"] =
                     integrity
             },
 
@@ -250,6 +274,8 @@ public sealed class ArchitecturalTransactionEvaluator
                     file,
                 ["FileName"] =
                     Path.GetFileName(file),
+                ["EvaluationScope"] =
+                    FileScope,
 
                 ["Language"] =
                     DetectLanguage(file),
@@ -350,62 +376,84 @@ public sealed class ArchitecturalTransactionEvaluator
 
     private static void AddSummary(
         List<ArchitectureEvaluatorResult> results,
-        string projectPath)
+        string projectPath,
+        int discoveredFileCount,
+        IReadOnlyCollection<ArchitectureEvaluatorResult> analyzedFileResults,
+        int unreadableFileCount,
+        IReadOnlyCollection<string> unreadableFilePaths)
     {
-        var analyzedCount =
-            results.Count;
+        var analyzedCount = analyzedFileResults.Count;
+        var analysisComplete = unreadableFileCount == 0
+            && analyzedCount == discoveredFileCount;
 
+        var integrity = analyzedCount > 0
+            ? analyzedFileResults.Average(result =>
+                result.Metrics.GetValueOrDefault("TransactionIntegrityScore"))
+            : 0d;
 
+        var safety = analyzedCount > 0
+            ? analyzedFileResults.Average(result =>
+                result.Metrics.GetValueOrDefault("SafetyScore"))
+            : 0d;
 
-        var integrity =
-            results.Average(x =>
-                x.Metrics.GetValueOrDefault(
-                    "TransactionIntegrityIndex",
-                    0));
-
-
-
-        var safety =
-            results.Average(x =>
-                x.Metrics.GetValueOrDefault(
-                    "SafetyScore",
-                    0));
-
-
-
-        results.Add(
-            new ArchitectureEvaluatorResult(
-                nameof(ArchitecturalTransactionEvaluator),
-                projectPath)
+        var summary = new ArchitectureEvaluatorResult(
+            nameof(ArchitecturalTransactionEvaluator),
+            projectPath)
+        {
+            Category = "PersistenceSummary",
+            Metrics = new Dictionary<string, double>
             {
-                Category =
-                    "PersistenceSummary",
+                ["DiscoveredFiles"] = discoveredFileCount,
+                ["AnalyzedFiles"] = analyzedCount,
+                ["UnreadableFiles"] = unreadableFileCount,
+                ["AverageTransactionIntegrityIndex"] = integrity,
+                ["DataConsistencyHealthIndex"] = integrity * 0.6 + safety * 0.4
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["Evaluator"] = nameof(ArchitecturalTransactionEvaluator),
+                ["EvaluationScope"] = ProjectScope,
+                ["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant(),
+                ["AnalysisStatus"] = analysisComplete
+                    ? "Completed"
+                    : "Incomplete",
+                ["MeasurementMethod"] =
+                    "Arithmetic mean of file-level transaction integrity measurements across all discovered source files."
+            }
+        };
 
+        if (analysisComplete && analyzedCount > 0)
+        {
+            // The project-level rule contract consumes this exact metric key.
+            // Do not expose it when any discovered source file was unreadable.
+            summary.Metrics["TransactionIntegrityIndex"] = integrity;
 
-                Metrics =
-                new Dictionary<string, double>
-                {
-                    ["AnalyzedFiles"] =
-                        analyzedCount,
+            var fileScores = analyzedFileResults
+                .Select(result => result.Metrics["TransactionIntegrityScore"])
+                .ToArray();
 
-                    ["AverageTransactionIntegrityIndex"] =
-                        integrity,
+            summary.Metadata["Evidence.TransactionIntegrityIndex"] =
+                $"Arithmetic mean of {analyzedCount} file-level transaction integrity measurements; " +
+                $"observed range {fileScores.Min():F2}–{fileScores.Max():F2}. " +
+                "Individual file measurements are emitted as separate evaluator facts.";
+            summary.Metadata["EvidenceScope.TransactionIntegrityIndex"] =
+                "ProjectAggregate";
+        }
+        else if (!analysisComplete)
+        {
+            summary.Metadata["IncompleteReason"] =
+                $"{unreadableFileCount} unreadable file(s); {analyzedCount} of {discoveredFileCount} source file(s) analyzed.";
+            summary.Metadata["UnreadableFilePaths"] = string.Join(
+                Environment.NewLine,
+                unreadableFilePaths.Take(20));
+        }
+        else
+        {
+            summary.Metadata["AnalysisStatus"] = "NoSourceFiles";
+        }
 
-                    ["DataConsistencyHealthIndex"] =
-                        integrity * 0.6 +
-                        safety * 0.4
-                },
-
-
-                Metadata =
-                new Dictionary<string, string>
-                {
-                    ["Evaluator"] =
-                        nameof(ArchitecturalTransactionEvaluator)
-                }
-            });
+        results.Add(summary);
     }
-
 
 
 
@@ -430,21 +478,6 @@ public sealed class ArchitecturalTransactionEvaluator
 
 
 
-    private static async Task<string?> TryReadFileAsync(
-        string file,
-        CancellationToken token)
-    {
-        try
-        {
-            return await File.ReadAllTextAsync(
-                file,
-                token);
-        }
-        catch
-        {
-            return null;
-        }
-    }
 
 
 

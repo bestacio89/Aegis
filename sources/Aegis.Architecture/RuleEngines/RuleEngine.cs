@@ -100,8 +100,17 @@ public sealed class RuleEngine
             context.ProjectName);
 
         var facts = new List<ArchitectureEvaluatorResult>();
-        var diagnostics = new List<AnalysisDiagnostic>();
-        var scopes = DiscoverProjectScopes(projectPath, context);
+        var diagnostics = context.DiscoveryDiagnostics.ToList();
+        var scopes = DiscoverProjectScopes(
+            projectPath,
+            context,
+            diagnostics);
+
+        // Rule applicability must see the same discovery evidence that is
+        // preserved in the report. Otherwise a failed module discovery could
+        // be mistaken for proof that a candidate pattern is absent.
+        context.DiscoveryDiagnostics = diagnostics.ToList();
+
         var executions = new List<(IEvaluator Evaluator, string Path, ProjectArchitectureContext Context)>();
 
         foreach (var evaluator in _evaluators)
@@ -390,12 +399,26 @@ public sealed class RuleEngine
         var status = metadata.GetValueOrDefault("AnalysisStatus");
         var detailText = metadata.GetValueOrDefault("Diagnostics");
         var messages = string.IsNullOrWhiteSpace(detailText)
-            ? Array.Empty<string>()
+            ? new List<string>()
             : detailText.Split(
                     ['\r', '\n'],
                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Distinct(StringComparer.Ordinal)
-                .ToArray();
+                .ToList();
+
+        var serializedDetailCount = messages.Count;
+
+        var incompleteReason = metadata.GetValueOrDefault("IncompleteReason");
+        if (!string.IsNullOrWhiteSpace(incompleteReason))
+            messages.Add(incompleteReason);
+
+        var unreadableFilePaths = metadata.GetValueOrDefault("UnreadableFilePaths");
+        if (!string.IsNullOrWhiteSpace(unreadableFilePaths))
+            messages.Add($"Unreadable source paths (up to 20):{Environment.NewLine}{unreadableFilePaths}");
+
+        messages = messages
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
         var reportedCount = result.Metrics.TryGetValue("DiagnosticCount", out var count)
             && double.IsFinite(count)
@@ -410,7 +433,7 @@ public sealed class RuleEngine
             || string.Equals(status, "Partial", StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, "Incomplete", StringComparison.OrdinalIgnoreCase);
 
-        if (!hasPartialStatus && reportedCount == 0 && messages.Length == 0)
+        if (!hasPartialStatus && reportedCount == 0 && messages.Count == 0)
             return;
 
         foreach (var message in messages)
@@ -427,8 +450,8 @@ public sealed class RuleEngine
 
         // Some evaluators cap serialized detail to keep reports bounded. Preserve
         // the declared count as evidence so truncation cannot make coverage look clean.
-        var omittedCount = Math.Max(0, reportedCount - messages.Length);
-        if (omittedCount > 0 || (hasPartialStatus && messages.Length == 0 && reportedCount == 0))
+        var omittedCount = Math.Max(0, reportedCount - serializedDetailCount);
+        if (omittedCount > 0 || (hasPartialStatus && messages.Count == 0 && reportedCount == 0))
         {
             diagnostics.Add(new AnalysisDiagnostic
             {
@@ -437,7 +460,7 @@ public sealed class RuleEngine
                     : "EvaluatorPartialAnalysis",
                 Component = evaluatorName,
                 Message = omittedCount > 0
-                    ? $"The evaluator reported {reportedCount} diagnostics but serialized only {messages.Length} detail message(s); {omittedCount} diagnostic detail(s) are unavailable."
+                    ? $"The evaluator reported {reportedCount} diagnostics but serialized only {messages.Count} detail message(s); {omittedCount} diagnostic detail(s) are unavailable."
                     : $"The evaluator reported analysis status '{status}' but did not provide diagnostic details or a diagnostic count.",
                 Target = result.Target,
                 AffectsCoverage = true
@@ -449,7 +472,8 @@ public sealed class RuleEngine
 
     private IReadOnlyList<AnalysisScope> DiscoverProjectScopes(
         string projectPath,
-        ProjectArchitectureContext rootContext)
+        ProjectArchitectureContext rootContext,
+        ICollection<AnalysisDiagnostic> diagnostics)
     {
         var root = Path.GetFullPath(projectPath);
         var modules = rootContext.Modules
@@ -482,6 +506,17 @@ public sealed class RuleEngine
             {
                 var moduleContext = ProjectArchitectureContextDetector.Detect(path);
 
+                foreach (var diagnostic in moduleContext.DiscoveryDiagnostics)
+                {
+                    if (!diagnostics.Any(existing =>
+                            string.Equals(existing.Code, diagnostic.Code, StringComparison.Ordinal)
+                            && string.Equals(existing.Target, diagnostic.Target, StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(existing.Message, diagnostic.Message, StringComparison.Ordinal)))
+                    {
+                        diagnostics.Add(diagnostic);
+                    }
+                }
+
                 // Keep technology applicability local to this project, while
                 // retaining the repository-wide graph and module inventory.
                 // Otherwise project-scoped evaluators lose cross-project
@@ -499,6 +534,16 @@ public sealed class RuleEngine
                 or ArgumentException
                 or NotSupportedException)
             {
+                diagnostics.Add(new AnalysisDiagnostic
+                {
+                    Code = "ProjectScopeDiscoveryFailed",
+                    Component = nameof(ProjectArchitectureContextDetector),
+                    Message = "The module context could not be detected; module-specific evaluators were not executed.",
+                    Target = path,
+                    ExceptionType = exception.GetType().FullName,
+                    AffectsCoverage = true
+                });
+
                 _logger.LogWarning(
                     exception,
                     "Could not detect project context for module {Path}; module-specific evaluators will not run.",

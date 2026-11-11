@@ -543,7 +543,14 @@ public sealed class ProjectArchitectureContextDetectorTests
         {
             "Mediator",
             "Messaging",
+            "Http",
+            "Http.Client",
+            "Http.Authentication",
             "Serialization",
+            "Reflection",
+            "DependencyInjection",
+            "Bootstrap",
+            "Hosting",
             "Base.Abstractions"
         };
 
@@ -572,6 +579,82 @@ public sealed class ProjectArchitectureContextDetectorTests
             Assert.Equal("Infrastructure", module.Type);
             Assert.Equal("Infrastructure", Assert.Single(module.Layers).Name);
         });
+    }
+
+    [Fact]
+    public void Detect_preserves_test_project_relationships_without_mixing_them_into_production_architecture()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var httpRoot = Path.Combine(directory.Path, "sources", "Franz.Common.Http");
+        var serializationRoot = Path.Combine(directory.Path, "sources", "Franz.Common.Serialization");
+        var testsRoot = Path.Combine(directory.Path, "tests", "Franz.Common.Http.Tests");
+        Directory.CreateDirectory(httpRoot);
+        Directory.CreateDirectory(serializationRoot);
+        Directory.CreateDirectory(testsRoot);
+
+        File.WriteAllText(
+            Path.Combine(serializationRoot, "Franz.Common.Serialization.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+
+        File.WriteAllText(
+            Path.Combine(httpRoot, "Franz.Common.Http.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <ProjectReference Include="..\Franz.Common.Serialization\Franz.Common.Serialization.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        File.WriteAllText(
+            Path.Combine(testsRoot, "Franz.Common.Http.Tests.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <IsTestProject>true</IsTestProject>
+              </PropertyGroup>
+              <ItemGroup>
+                <ProjectReference Include="..\..\sources\Franz.Common.Http\Franz.Common.Http.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal(2, context.ProductionDependencies.Count);
+        Assert.Single(context.TestDependencies);
+        Assert.Equal(3, context.Dependencies.Count);
+
+        var productionRelationship = Assert.Single(
+            context.ProductionDependencies,
+            dependency => dependency.Source == "Franz.Common.Http");
+        Assert.Equal("Production", productionRelationship.Scope);
+        Assert.Equal("Infrastructure", productionRelationship.SourceLayer);
+        Assert.Equal("Infrastructure", productionRelationship.TargetLayer);
+        Assert.Equal(
+            Path.GetFullPath(httpRoot),
+            productionRelationship.SourceProjectPath);
+        Assert.Equal(
+            Path.GetFullPath(serializationRoot),
+            productionRelationship.TargetProjectPath);
+
+        var testRelationship = Assert.Single(context.TestDependencies);
+        Assert.Equal("Test", testRelationship.Scope);
+        Assert.Equal("Tests", testRelationship.SourceLayer);
+        Assert.Equal("Infrastructure", testRelationship.TargetLayer);
+        Assert.Equal(
+            Path.GetFullPath(testsRoot),
+            testRelationship.SourceProjectPath);
+        Assert.Equal(
+            Path.GetFullPath(httpRoot),
+            testRelationship.TargetProjectPath);
     }
 
     private sealed class TemporaryDirectory : IDisposable

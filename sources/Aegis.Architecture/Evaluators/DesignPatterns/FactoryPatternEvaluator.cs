@@ -619,6 +619,84 @@ public sealed class FactoryPatternEvaluator
         };
     }
 
+    private static bool TryExtractClassBody(
+        string source,
+        Match classMatch,
+        string language,
+        out string classBody,
+        out int bodyStart)
+    {
+        classBody = string.Empty;
+        bodyStart = 0;
+
+        if (language == "Python")
+        {
+            var headerEnd = source.IndexOf('\n', classMatch.Index);
+            if (headerEnd < 0)
+                return false;
+
+            bodyStart = headerEnd + 1;
+            var classIndentation = CountIndentation(source, classMatch.Index);
+            var cursor = bodyStart;
+
+            while (cursor < source.Length)
+            {
+                var lineEnd = source.IndexOf('\n', cursor);
+                if (lineEnd < 0)
+                    lineEnd = source.Length;
+
+                var firstNonWhitespace = cursor;
+                while (firstNonWhitespace < lineEnd
+                    && char.IsWhiteSpace(source[firstNonWhitespace]))
+                {
+                    firstNonWhitespace++;
+                }
+
+                if (firstNonWhitespace < lineEnd
+                    && CountIndentation(source, firstNonWhitespace) <= classIndentation)
+                {
+                    break;
+                }
+
+                cursor = lineEnd + 1;
+            }
+
+            classBody = source[bodyStart..cursor];
+            return !string.IsNullOrWhiteSpace(classBody);
+        }
+
+        var openingBrace = source.IndexOf(
+            '{',
+            classMatch.Index + classMatch.Length);
+        if (openingBrace < 0)
+            return false;
+
+        var closingBrace = FindMatchingBrace(source, openingBrace);
+        if (closingBrace < 0)
+            return false;
+
+        bodyStart = openingBrace + 1;
+        classBody = source.Substring(
+            bodyStart,
+            closingBrace - bodyStart);
+
+        return true;
+    }
+
+    private static int FindMatchingBrace(string source, int openingBrace)
+    {
+        var depth = 0;
+        for (var index = openingBrace; index < source.Length; index++)
+        {
+            if (source[index] == '{')
+                depth++;
+            else if (source[index] == '}' && --depth == 0)
+                return index;
+        }
+
+        return -1;
+    }
+
     private static int CountIndentation(
         string source,
         int position)

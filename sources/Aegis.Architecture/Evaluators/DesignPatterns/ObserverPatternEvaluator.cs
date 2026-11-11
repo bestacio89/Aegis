@@ -336,6 +336,12 @@ public sealed class ObserverPatternEvaluator
         summary.Metadata["EventFramework"] = projectEventFramework;
         summary.Metadata["SemanticAnalysisPerformed"] = bool.FalseString;
         summary.Metadata["HexagonalAlignmentEvaluated"] = bool.FalseString;
+        var analysisComplete = unreadableFiles == 0
+            && contents.Count == files.Count;
+        summary.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
+        summary.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "Incomplete";
 
         results.Add(summary);
 

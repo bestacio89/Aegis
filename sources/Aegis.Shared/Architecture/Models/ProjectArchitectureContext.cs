@@ -100,14 +100,8 @@ public sealed class ProjectArchitectureContext
 
 
     /// <summary>
-    /// Logical architecture layers detected.
-    /// Examples:
-    /// API
-    /// Application
-    /// Contracts
-    /// Domain
-    /// Infrastructure
-    /// Tests
+    /// Logical layers in the production architecture. Test projects and
+    /// test-support modules retain their own Tests layer on ProjectModuleContext.
     /// </summary>
     public List<ProjectLayerContext> Layers { get; set; } = new();
 

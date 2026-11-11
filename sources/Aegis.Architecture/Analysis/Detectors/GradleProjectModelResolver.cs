@@ -50,6 +50,7 @@ internal static class GradleProjectModelResolver
             .Select(Path.GetFullPath)
             .Distinct(PathComparer)
             .ToArray();
+        var models = new List<GradleProjectModel>();
 
         foreach (var settingsFile in settingsFiles)
         {
@@ -76,6 +77,7 @@ internal static class GradleProjectModelResolver
                     IsComplete = false
                 };
                 AttachRootModel(context, rootDirectory, failedModel);
+                models.Add(failedModel);
                 continue;
             }
 
@@ -159,8 +161,13 @@ internal static class GradleProjectModelResolver
 
             AttachRootModel(context, rootDirectory, model);
             AttachIncludedProjects(context, model);
-            ResolveIncludedBuildMembership(context, model);
+            models.Add(model);
         }
+
+        // Resolve composite membership only after every settings model is attached.
+        // This makes included-build identity independent of filesystem enumeration order.
+        foreach (var model in models)
+            ResolveIncludedBuildMembership(context, model);
     }
 
     private static List<string> ParseIncludedProjects(

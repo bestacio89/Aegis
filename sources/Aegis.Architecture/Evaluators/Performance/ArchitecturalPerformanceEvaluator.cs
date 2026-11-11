@@ -236,12 +236,13 @@ public sealed class ArchitecturalPerformanceEvaluator
         result.ProjectName = Context?.ProjectName;
         result.Language = language;
         result.Framework = Context?.Framework;
-        result.Layer = Context?.Modules
+        var owningModule = Context?.Modules
             .Where(module => !string.IsNullOrWhiteSpace(module.Path))
             .OrderByDescending(module => module.Path.Length)
             .FirstOrDefault(module =>
-                IsSameOrDescendantPath(file, module.Path))
-            ?.Type;
+                IsSameOrDescendantPath(file, module.Path));
+        result.Layer = owningModule?.Layers.FirstOrDefault()?.Name
+            ?? owningModule?.Type;
         result.DetectionConfidence = Context?.Confidence ?? 0;
 
         result.Metrics["AlgorithmicEfficiencyScore"] = score.Algorithmic * 100;

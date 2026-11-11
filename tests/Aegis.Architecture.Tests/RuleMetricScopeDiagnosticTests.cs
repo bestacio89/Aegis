@@ -378,4 +378,76 @@ public sealed class RuleMetricScopeDiagnosticTests
         Assert.Contains(ruleId, incompleteOutcome.Stats.RulesNotEvaluated);
     }
 
+    [Fact]
+    public void Layer_boundary_rules_are_not_applicable_to_mixed_repositories_without_layer_roles()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "Franz.Common",
+            Nature = "MultiProject",
+            DomainType = "Mixed",
+            ArchitectureStyle = "Multi-Project / Mixed",
+            Modules =
+            [
+                new ProjectModuleContext
+                {
+                    Name = "Franz.Common.Business",
+                    Path = "sources/Franz.Common.Business",
+                    ProjectKind = "ClassLibrary"
+                },
+                new ProjectModuleContext
+                {
+                    Name = "Franz.Common.AotSmokeTest",
+                    Path = "tests/Franz.Common.AotSmokeTest",
+                    ProjectKind = "Executable"
+                }
+            ],
+            Layers =
+            [
+                new ProjectLayerContext { Name = "Unclassified:Franz.Common.Business" },
+                new ProjectLayerContext { Name = "Unclassified:Franz.Common.AotSmokeTest" },
+                new ProjectLayerContext { Name = "Tests" }
+            ]
+        };
+
+        var outcome = engine.EvaluateDetailed(context, []);
+
+        Assert.Contains("AEG-ARCH-R2", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-ARCH-R3", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-ARCH-R5", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-ARCH-R2", outcome.Stats.RulesNotEvaluated);
+    }
+
+    [Fact]
+    public void Layer_boundary_rules_remain_applicable_when_a_layer_role_is_recognized()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var context = new ProjectArchitectureContext
+        {
+            ArchitectureStyle = "Multi-Project / Mixed",
+            Modules =
+            [
+                new ProjectModuleContext { Name = "Domain", Path = "src/Domain", ProjectKind = "ClassLibrary" },
+                new ProjectModuleContext { Name = "Infrastructure", Path = "src/Infrastructure", ProjectKind = "ClassLibrary" }
+            ],
+            Layers =
+            [
+                new ProjectLayerContext { Name = "Domain" },
+                new ProjectLayerContext { Name = "Infrastructure" }
+            ]
+        };
+
+        var outcome = engine.EvaluateDetailed(context, []);
+
+        Assert.DoesNotContain("AEG-ARCH-R2", outcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-ARCH-R2", outcome.Stats.RulesNotEvaluated);
+    }
+
 }

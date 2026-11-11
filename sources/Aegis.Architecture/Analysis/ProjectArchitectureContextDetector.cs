@@ -312,7 +312,13 @@ public static class ProjectArchitectureContextDetector
 
 
         ctx.MetadataMap["DetectedModules"] =
-            ctx.Modules.Count.ToString();
+            ctx.ProductionModules.Count.ToString();
+
+        ctx.MetadataMap["DetectedTestProjects"] =
+            ctx.TestModules.Count.ToString();
+
+        ctx.MetadataMap["DetectedTestSupportModules"] =
+            ctx.TestSupportModules.Count.ToString();
 
         ctx.MetadataMap["ProjectKindBreakdown"] =
             JsonSerializer.Serialize(ctx.Modules

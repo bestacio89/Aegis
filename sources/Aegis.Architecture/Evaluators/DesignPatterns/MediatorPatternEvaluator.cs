@@ -429,7 +429,7 @@ public sealed class MediatorPatternEvaluator
         result.Evidence = string.Join(Environment.NewLine, evidence);
         result.LineNumber = mediatorImplementation is not null
             ? GetLineNumber(sanitized, mediatorImplementation.Index)
-            : complianceMatches.Length > 0
+            : orderedComplianceMatches.Length > 0
                 ? GetLineNumber(sanitized, orderedComplianceMatches[0].Index)
                 : null;
 

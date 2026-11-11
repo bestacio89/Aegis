@@ -81,6 +81,9 @@ public sealed class RuleEngineCore
         var notApplicableReasons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        var disabledByPolicyReasons =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         var unsupportedRuleReasons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -102,7 +105,7 @@ public sealed class RuleEngineCore
                     _policy,
                     out var policyApplicabilityReason))
             {
-                notApplicableReasons[rule.Id] = policyApplicabilityReason;
+                disabledByPolicyReasons[rule.Id] = policyApplicabilityReason;
                 continue;
             }
 
@@ -414,22 +417,14 @@ public sealed class RuleEngineCore
 
         var totalChecks = checksPassed + checksViolated;
 
-        var rulesNotEvaluated = _rules
-            .Where(rule =>
-                !evaluatedRuleIds.Contains(rule.Id)
-                && !notApplicableReasons.ContainsKey(rule.Id))
+        var rulesNotEvaluated = applicableRules
+            .Where(rule => !evaluatedRuleIds.Contains(rule.Id))
             .Select(rule => rule.Id)
             .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var notEvaluatedReasons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (ruleId, reason) in unsupportedRuleReasons)
-        {
-            notEvaluatedReasons[ruleId] =
-                $"Rule '{ruleId}' is not evaluable because its producer contract is unsupported: {reason}";
-        }
 
         var eligibleFacts = factList
             .Where(fact => fact is not null)
@@ -553,6 +548,8 @@ public sealed class RuleEngineCore
         {
             RulesRegistered = _rules.Count,
             RulesApplicable = applicableRules.Count,
+            RulesDisabledByPolicy = disabledByPolicyReasons.Count,
+            DisabledByPolicyReasons = disabledByPolicyReasons,
             RulesUnsupported = unsupportedRuleReasons.Count,
             MetricContractFailures = skippedMetricContractFailures,
             UnsupportedRuleReasons = unsupportedRuleReasons,

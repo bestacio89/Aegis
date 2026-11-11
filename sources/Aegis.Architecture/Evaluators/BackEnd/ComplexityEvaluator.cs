@@ -59,9 +59,7 @@ public sealed class ComplexityEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "ASP.NET",
-        "Spring Boot",
-        "FastAPI"
+        "LanguageAgnostic"
     ];
 
     public ComplexityEvaluator(
@@ -90,20 +88,11 @@ public sealed class ComplexityEvaluator
             return [];
         }
 
-        var language = Context.Language;
-        var extensions = GetExtensions(language);
-
-        if (extensions.Length == 0)
-        {
-            _logger.LogWarning(
-                "{Evaluator}: unsupported language {Language}.",
-                Name,
-                language);
-
-            return [];
-        }
-
-        var files = ResolveSourceFiles(projectPath, extensions)
+        var files = ResolveSourceFiles(
+                projectPath,
+                ".cs",
+                ".java",
+                ".py")
             .Where(IsEligibleSourceFile)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -122,7 +111,7 @@ public sealed class ComplexityEvaluator
             Name,
             DiagnosticLevel.Trace,
             $"Analyzing complexity for {files.Count} files " +
-            $"({language}/{Context.Framework}).");
+            $"({files.Select(DetectLanguage).Distinct(StringComparer.OrdinalIgnoreCase).Count()} language(s)).");
 
         var results = new List<ArchitectureEvaluatorResult>();
         var analyzedMethods = 0;
@@ -164,6 +153,11 @@ public sealed class ComplexityEvaluator
 
             token.ThrowIfCancellationRequested();
 
+            var language = DetectLanguage(file);
+            if (!SupportedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            var framework = ResolveFrameworkForFile(file, projectPath, Context);
             var methods = language.Equals(
                 "Python",
                 StringComparison.OrdinalIgnoreCase)
@@ -194,7 +188,9 @@ public sealed class ComplexityEvaluator
                         metrics.Complexity,
                         metrics.LineCount,
                         violations,
-                        content));
+                        content,
+                        language,
+                        framework));
             }
         }
 
@@ -236,15 +232,16 @@ public sealed class ComplexityEvaluator
         int complexity,
         int lines,
         IReadOnlyCollection<string> violations,
-        string source)
+        string source,
+        string language,
+        string? framework)
     {
         var result = CreateResult(
             file,
             "ComplexityMeasurement");
 
-        result.ProjectName = Context?.ProjectName;
-        result.Language = Context?.Language;
-        result.Framework = Context?.Framework;
+        result.Language = language;
+        result.Framework = framework;
         result.Layer = ResolveLayer(file);
         result.DetectionConfidence = Context?.Confidence ?? 0;
 
@@ -266,8 +263,8 @@ public sealed class ComplexityEvaluator
         result.Metadata["MaxLinesThreshold"] =
             _policy.MaxLinesPerMethod.ToString(
                 CultureInfo.InvariantCulture);
-        result.Metadata["Language"] = Context?.Language ?? "Unknown";
-        result.Metadata["Framework"] = Context?.Framework ?? "Unknown";
+        result.Metadata["Language"] = language;
+        result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["Layer"] = ResolveLayer(file) ?? "Unknown";
         result.Metadata["MeasurementMethod"] = "SourcePatternHeuristic";
         result.Metadata["Interpretation"] =
@@ -748,16 +745,14 @@ public sealed class ComplexityEvaluator
         return new string(chars);
     }
 
-    private static string[] GetExtensions(string language)
-    {
-        return language switch
+    private static string DetectLanguage(string file) =>
+        Path.GetExtension(file).ToLowerInvariant() switch
         {
-            "C#" => [".cs"],
-            "Java" => [".java"],
-            "Python" => [".py"],
-            _ => []
+            ".cs" => "C#",
+            ".java" => "Java",
+            ".py" => "Python",
+            _ => "Unknown"
         };
-    }
 
     private static bool IsEligibleSourceFile(string file)
     {

@@ -790,47 +790,6 @@ public sealed class ArchitecturalPerformanceEvaluator
             .ToArray();
     }
 
-    private IReadOnlyCollection<Match> FindBlockingOperations(
-        string content,
-        string language)
-    {
-        var matches = FindBlockingCallOperations(content, language).ToList();
-
-        if (_policy.RequireAsyncForIOMethods)
-            matches.AddRange(FindSynchronousIOOperations(content, language));
-
-        return matches
-            .GroupBy(match => match.Index)
-            .Select(group => group.First())
-            .OrderBy(match => match.Index)
-            .ToArray();
-    }
-
-    private static int GetLineNumber(string content, int position)
-    {
-        var lineNumber = 1;
-        for (var index = 0; index < position && index < content.Length; index++)
-        {
-            if (content[index] == '\n')
-                lineNumber++;
-        }
-
-        return lineNumber;
-    }
-
-    private static string GetSourceLine(string content, int lineNumber)
-    {
-        if (lineNumber <= 0)
-            return string.Empty;
-
-        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Split('\n');
-
-        return lineNumber <= lines.Length
-            ? lines[lineNumber - 1].Trim()
-            : string.Empty;
-    }
-
     private PerformanceScore AnalyzePerformanceSignals(
         string content,
         string language,

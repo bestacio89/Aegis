@@ -175,6 +175,7 @@ internal static class ArchitectureRuleMetricContracts
             new Dictionary<string, Func<AegisArchitecturePolicy, bool>>(
                 StringComparer.OrdinalIgnoreCase)
             {
+                ["AEG-ARCH-R1"] = policy => policy.CircularDependency.Enabled,
                 ["AEG-ARCH-R2"] = policy => policy.Architecture.EnforceLayerBoundaries,
                 ["AEG-ARCH-R3"] = policy => policy.Architecture.EnforceLayerBoundaries,
                 ["AEG-ARCH-R5"] = policy => policy.Architecture.EnforceLayerBoundaries,

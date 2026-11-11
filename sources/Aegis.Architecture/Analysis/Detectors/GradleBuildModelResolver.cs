@@ -243,7 +243,7 @@ internal static class GradleBuildModelResolver
             }
 
             var bundleAlias = Regex.Match(
-                argument, @"^libs\\.bundles\\.(?<alias>[A-Za-z0-9_.-]+)$",
+                argument, @"^libs\.bundles\.(?<alias>[A-Za-z0-9_.-]+)$",
                 RegexOptions.CultureInvariant);
             if (bundleAlias.Success)
             {
@@ -611,7 +611,7 @@ internal static class GradleBuildModelResolver
 
         var richVersion = Regex.Match(
             value,
-            @"version\\s*=\\s*\\{(?<constraint>[^{}]*)\\}",
+            @"version\s*=\s*\{(?<constraint>[^{}]*)\\}",
             RegexOptions.CultureInvariant);
         if (richVersion.Success)
         {
@@ -634,15 +634,15 @@ internal static class GradleBuildModelResolver
         if (literal.Success)
             return literal.Groups["notation"].Value;
 
-        var strict = Regex.Match(value, @"strictly\\s*=\\s*['""](?<version>[^'""]+)['""]");
+        var strict = Regex.Match(value, @"strictly\s*=\s*['""](?<version>[^'""]+)['""]");
         if (strict.Success)
             return strict.Groups["version"].Value;
 
-        var required = Regex.Match(value, @"require\\s*=\\s*['""](?<version>[^'""]+)['""]");
+        var required = Regex.Match(value, @"require\s*=\s*['""](?<version>[^'""]+)['""]");
         if (required.Success)
             return required.Groups["version"].Value;
 
-        var preferred = Regex.Match(value, @"prefer\\s*=\\s*['""](?<version>[^'""]+)['""]");
+        var preferred = Regex.Match(value, @"prefer\s*=\s*['""](?<version>[^'""]+)['""]");
         return preferred.Success ? preferred.Groups["version"].Value : null;
     }
 

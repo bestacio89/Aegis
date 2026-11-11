@@ -635,7 +635,7 @@ public sealed class RepositoryPatternEvaluator
                 RegexOptions.CultureInvariant)
             : Regex.IsMatch(
                 classHeader,
-                $@"{relationshipKeyword}s*[^{{]*{Regex.Escape(expectedInterfaceName)}",
+                $@"{relationshipKeyword}\s*[^{{]*{Regex.Escape(expectedInterfaceName)}",
                 RegexOptions.CultureInvariant);
     }
 

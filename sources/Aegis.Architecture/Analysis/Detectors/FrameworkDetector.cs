@@ -85,10 +85,6 @@ internal static class FrameworkDetector
         // EF Core is a data-access capability on the .NET platform, not a
         // separate application framework. Normalize it for repository-wide
         // aggregation while retaining the precise module-level value.
-        // Resolve the repository's primary runtime from executable host
-        // projects first. Supporting libraries and embedded toolchains (for
-        // example Unity assets alongside an ASP.NET host) remain visible in
-        // DetectedFrameworks, but must not replace the host framework.
         var nonTestModules = ctx.Modules
             .Where(module =>
                 !module.IsTestProject
@@ -106,9 +102,34 @@ internal static class FrameworkDetector
                 "Executable")
             .ToArray();
 
-        var frameworkModules = hostModules.Length > 0
-            ? hostModules
-            : nonTestModules;
+        var webModules = nonTestModules
+            .Where(module => string.Equals(
+                module.ProjectKind,
+                "WebApplication",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        // A split ASP.NET/Blazor web stack is one backend platform with a
+        // frontend host, even when the repository also contains an embedded
+        // Unity client. In contrast, a single Blazor web project beside an
+        // independent Unity project is genuinely multi-framework.
+        var isSplitBlazorWebStack = webModules.Length > 1
+            && webModules.Any(module => module.Frameworks.Contains(
+                "Blazor",
+                StringComparer.OrdinalIgnoreCase));
+
+        var hasOnlyHostsAndSupportingLibraries = nonTestModules.All(module =>
+            hostModules.Contains(module)
+            || string.Equals(
+                module.ProjectKind,
+                "ClassLibrary",
+                StringComparison.OrdinalIgnoreCase));
+
+        var frameworkModules = isSplitBlazorWebStack
+            ? webModules
+            : hostModules.Length > 0 && hasOnlyHostsAndSupportingLibraries
+                ? hostModules
+                : nonTestModules;
 
         var projectFrameworks = frameworkModules
             .Select(ResolveModulePrimaryFramework)

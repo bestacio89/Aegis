@@ -312,6 +312,47 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
     [Fact]
+    public void EvaluateDetailed_reports_disabled_policy_families_separately_from_unsupported_rules()
+    {
+        var policy = new AegisArchitecturePolicy();
+        policy.Dependency.Enabled = false;
+        policy.Performance.Enabled = false;
+        policy.Transaction.Enabled = false;
+        policy.Security.Enabled = false;
+        policy.Architecture.DesignPatterns.DetectGodClasses = false;
+
+        var context = new ProjectArchitectureContext
+        {
+            Language = "C#",
+            Framework = "React",
+            DetectedFrameworks = ["React"],
+            FrontendFrameworkDiscoveryComplete = true
+        };
+
+        var outcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            policy).EvaluateDetailed(context, []);
+
+        var disabledRuleIds = new[]
+        {
+            "AEG-DEPS-R1", "AEG-DEPS-R2", "AEG-DEPS-R3", "AEG-DEPS-R4",
+            "AEG-PERF-R1", "AEG-PERF-R2", "AEG-PERF-R3", "AEG-PERF-R4",
+            "AEG-TXN-R1", "AEG-TXN-R2", "AEG-TXN-R3", "AEG-TXN-R4",
+            "AEG-ARCH-R8", "AEG-ARCH-R10"
+        };
+
+        Assert.All(
+            disabledRuleIds,
+            ruleId => Assert.Contains(ruleId, outcome.Stats.DisabledByPolicyReasons.Keys));
+        Assert.All(
+            disabledRuleIds,
+            ruleId => Assert.DoesNotContain(ruleId, outcome.Stats.RulesNotEvaluated));
+        Assert.All(
+            disabledRuleIds,
+            ruleId => Assert.DoesNotContain(ruleId, outcome.Stats.UnsupportedRuleReasons.Keys));
+    }
+
+    [Fact]
     public void EvaluateDetailed_marks_strategy_rules_not_applicable_when_complete_analysis_finds_no_candidates()
     {
         var policy = new AegisArchitecturePolicy();

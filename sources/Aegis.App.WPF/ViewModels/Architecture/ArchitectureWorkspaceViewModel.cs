@@ -18,7 +18,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
 
     public ArchitectureWorkspaceViewModel(
         ArchitectureOverviewViewModel overview,
-        DependencyGraphViewModel explorer,
+        DependencyGraphViewModel dependencyGraph,
         RelationshipLedgerViewModel relationshipLedger,
         SectionDashboardViewModel sections,
         LayerDashboardViewModel layers,
@@ -27,7 +27,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         ReportVisualizationViewModel reports)
     {
         _overview = overview;
-        _dependencyGraph = explorer;
+        _dependencyGraph = dependencyGraph;
         _relationshipLedger = relationshipLedger;
         _sections = sections;
         _layers = layers;

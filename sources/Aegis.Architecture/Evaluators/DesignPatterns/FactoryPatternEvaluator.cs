@@ -322,13 +322,13 @@ public sealed class FactoryPatternEvaluator
         result.Metadata[EvaluationScopeMetadataKey] = FileScope;
         result.Metadata["FactoryName"] = factoryName;
         result.Metadata["ExpectedInterface"] = expectedInterface;
-        result.Metadata["ExpectedInterfaceFound"] = hasInterface.ToString();
+        result.Metadata["ExpectedInterfaceFound"] = hasInterface.ToString().ToLowerInvariant();
         result.Metadata["Language"] = sourceFile.Language;
         result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["ProjectPath"] = sourceFile.ProjectScopePath;
-        result.Metadata["SemanticAnalysisPerformed"] = bool.FalseString;
-        result.Metadata["StructuralAnalysisHeuristic"] = bool.TrueString;
-        result.Metadata["AnalysisComplete"] = bool.TrueString;
+        result.Metadata["SemanticAnalysisPerformed"] = "false";
+        result.Metadata["StructuralAnalysisHeuristic"] = "true";
+        result.Metadata["AnalysisComplete"] = "true";
         result.Metadata["FactoryScoreInterpretation"] =
             "Diagnostic heuristic only. Object construction and concrete return expressions are expected inside factory implementations and are not proof of a pattern violation.";
 
@@ -587,7 +587,7 @@ public sealed class FactoryPatternEvaluator
         summary.Metadata["SemanticAnalysisPerformed"] = "false";
         summary.Metadata["StructuralAnalysisHeuristic"] = "true";
         var analysisComplete = unreadableFiles == 0 && analyzedFiles == discoveredFiles;
-        summary.Metadata["AnalysisComplete"] = analysisComplete.ToString();
+        summary.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
         summary.Metadata["AnalysisStatus"] = analysisComplete
             ? "Completed"
             : "CompletedWithDiagnostics";

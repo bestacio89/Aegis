@@ -85,13 +85,32 @@ internal static class FrameworkDetector
         // EF Core is a data-access capability on the .NET platform, not a
         // separate application framework. Normalize it for repository-wide
         // aggregation while retaining the precise module-level value.
-        var projectFrameworks = ctx.Modules
+        // Resolve the repository's primary runtime from executable host
+        // projects first. Supporting libraries and embedded toolchains (for
+        // example Unity assets alongside an ASP.NET host) remain visible in
+        // DetectedFrameworks, but must not replace the host framework.
+        var nonTestModules = ctx.Modules
             .Where(module =>
                 !module.IsTestProject
                 && !string.Equals(
                     module.ProjectKind,
                     "Test",
                     StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        var hostModules = nonTestModules
+            .Where(module => module.ProjectKind is
+                "WebApplication" or
+                "FrontendApplication" or
+                "DesktopApplication" or
+                "Executable")
+            .ToArray();
+
+        var frameworkModules = hostModules.Length > 0
+            ? hostModules
+            : nonTestModules;
+
+        var projectFrameworks = frameworkModules
             .Select(ResolveModulePrimaryFramework)
             .Where(framework => !string.IsNullOrWhiteSpace(framework))
             .Select(framework => string.Equals(

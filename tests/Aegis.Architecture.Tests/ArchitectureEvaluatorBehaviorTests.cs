@@ -735,6 +735,79 @@ public sealed class ArchitectureEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task PerformanceEvaluator_does_not_require_async_for_loops_without_io()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Calculation.cs", """
+            public sealed class Calculation
+            {
+                public int Calculate(int count)
+                {
+                    var total = 0;
+                    for (var index = 0; index < count; index++)
+                        total += index;
+
+                    return total;
+                }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+        var finding = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "Calculation.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal(100, finding.Metrics["AsyncMaturityScore"]);
+        Assert.Equal(100, finding.Metrics["PerformanceHealthIndex"]);
+        Assert.Equal("FileMetrics", finding.Metadata["EvidenceScope.AsyncMaturityScore"]);
+        Assert.Contains("does not imply an async requirement", finding.Metadata["AsyncMaturityInterpretation"]);
+    }
+
+    [Fact]
+    public async Task PerformanceEvaluator_preserves_async_and_health_evidence_for_blocking_io()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/BlockingIoFixture.cs", """
+            public sealed class BlockingIoFixture
+            {
+                public void Load(string path)
+                {
+                    var contents = System.IO.File.ReadAllText(path);
+                    Thread.Sleep(100);
+                }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+        var finding = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "BlockingIoFixture.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal(2, finding.Metrics["BlockingIOCount"]);
+        Assert.True(finding.Metrics["AsyncMaturityScore"] < 85);
+        Assert.Equal("FileMetrics", finding.Metadata["EvidenceScope.AsyncMaturityScore"]);
+        Assert.Contains("ReadAllText", finding.Metadata["Evidence.AsyncMaturityScore"]);
+        Assert.Contains("Thread.Sleep", finding.Metadata["Evidence.AsyncMaturityScore"]);
+        Assert.Contains("ReadAllText", finding.Metadata["Evidence.PerformanceHealthIndex"]);
+    }
+
+    [Fact]
     public async Task TransactionEvaluator_flags_transaction_scopes_without_explicit_commit_or_rollback()
     {
         using var project = new TemporaryProject();

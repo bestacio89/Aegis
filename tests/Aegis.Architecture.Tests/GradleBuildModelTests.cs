@@ -80,6 +80,7 @@ public sealed class GradleBuildModelTests
             Assert.Contains(context.DependencyEvidence, dependency =>
                 dependency.Ecosystem == "Gradle" && dependency.Name == "org.junit.jupiter:junit-jupiter-api"
                 && dependency.IsTestOnly && dependency.ResolvedVersion is null);
+            Assert.Contains("org.springframework:spring-context", context.DetectedDependencies);
         }
         finally
         {

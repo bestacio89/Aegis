@@ -34,6 +34,11 @@ internal static class DependencyDetector
                 StringComparison.OrdinalIgnoreCase)))
             AnalyzeJava(ctx, files, dependencies);
 
+        if (files.Any(file =>
+                Path.GetFileName(file).Equals("build.gradle", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase)))
+            AnalyzeGradle(ctx, dependencies);
+
 
         ctx.DetectedDependencies =
             dependencies.ToList();

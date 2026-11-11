@@ -468,7 +468,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             if (IsConsoleOrTraceCall(call.Value))
                 continue;
 
-            var invocation = ExtractInvocationText(content, call.Index);
+            var invocation = ExtractInvocationText(content, code, call.Index);
             var hasTemplate = StructuredTemplateRx.IsMatch(invocation);
             var hasPythonParameters =
                 language == "Python"
@@ -550,114 +550,33 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
         call.Contains("Console.", StringComparison.OrdinalIgnoreCase)
         || call.Contains("System.Diagnostics.Trace", StringComparison.OrdinalIgnoreCase);
 
-    private static string ExtractInvocationText(string content, int callStart)
+    private static string ExtractInvocationText(
+        string content,
+        string code,
+        int callStart)
     {
-        var openingParenthesis = content.IndexOf('(', callStart);
+        var openingParenthesis = code.IndexOf('(', callStart);
         if (openingParenthesis < 0)
             return string.Empty;
 
         var depth = 0;
-        var quote = '\0';
-        var verbatim = false;
-        var rawQuoteCount = 0;
-
-        for (var index = openingParenthesis; index < content.Length; index++)
+        for (var index = openingParenthesis; index < code.Length; index++)
         {
-            var current = content[index];
-
-            if (quote != '\0')
-            {
-                if (rawQuoteCount > 0)
-                {
-                    if (current == '"' && HasQuoteRun(content, index, rawQuoteCount))
-                    {
-                        index += rawQuoteCount - 1;
-                        quote = '\0';
-                        rawQuoteCount = 0;
-                    }
-
-                    continue;
-                }
-
-                if (!verbatim && current == '\\')
-                {
-                    index++;
-                    continue;
-                }
-
-                if (verbatim && current == '"' && index + 1 < content.Length
-                    && content[index + 1] == '"')
-                {
-                    index++;
-                    continue;
-                }
-
-                if (current == quote)
-                {
-                    quote = '\0';
-                    verbatim = false;
-                }
-
-                continue;
-            }
-
-            if (current is '"' or '\'')
-            {
-                quote = current;
-                if (current == '"')
-                {
-                    var quoteRun = CountQuoteRun(content, index);
-                    if (quoteRun >= 3)
-                    {
-                        rawQuoteCount = quoteRun;
-                        index += quoteRun - 1;
-                        continue;
-                    }
-
-                    verbatim = index > 0 && content[index - 1] == '@';
-                }
-
-                continue;
-            }
-
-            if (current == '(')
+            if (code[index] == '(')
             {
                 depth++;
                 continue;
             }
 
-            if (current == ')')
-            {
-                depth--;
-                if (depth == 0)
-                    return content[(openingParenthesis + 1)..index];
-            }
+            if (code[index] != ')')
+                continue;
+
+            depth--;
+            if (depth == 0)
+                return content[(openingParenthesis + 1)..index];
         }
 
         return content[(openingParenthesis + 1)..];
-    }
-
-    private static int CountQuoteRun(string content, int start)
-    {
-        var count = 0;
-        while (start + count < content.Length && content[start + count] == '"')
-            count++;
-
-        return count;
-    }
-
-    private static bool HasQuoteRun(string content, int start, int count)
-    {
-        if (start + count > content.Length)
-            return false;
-
-        for (var index = start; index < start + count; index++)
-        {
-            if (content[index] != '"')
-                return false;
-        }
-
-        return true;
     }
 
     private static double ComputeIntegrity(

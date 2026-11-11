@@ -177,6 +177,10 @@ public sealed class GradleBuildModelTests
             var module = Assert.Single(context.Modules);
             var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
 
+            // Generated build output is inspected by the Gradle-specific resolver,
+            // but remains excluded from the repository-wide governed-file count.
+            Assert.Equal(4, context.FileCount);
+
             Assert.Contains(model.SourceRoots, sourceRoot =>
                 sourceRoot.Origin == ProjectSourceRootOrigin.Conventional
                 && sourceRoot.Ownership == ProjectSourceRootOwnership.Production

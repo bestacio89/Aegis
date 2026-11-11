@@ -377,13 +377,14 @@ public sealed class MediatorPatternEvaluator
 
         if (mediatorImplementation is not null)
         {
-            var couplingMatches = new List<Match> { mediatorImplementation };
-            couplingMatches.AddRange(directMatches);
-
             var className = mediatorImplementation.Groups["name"].Value;
             var couplingDescription = directMatches.Count == 0
                 ? $"Mediator implementation '{className}' has no detected service-like member calls."
                 : $"Mediator implementation '{className}' contains {directMatches.Count} service-like member call(s).";
+
+            var couplingMatches = directMatches.Count > 0
+                ? directMatches
+                : new[] { mediatorImplementation };
 
             AddMetricEvidence(
                 result,
@@ -393,6 +394,11 @@ public sealed class MediatorPatternEvaluator
                 source,
                 sanitized,
                 couplingDescription);
+
+            result.Metadata["EvidenceSummary.CouplingRisk"] = couplingDescription;
+            result.Metadata["Evidence.CouplingRisk"] =
+                $"{couplingDescription}{Environment.NewLine}" +
+                result.Metadata["Evidence.CouplingRisk"];
         }
 
         var complianceMatches = new List<Match>();

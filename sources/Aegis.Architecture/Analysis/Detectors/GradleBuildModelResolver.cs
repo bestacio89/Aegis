@@ -496,8 +496,10 @@ internal static class GradleBuildModelResolver
                             .Cast<Match>()
                             .Select(match => NormalizeAlias(match.Groups["alias"].Value))
                             .ToList();
-                        var remainder = Regex.Replace(
-                            value, @"['""][^'""]+['""]|[\\[\\],\\s]", string.Empty);
+                        var remainder = string.Concat(
+                            Regex.Replace(value, @"['""][^'""]+['""]", string.Empty)
+                                .Where(character => !char.IsWhiteSpace(character)
+                                    && character is not '[' and not ']' and not ','));
                         if (!value.StartsWith('[') || !value.EndsWith(']')
                             || remainder.Length > 0 || members.Count == 0)
                         {

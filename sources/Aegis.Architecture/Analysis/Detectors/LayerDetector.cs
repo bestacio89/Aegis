@@ -93,17 +93,38 @@ internal static class LayerDetector
         IReadOnlyCollection<string> moduleFiles,
         IReadOnlyDictionary<string, string[]> layerHints)
     {
-        var identifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var projectIdentifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        AddIdentifiers(identifiers, module.Name);
-        AddIdentifiers(identifiers, Path.GetFileName(module.Path));
+        AddIdentifiers(projectIdentifiers, module.Name);
 
         if (!string.IsNullOrWhiteSpace(module.ProjectFile))
         {
             AddIdentifiers(
-                identifiers,
+                projectIdentifiers,
                 Path.GetFileNameWithoutExtension(module.ProjectFile));
         }
+
+        var projectMatches = FindMatchingLayers(layerHints, projectIdentifiers);
+
+        if (projectMatches.Length == 1)
+            return (projectMatches[0], 0.9);
+
+        if (projectMatches.Length > 1)
+            return ($"Unclassified:{module.Name}", 0.25);
+
+        // Existing semantic module classification is stronger than incidental
+        // folder names. For example, a Client module stored under a "ui"
+        // directory remains Client rather than becoming ambiguous.
+        var inferredLayer = ResolveKnownLayerName(module.Type);
+
+        if (inferredLayer is not null)
+            return (inferredLayer, 0.95);
+
+        var folderIdentifiers = new HashSet<string>(
+            projectIdentifiers,
+            StringComparer.OrdinalIgnoreCase);
+
+        AddIdentifiers(folderIdentifiers, Path.GetFileName(module.Path));
 
         foreach (var file in moduleFiles)
         {
@@ -119,11 +140,25 @@ internal static class LayerDetector
                          [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
                          StringSplitOptions.RemoveEmptyEntries))
             {
-                AddIdentifiers(identifiers, segment);
+                AddIdentifiers(folderIdentifiers, segment);
             }
         }
 
-        var matchingLayers = layerHints
+        var folderMatches = FindMatchingLayers(layerHints, folderIdentifiers);
+
+        if (folderMatches.Length == 1)
+            return (folderMatches[0], 0.85);
+
+        if (folderMatches.Length > 1)
+            return ($"Unclassified:{module.Name}", 0.25);
+
+        return ($"Unclassified:{module.Name}", 0.5);
+    }
+
+    private static string[] FindMatchingLayers(
+        IReadOnlyDictionary<string, string[]> layerHints,
+        IReadOnlySet<string> identifiers) =>
+        layerHints
             .Where(pair =>
                 !string.IsNullOrWhiteSpace(pair.Key)
                 && pair.Value is not null
@@ -131,18 +166,6 @@ internal static class LayerDetector
             .Select(pair => pair.Key.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-
-        if (matchingLayers.Length == 1)
-            return (matchingLayers[0], 0.9);
-
-        if (matchingLayers.Length > 1)
-            return ($"Unclassified:{module.Name}", 0.25);
-
-        var inferredLayer = ResolveKnownLayerName(module.Type);
-        return inferredLayer is null
-            ? ($"Unclassified:{module.Name}", 0.5)
-            : (inferredLayer, 0.95);
-    }
 
     private static bool HintMatches(
         string? hint,

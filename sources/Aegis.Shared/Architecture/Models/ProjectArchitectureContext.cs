@@ -68,6 +68,18 @@ public sealed class ProjectArchitectureContext
     /// </summary>
     public List<ProjectModuleContext> Modules { get; set; } = new();
 
+    /// <summary>Modules that belong to the production architecture.</summary>
+    public IReadOnlyList<ProjectModuleContext> ProductionModules =>
+        Modules.Where(module => !module.IsTestProject && !module.IsTestSupport).ToArray();
+
+    /// <summary>Test projects retained for source analysis and evidence.</summary>
+    public IReadOnlyList<ProjectModuleContext> TestModules =>
+        Modules.Where(module => module.IsTestProject).ToArray();
+
+    /// <summary>Reusable test-support packages, distinct from test projects.</summary>
+    public IReadOnlyList<ProjectModuleContext> TestSupportModules =>
+        Modules.Where(module => module.IsTestSupport).ToArray();
+
 
     /// <summary>
     /// Logical architecture layers detected.
@@ -86,7 +98,7 @@ public sealed class ProjectArchitectureContext
 
 
     public bool IsMultiModule =>
-        Modules.Count > 1;
+        ProductionModules.Count > 1;
 
 
 
@@ -275,7 +287,9 @@ public sealed class ProjectArchitectureContext
             TargetRuntime,
             BuildSystem = BuildSystem.ToString(),
 
-            Modules = Modules.Count,
+            Modules = ProductionModules.Count,
+            TestProjects = TestModules.Count,
+            TestSupportModules = TestSupportModules.Count,
             Layers = Layers.Select(x => x.Name),
 
             ArchitectureStyle,

@@ -77,8 +77,17 @@ internal static class ModuleDetector
             if (pomManifest is not null)
                 PopulateMavenMetadata(module, pomManifest);
 
-            if (module.IsTestProject)
+            if (module.IsTestProject
+                || string.Equals(
+                    module.Type,
+                    "Test",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                module.IsTestProject = true;
                 module.Type = "Test";
+                module.ProjectKind = "Test";
+                module.IsLibrary = false;
+            }
 
             module.Framework = module.Frameworks.Count switch
             {
@@ -466,8 +475,15 @@ internal static class ModuleDetector
 
     private static string DetectModuleTypeFromName(string name)
     {
-        if (name.Contains("test", StringComparison.Ordinal))
+        if (name is "test" or "tests"
+            || name.EndsWith(".test", StringComparison.Ordinal)
+            || name.EndsWith(".tests", StringComparison.Ordinal)
+            || name.EndsWith("tests", StringComparison.Ordinal)
+            || name.StartsWith("test-", StringComparison.Ordinal)
+            || name.StartsWith("tests-", StringComparison.Ordinal))
+        {
             return "Test";
+        }
         if (name.EndsWith(".api", StringComparison.Ordinal)
             || name.EndsWith("api", StringComparison.Ordinal))
             return "Api";

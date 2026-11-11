@@ -199,6 +199,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
             scope.FileResults.Add(CreateFileResult(
                 file,
+                scope.Identity,
                 language,
                 loggingCalls,
                 content,
@@ -229,6 +230,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
     private ArchitectureEvaluatorResult CreateFileResult(
         string file,
+        ProjectIdentity identity,
         string language,
         MatchCollection loggingCalls,
         string content,
@@ -247,9 +249,10 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             .ToArray();
 
         var result = CreateResult(file, "Infrastructure");
-        result.ProjectName ??= Context?.ProjectName;
+        result.ProjectName = identity.Name;
         result.Language = language;
-        result.Framework = Context?.Framework;
+        result.Framework = identity.Framework;
+        result.Layer = ResolveLayer(file);
         result.Metrics["LoggingCallCount"] = loggingCalls.Count;
         result.Metrics["StructuredLoggingScore"] = structured;
         result.Metrics["LogLevelComplianceScore"] = levels;
@@ -258,9 +261,12 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
         result.Metadata["FileName"] = Path.GetFileName(file);
         result.Metadata["FilePath"] = file;
-        result.Metadata["Target"] = file;
+        result.Metadata["ProjectName"] = identity.Name;
+        result.Metadata["ProjectPath"] = identity.Path;
+        result.Metadata["ProjectKind"] = identity.ProjectKind;
         result.Metadata["Language"] = language;
-        result.Metadata["Framework"] = result.Framework ?? "Unknown";
+        result.Metadata["Framework"] = identity.Framework ?? "Unknown";
+        result.Metadata["Layer"] = result.Layer ?? "Unknown";
         result.Metadata["PolicyEnabled"] = _policy.Enabled.ToString();
         result.Metadata["EvaluationScope"] = FileScope;
         result.Metadata["AnalysisComplete"] = "true";

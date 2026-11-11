@@ -576,10 +576,13 @@ internal static class GradleBuildModelResolver
         foreach (var sourceFile in files.Where(file =>
                      Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)))
         {
+            var moduleBuildDirectory = Path.Combine(modulePath, "build");
+            if (!IsSameOrDescendantPath(sourceFile, moduleBuildDirectory))
+                continue;
+
             var relative = Path.GetRelativePath(modulePath, sourceFile)
                 .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            var buildIndex = Array.FindIndex(relative, segment =>
-                segment.Equals("build", StringComparison.OrdinalIgnoreCase));
+            var buildIndex = 0;
             if (buildIndex < 0 || buildIndex + 2 >= relative.Length
                 || !relative[buildIndex + 1].Equals("generated", StringComparison.OrdinalIgnoreCase)
                 || !relative[buildIndex + 2].Equals("sources", StringComparison.OrdinalIgnoreCase))

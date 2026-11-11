@@ -28,6 +28,8 @@ public sealed class MavenProjectModel
 
     public List<Plugin> Plugins { get; init; } = [];
 
+    public List<Plugin> ManagedPlugins { get; init; } = [];
+
     public List<Dependency> AnnotationProcessorPaths { get; init; } = [];
 
     public List<string> ProfileIds { get; init; } = [];

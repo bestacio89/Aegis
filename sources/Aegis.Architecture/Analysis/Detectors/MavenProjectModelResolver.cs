@@ -272,7 +272,12 @@ internal static class MavenProjectModelResolver
             var plugins = parentModel?.Plugins
                 .Select(plugin => plugin with { IsInherited = true })
                 .ToList() ?? [];
-            plugins.AddRange(ParsePlugins(root, properties, inherited: false));
+            plugins.AddRange(ParsePlugins(root, properties, inherited: false, managed: false));
+
+            var managedPlugins = parentModel?.ManagedPlugins
+                .Select(plugin => plugin with { IsInherited = true })
+                .ToList() ?? [];
+            managedPlugins.AddRange(ParsePlugins(root, properties, inherited: false, managed: true));
 
             var processorPaths = parentModel?.AnnotationProcessorPaths
                 .Select(dependency => dependency with { IsInherited = true })
@@ -308,6 +313,7 @@ internal static class MavenProjectModelResolver
                 Dependencies = effectiveDependencies,
                 ManagedDependencies = managed,
                 Plugins = plugins,
+                ManagedPlugins = managedPlugins,
                 AnnotationProcessorPaths = processorPaths,
                 ProfileIds = profileIds,
                 Diagnostics = diagnostics,
@@ -366,14 +372,17 @@ internal static class MavenProjectModelResolver
     private static List<MavenProjectModel.Plugin> ParsePlugins(
         XElement root,
         IReadOnlyDictionary<string, string> properties,
-        bool inherited)
+        bool inherited,
+        bool managed)
     {
         var build = Child(root, "build");
-        var pluginElements = (Child(build, "plugins")?.Elements() ?? Enumerable.Empty<XElement>())
-            .Concat(Child(Child(build, "pluginManagement"), "plugins")?.Elements() ?? Enumerable.Empty<XElement>())
-            .Where(element => NameIs(element, "plugin"));
+        var pluginsElement = managed
+            ? Child(Child(build, "pluginManagement"), "plugins")
+            : Child(build, "plugins");
 
-        return pluginElements.Select(plugin => new MavenProjectModel.Plugin(
+        return (pluginsElement?.Elements() ?? Enumerable.Empty<XElement>())
+            .Where(element => NameIs(element, "plugin"))
+            .Select(plugin => new MavenProjectModel.Plugin(
                 ResolveValue(Value(plugin, "groupId") ?? "org.apache.maven.plugins", properties),
                 ResolveValue(Value(plugin, "artifactId"), properties),
                 ResolveValue(Value(plugin, "version"), properties),

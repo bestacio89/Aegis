@@ -96,6 +96,15 @@ public sealed class MavenProjectModelTests
                         </configuration>
                       </plugin>
                     </plugins>
+                    <pluginManagement>
+                      <plugins>
+                        <plugin>
+                          <groupId>org.example.build</groupId>
+                          <artifactId>managed-codegen-plugin</artifactId>
+                          <version>2.0.0</version>
+                        </plugin>
+                      </plugins>
+                    </pluginManagement>
                   </build>
                 </project>
                 """);
@@ -136,6 +145,13 @@ public sealed class MavenProjectModelTests
             Assert.Equal("2.4.0", internalApi.Version);
             Assert.Equal("runtime", internalApi.Scope);
             Assert.Single(internalApi.Exclusions);
+
+            Assert.Contains(model.Plugins, plugin =>
+                plugin.ArtifactId == "maven-compiler-plugin" && plugin.Version == "3.13.0");
+            Assert.DoesNotContain(model.Plugins, plugin =>
+                plugin.ArtifactId == "managed-codegen-plugin");
+            Assert.Contains(model.ManagedPlugins, plugin =>
+                plugin.ArtifactId == "managed-codegen-plugin" && plugin.Version == "2.0.0");
 
             var processor = Assert.Single(model.AnnotationProcessorPaths);
             Assert.Equal("mapstruct-processor", processor.ArtifactId);

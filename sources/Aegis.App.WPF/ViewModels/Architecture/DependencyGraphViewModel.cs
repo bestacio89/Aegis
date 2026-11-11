@@ -53,7 +53,6 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
         foreach (var node in GraphNodes)
             node.IsSelected = ReferenceEquals(node, value);
 
-        FilteredDependencies = Dependencies.Count(MatchesFilter);
     }
 
     public void Update(ProjectArchitectureContext? context)

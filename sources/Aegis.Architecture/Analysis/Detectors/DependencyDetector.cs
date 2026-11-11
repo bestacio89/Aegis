@@ -256,4 +256,16 @@ internal static class DependencyDetector
         }
     }
 
+
+    private static void AnalyzeGradle(
+        ProjectArchitectureContext context,
+        HashSet<string> dependencies)
+    {
+        foreach (var evidence in context.DependencyEvidence.Where(dependency =>
+                     dependency.Ecosystem.Equals("Gradle", StringComparison.OrdinalIgnoreCase)))
+        {
+            dependencies.Add(evidence.Name);
+        }
+    }
+
 }

@@ -86,7 +86,13 @@ internal static class FrameworkDetector
         // separate application framework. Normalize it for repository-wide
         // aggregation while retaining the precise module-level value.
         var projectFrameworks = ctx.Modules
-            .Select(module => module.Framework)
+            .Where(module =>
+                !module.IsTestProject
+                && !string.Equals(
+                    module.ProjectKind,
+                    "Test",
+                    StringComparison.OrdinalIgnoreCase))
+            .Select(ResolveModulePrimaryFramework)
             .Where(framework => !string.IsNullOrWhiteSpace(framework))
             .Select(framework => string.Equals(
                 framework,
@@ -101,9 +107,7 @@ internal static class FrameworkDetector
         if (projectFrameworks.Length > 1)
             ctx.Framework = "Multi-Framework";
         else if (projectFrameworks.Length == 1)
-            ctx.Framework = ctx.Modules.Count > 1
-                ? projectFrameworks[0]
-                : ctx.Modules[0].Framework;
+            ctx.Framework = projectFrameworks[0];
     }
 
     private static void DetectDotNetFramework(
@@ -184,6 +188,32 @@ internal static class FrameworkDetector
         {
             ctx.Framework = ".NET";
         }
+    }
+
+    private static string? ResolveModulePrimaryFramework(ProjectModuleContext module)
+    {
+        if (!string.Equals(
+                module.Framework,
+                "Multi-Framework",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return module.Framework;
+        }
+
+        // A mixed module may expose a UI framework alongside its primary
+        // runtime. Prefer the runtime for repository identity; individual
+        // files retain their concrete framework through module.Frameworks.
+        return module.Frameworks.FirstOrDefault(framework =>
+                   string.Equals(framework, "ASP.NET Core", StringComparison.OrdinalIgnoreCase))
+            ?? module.Frameworks.FirstOrDefault(framework =>
+                   string.Equals(framework, ".NET (EF Core)", StringComparison.OrdinalIgnoreCase))
+            ?? module.Frameworks.FirstOrDefault(framework =>
+                   string.Equals(framework, ".NET", StringComparison.OrdinalIgnoreCase))
+            ?? module.Frameworks.FirstOrDefault(framework =>
+                   string.Equals(framework, "WPF", StringComparison.OrdinalIgnoreCase))
+            ?? module.Frameworks.FirstOrDefault(framework =>
+                   string.Equals(framework, "Windows Forms", StringComparison.OrdinalIgnoreCase))
+            ?? "Multi-Framework";
     }
 
     private static void AddFramework(ProjectArchitectureContext context, string framework)

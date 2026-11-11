@@ -41,6 +41,58 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.Equal(1, summary.Metrics["MissingDocumentation"]);
         Assert.Equal(200d / 3d, summary.Metrics["DocumentationCoverage"], precision: 5);
         Assert.Equal("Completed", summary.Metadata["AnalysisStatus"]);
+        Assert.Contains("DocumentationFixture.cs", summary.Evidence);
+        Assert.Contains("UndocumentedOperation", summary.Evidence);
+        Assert.Contains("DocumentedOperation", summary.Evidence);
+        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
+    }
+
+    [Fact]
+    public async Task DocumentationEvaluator_emits_project_scoped_evidence_and_excludes_test_projects()
+    {
+        using var project = new TemporaryProject();
+        project.Write("Library/Library.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("Library/Production.cs", """
+            public sealed class Production
+            {
+                public void Execute() { }
+            }
+            """);
+        project.Write("Library.Tests/Library.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <IsTestProject>true</IsTestProject>
+              </PropertyGroup>
+              <ItemGroup><PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" /></ItemGroup>
+            </Project>
+            """);
+        project.Write("Library.Tests/ProductionTests.cs", """
+            public sealed class ProductionTests
+            {
+                public void TestOperation() { }
+            }
+            """);
+
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(project.Root);
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "DocumentationEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(project.Root, context)).ToArray();
+        var summary = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+
+        Assert.Equal("Library", summary.ProjectName);
+        Assert.Equal(1, summary.Metrics["TotalDeclarations"]);
+        Assert.Contains("Production.cs", summary.Evidence);
+        Assert.DoesNotContain("ProductionTests.cs", summary.Evidence);
+        Assert.True(summary.Metadata["AnalysisComplete"] == "true");
     }
 
     [Fact]

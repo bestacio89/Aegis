@@ -148,23 +148,68 @@ public sealed class ProjectArchitectureContext
     /// </summary>
     public IReadOnlyList<ArchitectureDependencyContext> ProductionDependencies =>
         Dependencies
-            .Where(dependency => string.Equals(
-                dependency.Scope,
-                "Production",
-                StringComparison.OrdinalIgnoreCase))
+            .Where(dependency =>
+                string.Equals(
+                    dependency.Scope,
+                    "Production",
+                    StringComparison.OrdinalIgnoreCase)
+                && !IsTestScopedDependency(dependency))
             .ToArray();
 
     /// <summary>
-    /// Relationships involving at least one test project. These remain available
-    /// for findings and the relationship ledger, but are not production edges.
+    /// Relationships involving at least one test project or test-support module.
+    /// These remain available for findings and the relationship ledger, but are
+    /// not production architecture edges.
     /// </summary>
     public IReadOnlyList<ArchitectureDependencyContext> TestDependencies =>
         Dependencies
-            .Where(dependency => string.Equals(
-                dependency.Scope,
-                "Test",
-                StringComparison.OrdinalIgnoreCase))
+            .Where(dependency =>
+                string.Equals(
+                    dependency.Scope,
+                    "Test",
+                    StringComparison.OrdinalIgnoreCase)
+                || IsTestScopedDependency(dependency))
             .ToArray();
+
+    private bool IsTestScopedDependency(ArchitectureDependencyContext dependency) =>
+        IsTestOrSupportModule(dependency.SourceProjectPath, dependency.Source)
+        || IsTestOrSupportModule(dependency.TargetProjectPath, dependency.Target);
+
+    private bool IsTestOrSupportModule(string projectPath, string moduleName)
+    {
+        ProjectModuleContext? module = null;
+
+        if (!string.IsNullOrWhiteSpace(projectPath))
+        {
+            var normalizedPath = Path.GetFullPath(projectPath);
+            var pathComparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            module = Modules.FirstOrDefault(candidate =>
+                !string.IsNullOrWhiteSpace(candidate.Path)
+                && string.Equals(
+                    Path.GetFullPath(candidate.Path),
+                    normalizedPath,
+                    pathComparison));
+        }
+        else
+        {
+            var matchingModules = Modules
+                .Where(candidate => string.Equals(
+                    candidate.Name,
+                    moduleName,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToArray();
+
+            if (matchingModules.Length == 1)
+                module = matchingModules[0];
+        }
+
+        return module is not null
+            && (module.IsTestProject || module.IsTestSupport);
+    }
 
 
 

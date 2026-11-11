@@ -297,7 +297,15 @@ public sealed class ArchitecturalPerformanceEvaluator
         result.Metadata["AsyncMaturityInterpretation"] =
             "Only configured blocking calls and synchronous I/O lower async maturity. A loop without I/O does not imply an async requirement.";
 
-        var healthMatches = nestedLoopMatches
+        var algorithmicMatches = nestedLoopMatches
+            .Concat(loopAnalysis.LongLoopBodyMatches)
+            .Concat(stringConcatenationMatches)
+            .Concat(largeAllocationMatches)
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToArray();
+        var healthMatches = algorithmicMatches
             .Concat(blockingMatches)
             .Concat(threadCreationMatches)
             .Concat(syncIoMatches)
@@ -339,7 +347,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             result,
             evidence,
             "AlgorithmicEfficiencyScore",
-            nestedLoopMatches,
+            algorithmicMatches,
             content,
             sanitized,
             $"Algorithmic efficiency {score.Algorithmic * 100:0.##}/100; maximum loop nesting depth {loopAnalysis.MaximumNestingDepth} (policy maximum {_policy.MaxNestedLoopDepth}); " +
@@ -385,6 +393,22 @@ public sealed class ArchitecturalPerformanceEvaluator
             content,
             sanitized,
             $"Large collection allocation signals: {largeAllocationMatches.Length} (informational only).");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "LoopBodyLengthSignalCount",
+            loopAnalysis.LongLoopBodyMatches,
+            content,
+            sanitized,
+            $"Loop bodies exceeding the configured line limit: {loopAnalysis.LongLoopBodyMatches.Count}.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "MaximumLoopNestingDepth",
+            nestedLoopMatches,
+            content,
+            sanitized,
+            $"Maximum measured loop nesting depth: {loopAnalysis.MaximumNestingDepth}.");
 
         result.Evidence = string.Join(Environment.NewLine, evidence);
         var firstEvidence = healthMatches.FirstOrDefault()

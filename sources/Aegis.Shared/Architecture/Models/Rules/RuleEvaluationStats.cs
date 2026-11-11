@@ -110,20 +110,35 @@ public sealed class RuleEvaluationStats
             StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Percentage of applicable rules with at least one completed evaluation.
-    /// Applicable rules without a supported producer remain in the denominator:
-    /// missing capability must reduce coverage rather than disappear from it.
-    /// Rules positively classified as not applicable and rules disabled by
-    /// explicit policy are excluded from the coverage denominator.
+    /// Percentage of supported, applicable rules with at least one completed evaluation.
+    /// Rules that do not apply to the analyzed project, are disabled by policy, or
+    /// lack a supported producer are excluded from this project-level denominator.
+    /// Unsupported producer contracts are reported separately by RuleCapabilityCoverage.
     /// </summary>
     public double EvaluationCoverage
     {
         get
         {
-            var applicableRuleCount = RulesApplicable + RulesUnsupported;
-            return applicableRuleCount <= 0
+            return RulesApplicable <= 0
                 ? 0.0
-                : Math.Clamp((double)RulesEvaluated / applicableRuleCount * 100.0, 0.0, 100.0);
+                : Math.Clamp((double)RulesEvaluated / RulesApplicable * 100.0, 0.0, 100.0);
+        }
+    }
+
+    /// <summary>
+    /// Percentage of registered rules for which the engine has a supported producer contract.
+    /// This is an engine capability measure, not project-specific evaluation coverage.
+    /// </summary>
+    public double RuleCapabilityCoverage
+    {
+        get
+        {
+            return RulesRegistered <= 0
+                ? 0.0
+                : Math.Clamp(
+                    (double)(RulesRegistered - RulesUnsupported) / RulesRegistered * 100.0,
+                    0.0,
+                    100.0);
         }
     }
 }

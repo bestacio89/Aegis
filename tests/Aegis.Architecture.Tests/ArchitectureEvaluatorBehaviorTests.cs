@@ -911,8 +911,11 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.Equal(1, summary.Metrics["AnalyzedFiles"]);
         Assert.Equal(0, summary.Metrics["UnreadableFiles"]);
         Assert.Equal(
-            fileResult.Metrics["TransactionIntegrityIndex"],
+            fileResult.Metrics["TransactionIntegrityScore"],
             summary.Metrics["TransactionIntegrityIndex"]);
+        Assert.Contains(
+            "Arithmetic mean",
+            summary.Metadata["Evidence.TransactionIntegrityIndex"]);
 
         AssertAllMetricsAreFinite(results);
     }

@@ -235,7 +235,7 @@ public sealed class ArchitecturalPerformanceEvaluator
     {
         var language = DetectLanguage(file);
         var sanitized = SourceCodeMasker.Mask(content);
-        var score = AnalyzePerformanceSignals(sanitized);
+        var score = AnalyzePerformanceSignals(sanitized, language);
         var blockingMatches = FindBlockingOperations(sanitized, language);
         var evidenceItems = blockingMatches
             .Select(match =>
@@ -382,7 +382,8 @@ public sealed class ArchitecturalPerformanceEvaluator
     }
 
     private PerformanceScore AnalyzePerformanceSignals(
-        string content)
+        string content,
+        string language)
     {
         var algorithmic = 1d;
         var concurrency = 1d;
@@ -413,8 +414,8 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
 
-        if (_policy.DisallowBlockingCalls &&
-            BlockingRegex.IsMatch(content))
+        if (_policy.DisallowBlockingCalls
+            && HasBlockingCalls(content, language))
         {
             concurrency -= 0.25;
         }
@@ -437,8 +438,8 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
 
-        if (_policy.RequireAsyncForIOMethods &&
-            SyncIORegex.IsMatch(content))
+        if (_policy.RequireAsyncForIOMethods
+            && HasSynchronousIO(content, language))
         {
             io -= 0.20;
         }
@@ -480,6 +481,41 @@ public sealed class ArchitecturalPerformanceEvaluator
     }
 
 
+
+    private static bool HasBlockingCalls(string content, string language)
+    {
+        if (BlockingRegex.IsMatch(content))
+            return true;
+
+        if (!string.Equals(language, "C#", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return TaskVariableDeclarationRegex.Matches(content)
+            .Select(match => match.Groups["name"].Value.TrimStart('@'))
+            .Distinct(StringComparer.Ordinal)
+            .Any(variable =>
+            {
+                var escaped = Regex.Escape(variable);
+                return Regex.IsMatch(
+                    content,
+                    $@"\b{escaped}\s*\.\s*(?:Wait\s*\(|Result\b)",
+                    RegexOptions.CultureInvariant);
+            });
+    }
+
+    private static bool HasSynchronousIO(string content, string language)
+    {
+        var regex = language switch
+        {
+            "C#" => DotNetSyncIORegex,
+            "Java" => JavaSyncIORegex,
+            "Python" => PythonSyncIORegex,
+            "TypeScript" or "JavaScript" => JavaScriptSyncIORegex,
+            _ => null
+        };
+
+        return regex?.IsMatch(content) == true;
+    }
 
     private void AddSummaries(
         List<ArchitectureEvaluatorResult> results,

@@ -480,7 +480,7 @@ public sealed class RepositoryPatternEvaluator
             asyncMatches.Count > 0
                 ? GetSourceLine(
                     sourceFile.Source,
-                    GetLineNumber(sourceFile.Sanitized, classBodyStart + asyncMatches[0].Index))
+                    GetLineNumber(sourceFile.Sanitized, classBodyStart + asyncMatches.First().Index))
                 : classSnippet);
 
         var leakEvidence = leakMatches.Count == 0
@@ -502,7 +502,7 @@ public sealed class RepositoryPatternEvaluator
             leakMatches.Count > 0
                 ? GetSourceLine(
                     sourceFile.Source,
-                    GetLineNumber(sourceFile.Sanitized, classBodyStart + leakMatches[0].Match.Index))
+                    GetLineNumber(sourceFile.Sanitized, classBodyStart + leakMatches.First().Match.Index))
                 : classSnippet);
 
         AddMetricEvidence(

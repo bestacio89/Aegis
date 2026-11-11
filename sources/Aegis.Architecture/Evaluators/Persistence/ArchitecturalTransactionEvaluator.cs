@@ -424,7 +424,7 @@ public sealed class ArchitecturalTransactionEvaluator
             summary.Metrics["TransactionIntegrityIndex"] = integrity;
 
             var fileScores = analyzedFileResults
-                .Select(result => result.Metrics["TransactionIntegrityIndex"])
+                .Select(result => result.Metrics["TransactionIntegrityScore"])
                 .ToArray();
 
             summary.Metadata["Evidence.TransactionIntegrityIndex"] =

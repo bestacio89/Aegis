@@ -280,6 +280,9 @@ public static class ProjectArchitectureContextDetector
             JsonSerializer.Serialize(ctx.ExcludedEntriesByReason);
 
 
+        ctx.MetadataMap["FrontendFrameworkDiscoveryComplete"] =
+            ctx.FrontendFrameworkDiscoveryComplete.ToString().ToLowerInvariant();
+
         ctx.MetadataMap["DetectedDependencies"] =
             ctx.DetectedDependencies.Count.ToString();
 

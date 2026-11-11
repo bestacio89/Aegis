@@ -423,7 +423,11 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
 
     protected bool IsTestProjectFile(string file) =>
         Context?.Modules.Any(module =>
-            module.IsTestProject
+            (module.IsTestProject
+                || string.Equals(
+                    module.ProjectKind,
+                    "Test",
+                    StringComparison.OrdinalIgnoreCase))
             && IsSameOrDescendantPath(file, module.Path)) == true;
 
     private bool IsWithinDetectedModule(string file) =>

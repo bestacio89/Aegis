@@ -318,6 +318,7 @@ public sealed class AnemicDomainModelEvaluator
                     behaviorScore,
                     evidence,
                     typeLine,
+                    GetSourceLine(content, typeLine),
                     language,
                     framework,
                     candidateReason);
@@ -351,6 +352,7 @@ public sealed class AnemicDomainModelEvaluator
         double behaviorScore,
         IReadOnlyCollection<string> evidence,
         int typeLine,
+        string codeSnippet,
         string language,
         string? framework,
         string candidateReason)
@@ -398,8 +400,10 @@ public sealed class AnemicDomainModelEvaluator
             typeLine.ToString(System.Globalization.CultureInfo.InvariantCulture);
         result.Metadata["EvidenceLine.DomainBehaviorScore"] =
             typeLine.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        result.Metadata["CodeSnippet.AnemicDomainModelIndex"] =
-            GetSourceLine(evidence, 0);
+        result.Metadata["CodeSnippet.AnemicDomainModelIndex"] = codeSnippet;
+        result.Metadata["CodeSnippet.DomainBehaviorScore"] = codeSnippet;
+        result.Metadata["EvidenceSummary.AnemicDomainModelIndex"] =
+            $"State members: {propertyCount + fieldCount}; behavior methods: {methodCount}; behavior ratio: {behaviorRatio:0.##}.";
         result.Evidence = string.Join(Environment.NewLine, evidence);
         result.LineNumber = typeLine;
 

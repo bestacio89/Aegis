@@ -58,15 +58,18 @@ public static class ProjectArchitectureContextDetector
             files);
 
 
-        FrameworkDetector.Analyze(
-            ctx,
-            files);
-
-
+        // Build manifests and structured dependency evidence must be available
+        // before framework classification. Java framework identity is derived
+        // from module-owned coordinates, never from source or directory names.
         DependencyDetector.Analyze(
             ctx,
             files,
             includeProjectReferences: false);
+
+
+        FrameworkDetector.Analyze(
+            ctx,
+            files);
 
 
         LayerDetector.Analyze(

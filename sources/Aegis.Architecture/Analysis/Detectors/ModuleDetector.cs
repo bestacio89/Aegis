@@ -515,9 +515,14 @@ internal static class ModuleDetector
             }
         }
 
-        return Path.GetFileName(modulePath.TrimEnd(
-            Path.DirectorySeparatorChar,
-            Path.AltDirectorySeparatorChar));
+        if (LanguageAndBuildDetector.IsGradleManifest(projectFile))
+        {
+            return Path.GetFileName(modulePath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar));
+        }
+
+        return Path.GetFileNameWithoutExtension(projectFile);
     }
 
     private static string DetectModuleType(

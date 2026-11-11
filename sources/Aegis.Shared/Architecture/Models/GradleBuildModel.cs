@@ -41,5 +41,6 @@ public sealed class GradleBuildModel
     public sealed record SourceSet(
         string Name,
         List<string> JavaSourceDirectories,
-        bool IsTest);
+        bool IsTest,
+        List<string>? ExplicitJavaSourceDirectories = null);
 }

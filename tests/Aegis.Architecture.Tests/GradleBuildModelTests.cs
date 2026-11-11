@@ -210,6 +210,94 @@ public sealed class GradleBuildModelTests
         }
     }
 
+    [Fact]
+    public void Detect_resolves_literal_custom_source_sets_and_preserves_test_ownership()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleCustomSourceSets_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"custom-source-sets\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins { id("java") }
+                sourceSets {
+                    create("integrationTest") {
+                        java.srcDir("src/integration/java")
+                    }
+                    create("contractTest") {
+                        java.setSrcDirs(listOf("src/contracts/java", "src/contracts/shared"))
+                    }
+                    create("benchmark") {
+                        java.srcDir("src/benchmark/java")
+                    }
+                }
+                """);
+
+            WriteJavaSource(root, "src/integration/java/example/IntegrationTest.java");
+            WriteJavaSource(root, "src/contracts/java/example/ContractTest.java");
+            WriteJavaSource(root, "src/contracts/shared/example/ContractFixture.java");
+            WriteJavaSource(root, "src/benchmark/java/example/Benchmark.java");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            var integration = Assert.Single(model.SourceSets, sourceSet => sourceSet.Name == "integrationTest");
+            Assert.True(integration.IsTest);
+            Assert.Contains(model.SourceSets, sourceSet =>
+                sourceSet.Name == "contractTest" && sourceSet.IsTest
+                && sourceSet.JavaSourceDirectories.Count == 2);
+            Assert.Contains(model.SourceSets, sourceSet =>
+                sourceSet.Name == "benchmark" && !sourceSet.IsTest);
+
+            Assert.Contains(model.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(root, "src", "integration", "java")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test
+                && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Explicit);
+            Assert.Contains(model.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(root, "src", "benchmark", "java")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production
+                && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Explicit);
+            Assert.True(model.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_does_not_infer_dynamic_custom_source_set_directories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleDynamicSourceSet_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle"), "rootProject.name = 'dynamic-source-set'");
+            File.WriteAllText(Path.Combine(root, "build.gradle"), """
+                sourceSets {
+                    create("generatedTest") {
+                        java.srcDir(provider { generatedDirectory })
+                    }
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.False(model.IsComplete);
+            Assert.DoesNotContain(model.SourceSets, sourceSet => sourceSet.Name == "generatedTest");
+            Assert.Contains(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleCustomSourceSetNotStaticallyResolved");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static void WriteJavaSource(string root, string relativePath)
     {
         var path = Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));

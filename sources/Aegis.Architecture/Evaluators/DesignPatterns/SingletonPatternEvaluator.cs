@@ -422,6 +422,12 @@ public sealed class SingletonPatternEvaluator
             bool.FalseString;
         summary.Metadata["EmptyCandidateSet"] =
             (singletonCount == 0).ToString();
+        var analysisComplete = unreadableFiles == 0
+            && analyzedFiles == files.Count;
+        summary.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
+        summary.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "Incomplete";
 
         results.Add(summary);
 

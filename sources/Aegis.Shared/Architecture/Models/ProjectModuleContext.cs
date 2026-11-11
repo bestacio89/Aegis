@@ -35,6 +35,9 @@ public sealed class ProjectModuleContext
     /// <summary>Statically interpreted Maven model; null for non-Maven projects.</summary>
     public MavenProjectModel? MavenModel { get; set; }
 
+    /// <summary>Static Gradle settings/project graph; populated on the build root module.</summary>
+    public GradleProjectModel? GradleModel { get; set; }
+
     public List<string> TargetFrameworks { get; set; } = [];
 
     public List<string> Languages { get; set; } = [];

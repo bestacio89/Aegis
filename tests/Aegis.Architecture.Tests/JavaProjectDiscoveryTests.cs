@@ -40,12 +40,13 @@ public sealed class JavaProjectDiscoveryTests
         {
             File.WriteAllText(
                 Path.Combine(root, "settings.gradle.kts"),
-                "rootProject.name = \"gradle-root\"\ninclude(\":api\", \":service\")");
+                "rootProject.name = \"gradle-root\"\ninclude(\":api\", \":service\")\nproject(\":api\").projectDir = file(\"modules/api\")\nincludeBuild(\"build-logic\")");
             File.WriteAllText(Path.Combine(root, "build.gradle.kts"), "plugins { java }");
 
-            var apiRoot = Path.Combine(root, "api");
+            var apiRoot = Path.Combine(root, "modules", "api");
             var serviceRoot = Path.Combine(root, "service");
             Directory.CreateDirectory(apiRoot);
+            Directory.CreateDirectory(Path.Combine(root, "build-logic"));
             Directory.CreateDirectory(serviceRoot);
             File.WriteAllText(Path.Combine(apiRoot, "build.gradle"), "apply plugin: 'java'");
             File.WriteAllText(Path.Combine(serviceRoot, "build.gradle.kts"), "plugins { java }");
@@ -75,6 +76,11 @@ public sealed class JavaProjectDiscoveryTests
                 Path.GetFileName(file).Equals("settings.gradle.kts", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(rootModule.ProjectFiles, file =>
                 Path.GetFileName(file).Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase));
+            var gradleModel = Assert.IsType<Aegis.Shared.Architecture.Models.GradleProjectModel>(rootModule.GradleModel);
+            Assert.Equal("gradle-root", gradleModel.RootProjectName);
+            Assert.Contains(gradleModel.Projects, project => project.ProjectPath == ":api" && project.ProjectDirectory == apiRoot);
+            Assert.Contains(gradleModel.Projects, project => project.ProjectPath == ":service" && project.ProjectDirectory == serviceRoot);
+            Assert.Contains(gradleModel.IncludedBuilds, build => build.Directory == Path.Combine(root, "build-logic"));
         }
         finally
         {

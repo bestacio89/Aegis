@@ -152,6 +152,7 @@ internal static class ModuleDetector
         }
 
         MavenProjectModelResolver.Analyze(context, files);
+        GradleProjectModelResolver.Analyze(context, files);
 
         PopulateOwnedLanguages(context.Modules, files);
     }

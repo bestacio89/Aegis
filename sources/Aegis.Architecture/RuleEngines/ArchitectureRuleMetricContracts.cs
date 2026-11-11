@@ -187,24 +187,59 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-ARCH-R2"] = policy => policy.Architecture.EnforceLayerBoundaries,
                 ["AEG-ARCH-R3"] = policy => policy.Architecture.EnforceLayerBoundaries,
                 ["AEG-ARCH-R5"] = policy => policy.Architecture.EnforceLayerBoundaries,
+                ["AEG-ARCH-R8"] = policy => policy.Architecture.DesignPatterns.DetectGodClasses,
+                ["AEG-ARCH-R10"] = policy => policy.Security.Enabled,
 
                 ["AEG-BACK-R5"] = policy =>
                     policy.Maintainability.MinMaintainabilityIndex > 0,
 
                 ["AEG-DES-BLD001"] = policy => policy.Architecture.DesignPatterns.EnforceBuilderPattern,
+                ["AEG-DES-BLD002"] = policy =>
+                    policy.Architecture.DesignPatterns.EnforceBuilderPattern
+                    && policy.Architecture.DesignPatterns.SuggestImmutability,
                 ["AEG-DES-CMD001"] = policy => policy.Architecture.DesignPatterns.EnforceCommandPattern,
+                ["AEG-DES-CMD002"] = policy => policy.Architecture.DesignPatterns.EnforceCommandPattern,
                 ["AEG-DES-DEC001"] = policy => policy.Architecture.DesignPatterns.EnforceDecoratorPattern,
+                ["AEG-DES-DEC002"] = policy => policy.Architecture.DesignPatterns.EnforceDecoratorPattern,
                 ["AEG-DES-FAC001"] = policy => policy.Architecture.DesignPatterns.EnforceFacadePattern,
                 ["AEG-DES-FAC002"] = policy => policy.Architecture.DesignPatterns.EnforceFacadePattern,
+                ["AEG-DES-FACR001"] = policy => policy.Architecture.DesignPatterns.EnforceFactoryPattern,
+                ["AEG-DES-FACR002"] = policy => policy.Architecture.DesignPatterns.EnforceFactoryPattern,
+                ["AEG-DES-MEDI001"] = policy => policy.Architecture.DesignPatterns.EnforceMediatorPattern,
+                ["AEG-DES-MEDI002"] = policy => policy.Architecture.DesignPatterns.EnforceMediatorPattern,
+                ["AEG-DES-ADM001"] = policy => policy.Architecture.DesignPatterns.DetectAnemicDomainModels,
+                ["AEG-DES-CIRC001"] = policy => policy.Architecture.DesignPatterns.DetectCircularDependencies,
                 ["AEG-DES-GOD001"] = policy => policy.Architecture.DesignPatterns.DetectGodClasses,
-                ["AEG-DES-OBS001"] = policy => policy.Architecture.DesignPatterns.EnforceObserverPattern,
+                ["AEG-DES-OBS001"] = policy =>
+                    policy.Architecture.DesignPatterns.EnforceObserverPattern
+                    && policy.Architecture.DesignPatterns.DetectLeakingSubscriptions,
+                ["AEG-DES-OBS002"] = policy => policy.Architecture.DesignPatterns.EnforceObserverPattern,
                 ["AEG-DES-REPO001"] = policy => policy.Architecture.DesignPatterns.EnforceRepositoryPattern,
                 ["AEG-DES-SING001"] = policy => policy.Architecture.DesignPatterns.EnforceSingletonPattern,
-                ["AEG-DES-STRAT001"] = policy => policy.Architecture.DesignPatterns.EnforceStrategyPattern,
+                ["AEG-DES-STRAT001"] = policy =>
+                    policy.Architecture.DesignPatterns.EnforceStrategyPattern
+                    && policy.Architecture.DesignPatterns.DetectConditionalStrategySwitch,
                 ["AEG-DES-STRAT002"] = policy => policy.Architecture.DesignPatterns.EnforceStrategyPattern,
 
                 ["AEG-INF-R1"] = policy => policy.Configuration.Enabled,
                 ["AEG-INF-R2"] = policy => policy.Logging.Enabled,
+
+                ["AEG-DEPS-R1"] = policy => policy.Dependency.Enabled && policy.Dependency.CheckOutdatedPackages,
+                ["AEG-DEPS-R2"] = policy => policy.Dependency.Enabled && policy.Dependency.CheckOutdatedPackages,
+                ["AEG-DEPS-R3"] = policy => policy.Dependency.Enabled && policy.Dependency.CheckUnusedReferences,
+                ["AEG-DEPS-R4"] = policy => policy.Dependency.Enabled && policy.Dependency.CheckOutdatedPackages,
+
+                ["AEG-FRONT-R1"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R2"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R3"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R4"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R5"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R6"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R7"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R8"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R9"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R10"] = policy => policy.Frontend.Enabled,
+                ["AEG-FRONT-R11"] = policy => policy.Frontend.Enabled,
 
                 ["AEG-NAM-R1"] = policy => policy.Naming.Enabled,
                 ["AEG-NAM-R2"] = policy => policy.Naming.Enabled,
@@ -218,9 +253,13 @@ internal static class ArchitectureRuleMetricContracts
 
                 ["AEG-PERF-R1"] = policy => policy.Performance.Enabled,
                 ["AEG-PERF-R2"] = policy => policy.Performance.Enabled,
+                ["AEG-PERF-R3"] = policy => policy.Performance.Enabled,
                 ["AEG-PERF-R4"] = policy => policy.Performance.Enabled,
 
-                ["AEG-TXN-R1"] = policy => policy.Transaction.Enabled
+                ["AEG-TXN-R1"] = policy => policy.Transaction.Enabled,
+                ["AEG-TXN-R2"] = policy => policy.Transaction.Enabled,
+                ["AEG-TXN-R3"] = policy => policy.Transaction.Enabled,
+                ["AEG-TXN-R4"] = policy => policy.Transaction.Enabled
             };
 
     public static string? GetProducerContractDisposition(string ruleId)

@@ -203,6 +203,38 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
     [Fact]
+    public void EvaluateDetailed_marks_policy_disabled_supported_rules_not_applicable()
+    {
+        var disabledPolicy = new AegisArchitecturePolicy();
+        disabledPolicy.Architecture.DesignPatterns.EnforceStrategyPattern = false;
+
+        var disabledOutcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            disabledPolicy).EvaluateDetailed(
+                new ProjectArchitectureContext { Language = "C#" },
+                []);
+
+        Assert.Contains("AEG-DES-STRAT001", disabledOutcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-DES-STRAT002", disabledOutcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-DES-STRAT001", disabledOutcome.Stats.RulesNotEvaluated);
+        Assert.DoesNotContain("AEG-DES-STRAT002", disabledOutcome.Stats.RulesNotEvaluated);
+
+        var enabledPolicy = new AegisArchitecturePolicy();
+        enabledPolicy.Architecture.DesignPatterns.EnforceStrategyPattern = true;
+
+        var enabledOutcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            enabledPolicy).EvaluateDetailed(
+                new ProjectArchitectureContext { Language = "C#" },
+                []);
+
+        Assert.DoesNotContain("AEG-DES-STRAT001", enabledOutcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-DES-STRAT002", enabledOutcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-DES-STRAT001", enabledOutcome.Stats.RulesNotEvaluated);
+        Assert.Contains("AEG-DES-STRAT002", enabledOutcome.Stats.RulesNotEvaluated);
+    }
+
+    [Fact]
     public void EvaluateDetailed_marks_layer_boundary_rules_not_applicable_without_two_architectural_roles()
     {
         var context = new ProjectArchitectureContext
@@ -296,10 +328,10 @@ public sealed class RuleEngineCoreBehaviorTests
 
         Assert.Equal(76, ArchitectureRuleRegistry.All.Count);
         Assert.Equal(28, outcome.Stats.RulesUnsupported);
-        Assert.Equal(46, outcome.Stats.RulesApplicable);
-        Assert.Equal(74, outcome.Stats.NotEvaluatedReasons.Count);
-        Assert.Equal(74, outcome.Stats.RulesNotEvaluated.Count);
-        Assert.Equal(2, outcome.Stats.RulesNotApplicable.Count);
+        Assert.Equal(42, outcome.Stats.RulesApplicable);
+        Assert.Equal(70, outcome.Stats.NotEvaluatedReasons.Count);
+        Assert.Equal(70, outcome.Stats.RulesNotEvaluated.Count);
+        Assert.Equal(6, outcome.Stats.RulesNotApplicable.Count);
 
         // Rule-level missing evidence is not a scoped evaluation result.
         Assert.Empty(outcome.Evaluations);

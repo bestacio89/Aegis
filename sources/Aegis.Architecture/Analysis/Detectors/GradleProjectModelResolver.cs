@@ -156,6 +156,7 @@ internal static class GradleProjectModelResolver
                 ? match.Groups["parenthesized"].Value
                 : match.Groups["groovy"].Value;
             var values = QuotedValueExpression.Matches(arguments)
+                .Cast<Match>()
                 .Select(value => value.Groups["value"].Value.Trim())
                 .ToArray();
             var remaining = QuotedValueExpression.Replace(arguments, string.Empty)

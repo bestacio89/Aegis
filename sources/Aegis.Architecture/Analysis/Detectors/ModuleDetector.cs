@@ -59,7 +59,7 @@ internal static class ModuleDetector
                 Path = modulePath,
                 ProjectFile = primaryProjectFile,
                 ProjectFiles = projectFiles,
-                Type = DetectModuleType(modulePath, moduleName)
+                Type = DetectModuleType(context.RootPath, modulePath, moduleName)
             };
 
             var dotNetProject = projectFiles.FirstOrDefault(file =>
@@ -465,11 +465,18 @@ internal static class ModuleDetector
         return Path.GetFileNameWithoutExtension(projectFile);
     }
 
-    private static string DetectModuleType(string path, string moduleName)
+    private static string DetectModuleType(
+        string rootPath,
+        string path,
+        string moduleName)
     {
-        // A project nested under an explicit test directory is test scope even
-        // when its project name or build metadata does not use a test suffix.
-        if (Path.GetFullPath(path)
+        // A project nested under an explicit test directory within the scanned
+        // repository is test scope even when its name or build metadata omits it.
+        var relativePath = Path.GetRelativePath(
+            Path.GetFullPath(rootPath),
+            Path.GetFullPath(path));
+
+        if (relativePath
             .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
                 StringSplitOptions.RemoveEmptyEntries)
             .Any(segment => segment.Equals("test", StringComparison.OrdinalIgnoreCase)

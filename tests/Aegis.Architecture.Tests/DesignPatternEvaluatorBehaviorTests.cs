@@ -102,6 +102,51 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.Equal(1, result.Metrics["AbstractionScore"]);
         Assert.True(result.Metrics.ContainsKey("FactoryComplianceScore"));
         Assert.Equal("false", result.Metadata["SemanticAnalysisPerformed"]);
+        Assert.Equal("FileMetrics", result.Metadata["EvidenceScope.FactoryComplianceScore"]);
+        Assert.Contains("IOrderFactory", result.Metadata["Evidence.AbstractionScore"]);
+        Assert.Contains("FactoryScoreInterpretation", result.Metadata.Keys);
+    }
+
+    [Fact]
+    public async Task FactoryEvaluator_resolves_abstractions_across_files_and_requires_an_implementation_relationship()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Contracts/IOrderFactory.cs", """
+            public interface IOrderFactory
+            {
+                Order Create();
+            }
+            """);
+        project.Write("back/Factories/OrderFactory.cs", """
+            public sealed class OrderFactory
+            {
+                public Order Create() => new Order();
+            }
+            """);
+        project.Write("back/Factories/InvoiceFactory.cs", """
+            public sealed class InvoiceFactory : IInvoiceFactory
+            {
+                public Invoice Create() => new Invoice();
+            }
+            """);
+        project.Write("back/Contracts/IInvoiceFactory.cs", """
+            public interface IInvoiceFactory
+            {
+                Invoice Create();
+            }
+            """);
+
+        var results = await Evaluate(project, "FactoryPatternEvaluator");
+        var order = Assert.Single(results, result =>
+            result.Metadata.GetValueOrDefault("FactoryName") == "OrderFactory");
+        var invoice = Assert.Single(results, result =>
+            result.Metadata.GetValueOrDefault("FactoryName") == "InvoiceFactory");
+
+        Assert.Equal(0, order.Metrics["AbstractionScore"]);
+        Assert.Equal(1, invoice.Metrics["AbstractionScore"]);
+        Assert.Contains("No matching abstraction", order.Metadata["Evidence.AbstractionScore"]);
+        Assert.Contains("IInvoiceFactory.cs", invoice.Metadata["Evidence.AbstractionScore"]);
+        Assert.True(invoice.LineNumber is > 0);
     }
 
     [Fact]

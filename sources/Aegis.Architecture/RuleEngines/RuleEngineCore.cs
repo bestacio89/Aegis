@@ -810,7 +810,17 @@ public sealed class RuleEngineCore
             return false;
 
         if (scope == RuleEvaluationScope.Project)
+        {
+            if (string.Equals(
+                    metadata?.GetValueOrDefault("AnalysisComplete"),
+                    bool.FalseString,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
             return true;
+        }
 
         var filePath = ResolveEvidenceFilePath(fact);
         if (string.IsNullOrWhiteSpace(filePath))

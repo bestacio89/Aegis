@@ -46,7 +46,8 @@
         <Grid Grid.Row="1" Margin="0,4,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="190" />
+                <ColumnDefinition Width="170" />
+                <ColumnDefinition Width="150" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBox
@@ -66,8 +67,17 @@
                 Foreground="{StaticResource Brush.TextPrimary}"
                 BorderBrush="{StaticResource Brush.Line}"
                 VerticalContentAlignment="Center" />
-            <Button
+            <ComboBox
                 Grid.Column="2"
+                ItemsSource="{Binding ScopeFilters}"
+                SelectedItem="{Binding SelectedScope, Mode=TwoWay}"
+                MinHeight="38" Margin="0,0,10,0" Padding="8,4"
+                Background="{StaticResource Brush.PanelElevated}"
+                Foreground="{StaticResource Brush.TextPrimary}"
+                BorderBrush="{StaticResource Brush.Line}"
+                VerticalContentAlignment="Center" />
+            <Button
+                Grid.Column="3"
                 Content="Clear filters"
                 Command="{Binding ClearFiltersCommand}"
                 Padding="14,8" MinHeight="38"
@@ -106,6 +116,7 @@
                         <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
                         <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="125" />
                         <DataGridTextColumn Header="Direction / type" Binding="{Binding DependencyType}" Width="125" />
+                        <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" Width="90" />
                         <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="125" />
                         <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="*" />
                         <DataGridTextColumn Header="Evidence file" Binding="{Binding File}" Width="1.4*" />
@@ -168,6 +179,17 @@
                             <TextBlock Text="DEPENDENCY TYPE" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.DependencyType, TargetNullValue='Not supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" TextWrapping="Wrap" />
+                            <TextBlock Text="SCOPE" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.Scope, TargetNullValue='Not supplied'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
+                            <TextBlock Text="SOURCE PROJECT" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.SourceProjectPath, TargetNullValue='Not supplied'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
+                                       TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
+                            <TextBlock Text="TARGET PROJECT" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.TargetProjectPath, TargetNullValue='Not supplied'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
+                                       TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
                             <TextBlock Text="DISCOVERY EVIDENCE" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.File, TargetNullValue='No source file supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12"

@@ -649,7 +649,7 @@ internal static class MavenProjectModelResolver
                 .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var targetIndex = Array.FindIndex(relative, segment =>
                 segment.Equals("target", StringComparison.OrdinalIgnoreCase));
-            if (targetIndex < 0 || targetIndex + 1 >= relative.Length)
+            if (targetIndex != 0 || targetIndex + 1 >= relative.Length)
                 continue;
 
             var generatedDirectory = relative[targetIndex + 1];

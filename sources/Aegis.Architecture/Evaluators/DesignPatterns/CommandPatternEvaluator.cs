@@ -495,12 +495,6 @@ public sealed class CommandPatternEvaluator
         result.Metadata["MeasurementMethod"] =
             "Lexical command-class analysis; handler pairing uses class names across analyzed files.";
         result.Metadata["ComplianceScoreIsHeuristic"] = true.ToString();
-        var analysisComplete = unreadableFileCount == 0
-            && analyzedFileCount == discoveredFileCount;
-        result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
-        result.Metadata["AnalysisStatus"] = analysisComplete
-            ? "Completed"
-            : "Incomplete";
         result.Metadata["TypeResolutionPerformed"] = false.ToString();
         result.Metadata["CallGraphResolved"] = false.ToString();
 
@@ -551,6 +545,12 @@ public sealed class CommandPatternEvaluator
         result.Metadata["MeasurementMethod"] =
             "Project-level aggregation of command candidate results.";
         result.Metadata["ComplianceScoreIsHeuristic"] = true.ToString();
+        var analysisComplete = unreadableFileCount == 0
+            && analyzedFileCount == discoveredFileCount;
+        result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
+        result.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "Incomplete";
 
         return result;
     }

@@ -451,7 +451,7 @@ public sealed class RepositoryPatternEvaluator
         var interfaceEvidence = hasMatchingInterface && matchingInterface is not null
             ? $"Matching abstraction '{expectedInterfaceName}' found at " +
               $"{Path.GetRelativePath(sourceFile.ProjectScopePath, matchingInterface.FilePath)}:" +
-              $"{matchingInterface.LineNumber}. Repository declaration: {relativePath}:{classLine} — {classSnippet}"
+              $"{matchingInterface.LineNumber} — {matchingInterface.SourceLine}. Repository declaration: {relativePath}:{classLine} — {classSnippet}"
             : $"No matching abstraction '{expectedInterfaceName}' was found in project scope '{sourceFile.ProjectScopePath}'. " +
               $"Repository declaration: {relativePath}:{classLine} — {classSnippet}";
 
@@ -476,7 +476,7 @@ public sealed class RepositoryPatternEvaluator
             "AsyncCompliance",
             asyncEvidence,
             asyncMatches.Count > 0
-                ? GetLineNumber(sourceFile.Sanitized, classBodyStart + asyncMatches[0].Index)
+                ? GetLineNumber(sourceFile.Sanitized, classBodyStart + asyncMatches.First().Index)
                 : classLine,
             asyncMatches.Count > 0
                 ? GetSourceLine(
@@ -498,7 +498,7 @@ public sealed class RepositoryPatternEvaluator
             "LeakRisk",
             leakEvidence,
             leakMatches.Count > 0
-                ? GetLineNumber(sourceFile.Sanitized, classBodyStart + leakMatches[0].Match.Index)
+                ? GetLineNumber(sourceFile.Sanitized, classBodyStart + leakMatches.First().Match.Index)
                 : classLine,
             leakMatches.Count > 0
                 ? GetSourceLine(

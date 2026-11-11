@@ -396,13 +396,15 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             result => result.Metrics.ContainsKey("LoggingCallCount"));
 
         Assert.True(fileResult.Metrics["LoggingCallCount"] >= 2);
+        Assert.True(fileResult.LineNumber is > 0);
+        Assert.Contains("LogInformation", fileResult.Evidence);
         Assert.DoesNotContain(results, result =>
             result.Target.Contains("External.cs", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal(
-            1,
-            Assert.Single(results, result =>
-                result.Metrics.ContainsKey("SourceFilesScanned"))
-                .Metrics["SourceFilesScanned"]);
+        var summary = Assert.Single(results, result =>
+            result.Metrics.ContainsKey("SourceFilesScanned"));
+        Assert.Equal(1, summary.Metrics["SourceFilesScanned"]);
+        Assert.Contains("LoggingFixture.cs", summary.Evidence);
+        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
         Assert.True(fileResult.Metrics.ContainsKey("StructuredLoggingScore"));
         Assert.Contains(results, result =>
             result.Metrics.ContainsKey("ObservabilityHealthIndex"));

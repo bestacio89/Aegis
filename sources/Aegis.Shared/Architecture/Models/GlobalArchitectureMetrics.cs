@@ -10,8 +10,11 @@ public sealed class GlobalArchitectureMetrics
     /// <summary>True only when at least one valid rule comparison supports the health metrics.</summary>
     public bool HasAssessmentEvidence { get; set; }
 
-    /// <summary>Percentage of applicable registered rules that were evaluated.</summary>
+    /// <summary>Percentage of supported, applicable rules that were evaluated for this project.</summary>
     public double RuleEvaluationCoverage { get; set; }
+
+    /// <summary>Percentage of registered rules with a supported evaluator metric contract.</summary>
+    public double RuleCapabilityCoverage { get; set; }
 
     /// <summary>True when a supported applicable-rule denominator is available.</summary>
     public bool HasCoverageEvidence { get; set; }

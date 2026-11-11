@@ -381,6 +381,44 @@ public sealed class ProjectArchitectureContextDetectorTests
 
  
     [Fact]
+    public void Detect_excludes_test_projects_from_repository_primary_framework_aggregation()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var webRoot = Path.Combine(directory.Path, "src", "Web");
+        var testsRoot = Path.Combine(directory.Path, "tests", "Web.Tests");
+        Directory.CreateDirectory(webRoot);
+        Directory.CreateDirectory(testsRoot);
+
+        File.WriteAllText(
+            Path.Combine(webRoot, "Web.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(
+            Path.Combine(testsRoot, "Web.Tests.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <IsTestProject>true</IsTestProject>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+
+        Assert.Equal("ASP.NET Core", context.Framework);
+        Assert.Contains(context.Modules, module =>
+            module.Name == "Web.Tests" && module.IsTestProject);
+    }
+
+    [Fact]
     public void Detect_discovers_frontend_manifests_without_overwriting_backend_identity()
     {
         using var directory = new TemporaryDirectory();

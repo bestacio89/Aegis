@@ -114,11 +114,20 @@ public sealed class RuleEngineCore
             // rule's semantic support status. With no candidate, the rule is
             // not applicable; with candidates, its producer contract still
             // determines whether the measurement is currently supportable.
+            var nonNullFacts = factList
+                .Where(fact => fact is not null)
+                .ToList();
+
             if (ArchitectureRuleMetricContracts.TryGetNoCandidateDisposition(
                     rule.Id,
-                    factList.Where(fact => fact is not null).ToList(),
+                    nonNullFacts,
                     context,
-                    out var noCandidateReason))
+                    out var noCandidateReason)
+                || ArchitectureRuleMetricContracts.TryGetExplicitNoApplicableDisposition(
+                    rule.Id,
+                    nonNullFacts,
+                    context,
+                    out noCandidateReason))
             {
                 notApplicableReasons[rule.Id] = noCandidateReason;
                 continue;

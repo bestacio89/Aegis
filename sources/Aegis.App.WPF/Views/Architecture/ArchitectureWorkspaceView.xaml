@@ -11,8 +11,8 @@
         <DataTemplate DataType="{x:Type archivm:ArchitectureOverviewViewModel}">
             <artchiviews:ArchitectureOverviewView />
         </DataTemplate>
-        <DataTemplate DataType="{x:Type archivm:ArchitectureExplorerViewModel}">
-            <artchiviews:ArchitectureExplorerView />
+        <DataTemplate DataType="{x:Type archivm:DependencyGraphViewModel}">
+            <artchiviews:DependencyGraphView />
         </DataTemplate>
         <DataTemplate DataType="{x:Type archivm:RelationshipLedgerViewModel}">
             <artchiviews:RelationshipLedgerView />

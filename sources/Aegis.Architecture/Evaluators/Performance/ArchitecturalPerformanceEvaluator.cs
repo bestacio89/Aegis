@@ -401,7 +401,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             stringConcatenationMatches,
             content,
             sanitized,
-            $"String concatenation assignment signals: {stringConcatenationMatches.Count} (informational only).");
+            $"String concatenation assignment signals: {stringConcatenationMatches.Count}; only typed string variables inside loop bodies contribute to the algorithmic score.");
         AddMetricEvidence(
             result,
             evidence,
@@ -409,7 +409,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             largeAllocationMatches,
             content,
             sanitized,
-            $"Large collection allocation signals: {largeAllocationMatches.Count} (informational only).");
+            $"Large collection allocation signals: {largeAllocationMatches.Count}; only explicit capacities above the configured threshold inside loop bodies contribute to the algorithmic score.");
         AddMetricEvidence(
             result,
             evidence,
@@ -717,10 +717,16 @@ public sealed class ArchitecturalPerformanceEvaluator
                         break;
                 }
 
+                if (lineEnd == content.Length)
+                {
+                    cursor = lineEnd;
+                    break;
+                }
+
                 cursor = lineEnd + 1;
             }
 
-            range = new LoopBodyRange(loopMatch, bodyStart, cursor);
+            range = new LoopBodyRange(loopMatch, bodyStart, Math.Min(cursor, content.Length));
             return cursor > bodyStart;
         }
 

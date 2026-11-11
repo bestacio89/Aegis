@@ -772,6 +772,56 @@ public sealed class ArchitectureEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task PerformanceEvaluator_distinguishes_sequential_loops_from_nested_loops()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/LoopFixture.cs", """
+            public sealed class LoopFixture
+            {
+                public void Execute(int count)
+                {
+                    for (var first = 0; first < count; first++)
+                    {
+                        Consume(first);
+                    }
+
+                    for (var second = 0; second < count; second++)
+                    {
+                        Consume(second);
+                    }
+
+                    for (var outer = 0; outer < count; outer++)
+                    {
+                        for (var inner = 0; inner < count; inner++)
+                        {
+                            Consume(outer + inner);
+                        }
+                    }
+                }
+
+                private void Consume(int value) { }
+            }
+            """);
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project))).ToArray();
+        var finding = Assert.Single(
+            results,
+            result => result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "LoopFixture.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal(2, finding.Metrics["MaximumLoopNestingDepth"]);
+        Assert.Equal(100, finding.Metrics["AlgorithmicEfficiencyScore"]);
+        Assert.Equal(0, finding.Metrics["LoopBodyLengthSignalCount"]);
+    }
+
+    [Fact]
     public async Task PerformanceEvaluator_preserves_async_and_health_evidence_for_blocking_io()
     {
         using var project = new TemporaryProject();

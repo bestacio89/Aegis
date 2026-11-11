@@ -84,7 +84,7 @@ public sealed class RemainingPatternEvaluatorBehaviorTests
         using var project = new TemporaryProject();
 
         var methods = Enumerable.Range(0, 25)
-            .Select(index => $"""
+            .Select(index => $$"""
                 public int Method{{index}}(int value)
                 {
                     if (value > {{index}}) return value;

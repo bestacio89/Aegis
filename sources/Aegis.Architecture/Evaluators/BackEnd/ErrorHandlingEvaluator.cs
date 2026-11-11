@@ -843,64 +843,6 @@ public sealed class ErrorHandlingEvaluator
             _ => "Unknown"
         };
 
-    private static void AddMetricEvidence(
-        ArchitectureEvaluatorResult result,
-        string metricKey,
-        IReadOnlyCollection<CatchEvidence> evidence,
-        string emptyEvidence)
-    {
-        var evidenceText = evidence.Count == 0
-            ? emptyEvidence
-            : string.Join(
-                Environment.NewLine,
-                evidence.Select(item =>
-                    $"Line {item.LineNumber}: {item.SourceLine}"));
-
-        result.Metadata[$"Evidence.{metricKey}"] = evidenceText;
-        result.Metadata[$"EvidenceScope.{metricKey}"] = "FileMetrics";
-
-        var first = evidence.FirstOrDefault();
-        if (first is null)
-            return;
-
-        result.Metadata[$"EvidenceLine.{metricKey}"] =
-            first.LineNumber.ToString(
-                System.Globalization.CultureInfo.InvariantCulture);
-        result.Metadata[$"CodeSnippet.{metricKey}"] = first.SourceLine;
-    }
-
-    private static int GetLineNumber(string content, int position)
-    {
-        var lineNumber = 1;
-        for (var index = 0; index < position && index < content.Length; index++)
-        {
-            if (content[index] == '\n')
-                lineNumber++;
-        }
-
-        return lineNumber;
-    }
-
-    private static string GetSourceLine(string content, int lineNumber)
-    {
-        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n')
-            .Split('\n');
-
-        return lineNumber > 0 && lineNumber <= lines.Length
-            ? lines[lineNumber - 1].Trim()
-            : string.Empty;
-    }
-
-    private static string DetectLanguage(string file) =>
-        Path.GetExtension(file).ToLowerInvariant() switch
-        {
-            ".cs" => "C#",
-            ".java" => "Java",
-            ".py" => "Python",
-            _ => "Unknown"
-        };
-
     private void AddSummary(
         List<ArchitectureEvaluatorResult> results,
         int filesDiscovered,

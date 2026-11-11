@@ -274,44 +274,7 @@ public sealed class AegisArchitectureAnalysisRunner
 
         try
         {
-            using var document = JsonDocument.Parse(
-                json,
-                new JsonDocumentOptions
-                {
-                    CommentHandling = JsonCommentHandling.Skip,
-                    AllowTrailingCommas = true
-                });
-
-            if (document.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                throw new JsonException(
-                    "The policy document root must be a JSON object.");
-            }
-
-            var root = document.RootElement;
-
-            if (TryGetPropertyIgnoreCase(
-                    root,
-                    "AegisArchitecturePolicy",
-                    out var wrappedPolicy))
-            {
-                if (wrappedPolicy.ValueKind != JsonValueKind.Object)
-                {
-                    throw new JsonException(
-                        "'AegisArchitecturePolicy' must contain a JSON object.");
-                }
-
-                root = wrappedPolicy;
-            }
-
-            var policy = root.Deserialize<AegisArchitecturePolicy>(
-                PolicyJsonOptions);
-
-            if (policy is null)
-            {
-                throw new JsonException(
-                    "The policy document deserialized to null.");
-            }
+            var policy = DeserializePolicyDocument(json);
 
             _logger.LogInformation(
                 "Aegis policy loaded: {Name}, version {Version}, detail level {DetailLevel}",
@@ -333,6 +296,70 @@ public sealed class AegisArchitectureAnalysisRunner
                 "Analysis cannot safely continue with an assumed default policy.",
                 exception);
         }
+    }
+
+    internal static AegisArchitecturePolicy DeserializePolicyDocument(string json)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(json);
+
+        using var document = JsonDocument.Parse(
+            json,
+            new JsonDocumentOptions
+            {
+                CommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true
+            });
+
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException(
+                "The policy document root must be a JSON object.");
+        }
+
+        var root = document.RootElement;
+
+        var hasArchitectureWrapper = TryGetPropertyIgnoreCase(
+            root,
+            "AegisArchitecturePolicy",
+            out var architecturePolicy);
+
+        var hasLegacyWrapper = TryGetPropertyIgnoreCase(
+            root,
+            "AegisPolicy",
+            out var legacyPolicy);
+
+        if (hasArchitectureWrapper && hasLegacyWrapper)
+        {
+            throw new JsonException(
+                "The policy document cannot contain both 'AegisArchitecturePolicy' " +
+                "and 'AegisPolicy' wrappers.");
+        }
+
+        if (hasArchitectureWrapper || hasLegacyWrapper)
+        {
+            var wrappedPolicy = hasArchitectureWrapper
+                ? architecturePolicy
+                : legacyPolicy;
+
+            if (wrappedPolicy.ValueKind != JsonValueKind.Object)
+            {
+                var wrapperName = hasArchitectureWrapper
+                    ? "AegisArchitecturePolicy"
+                    : "AegisPolicy";
+
+                throw new JsonException(
+                    $"'{wrapperName}' must contain a JSON object.");
+            }
+
+            root = wrappedPolicy;
+        }
+
+        var policy = root.Deserialize<AegisArchitecturePolicy>(
+            PolicyJsonOptions);
+
+        return policy
+            ?? throw new JsonException(
+                "The policy document deserialized to null.");
     }
 
     private static bool TryGetPropertyIgnoreCase(

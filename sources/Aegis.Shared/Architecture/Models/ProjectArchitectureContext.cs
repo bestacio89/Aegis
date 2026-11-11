@@ -130,6 +130,30 @@ public sealed class ProjectArchitectureContext
     /// </summary>
     public List<ArchitectureDependencyContext> Dependencies { get; set; } = new();
 
+    /// <summary>
+    /// Production-to-production relationships used to describe the deployed
+    /// architecture. Test-project relationships are intentionally excluded.
+    /// </summary>
+    public IReadOnlyList<ArchitectureDependencyContext> ProductionDependencies =>
+        Dependencies
+            .Where(dependency => string.Equals(
+                dependency.Scope,
+                "Production",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+    /// <summary>
+    /// Relationships involving at least one test project. These remain available
+    /// for findings and the relationship ledger, but are not production edges.
+    /// </summary>
+    public IReadOnlyList<ArchitectureDependencyContext> TestDependencies =>
+        Dependencies
+            .Where(dependency => string.Equals(
+                dependency.Scope,
+                "Test",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
 
 
     // ===============================================================

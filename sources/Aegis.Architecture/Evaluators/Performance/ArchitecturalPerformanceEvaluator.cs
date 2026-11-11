@@ -545,16 +545,14 @@ public sealed class ArchitecturalPerformanceEvaluator
             .ToArray();
     }
 
-    private static IReadOnlyCollection<Match> FindLargeAllocationMatches(string content)
+    private IReadOnlyCollection<Match> FindLargeAllocationMatches(string content)
     {
-        var matches = LargeAllocationRegex.Matches(content)
+        return LargeAllocationRegex.Matches(content)
             .Cast<Match>()
             .Where(match =>
                 int.TryParse(match.Groups["capacity"].Value, out var capacity)
-                && capacity >= 1000)
+                && capacity >= _policy.LargeCollectionThreshold)
             .ToArray();
-
-        return matches;
     }
 
     private IReadOnlyCollection<Match> FindBlockingOperations(
@@ -885,7 +883,11 @@ public sealed class ArchitecturalPerformanceEvaluator
             ||
             file.EndsWith(".ts", StringComparison.OrdinalIgnoreCase)
             ||
-            file.EndsWith(".js", StringComparison.OrdinalIgnoreCase);
+            file.EndsWith(".tsx", StringComparison.OrdinalIgnoreCase)
+            ||
+            file.EndsWith(".js", StringComparison.OrdinalIgnoreCase)
+            ||
+            file.EndsWith(".jsx", StringComparison.OrdinalIgnoreCase);
     }
 
 
@@ -909,12 +911,14 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
         if (path.EndsWith(".ts",
-                StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".tsx", StringComparison.OrdinalIgnoreCase))
             return "TypeScript";
 
 
         if (path.EndsWith(".js",
-                StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".jsx", StringComparison.OrdinalIgnoreCase))
             return "JavaScript";
 
 

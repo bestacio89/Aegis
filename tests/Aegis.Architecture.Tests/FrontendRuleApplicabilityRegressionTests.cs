@@ -57,7 +57,7 @@ public sealed class FrontendRuleApplicabilityRegressionTests
 
         Assert.Contains("AEG-FRONT-R11", outcome.Stats.RulesNotApplicable);
         Assert.Contains(
-            "dedicated complexity rule",
+            "no React or Razor",
             outcome.Stats.NotApplicableReasons["AEG-FRONT-R11"],
             StringComparison.OrdinalIgnoreCase);
     }

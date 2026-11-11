@@ -313,6 +313,12 @@ public sealed class RuleMetricScopeDiagnosticTests
     [InlineData("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-SING001")]
     [InlineData("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-STRAT001")]
     [InlineData("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-STRAT002")]
+    [InlineData("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-FAC001")]
+    [InlineData("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-FAC002")]
+    [InlineData("FactoryPatternEvaluator", "FactoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-FACR001")]
+    [InlineData("FactoryPatternEvaluator", "FactoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-FACR002")]
+    [InlineData("MediatorPatternEvaluator", "MediatorImplementationCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-MEDI001")]
+    [InlineData("RepositoryPatternEvaluator", "RepositoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-REPO001")]
     public void Candidate_rules_are_not_applicable_only_after_every_source_file_was_analyzed(
         string producer,
         string candidateMetric,

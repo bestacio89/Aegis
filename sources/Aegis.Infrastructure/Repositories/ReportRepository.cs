@@ -26,6 +26,25 @@ public sealed class ReportRepository : IReportRepository
     public async Task<ReportEntity?> GetLatestAsync(CancellationToken token = default)
         => await _db.Reports.Include(r => r.RuleResults).OrderByDescending(r => r.ScanDate).FirstOrDefaultAsync(token);
 
+    public async Task<ReportEntity?> GetPreviousForProjectAsync(
+        string projectPath,
+        int currentReportId,
+        CancellationToken token = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
+
+        var projectPathIdentity = NormalizeProjectPath(projectPath);
+
+        return await _db.Reports
+            .AsNoTracking()
+            .Include(report => report.RuleResults)
+            .Where(report =>
+                report.ProjectPath == projectPathIdentity
+                && report.Id != currentReportId)
+            .OrderByDescending(report => report.ScanDate)
+            .FirstOrDefaultAsync(token);
+    }
+
     public async Task<List<ReportEntity>> GetAllReportsAsync(int? limit = null, CancellationToken token = default)
     {
         var query = _db.Reports.AsNoTracking().OrderByDescending(r => r.ScanDate);
@@ -36,9 +55,13 @@ public sealed class ReportRepository : IReportRepository
 
     public async Task<ReportEntity> CreateSessionAsync(string projectPath, ProjectArchitectureContext context, CancellationToken token = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
+
+        var projectPathIdentity = NormalizeProjectPath(projectPath);
         var entity = new ReportEntity
         {
-            ProjectName = Path.GetFileName(projectPath),
+            ProjectName = Path.GetFileName(projectPathIdentity),
+            ProjectPath = projectPathIdentity,
             Language = context.Language,
             Framework = context.DetectedFrameworks.FirstOrDefault() ?? context.Framework ?? "Unknown",
 
@@ -52,6 +75,12 @@ public sealed class ReportRepository : IReportRepository
         await _db.SaveChangesAsync(token);
         _logger.LogInformation("🆕 Created new audit session ID {Id} for {Project}", entity.Id, entity.ProjectName);
         return entity;
+    }
+
+    private static string NormalizeProjectPath(string projectPath)
+    {
+        var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(projectPath));
+        return OperatingSystem.IsWindows() ? fullPath.ToUpperInvariant() : fullPath;
     }
 
     public async Task FinalizeReportAsync(int reportId, AegisArchitectureReport report, CancellationToken token = default)

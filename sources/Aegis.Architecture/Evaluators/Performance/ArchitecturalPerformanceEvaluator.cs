@@ -253,12 +253,16 @@ public sealed class ArchitecturalPerformanceEvaluator
     {
         var language = DetectLanguage(file);
         var sanitized = SourceCodeMasker.Mask(content);
-        var loopAnalysis = AnalyzeLoopBodies(sanitized, language);
-        var score = AnalyzePerformanceSignals(sanitized, language, loopAnalysis);
         var blockingCallMatches = FindBlockingCallOperations(sanitized, language);
         var syncIoMatches = _policy.RequireAsyncForIOMethods
             ? FindSynchronousIOOperations(sanitized, language)
             : Array.Empty<Match>();
+        var loopAnalysis = AnalyzeLoopBodies(sanitized, language);
+        var score = AnalyzePerformanceSignals(
+            sanitized,
+            loopAnalysis,
+            blockingCallMatches,
+            syncIoMatches);
         var blockingMatches = blockingCallMatches
             .Concat(syncIoMatches)
             .GroupBy(match => match.Index)
@@ -830,18 +834,14 @@ public sealed class ArchitecturalPerformanceEvaluator
 
     private PerformanceScore AnalyzePerformanceSignals(
         string content,
-        string language,
-        LoopAnalysis loopAnalysis)
+        LoopAnalysis loopAnalysis,
+        IReadOnlyCollection<Match> blockingCalls,
+        IReadOnlyCollection<Match> synchronousIo)
     {
         var algorithmic = 1d;
         var concurrency = 1d;
         var async = 1d;
         var io = 1d;
-
-        var blockingCalls = FindBlockingCallOperations(content, language);
-        var synchronousIo = _policy.RequireAsyncForIOMethods
-            ? FindSynchronousIOOperations(content, language)
-            : Array.Empty<Match>();
 
         if (loopAnalysis.MaximumNestingDepth > _policy.MaxNestedLoopDepth)
             algorithmic -= 0.20;

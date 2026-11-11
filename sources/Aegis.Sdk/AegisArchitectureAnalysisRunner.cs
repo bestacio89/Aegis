@@ -569,6 +569,7 @@ public sealed class AegisArchitectureAnalysisRunner
         {
             var previousReport = await _customReportRepo.GetPreviousForProjectAsync(
                 currentReport.ProjectPath,
+                currentReport.ScanDate,
                 currentReport.Id,
                 token).ConfigureAwait(false);
 

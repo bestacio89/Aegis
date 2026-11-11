@@ -120,10 +120,17 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
 
-    private static readonly Regex StringConcatenationRegex =
-        new(
-            @"\+\s*=",
-            RegexOptions.Compiled);
+    private static readonly Regex StringVariableDeclarationRegex = new(
+        @"\b(?:string|String)\s+(?<name>@?[A-Za-z_][A-Za-z0-9_]*)\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex TypeScriptStringVariableRegex = new(
+        @"\b(?:let|const|var)\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*string\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex PythonStringVariableRegex = new(
+        @"\b(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?:str|string)\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
 
 
@@ -612,11 +619,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             .ToArray();
 
         var stringConcatenations = _policy.DetectStringConcatenationInLoops
-            ? StringConcatenationRegex.Matches(content)
-                .Cast<Match>()
-                .Where(match => ranges.Any(range =>
-                    match.Index >= range.Start && match.Index < range.End))
-                .ToArray()
+            ? FindStringConcatenationMatches(content, language, ranges)
             : Array.Empty<Match>();
 
         var largeAllocations = _policy.DetectLargeCollectionsInitialization
@@ -741,6 +744,41 @@ public sealed class ArchitecturalPerformanceEvaluator
 
         range = new LoopBodyRange(loopMatch, bodyStartIndex, statementEnd);
         return statementEnd > bodyStartIndex;
+    }
+
+    private static Match[] FindStringConcatenationMatches(
+        string content,
+        string language,
+        IReadOnlyCollection<LoopBodyRange> loopRanges)
+    {
+        var variableNames = StringVariableDeclarationRegex.Matches(content)
+            .Select(match => match.Groups["name"].Value.TrimStart('@'))
+            .Concat(language == "TypeScript"
+                ? TypeScriptStringVariableRegex.Matches(content)
+                    .Select(match => match.Groups["name"].Value)
+                : Enumerable.Empty<string>())
+            .Concat(language == "Python"
+                ? PythonStringVariableRegex.Matches(content)
+                    .Select(match => match.Groups["name"].Value)
+                : Enumerable.Empty<string>())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return variableNames
+            .SelectMany(variable =>
+            {
+                var escaped = Regex.Escape(variable);
+                var assignmentRegex = new Regex(
+                    $@"\b{escaped}\s*\+=\s*",
+                    RegexOptions.Compiled | RegexOptions.CultureInvariant);
+                return assignmentRegex.Matches(content).Cast<Match>();
+            })
+            .Where(match => loopRanges.Any(range =>
+                match.Index >= range.Start && match.Index < range.End))
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToArray();
     }
 
     private static int FindMatchingDelimiter(

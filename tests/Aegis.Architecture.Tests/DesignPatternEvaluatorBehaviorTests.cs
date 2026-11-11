@@ -148,7 +148,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.True(result.Metadata.ContainsKey("HasMatchingAbstraction"));
         Assert.Equal("FileMetrics", result.Metadata["EvidenceScope.InterfaceAdherence"]);
         Assert.Contains("IOrderRepository", result.Metadata["Evidence.InterfaceAdherence"]);
-        Assert.Contains("DbContext", result.Metadata["ExternalTransportInterpretation"]);
+        Assert.Contains("Database access is expected", result.Metadata["ExternalTransportInterpretation"]);
     }
 
     [Fact]

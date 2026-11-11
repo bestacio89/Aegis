@@ -306,7 +306,6 @@ public sealed class RepositoryPatternEvaluator
                 var namingScore = namingCompliance ? 1d : 0d;
                 var compliance = ComputeCompliance(
                     interfaceScore,
-                    asyncScore,
                     leakScore,
                     namingScore,
                     complexity);
@@ -434,8 +433,8 @@ public sealed class RepositoryPatternEvaluator
         result.Metadata["HasAsyncSignal"] = hasAsyncSignal.ToString();
         result.Metadata["HasPersistenceOrTransportSignals"] = (leakMatches.Count > 0).ToString();
         result.Metadata["ExternalTransportIndicators"] = string.Join(", ", leakIndicators);
-        result.Metadata["PersistenceTransportIndicators"] =
-            "Database access is expected inside repository implementations; this evaluator only reports external transport clients."; 
+        result.Metadata["ExternalTransportInterpretation"] =
+            "Database access is expected inside repository implementations; only external transport clients contribute to leak risk.";
         result.Metadata["AsyncSignalInterpretation"] =
             "Informational only. Synchronous repository methods are not automatically non-compliant.";
         result.Metadata["NamingConventionSatisfied"] =
@@ -894,32 +893,6 @@ public sealed class RepositoryPatternEvaluator
             : BraceFieldRegex;
 
         return regex.Matches(classBody).Count;
-    }
-
-    private static bool HasAsyncSignal(
-        string classBody,
-        string language)
-    {
-        return language == "Python"
-            ? PythonAsyncSignalRegex.IsMatch(classBody)
-            : AsyncSignalRegex.IsMatch(classBody);
-    }
-
-    private static List<string> FindLeakIndicators(string classBody)
-    {
-        var found = new List<string>();
-
-        foreach (var indicator in PersistenceAndTransportIndicators)
-        {
-            if (classBody.Contains(
-                indicator,
-                StringComparison.OrdinalIgnoreCase))
-            {
-                found.Add(indicator);
-            }
-        }
-
-        return found;
     }
 
     private static string DetectLanguage(string filePath) =>

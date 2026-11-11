@@ -24,7 +24,6 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
     private const int DefaultTimeoutSeconds = 120;
     private const int MaximumTimeoutSeconds = 1800;
 
-    private readonly ILogger<ReactEvaluator> _logger;
     private readonly FrontendPolicy _policy;
 
     public ReactEvaluator(
@@ -35,7 +34,6 @@ public sealed class ReactEvaluator : BaseArchitectureEvaluator
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(options);
 
-        _logger = logger;
         _policy = options.Value.Frontend ?? new FrontendPolicy();
     }
 

@@ -227,10 +227,17 @@ public sealed class DocumentationEvaluator :
                     files.ToArray())];
         }
 
-        var modules = Context.Modules
-            .Where(module => !module.IsTestProject
-                && !string.Equals(module.ProjectKind, "Test", StringComparison.OrdinalIgnoreCase))
+        var allModules = Context.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
             .OrderByDescending(module => NormalizePath(module.Path).Length)
+            .ToArray();
+
+        var modules = allModules
+            .Where(module => !module.IsTestProject
+                && !string.Equals(
+                    module.ProjectKind,
+                    "Test",
+                    StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
         var scopes = new List<DocumentationProjectScope>();
@@ -241,7 +248,7 @@ public sealed class DocumentationEvaluator :
                 .Where(file => IsSameOrDescendantPath(file, module.Path))
                 .Where(file =>
                 {
-                    var owner = modules.FirstOrDefault(candidate =>
+                    var owner = allModules.FirstOrDefault(candidate =>
                         IsSameOrDescendantPath(file, candidate.Path));
                     return ReferenceEquals(owner, module);
                 })
@@ -259,7 +266,7 @@ public sealed class DocumentationEvaluator :
         }
 
         var unownedFiles = files
-            .Where(file => !modules.Any(module =>
+            .Where(file => !allModules.Any(module =>
                 IsSameOrDescendantPath(file, module.Path)))
             .ToArray();
 

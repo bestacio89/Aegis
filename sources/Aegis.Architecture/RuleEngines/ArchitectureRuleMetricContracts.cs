@@ -1,4 +1,5 @@
 
+using Aegis.Architecture.Analysis;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Rules;
@@ -428,7 +429,7 @@ internal static class ArchitectureRuleMetricContracts
         }
 
         if (IsLayerBoundaryRule(rule.Id)
-            && IsMultiProjectRepositoryWithoutLayerRoles(context))
+            && ArchitectureLayerApplicability.IsMultiProjectWithoutLayerBoundaryModel(context))
         {
             reason =
                 $"Rule '{rule.Id}' is not applicable because the repository is " +
@@ -635,39 +636,6 @@ internal static class ArchitectureRuleMetricContracts
         ruleId.Equals("AEG-ARCH-R2", StringComparison.OrdinalIgnoreCase)
         || ruleId.Equals("AEG-ARCH-R3", StringComparison.OrdinalIgnoreCase)
         || ruleId.Equals("AEG-ARCH-R5", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsMultiProjectRepositoryWithoutLayerRoles(
-        ProjectArchitectureContext context)
-    {
-        if (context.Modules.Count == 0
-            || context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
-        {
-            return false;
-        }
-
-        var isMultiProjectLibraryOrMixed =
-            string.Equals(
-                context.ArchitectureStyle,
-                "Multi-Project / Mixed",
-                StringComparison.OrdinalIgnoreCase)
-            || string.Equals(
-                context.ArchitectureStyle,
-                "Multi-Project Library",
-                StringComparison.OrdinalIgnoreCase);
-
-        if (!isMultiProjectLibraryOrMixed)
-            return false;
-
-        return !context.Layers.Any(layer =>
-            !string.IsNullOrWhiteSpace(layer.Name)
-            && !layer.Name.StartsWith(
-                "Unclassified:",
-                StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(
-                layer.Name,
-                "Tests",
-                StringComparison.OrdinalIgnoreCase));
-    }
 
     private static bool HasCSharpEvidence(ProjectArchitectureContext context) =>
         string.Equals(context.Language, "C#", StringComparison.OrdinalIgnoreCase)

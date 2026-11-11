@@ -496,16 +496,27 @@ internal static class ModuleDetector
         if (name.Contains("domain", StringComparison.Ordinal)
             || name.EndsWith(".core", StringComparison.Ordinal))
             return "Domain";
-        // Foundational technical capabilities belong to the infrastructure
-        // layer even when their project names use an abstraction-oriented suffix.
-        // Keep business-facing contracts distinct from runtime/platform concerns.
+        // Explicit business-facing contracts take precedence over technical
+        // family names (for example, Http.Contracts remains a contract module).
+        if (name.Contains("contracts", StringComparison.Ordinal))
+            return "Contracts";
+
+        // Foundational runtime capabilities and platform adapters belong to
+        // infrastructure even when their package names omit "Infrastructure".
         if (name.Contains("infrastructure", StringComparison.Ordinal)
             || name.Contains("persistence", StringComparison.Ordinal)
             || name.Contains("database", StringComparison.Ordinal)
             || name.Contains("mediator", StringComparison.Ordinal)
             || name.Contains("messaging", StringComparison.Ordinal)
+            || name.Contains("http", StringComparison.Ordinal)
+            || name.Contains("refit", StringComparison.Ordinal)
+            || name.Contains("headers", StringComparison.Ordinal)
             || name.Contains("serialization", StringComparison.Ordinal)
             || name.Contains("serializer", StringComparison.Ordinal)
+            || name.Contains("reflection", StringComparison.Ordinal)
+            || name.Contains("dependencyinjection", StringComparison.Ordinal)
+            || name.Contains("bootstrap", StringComparison.Ordinal)
+            || name.Contains("hosting", StringComparison.Ordinal)
             || name.Contains("caching", StringComparison.Ordinal)
             || name.Contains("cache", StringComparison.Ordinal)
             || name.Contains("logging", StringComparison.Ordinal)
@@ -519,8 +530,6 @@ internal static class ModuleDetector
             || name.EndsWith(".base", StringComparison.Ordinal)
             || name.StartsWith("base.", StringComparison.Ordinal))
             return "Infrastructure";
-        if (name.Contains("contracts", StringComparison.Ordinal))
-            return "Contracts";
         if (name.Contains("consumer", StringComparison.Ordinal)
             || name.Contains("worker", StringComparison.Ordinal)
             || name.Contains("background", StringComparison.Ordinal))

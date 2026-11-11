@@ -65,7 +65,8 @@ public static class ProjectArchitectureContextDetector
 
         DependencyDetector.Analyze(
             ctx,
-            files);
+            files,
+            includeProjectReferences: false);
 
 
         LayerDetector.Analyze(

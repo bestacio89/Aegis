@@ -304,9 +304,9 @@ public sealed class ArchitecturalPerformanceEvaluator
         result.Metadata["AnalysisStatus"] = "Completed";
         result.Metadata["MeasurementMethod"] = "SourcePatternHeuristic";
         result.Metadata["StringConcatenationInterpretation"] =
-            "Informational only until concatenation can be associated with a specific loop body.";
+            "Only assignments to statically typed string variables inside recognized loop bodies are scored; inferred string types are not resolved.";
         result.Metadata["LargeAllocationInterpretation"] =
-            "Informational only; an allocation signal alone does not establish a performance defect.";
+            "Only explicit collection capacities or array sizes at/above the configured threshold inside recognized loop bodies are scored; runtime impact is not measured.";
         result.Metadata["AsyncMaturityInterpretation"] =
             "Only configured blocking calls and synchronous I/O lower async maturity. A loop without I/O does not imply an async requirement.";
 

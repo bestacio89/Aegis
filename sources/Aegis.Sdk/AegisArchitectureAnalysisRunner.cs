@@ -12,6 +12,7 @@ using Aegis.Shared.Contracts;
 using Franz.Common.Business.Repositories;
 using Franz.Common.EntityFramework.Repositories;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Aegis.Sdk;
 
@@ -30,6 +31,7 @@ public sealed class AegisArchitectureAnalysisRunner
     private readonly IRuleResultRepository _customRuleResultRepo;
     private readonly IReportRepository _customReportRepo;
     private readonly IReadOnlyDictionary<string, IReportExporter> _exporters;
+    private readonly AegisArchitecturePolicy _configuredPolicy;
     private readonly ILogger<AegisArchitectureAnalysisRunner> _logger;
 
     public AegisArchitectureAnalysisRunner(
@@ -39,6 +41,7 @@ public sealed class AegisArchitectureAnalysisRunner
         IRuleResultRepository customRuleResultRepo,
         IReportRepository customReportRepo,
         IEnumerable<IReportExporter> exporters,
+        IOptions<AegisArchitecturePolicy> policyOptions,
         ILogger<AegisArchitectureAnalysisRunner> logger)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -47,6 +50,7 @@ public sealed class AegisArchitectureAnalysisRunner
         ArgumentNullException.ThrowIfNull(customRuleResultRepo);
         ArgumentNullException.ThrowIfNull(customReportRepo);
         ArgumentNullException.ThrowIfNull(exporters);
+        ArgumentNullException.ThrowIfNull(policyOptions);
         ArgumentNullException.ThrowIfNull(logger);
 
         _engine = engine;
@@ -54,6 +58,7 @@ public sealed class AegisArchitectureAnalysisRunner
         _reportRepo = reportRepo;
         _customRuleResultRepo = customRuleResultRepo;
         _customReportRepo = customReportRepo;
+        _configuredPolicy = policyOptions.Value;
         _logger = logger;
 
         var exporterList = exporters.ToList();
@@ -103,8 +108,12 @@ public sealed class AegisArchitectureAnalysisRunner
 
             Report(progress, 1, "Preparing", "Loading policy");
 
-            var policy = await LoadPolicyAsync(policyPath, token)
-                .ConfigureAwait(false);
+            // The registered options instance is the same policy snapshot
+            // consumed by evaluator constructors. Using it by default keeps
+            // evaluator execution and rule interpretation on one policy.
+            var policy = string.IsNullOrWhiteSpace(policyPath)
+                ? _configuredPolicy
+                : await LoadPolicyAsync(policyPath, token).ConfigureAwait(false);
 
             token.ThrowIfCancellationRequested();
 
@@ -250,13 +259,7 @@ public sealed class AegisArchitectureAnalysisRunner
         string? policyPath,
         CancellationToken token)
     {
-        if (string.IsNullOrWhiteSpace(policyPath))
-        {
-            policyPath = Path.Combine(
-                AppContext.BaseDirectory,
-                "config",
-                "aegis.policy.json");
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(policyPath);
 
         _logger.LogInformation(
             "Loading Aegis policy from {Path}",

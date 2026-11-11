@@ -566,49 +566,50 @@ public sealed class AegisArchitectureAnalysisRunner
     {
         try
         {
-            var previous = await _customReportRepo.GetLatestAsync(token)
-                .ConfigureAwait(false);
+            var previousReport = await _customReportRepo.GetPreviousForProjectAsync(
+                currentReport.ProjectPath,
+                currentReport.Id,
+                token).ConfigureAwait(false);
 
-            if (previous is null || previous.Id == currentReport.Id)
+            if (previousReport is null)
             {
                 _logger.LogInformation(
-                    "No previous report to compare with.");
+                    "No previous report exists for project {ProjectPath}.",
+                    currentReport.ProjectPath);
 
                 return;
             }
 
-            var previousResults =
-                await _customRuleResultRepo.GetPreviousReportAsync(
-                    currentReport.ProjectName,
-                    currentReport.DateCreated,
-                    token).ConfigureAwait(false);
+            var currentResults = await _customRuleResultRepo.GetViolationsByReportIdAsync(
+                currentReport.Id,
+                token).ConfigureAwait(false);
 
-            var currentResults =
-                await _customRuleResultRepo.GetViolationsByReportIdAsync(
-                    currentReport.Id,
-                    token).ConfigureAwait(false);
-
-            var previousViolationKeys =
-                new HashSet<(string RuleId, string Project)>(
-                    previousResults.Select(
-                        result => (result.RuleId, result.Project)));
+            var previousViolationKeys = previousReport.RuleResults
+                .Select(CreateViolationIdentity)
+                .ToHashSet(ViolationIdentityComparer.Instance);
 
             var newViolations = currentResults
                 .Where(current =>
-                    !previousViolationKeys.Contains(
-                        (current.RuleId, current.Project)))
+                    !previousViolationKeys.Contains(CreateViolationIdentity(current)))
                 .ToList();
+
+            _logger.LogInformation(
+                "Compared report {CurrentReportId} with project-scoped previous report {PreviousReportId}.",
+                currentReport.Id,
+                previousReport.Id);
 
             if (newViolations.Count > 0)
             {
                 _logger.LogWarning(
-                    "{Count} new violations detected.",
-                    newViolations.Count);
+                    "{Count} new violations detected for project {ProjectPath}.",
+                    newViolations.Count,
+                    currentReport.ProjectPath);
             }
             else
             {
                 _logger.LogInformation(
-                    "No new violations introduced.");
+                    "No new violations introduced for project {ProjectPath}.",
+                    currentReport.ProjectPath);
             }
         }
         catch (OperationCanceledException)
@@ -620,7 +621,38 @@ public sealed class AegisArchitectureAnalysisRunner
         {
             _logger.LogError(
                 exception,
-                "Failed report comparison.");
+                "Failed report comparison for project {ProjectPath}.",
+                currentReport.ProjectPath);
         }
     }
+
+    private static ViolationIdentity CreateViolationIdentity(RuleResultEntity result) =>
+        new(result.RuleId, result.Target, result.Category, result.Domain);
+
+    private readonly record struct ViolationIdentity(
+        string RuleId,
+        string Target,
+        string Category,
+        string? Domain);
+
+    private sealed class ViolationIdentityComparer : IEqualityComparer<ViolationIdentity>
+    {
+        public static ViolationIdentityComparer Instance { get; } = new();
+
+        public bool Equals(ViolationIdentity left, ViolationIdentity right) =>
+            StringComparer.OrdinalIgnoreCase.Equals(left.RuleId, right.RuleId)
+            && StringComparer.OrdinalIgnoreCase.Equals(left.Target, right.Target)
+            && StringComparer.OrdinalIgnoreCase.Equals(left.Category, right.Category)
+            && StringComparer.OrdinalIgnoreCase.Equals(left.Domain, right.Domain);
+
+        public int GetHashCode(ViolationIdentity value) =>
+            HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(value.RuleId),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(value.Target),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(value.Category),
+                value.Domain is null
+                    ? 0
+                    : StringComparer.OrdinalIgnoreCase.GetHashCode(value.Domain));
+    }
+
 }

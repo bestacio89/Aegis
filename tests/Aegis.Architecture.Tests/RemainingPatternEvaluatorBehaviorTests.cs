@@ -1,3 +1,4 @@
+using Aegis.Architecture.Evaluators.BackEnd;
 using Aegis.Architecture.Evaluators.DesignPatterns;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Shared.Architecture.Models;
@@ -75,6 +76,53 @@ public sealed class RemainingPatternEvaluatorBehaviorTests
         Assert.Equal(0, result.Metrics["LeakRisk"]);
         Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
         AssertAllMetricsAreFinite(results);
+    }
+
+    [Fact]
+    public async Task MaintainabilityEvaluator_uses_worst_method_complexity_not_file_aggregate()
+    {
+        using var project = new TemporaryProject();
+
+        var methods = Enumerable.Range(0, 25)
+            .Select(index => $"""
+                public int Method{{index}}(int value)
+                {
+                    if (value > {{index}}) return value;
+                    if (value < -{{index}}) return -value;
+                    return 0;
+                }
+                """);
+
+        project.Write(
+            "source/ManySimpleMethods.cs",
+            $"public sealed class ManySimpleMethods\n{{\n{string.Join("\n", methods)}\n}}");
+
+        var policy = new AegisArchitecturePolicy();
+        policy.Maintainability.ComplexityWeight = 2;
+        policy.Maintainability.MaxLinesPerFile = 500;
+        policy.Maintainability.LineWeight = 0.02;
+
+        var evaluator = new MaintainabilityEvaluator(
+            NullLogger<MaintainabilityEvaluator>.Instance,
+            Options.Create(policy));
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project, "C#", "ASP.NET"))).ToArray();
+
+        var fileFact = Assert.Single(
+            results,
+            item => item.Metadata.GetValueOrDefault("EvaluationScope") == "File");
+
+        Assert.Equal(2, fileFact.Metrics["DecisionPointCount"]);
+        Assert.Equal(96, fileFact.Metrics["MaintainabilityScore"]);
+        Assert.Contains("Roslyn AST", fileFact.Metadata["ComplexityMeasurement"]);
+        Assert.Contains("Method0", fileFact.Metadata["EvidenceSummary.MaintainabilityScore"]);
+
+        var summary = Assert.Single(
+            results,
+            item => item.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
+        Assert.Equal(2, summary.Metrics["TotalDecisionPoints"]);
     }
 
     [Fact]

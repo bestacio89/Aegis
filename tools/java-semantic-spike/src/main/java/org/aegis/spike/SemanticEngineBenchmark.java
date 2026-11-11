@@ -269,6 +269,7 @@ public final class SemanticEngineBenchmark {
         int resolutionAttempts = 0;
         int resolvedBindings = 0;
         Set<String> resolvedExpectedTypes = new HashSet<>();
+        Set<String> resolvedExternalTypes = new HashSet<>();
         long started = System.nanoTime();
 
         for (Path sourceFile : sourceFiles) {
@@ -363,6 +364,8 @@ public final class SemanticEngineBenchmark {
             resolvedBindings,
             resolvedExpectedTypes.size(),
             EXPECTED_SOURCE_TYPES.size(),
+            resolvedExternalTypes.size(),
+            EXPECTED_EXTERNAL_TYPES.size(),
             elapsedMilliseconds,
             heapUsedBytes);
     }

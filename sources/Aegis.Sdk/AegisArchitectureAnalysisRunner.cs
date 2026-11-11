@@ -132,8 +132,8 @@ public sealed class AegisArchitectureAnalysisRunner
             if (!string.IsNullOrWhiteSpace(policyPath))
             {
                 _logger.LogWarning(
-                    "An explicit policy path overrides rule interpretation, but evaluator options remain bound to the registered split policy documents. " +
-                    "Use the split policy files for evaluator configuration.");
+                    "An explicit policy path overrides rule interpretation and context layer hints, but evaluator options remain bound to the registered split policy documents. " +
+                    "This can produce inconsistent analysis; use the split policy files for evaluator configuration.");
             }
 
             Report(progress, 4, "Preparing", "Policy applied");

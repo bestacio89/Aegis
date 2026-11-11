@@ -75,6 +75,24 @@ internal static class FrameworkDetector
             ctx.DetectedDependencies = deps.ToList();
         }
 
+        var hasPackageManifest = files.Any(file =>
+            Path.GetFileName(file).Equals(
+                "package.json",
+                StringComparison.OrdinalIgnoreCase));
+
+        var hasUnclassifiedFrontendSource = files.Any(file =>
+            Path.GetExtension(file).ToLowerInvariant() is ".tsx" or ".jsx" or ".vue");
+
+        if (!hasPackageManifest && hasUnclassifiedFrontendSource)
+            ctx.FrontendFrameworkDiscoveryComplete = false;
+
+        if (files.Any(file => Path.GetExtension(file).Equals(
+                ".cshtml",
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            AddFramework(ctx, "Razor");
+        }
+
         if (!string.IsNullOrWhiteSpace(ctx.Framework))
             AddFramework(ctx, ctx.Framework);
 

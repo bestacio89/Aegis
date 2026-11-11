@@ -72,7 +72,11 @@ internal static class LayerDetector
         // A project/module is not itself an architectural layer. The top-level
         // inventory contains distinct semantic roles, with their owned files
         // aggregated, while each module retains its own path-specific layer view.
-        foreach (var group in moduleLayers.GroupBy(
+        var productionLayers = context.Modules
+            .Where(module => !module.IsTestProject && !module.IsTestSupport)
+            .SelectMany(module => module.Layers);
+
+        foreach (var group in productionLayers.GroupBy(
                      layer => layer.Name,
                      StringComparer.OrdinalIgnoreCase))
         {

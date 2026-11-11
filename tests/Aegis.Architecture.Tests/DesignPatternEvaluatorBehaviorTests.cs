@@ -102,6 +102,37 @@ public sealed class DesignPatternEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task DecoratorEvaluator_emits_abstraction_wrapping_and_delegation_evidence()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Decorators/OrderServiceDecorator.cs", """
+            public interface IOrderService
+            {
+                Order Execute();
+            }
+
+            public sealed class OrderServiceDecorator : IOrderService
+            {
+                private readonly IOrderService _inner;
+
+                public OrderServiceDecorator(IOrderService inner) => _inner = inner;
+
+                public Order Execute() => _inner.Execute();
+            }
+            """);
+
+        var results = await Evaluate(project, "DecoratorPatternEvaluator");
+        var result = Assert.Single(
+            results,
+            item => item.Target == "OrderServiceDecorator");
+
+        Assert.Equal(100, result.Metrics["DecoratorDelegationComplianceScore"]);
+        Assert.Equal("FileMetrics", result.Metadata["EvidenceScope.DecoratorDelegationComplianceScore"]);
+        Assert.Contains("_inner.Execute", result.Metadata["Evidence.DecoratorDelegationComplianceScore"]);
+        Assert.True(result.LineNumber is > 0);
+    }
+
+    [Fact]
     public async Task FactoryEvaluator_reports_instantiation_and_abstraction_evidence()
     {
         using var project = new TemporaryProject();

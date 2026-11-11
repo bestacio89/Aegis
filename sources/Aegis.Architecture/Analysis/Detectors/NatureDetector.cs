@@ -22,12 +22,18 @@ internal static class NatureDetector
             ctx.Nature = "TestSuite";
             return;
         }
+
+        if (project is null && ctx.TestSupportModules.Count > 0)
+        {
+            ctx.Nature = "Library";
+            return;
+        }
         if (project is not null)
         {
             ctx.Nature = project.ProjectKind switch
             {
                 "Test" => "TestSuite",
-                "ClassLibrary" => "Library",
+                "ClassLibrary" or "TestSupport" => "Library",
                 "WebApplication" => "Service",
                 "FrontendApplication" => "FrontendApp",
                 "DesktopApplication" => "DesktopApp",

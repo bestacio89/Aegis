@@ -476,13 +476,14 @@ internal static class MavenProjectModelResolver
                 if (root is null || !NameIs(root, "project"))
                     continue;
 
-                var properties = Child(root, "properties")?
-                    .Elements()
-                    .ToDictionary(
-                        property => property.Name.LocalName,
-                        property => property.Value.Trim(),
-                        StringComparer.Ordinal)
-                    ?? new Dictionary<string, string>(StringComparer.Ordinal);
+                var properties = new Dictionary<string, string>(StringComparer.Ordinal);
+                var declaredProperties = Child(root, "properties");
+                if (declaredProperties is not null)
+                {
+                    foreach (var property in declaredProperties.Elements())
+                        properties[property.Name.LocalName] = property.Value.Trim();
+                }
+
                 ResolveProperties(properties);
 
                 var parent = Child(root, "parent");

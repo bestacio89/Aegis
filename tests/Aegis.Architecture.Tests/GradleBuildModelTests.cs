@@ -22,7 +22,6 @@ public sealed class GradleBuildModelTests
             var buildFile = Path.Combine(service, "build.gradle.kts");
             File.WriteAllText(buildFile, """
                 plugins {
-                    id("org.springframework.boot") version "3.4.1"
                     alias(libs.plugins.mapstruct)
                     alias(libs.plugins.spring.boot)
                 }
@@ -67,8 +66,6 @@ public sealed class GradleBuildModelTests
             Assert.Equal("21", model.JavaToolchainVersion);
             Assert.Contains(model.Plugins, plugin => plugin.Id == "org.springframework.boot" && plugin.Version == "3.4.1");
             Assert.Contains(model.Plugins, plugin => plugin.Id == "org.mapstruct" && plugin.Version == "1.6.3");
-            Assert.Contains(model.Plugins, plugin =>
-                plugin.Id == "org.springframework.boot" && plugin.Version == "3.4.1");
             Assert.Contains(model.Dependencies, dependency =>
                 dependency.Group == "org.springframework" && dependency.Artifact == "spring-context");
             Assert.Contains(model.Dependencies, dependency =>

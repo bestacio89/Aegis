@@ -114,15 +114,15 @@ public sealed class RemainingPatternEvaluatorBehaviorTests
             results,
             item => item.Metadata.GetValueOrDefault("EvaluationScope") == "File");
 
-        Assert.Equal(2, fileFact.Metrics["DecisionPointCount"]);
-        Assert.Equal(96, fileFact.Metrics["MaintainabilityScore"]);
+        Assert.Equal(2d, fileFact.Metrics["DecisionPointCount"]);
+        Assert.Equal(96d, fileFact.Metrics["MaintainabilityScore"]);
         Assert.Contains("Roslyn AST", fileFact.Metadata["ComplexityMeasurement"]);
         Assert.Contains("Method0", fileFact.Metadata["EvidenceSummary.MaintainabilityScore"]);
 
         var summary = Assert.Single(
             results,
             item => item.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
-        Assert.Equal(2, summary.Metrics["TotalDecisionPoints"]);
+        Assert.Equal(2d, summary.Metrics["TotalDecisionPoints"]);
     }
 
     [Fact]

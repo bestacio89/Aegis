@@ -187,7 +187,8 @@ public sealed class RuleEngineCoreBehaviorTests
         var fact = FrontendFact(rule!, "Widget.ts", 1);
         var context = new ProjectArchitectureContext
         {
-            Framework = "React"
+            Framework = "React",
+            FrontendFrameworkDiscoveryComplete = true
         };
 
         var outcome = CreateEngine().EvaluateDetailed(context, [fact]);
@@ -616,9 +617,14 @@ public sealed class RuleEngineCoreBehaviorTests
             }
         };
 
-        var outcome = CreateEngine().EvaluateDetailed(
-            new ProjectArchitectureContext(),
-            facts);
+        var policy = new AegisArchitecturePolicy();
+        policy.Architecture.DesignPatterns.EnforceMediatorPattern = true;
+
+        var outcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            policy).EvaluateDetailed(
+                new ProjectArchitectureContext(),
+                facts);
 
         Assert.DoesNotContain(outcome.Results, result =>
             result.RuleId is "AEG-DES-ADM001" or "AEG-DES-MEDI001");
@@ -637,11 +643,11 @@ public sealed class RuleEngineCoreBehaviorTests
 
         Assert.Contains(
             "no dedicated pattern-circular-reference producer",
-            outcome.Stats.NotEvaluatedReasons["AEG-DES-CIRC001"],
+            outcome.Stats.UnsupportedRuleReasons["AEG-DES-CIRC001"],
             StringComparison.OrdinalIgnoreCase);
         Assert.Contains(
             "no dedicated pattern-overuse producer",
-            outcome.Stats.NotEvaluatedReasons["AEG-DES-OVER001"],
+            outcome.Stats.UnsupportedRuleReasons["AEG-DES-OVER001"],
             StringComparison.OrdinalIgnoreCase);
     }
 

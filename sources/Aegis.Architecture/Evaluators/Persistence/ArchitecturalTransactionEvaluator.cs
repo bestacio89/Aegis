@@ -258,7 +258,7 @@ public sealed class ArchitecturalTransactionEvaluator
                 ["SafetyScore"] =
                     safetyScore * 100,
 
-                ["TransactionIntegrityIndex"] =
+                ["TransactionIntegrityScore"] =
                     integrity
             },
 
@@ -383,7 +383,7 @@ public sealed class ArchitecturalTransactionEvaluator
 
         var integrity = analyzedCount > 0
             ? analyzedFileResults.Average(result =>
-                result.Metrics.GetValueOrDefault("TransactionIntegrityIndex"))
+                result.Metrics.GetValueOrDefault("TransactionIntegrityScore"))
             : 0d;
 
         var safety = analyzedCount > 0

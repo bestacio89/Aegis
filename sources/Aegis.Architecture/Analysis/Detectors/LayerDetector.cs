@@ -103,6 +103,15 @@ internal static class LayerDetector
                 Path.GetFileNameWithoutExtension(module.ProjectFile));
         }
 
+        // Explicit project semantics take precedence over broad naming hints.
+        // For example, a foundational "Base.Abstractions" module is classified
+        // as Infrastructure by module discovery; a generic "abstractions"
+        // hint must not incorrectly remap it to Contracts.
+        var inferredLayer = ResolveKnownLayerName(module.Type);
+
+        if (inferredLayer is not null)
+            return (inferredLayer, 0.95);
+
         var projectMatches = FindMatchingLayers(layerHints, projectIdentifiers);
 
         if (projectMatches.Length == 1)
@@ -110,14 +119,6 @@ internal static class LayerDetector
 
         if (projectMatches.Length > 1)
             return ($"Unclassified:{module.Name}", 0.25);
-
-        // Existing semantic module classification is stronger than incidental
-        // folder names. For example, a Client module stored under a "ui"
-        // directory remains Client rather than becoming ambiguous.
-        var inferredLayer = ResolveKnownLayerName(module.Type);
-
-        if (inferredLayer is not null)
-            return (inferredLayer, 0.95);
 
         var folderIdentifiers = new HashSet<string>(
             projectIdentifiers,

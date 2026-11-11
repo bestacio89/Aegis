@@ -97,6 +97,15 @@ public sealed class RuleEngineCore
                 continue;
             }
 
+            if (!ArchitectureRuleMetricContracts.TryGetPolicyApplicability(
+                    rule.Id,
+                    _policy,
+                    out var policyApplicabilityReason))
+            {
+                notApplicableReasons[rule.Id] = policyApplicabilityReason;
+                continue;
+            }
+
             // A complete project summary proving that a candidate-dependent
             // rule has no applicable candidates takes precedence over the
             // rule's semantic support status. With no candidate, the rule is

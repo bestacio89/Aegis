@@ -444,4 +444,49 @@ public sealed class GradleBuildModelTests
     }
 
 
+    [Fact]
+    public void Detect_does_not_misclassify_gradle_constraints_or_dynamic_additions_as_direct_dependencies()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleDependencyContracts_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"dependency-contracts\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                dependencies {
+                    implementation("org.example:direct-api:1.0.0")
+                    constraints {
+                        implementation("org.example:constrained-api:2.0.0")
+                    }
+                    add("runtimeOnly", "org.example:dynamic-api:3.0.0")
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            var direct = Assert.Single(model.Dependencies);
+            Assert.Equal("org.example", direct.Group);
+            Assert.Equal("direct-api", direct.Artifact);
+            Assert.DoesNotContain(model.Dependencies, dependency =>
+                dependency.Artifact is "constrained-api" or "dynamic-api");
+
+            Assert.Contains(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleDependencyConstraintsNotModeled");
+            Assert.Contains(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleDependencyDeclarationNotSupported");
+            Assert.False(model.IsComplete);
+
+            var evidence = Assert.Single(context.DependencyEvidence);
+            Assert.Equal("org.example:direct-api", evidence.Name);
+            Assert.True(evidence.IsDirect);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
 }

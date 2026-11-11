@@ -209,8 +209,25 @@ internal static class GradleBuildModelResolver
         if (block is null)
             return result;
 
+        var constraintBlockDepth = 0;
         foreach (var line in block.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
+            if (constraintBlockDepth > 0)
+            {
+                constraintBlockDepth += CountBraceDelta(line);
+                continue;
+            }
+
+            if (Regex.IsMatch(line, @"^\s*constraints\s*\{", RegexOptions.CultureInvariant))
+            {
+                constraintBlockDepth = CountBraceDelta(line);
+                diagnostics.Add(Diagnostic(
+                    "GradleDependencyConstraintsNotModeled",
+                    "Gradle dependency constraints are not yet represented as first-class dependency evidence; declarations inside the constraints block are intentionally excluded from direct dependencies.",
+                    buildFile));
+                continue;
+            }
+
             var match = DependencyDeclaration.Match(line);
             if (!match.Success)
                 continue;
@@ -219,9 +236,14 @@ internal static class GradleBuildModelResolver
             var argument = match.Groups["argument"].Success
                 ? match.Groups["argument"].Value.Trim()
                 : match.Groups["groovy"].Value.Trim();
-            if (configuration.Equals("constraints", StringComparison.OrdinalIgnoreCase)
-                || configuration.Equals("add", StringComparison.OrdinalIgnoreCase))
+            if (configuration.Equals("add", StringComparison.OrdinalIgnoreCase))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleDependencyDeclarationNotSupported",
+                    $"Dependency declaration '{line.Trim()}' uses the dynamic add(...) form, which is outside the supported static subset.",
+                    buildFile));
                 continue;
+            }
 
             var isAnnotationProcessor = configuration.Contains("annotationProcessor", StringComparison.OrdinalIgnoreCase)
                 || configuration.Equals("kapt", StringComparison.OrdinalIgnoreCase)
@@ -325,6 +347,44 @@ internal static class GradleBuildModelResolver
         }
 
         return result;
+    }
+
+    private static int CountBraceDelta(string line)
+    {
+        var delta = 0;
+        var inString = false;
+        var escaped = false;
+        var quote = '\0';
+
+        foreach (var character in line)
+        {
+            if (inString)
+            {
+                if (escaped)
+                    escaped = false;
+                else if (character == '\\')
+                    escaped = true;
+                else if (character == quote)
+                    inString = false;
+                continue;
+            }
+
+            if (character is '\'' or '"')
+            {
+                inString = true;
+                quote = character;
+            }
+            else if (character == '{')
+            {
+                delta++;
+            }
+            else if (character == '}')
+            {
+                delta--;
+            }
+        }
+
+        return delta;
     }
 
     private static void AddDependencyEvidence(

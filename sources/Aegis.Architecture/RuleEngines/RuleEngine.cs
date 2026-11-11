@@ -498,18 +498,7 @@ public sealed class RuleEngine
             {
                 var moduleContext = ProjectArchitectureContextDetector.Detect(path);
 
-                var combinedDiscoveryDiagnostics = rootContext.DiscoveryDiagnostics
-                    .Concat(moduleContext.DiscoveryDiagnostics)
-                    .GroupBy(diagnostic => (
-                        diagnostic.Code,
-                        diagnostic.Target,
-                        diagnostic.Message))
-                    .Select(group => group.First())
-                    .ToList();
-
-                moduleContext.DiscoveryDiagnostics = combinedDiscoveryDiagnostics;
-
-                foreach (var diagnostic in combinedDiscoveryDiagnostics)
+                foreach (var diagnostic in moduleContext.DiscoveryDiagnostics)
                 {
                     if (!diagnostics.Any(existing =>
                             string.Equals(existing.Code, diagnostic.Code, StringComparison.Ordinal)

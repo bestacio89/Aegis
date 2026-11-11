@@ -658,10 +658,16 @@ public sealed class FactoryPatternEvaluator
                     break;
                 }
 
+                if (lineEnd == source.Length)
+                {
+                    cursor = lineEnd;
+                    break;
+                }
+
                 cursor = lineEnd + 1;
             }
 
-            classBody = source[bodyStart..cursor];
+            classBody = source[bodyStart..Math.Min(cursor, source.Length)];
             return !string.IsNullOrWhiteSpace(classBody);
         }
 

@@ -447,9 +447,17 @@ internal static class ArchitectureRuleMetricContracts
         // eligible merely because the repository contains multiple modules.
         // Individual facts are still checked against their own framework below.
 
-        // No recognized family means applicability remains unknown.
         if (detectedFamilies.Length == 0)
-            return true;
+        {
+            if (!context.FrontendFrameworkDiscoveryComplete)
+                return true;
+
+            reason =
+                $"Rule '{rule.Id}' is not applicable because frontend framework " +
+                "discovery completed without identifying a supported frontend family.";
+
+            return false;
+        }
 
         // R11 is the shared complexity rule for React and Razor files, which
         // have no dedicated complexity rule in this ruleset. Angular and Blazor

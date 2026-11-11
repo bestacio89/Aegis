@@ -2,13 +2,22 @@
 
 using Aegis.Architecture.Analysis.Detectors;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Policies.Architecture;
 
 namespace Aegis.Architecture.Analysis;
 
 public static class ProjectArchitectureContextDetector
 {
-    public static ProjectArchitectureContext Detect(string rootPath)
+    public static ProjectArchitectureContext Detect(string rootPath) =>
+        Detect(rootPath, new ArchitecturePolicy());
+
+    public static ProjectArchitectureContext Detect(
+        string rootPath,
+        ArchitecturePolicy architecturePolicy)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+        ArgumentNullException.ThrowIfNull(architecturePolicy);
+
         var ctx = new ProjectArchitectureContext
         {
             ProjectName =
@@ -61,7 +70,8 @@ public static class ProjectArchitectureContextDetector
 
         LayerDetector.Analyze(
             ctx,
-            files);
+            files,
+            architecturePolicy);
 
 
         DomainDetector.Analyze(

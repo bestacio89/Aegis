@@ -340,6 +340,49 @@ public sealed class ArchitectureEvaluatorBehaviorTests
 
 
     [Fact]
+    public async Task NamingEvaluator_applies_test_method_naming_only_to_test_project_scope()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Library.Tests/Library.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("back/Library.Tests/LibraryTests.cs", """
+            public sealed class LibraryTests
+            {
+                public void Given_InventoryIsAvailable_When_OrderIsCreated_Then_ReturnsCreatedOrder() { }
+            }
+            """);
+        project.Write("back/Library/Library.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("back/Library/LibraryService.cs", """
+            public sealed class LibraryService
+            {
+                public void Create_Order() { }
+            }
+            """);
+
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(project.Root);
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "NamingEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(project.Root, context)).ToArray();
+        var testResult = Assert.Single(results, result =>
+            result.Target.Contains("LibraryTests.cs", StringComparison.OrdinalIgnoreCase));
+        var productionResult = Assert.Single(results, result =>
+            result.Target.Contains("LibraryService.cs", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(100, testResult.Metrics["MethodNamingCompliance"]);
+        Assert.Equal(0, productionResult.Metrics["MethodNamingCompliance"]);
+        Assert.Contains("Create_Order", productionResult.Metadata["Evidence.MethodNamingCompliance"]);
+    }
+
+    [Fact]
     public async Task NamingEvaluator_accepts_descriptive_test_methods_and_private_field_conventions()
     {
         using var project = new TemporaryProject();

@@ -69,6 +69,7 @@ public sealed class ProjectArchitectureContext
     public List<ProjectModuleContext> Modules { get; set; } = new();
 
     /// <summary>Modules that belong to the production architecture.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyList<ProjectModuleContext> ProductionModules =>
         Modules.Where(module =>
             !module.IsTestProject
@@ -80,6 +81,7 @@ public sealed class ProjectArchitectureContext
         .ToArray();
 
     /// <summary>Test projects retained for source analysis and evidence.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyList<ProjectModuleContext> TestModules =>
         Modules.Where(module =>
             module.IsTestProject
@@ -88,6 +90,7 @@ public sealed class ProjectArchitectureContext
         .ToArray();
 
     /// <summary>Reusable test-support packages, distinct from test projects.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyList<ProjectModuleContext> TestSupportModules =>
         Modules.Where(module =>
             module.IsTestSupport
@@ -161,6 +164,7 @@ public sealed class ProjectArchitectureContext
     /// Production-to-production relationships used to describe the deployed
     /// architecture. Test-project relationships are intentionally excluded.
     /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyList<ArchitectureDependencyContext> ProductionDependencies =>
         Dependencies
             .Where(dependency =>
@@ -176,6 +180,7 @@ public sealed class ProjectArchitectureContext
     /// These remain available for findings and the relationship ledger, but are
     /// not production architecture edges.
     /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyList<ArchitectureDependencyContext> TestDependencies =>
         Dependencies
             .Where(dependency =>

@@ -252,6 +252,9 @@ public sealed class AdditionalEvaluatorBehaviorTests
             && result.Metadata.GetValueOrDefault("EvaluationScope") == "File");
         Assert.True(fileResult.Metrics.ContainsKey("MaintainabilityScore"));
         Assert.Contains("Aegis heuristic", fileResult.Metadata["MaintainabilityMeasurement"]);
+        Assert.Contains("informational only", fileResult.Metadata["CommentDensityInterpretation"]);
+        Assert.Equal("FileMetrics", fileResult.Metadata["EvidenceScope.MaintainabilityScore"]);
+        Assert.Contains("not included in the score", fileResult.Metadata["EvidenceSummary.MaintainabilityScore"]);
         Assert.InRange(fileResult.Metrics["MaintainabilityScore"], 0, 100);
 
         var summary = Assert.Single(

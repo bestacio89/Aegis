@@ -133,8 +133,19 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
         if (selectedNodeName is not null)
         {
-            SelectedGraphNode = GraphNodes.FirstOrDefault(node =>
+            var resolvedNode = GraphNodes.FirstOrDefault(node =>
                 string.Equals(node.Name, selectedNodeName, StringComparison.OrdinalIgnoreCase));
+
+            if (resolvedNode is null)
+            {
+                SelectedGraphNode = null;
+                graphDependencies = baseDependencies;
+                BuildGraph(graphDependencies);
+            }
+            else
+            {
+                SelectedGraphNode = resolvedNode;
+            }
         }
 
         FilteredDependencies = graphDependencies.Length;

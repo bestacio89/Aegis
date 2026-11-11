@@ -15,25 +15,6 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 {
     private readonly LoggingPolicy _policy;
 
-    private static readonly HashSet<string> ExcludedDirectories =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".git",
-            ".vs",
-            ".idea",
-            "bin",
-            "obj",
-            "node_modules",
-            "dist",
-            "build",
-            "coverage",
-            "vendor",
-            "packages",
-            "__pycache__",
-            ".venv",
-            "venv"
-        };
-
     private static readonly Regex LoggingCallRx = new(
         """
         \b(?:

@@ -69,15 +69,14 @@ public sealed class ArchitecturalPerformanceEvaluator
 
     private static readonly Regex BlockingRegex =
         new(
-            @"\b(?:Thread\.Sleep|Task\.Wait|[A-Za-z_][A-Za-z0-9_]*\.Wait|time\.sleep|Thread\.Join)\s*\(",
+            @"\b(?:Thread\.Sleep|Task\.WaitAll|Task\.WaitAny|time\.sleep)\s*\(|\b[A-Za-z_][A-Za-z0-9_]*\.GetAwaiter\(\)\.GetResult\s*\(",
             RegexOptions.IgnoreCase |
-            RegexOptions.Compiled);
+            RegexOptions.Compiled |
+            RegexOptions.CultureInvariant);
 
-    // .Result also names ordinary status/result objects. Do not count an
-    // awaited result access as synchronous blocking.
-    private static readonly Regex SynchronousResultRegex = new(
-        @"(?m)^(?![^\r\n]*\bawait\b)[^\r\n]*\.Result\s*(?:;|,|\)|$)",
-        RegexOptions.Compiled);
+    private static readonly Regex TaskVariableDeclarationRegex = new(
+        @"\b(?:System\.Threading\.Tasks\.)?(?:Task|ValueTask)(?:\s*<[^;=(){}]+>)?\??\s+(?<name>@?[A-Za-z_][A-Za-z0-9_]*)\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex NonCodeRegex = new(
         """"(?s)(?:\x22{3}.*?\x22{3}|\x27{3}.*?\x27{3}|\x60(?:\\.|[^\x60\\])*\x60|@?"(?:""|\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|//[^\r\n]*|/\*.*?\*/|\#[^\r\n]*)"""",
@@ -87,9 +86,10 @@ public sealed class ArchitecturalPerformanceEvaluator
 
     private static readonly Regex SyncIORegex =
         new(
-            @"\b(File\.ReadAllText|ReadToEnd|readFileSync|open\(|Files\.readAll)\b",
+            @"\b(?:(?:System\.IO\.)?File\.(?:ReadAllText|ReadAllBytes|ReadAllLines|WriteAllText|WriteAllBytes|WriteAllLines|OpenRead|OpenWrite|Open|CreateText)|ReadToEnd|readFileSync|Files\.readAll(?:Bytes|Lines|String)?|open)\s*\(",
             RegexOptions.IgnoreCase |
-            RegexOptions.Compiled);
+            RegexOptions.Compiled |
+            RegexOptions.CultureInvariant);
 
 
 
@@ -221,60 +221,113 @@ public sealed class ArchitecturalPerformanceEvaluator
         var language = DetectLanguage(file);
         var sanitized = MaskNonCode(content);
         var score = AnalyzePerformanceSignals(sanitized);
+        var blockingMatches = FindBlockingOperations(sanitized);
+        var evidenceItems = blockingMatches
+            .Select(match =>
+            {
+                var lineNumber = GetLineNumber(sanitized, match.Index);
+                var sourceLine = GetSourceLine(content, lineNumber);
+                return $"Line {lineNumber}: {match.Value.Trim()} — {sourceLine}";
+            })
+            .ToArray();
 
+        var result = CreateResult(file, "Performance");
+        result.ProjectName = Context?.ProjectName;
+        result.Language = language;
+        result.Framework = Context?.Framework;
+        result.Layer = ResolveLayer(file);
+        result.DetectionConfidence = Context?.Confidence ?? 0;
 
+        result.Metrics["AlgorithmicEfficiencyScore"] = score.Algorithmic * 100;
+        result.Metrics["ConcurrencyScore"] = score.Concurrency * 100;
+        result.Metrics["AsyncMaturityScore"] = score.Async * 100;
+        result.Metrics["IOMaturityScore"] = score.IO * 100;
+        result.Metrics["BlockingIOCount"] = blockingMatches.Count;
+        result.Metrics["PerformanceHealthIndex"] = score.Health;
 
-        return new ArchitectureEvaluatorResult(
-            Name,
-            file)
+        result.Metadata["FileName"] = Path.GetFileName(file);
+        result.Metadata["FilePath"] = file;
+        result.Metadata["Language"] = language;
+        result.Metadata["Framework"] = result.Framework ?? "Unknown";
+        result.Metadata["Evaluator"] = Name;
+        result.Metadata["EvaluationScope"] = BaseArchitectureEvaluator.FileScope;
+        result.Metadata["AnalysisComplete"] = "true";
+        result.Metadata["AnalysisStatus"] = "Completed";
+        result.Metadata["MeasurementMethod"] = "SourcePatternHeuristic";
+
+        if (evidenceItems.Length > 0)
         {
-            Category =
-                "Performance",
+            var firstLine = GetLineNumber(sanitized, blockingMatches[0].Index);
+            result.LineNumber = firstLine;
+            result.Evidence = string.Join(Environment.NewLine, evidenceItems);
+            result.Metadata["Evidence.BlockingIOCount"] =
+                string.Join(Environment.NewLine, evidenceItems);
+            result.Metadata["EvidenceLine.BlockingIOCount"] =
+                firstLine.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            result.Metadata["CodeSnippet.BlockingIOCount"] =
+                GetSourceLine(content, firstLine);
+        }
 
-            Metrics =
-            {
-                ["AlgorithmicEfficiencyScore"] =
-                    score.Algorithmic * 100,
-
-                ["ConcurrencyScore"] =
-                    score.Concurrency * 100,
-
-                ["AsyncMaturityScore"] =
-                    score.Async * 100,
-
-                ["IOMaturityScore"] =
-                    score.IO * 100,
-
-                ["BlockingIOCount"] =
-                    BlockingRegex.Matches(sanitized).Count +
-                    SynchronousResultRegex.Matches(sanitized).Count +
-                    SyncIORegex.Matches(sanitized).Count,
-
-                ["PerformanceHealthIndex"] =
-                    score.Health
-            },
-
-            Metadata =
-            {
-                ["FileName"] =
-                    Path.GetFileName(file),
-
-                ["FilePath"] =
-                    file,
-
-                ["Language"] =
-                    language,
-
-                ["Evaluator"] =
-                    Name,
-
-                ["EvaluationScope"] =
-                    BaseArchitectureEvaluator.FileScope
-            }
-        };
+        return result;
     }
 
+    private static List<Match> FindBlockingOperations(string content)
+    {
+        var matches = BlockingRegex.Matches(content)
+            .Cast<Match>()
+            .Concat(SyncIORegex.Matches(content).Cast<Match>())
+            .ToList();
 
+        var taskVariables = TaskVariableDeclarationRegex.Matches(content)
+            .Select(match => match.Groups["name"].Value.TrimStart('@'))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var variable in taskVariables)
+        {
+            var escaped = Regex.Escape(variable);
+            var waitRegex = new Regex(
+                $@"\b{escaped}\s*\.\s*Wait\s*\(",
+                RegexOptions.Compiled | RegexOptions.CultureInvariant);
+            var resultRegex = new Regex(
+                $@"\b{escaped}\s*\.\s*Result\b",
+                RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+            matches.AddRange(waitRegex.Matches(content).Cast<Match>());
+            matches.AddRange(resultRegex.Matches(content).Cast<Match>());
+        }
+
+        return matches
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToList();
+    }
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position && index < content.Length; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        if (lineNumber <= 0)
+            return string.Empty;
+
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n');
+
+        return lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
+    }
 
     private static string MaskNonCode(string content)
     {

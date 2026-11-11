@@ -96,8 +96,10 @@
                         <TextBlock Text="VISIBLE / TOTAL" Style="{StaticResource Text.Eyebrow}" />
                         <TextBlock Text="{Binding FilteredDependencies, StringFormat={}{0:N0}}"
                                    Style="{StaticResource Text.KpiValue}" FontSize="22" />
-                        <TextBlock Text="{Binding TotalDependencies, StringFormat='of {0:N0} relationships'}"
+                        <TextBlock Text="{Binding TotalDependencies, StringFormat='of {0:N0} production relationships'}"
                                    Foreground="{StaticResource Brush.TextMuted}" FontSize="11" />
+                    <TextBlock Text="{Binding TestRelationshipCount, StringFormat='{0:N0} test-scope records excluded'}"
+                               Foreground="{StaticResource Brush.TextMuted}" FontSize="10" />
                     </StackPanel>
                 </Border>
             </Grid>

@@ -40,7 +40,8 @@ public sealed class ArchitectureMetricContractTests
                         ["FilePath"] = Path.Combine(Path.GetTempPath(), "SampleFacade.cs"),
                         ["MetricUnit.PublicSurfaceRatio"] = "RatioOfConfiguredMaximum",
                         ["Evidence.PublicSurfaceRatio"] =
-                            "Public facade surface exceeds the configured ratio limit."
+                            "Public facade surface exceeds the configured ratio limit.",
+                        ["EvidenceScope.PublicSurfaceRatio"] = "FileMetrics"
                     }
                 },
                 new ArchitectureEvaluatorResult("GodClassEvaluator", "LargeService")
@@ -57,7 +58,8 @@ public sealed class ArchitectureMetricContractTests
                         ["FilePath"] = Path.Combine(Path.GetTempPath(), "LargeService.cs"),
                         ["MetricUnit.GodClassSeverity"] = "MinimumOfLineAndMethodLimitRatios",
                         ["Evidence.GodClassSeverity"] =
-                            "LargeService.cs: class exceeds the configured size and method-count limits."
+                            "LargeService.cs: class exceeds the configured size and method-count limits.",
+                        ["EvidenceScope.GodClassSeverity"] = "FileMetrics"
                     }
                 }
             ]);

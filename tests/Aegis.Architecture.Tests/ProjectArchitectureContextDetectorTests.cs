@@ -372,6 +372,10 @@ public sealed class ProjectArchitectureContextDetectorTests
         Assert.Equal("ASP.NET Core", context.Framework);
         Assert.Contains("Blazor", context.DetectedFrameworks);
         Assert.Contains("ASP.NET Core", context.DetectedFrameworks);
+        var module = Assert.Single(context.Modules);
+        Assert.Equal("ASP.NET Core", module.Framework);
+        Assert.Contains("Blazor", module.Frameworks);
+        Assert.Contains("ASP.NET Core", module.Frameworks);
         Assert.Equal("FullStack", context.DomainType);
     }
 

@@ -341,7 +341,9 @@ public sealed class ProjectArchitectureContextDetectorTests
             module => module.Name == "Franz.Common.Tests");
 
         Assert.False(supportModule.IsTestProject);
-        Assert.NotEqual("Test", supportModule.ProjectKind);
+        Assert.True(supportModule.IsTestSupport);
+        Assert.Equal("TestSupport", supportModule.ProjectKind);
+        Assert.Equal("Tests", Assert.Single(supportModule.Layers).Name);
         Assert.True(testsModule.IsTestProject);
         Assert.Equal("Test", testsModule.ProjectKind);
         Assert.Equal("Test", testsModule.Type);

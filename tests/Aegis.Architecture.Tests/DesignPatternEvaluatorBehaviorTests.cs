@@ -43,6 +43,35 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.Equal("File", result.Metadata["EvaluationScope"]);
         Assert.Equal(100, result.Metrics["BuilderPatternComplianceIndex"]);
         Assert.Equal(0, result.Metrics["BuilderMutabilityViolationCount"]);
+        Assert.Equal("FileMetrics", result.Metadata["EvidenceScope.BuilderPatternComplianceIndex"]);
+        Assert.Contains("Build()", result.Metadata["Evidence.BuilderPatternComplianceIndex"]);
+        Assert.True(result.LineNumber is > 0);
+    }
+
+    [Fact]
+    public async Task BuilderEvaluator_does_not_require_fluent_chaining_for_a_valid_builder()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/OrderBuilder.cs", """
+            public sealed class OrderBuilder
+            {
+                private int _id;
+
+                public void WithId(int id) => _id = id;
+
+                public Order Build() => new Order(_id);
+            }
+            """);
+
+        var results = await Evaluate(project, "BuilderPatternEvaluator");
+        var result = Assert.Single(
+            results,
+            item => item.Metadata.GetValueOrDefault("BuilderClassName") == "OrderBuilder");
+
+        Assert.Equal(100, result.Metrics["BuilderPatternComplianceIndex"]);
+        Assert.Equal(0, result.Metrics["FluentReturnCount"]);
+        Assert.Contains("informational", result.Metadata["BuilderPatternMeasurement"]);
+        Assert.Equal("FileMetrics", result.Metadata["EvidenceScope.BuilderPatternComplianceIndex"]);
     }
 
     [Fact]

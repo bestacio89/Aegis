@@ -257,11 +257,25 @@ public sealed class RuleEngineCoreBehaviorTests
         var disabledPolicy = new AegisArchitecturePolicy();
         disabledPolicy.Architecture.DesignPatterns.EnforceStrategyPattern = false;
 
+        var cycleSummary = new ArchitectureEvaluatorResult(
+            "CircularDependencyEvaluator",
+            "Project")
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                ["CircularDependencyCount"] = 0
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project"
+            }
+        };
+
         var disabledOutcome = new RuleEngineCore(
             NullLogger<RuleEngineCore>.Instance,
             disabledPolicy).EvaluateDetailed(
                 new ProjectArchitectureContext { Language = "C#" },
-                []);
+                [cycleSummary]);
 
         Assert.Contains("AEG-DES-STRAT001", disabledOutcome.Stats.DisabledByPolicyReasons.Keys);
         Assert.Contains("AEG-DES-STRAT002", disabledOutcome.Stats.DisabledByPolicyReasons.Keys);
@@ -278,7 +292,7 @@ public sealed class RuleEngineCoreBehaviorTests
             NullLogger<RuleEngineCore>.Instance,
             enabledPolicy).EvaluateDetailed(
                 new ProjectArchitectureContext { Language = "C#" },
-                []);
+                [cycleSummary]);
 
         Assert.DoesNotContain("AEG-DES-STRAT001", enabledOutcome.Stats.DisabledByPolicyReasons.Keys);
         Assert.DoesNotContain("AEG-DES-STRAT002", enabledOutcome.Stats.DisabledByPolicyReasons.Keys);
@@ -286,6 +300,9 @@ public sealed class RuleEngineCoreBehaviorTests
         Assert.DoesNotContain("AEG-DES-STRAT002", enabledOutcome.Stats.RulesNotApplicable);
         Assert.Contains("AEG-DES-STRAT001", enabledOutcome.Stats.RulesNotEvaluated);
         Assert.Contains("AEG-DES-STRAT002", enabledOutcome.Stats.RulesNotEvaluated);
+        Assert.True(
+            disabledOutcome.Stats.EvaluationCoverage > enabledOutcome.Stats.EvaluationCoverage,
+            "Policy-disabled rules must not reduce evaluation coverage.");
     }
 
     [Fact]

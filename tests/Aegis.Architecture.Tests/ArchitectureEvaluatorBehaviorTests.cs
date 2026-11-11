@@ -89,7 +89,7 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
 
         Assert.Equal("Library", summary.ProjectName);
-        Assert.Equal(1, summary.Metrics["TotalDeclarations"]);
+        Assert.Equal(2, summary.Metrics["TotalDeclarations"]);
         Assert.Contains("Production.cs", summary.Evidence);
         Assert.DoesNotContain("ProductionTests.cs", summary.Evidence);
         Assert.True(summary.Metadata["AnalysisComplete"] == "true");

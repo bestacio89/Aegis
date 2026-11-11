@@ -37,21 +37,41 @@ jobs:
       - name: Prepare result directory
         run: mkdir -p artifacts
 
-      - name: Run Eclipse JDT
+      - name: Resolve controlled external classpath
         run: |
-          set -o pipefail
-          mvn --quiet -f tools/java-semantic-spike/pom.xml \
-            compile exec:java \
-            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java" \
-            | tee artifacts/jdt.jsonl
+          mvn --batch-mode --no-transfer-progress \
+            -f tools/java-semantic-spike/classpath-pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=test \
+            -Dmdep.outputFile="${{ github.workspace }}/artifacts/external-classpath.txt"
 
-      - name: Run JavaParser Symbol Solver
+      - name: Run Eclipse JDT (source-only)
         run: |
           set -o pipefail
-          mvn --quiet -f tools/java-semantic-spike/pom.xml \
-            compile exec:java \
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java" \
+            | tee artifacts/jdt-source-only.jsonl
+
+      - name: Run JavaParser (source-only)
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
             -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java" \
-            | tee artifacts/javaparser.jsonl
+            | tee artifacts/javaparser-source-only.jsonl
+
+      - name: Run Eclipse JDT (controlled external classpath)
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java artifacts/external-classpath.txt" \
+            | tee artifacts/jdt-external-classpath.jsonl
+
+      - name: Run JavaParser (controlled external classpath)
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
+            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java artifacts/external-classpath.txt" \
+            | tee artifacts/javaparser-external-classpath.jsonl
 
       - name: Upload comparison results
         if: always()

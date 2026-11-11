@@ -7,20 +7,34 @@ This is an isolated J0 benchmark harness, not a production dependency of Aegis.
 - Eclipse JDT Core `3.47.0` (EPL-2.0)
 - JavaParser Symbol Solver `3.28.2` (Apache-2.0 or LGPL-3.0, at adopter's choice)
 
-Both engines run against the same checked-in Maven and Gradle Kotlin fixture corpus. The harness materializes only `.java.fixture` source files into a temporary workspace; it does not execute Maven, Gradle, plugins, annotation processors, or project build scripts.
+Both engines run against the same checked-in Maven and Gradle Kotlin fixture corpus. The harness materializes only `.java.fixture` source files into a temporary workspace; it does not execute Maven/Gradle fixture builds, plugins, annotation processors, or project build scripts.
 
-## Metrics
+## Benchmark passes
 
-The harness reports per corpus:
+The workflow runs each engine in two independent modes:
+
+1. **Source-only:** checked-in source roots and the running JDK only.
+2. **Controlled external classpath:** the same source roots plus a separately resolved, pinned dependency manifest in `classpath-pom.xml`.
+
+The classpath manifest is deliberately separate from the fixture Maven and Gradle build files. CI resolves it with Maven's dependency plugin and passes the resulting JAR list to both engines. This avoids executing fixture build scripts and avoids accidentally placing either semantic engine's own implementation dependencies on the analysed project's classpath. The manifest currently covers Spring Context, JUnit Jupiter API and MapStruct API, including their transitives. It is a controlled representative classpath, not a claim that the fixture build models have been fully resolved.
+
+The harness validates every classpath entry before analysis. JDT receives the entries through `ASTParser.setEnvironment`; JavaParser receives the same JARs through `JarTypeSolver`.
+
+## Metrics and interpretation
+
+The JSON output includes:
 - discovered and successfully parsed source files;
-- parser/compiler diagnostics (the engines expose different diagnostic models, so these counts are not directly interchangeable);
+- parser/compiler diagnostics (the engines expose different diagnostic models, so counts are not directly interchangeable);
 - semantic resolution attempts and successful bindings for type references, method calls and constructor calls;
+- independently tracked known cross-source type targets;
+- independently tracked known third-party type targets;
+- number of external JAR entries;
 - elapsed analysis time;
 - an approximate post-run heap snapshot, not peak memory.
 
-The initial spike configures the running JDK and checked-in source roots only. It deliberately does not resolve third-party Maven/Gradle dependencies or execute project builds. This isolates cross-source source resolution but is not a full build-classpath benchmark. The next comparison must add a separately controlled, pre-resolved dependency classpath before choosing a production engine.
+The expected source-type and external-type targets are correctness spot checks, not exhaustive semantic validation. A higher aggregate binding count is not automatically better if an engine incorrectly resolves intentionally missing symbols. The corpus also includes intentionally unresolved names; those must remain unresolved.
 
-These are comparative diagnostics, not a complete correctness score. Binding counts must be interpreted alongside the fixture's known resolved/unresolved cases and manual spot checks. A higher count is not automatically better if the engine incorrectly resolves intentionally missing symbols.
+Heap snapshots are affected by JVM allocation and GC timing. They are indicative only. Run each engine in a separate process; do not treat one timing sample as a stable performance ranking.
 
 ## Run
 
@@ -32,6 +46,16 @@ mvn -B -f tools/java-semantic-spike/pom.xml compile exec:java \
 
 mvn -B -f tools/java-semantic-spike/pom.xml compile exec:java \
   -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java"
+
+mvn -B -f tools/java-semantic-spike/classpath-pom.xml \
+  org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+  -DincludeScope=test -Dmdep.outputFile=/tmp/aegis-java-classpath.txt
+
+mvn -B -f tools/java-semantic-spike/pom.xml compile exec:java \
+  -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java /tmp/aegis-java-classpath.txt"
+
+mvn -B -f tools/java-semantic-spike/pom.xml compile exec:java \
+  -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java /tmp/aegis-java-classpath.txt"
 ```
 
-Run each engine in a separate process for comparable heap observations. CI records both outputs as artifacts. Do not select a production engine from this small corpus alone; add larger real-world projects and classpath-resolution cases before the final J0 decision.
+Do not select a production engine from this small corpus alone. Add larger real-world repositories, effective Maven/Gradle model resolution, module-path cases and dependency-version conflict cases before final production integration.

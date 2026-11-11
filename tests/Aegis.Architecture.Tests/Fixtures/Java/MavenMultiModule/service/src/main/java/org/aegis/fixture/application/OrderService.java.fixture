@@ -14,4 +14,8 @@ public class OrderService {
     public Order find(String id) {
         return repository.findById(id).orElseThrow();
     }
+
+    public Class<?> frameworkAnnotationType() {
+        return Service.class;
+    }
 }

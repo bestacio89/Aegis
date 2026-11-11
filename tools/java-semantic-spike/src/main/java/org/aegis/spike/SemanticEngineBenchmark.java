@@ -10,6 +10,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.compiler.IProblem;
@@ -21,6 +22,7 @@ import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.SimpleType;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,6 +41,10 @@ import java.util.stream.Stream;
  */
 public final class SemanticEngineBenchmark {
     private static final String FIXTURE_SUFFIX = ".fixture";
+    private static final Set<String> EXPECTED_EXTERNAL_TYPES = Set.of(
+        "org.springframework.stereotype.Service",
+        "org.springframework.stereotype.Component",
+        "org.junit.jupiter.api.Test");
     private static final Set<String> EXPECTED_SOURCE_TYPES = Set.of(
         "org.aegis.fixture.domain.Entity",
         "org.aegis.fixture.domain.Order",
@@ -52,7 +58,7 @@ public final class SemanticEngineBenchmark {
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
             throw new IllegalArgumentException(
-                "Usage: SemanticEngineBenchmark <jdt|javaparser> <fixture-root>");
+                "Usage: SemanticEngineBenchmark <jdt|javaparser> <fixture-root> [classpath-file]");
         }
 
         String engine = args[0].toLowerCase(Locale.ROOT);
@@ -65,16 +71,19 @@ public final class SemanticEngineBenchmark {
             throw new IllegalArgumentException("Fixture root does not exist: " + fixtureRoot);
         }
 
+        List<Path> externalClasspath = args.length >= 3
+            ? readClasspath(Path.of(args[2]))
+            : List.of();
         Path workspace = Files.createTempDirectory("aegis-java-semantic-spike-");
         try {
             List<Path> sourceFiles = materializeSources(fixtureRoot, workspace);
             List<Path> sourceRoots = discoverSourceRoots(workspace, sourceFiles);
 
             Metrics metrics = engine.equals("jdt")
-                ? analyzeWithJdt(sourceFiles, sourceRoots)
-                : analyzeWithJavaParser(sourceFiles, sourceRoots);
+                ? analyzeWithJdt(sourceFiles, sourceRoots, externalClasspath)
+                : analyzeWithJavaParser(sourceFiles, sourceRoots, externalClasspath);
 
-            printJson(engine, metrics, sourceRoots.size());
+            printJson(engine, metrics, sourceRoots.size(), externalClasspath.size());
         } finally {
             deleteDirectory(workspace);
         }
@@ -130,7 +139,8 @@ public final class SemanticEngineBenchmark {
 
     private static Metrics analyzeWithJavaParser(
         List<Path> sourceFiles,
-        List<Path> sourceRoots) {
+        List<Path> sourceRoots,
+        List<Path> externalClasspath) {
 
         ParserConfiguration sourceParserConfiguration = new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21);
@@ -140,6 +150,15 @@ public final class SemanticEngineBenchmark {
             typeSolver.add(new JavaParserTypeSolver(
                 sourceRoot.toFile(),
                 sourceParserConfiguration));
+        }
+        for (Path classpathEntry : externalClasspath) {
+            try {
+                typeSolver.add(new JarTypeSolver(classpathEntry));
+            } catch (IOException invalidClasspathEntry) {
+                throw new IllegalStateException(
+                    "Unable to load external classpath entry: " + classpathEntry,
+                    invalidClasspathEntry);
+            }
         }
 
         ParserConfiguration configuration = new ParserConfiguration()
@@ -152,6 +171,7 @@ public final class SemanticEngineBenchmark {
         int resolutionAttempts = 0;
         int resolvedBindings = 0;
         Set<String> resolvedExpectedTypes = new HashSet<>();
+        Set<String> resolvedExternalTypes = new HashSet<>();
         long started = System.nanoTime();
 
         for (Path sourceFile : sourceFiles) {
@@ -178,6 +198,9 @@ public final class SemanticEngineBenchmark {
                     resolvedBindings++;
                     if (EXPECTED_SOURCE_TYPES.contains(qualifiedName)) {
                         resolvedExpectedTypes.add(qualifiedName);
+                    }
+                    if (EXPECTED_EXTERNAL_TYPES.contains(qualifiedName)) {
+                        resolvedExternalTypes.add(qualifiedName);
                     }
                 } catch (RuntimeException unresolvedOrUnsupported) {
                     // Resolution failures are evidence; they do not abort the corpus.
@@ -217,14 +240,20 @@ public final class SemanticEngineBenchmark {
             resolvedBindings,
             resolvedExpectedTypes.size(),
             EXPECTED_SOURCE_TYPES.size(),
+            resolvedExternalTypes.size(),
+            EXPECTED_EXTERNAL_TYPES.size(),
             elapsedMilliseconds,
             heapUsedBytes);
     }
 
     private static Metrics analyzeWithJdt(
         List<Path> sourceFiles,
-        List<Path> sourceRoots) {
+        List<Path> sourceRoots,
+        List<Path> externalClasspath) {
 
+        String[] classpathEntries = externalClasspath.stream()
+            .map(Path::toString)
+            .toArray(String[]::new);
         String[] sourcePaths = sourceRoots.stream()
             .map(Path::toString)
             .toArray(String[]::new);
@@ -248,7 +277,7 @@ public final class SemanticEngineBenchmark {
                 parser.setKind(ASTParser.K_COMPILATION_UNIT);
                 parser.setSource(Files.readString(sourceFile).toCharArray());
                 parser.setUnitName(resolveUnitName(sourceFile, sourceRoots));
-                parser.setEnvironment(new String[0], sourcePaths, encodings, true);
+                parser.setEnvironment(classpathEntries, sourcePaths, encodings, true);
                 parser.setResolveBindings(true);
                 parser.setBindingsRecovery(true);
                 parser.setStatementsRecovery(true);
@@ -277,6 +306,9 @@ public final class SemanticEngineBenchmark {
                                 resolved[0]++;
                                 if (EXPECTED_SOURCE_TYPES.contains(binding.getQualifiedName())) {
                                     resolvedExpectedTypes.add(binding.getQualifiedName());
+                                }
+                                if (EXPECTED_EXTERNAL_TYPES.contains(binding.getQualifiedName())) {
+                                    resolvedExternalTypes.add(binding.getQualifiedName());
                                 }
                             }
                         } catch (RuntimeException unresolvedOrUnsupported) {
@@ -343,15 +375,46 @@ public final class SemanticEngineBenchmark {
             .orElseGet(() -> sourceFile.getFileName().toString());
     }
 
-    private static void printJson(String engine, Metrics metrics, int sourceRootCount) {
+    private static List<Path> readClasspath(Path classpathFile) throws IOException {
+        if (!Files.isRegularFile(classpathFile)) {
+            throw new IllegalArgumentException("Classpath file does not exist: " + classpathFile);
+        }
+
+        String classpath = Files.readString(classpathFile).trim();
+        if (classpath.isEmpty()) {
+            throw new IllegalArgumentException("Classpath file is empty: " + classpathFile);
+        }
+
+        List<Path> entries = Stream.of(
+                classpath.split(java.util.regex.Pattern.quote(File.pathSeparator)))
+            .map(String::trim)
+            .filter(entry -> !entry.isEmpty())
+            .map(Path::of)
+            .map(Path::toAbsolutePath)
+            .map(Path::normalize)
+            .toList();
+        for (Path entry : entries) {
+            if (!Files.isRegularFile(entry)) {
+                throw new IllegalArgumentException("Classpath entry does not exist: " + entry);
+            }
+        }
+        return entries;
+    }
+
+    private static void printJson(
+        String engine,
+        Metrics metrics,
+        int sourceRootCount,
+        int externalClasspathEntryCount) {
         System.out.printf(
             Locale.ROOT,
             "{\"engine\":\"%s\",\"sourceFiles\":%d,\"parsedFiles\":%d,"
                 + "\"diagnostics\":%d,\"sourceRoots\":%d,"
                 + "\"resolutionAttempts\":%d,\"resolvedBindings\":%d,"
                 + "\"resolutionRatio\":%.4f,\"expectedSourceTypesResolved\":%d,"
-                + "\"expectedSourceTypesTotal\":%d,\"elapsedMilliseconds\":%d,"
-                + "\"heapUsedBytes\":%d,\"externalClasspathEnabled\":false}%n",
+                + "\"expectedSourceTypesTotal\":%d,\"expectedExternalTypesResolved\":%d,"
+                + "\"expectedExternalTypesTotal\":%d,\"elapsedMilliseconds\":%d,"
+                + "\"heapUsedBytes\":%d,\"externalClasspathEnabled\":%s,\"externalClasspathEntries\":%d}%n",
             engine,
             metrics.sourceFiles(),
             metrics.parsedFiles(),
@@ -364,8 +427,12 @@ public final class SemanticEngineBenchmark {
                 : (double) metrics.resolvedBindings() / metrics.resolutionAttempts(),
             metrics.expectedSourceTypesResolved(),
             metrics.expectedSourceTypesTotal(),
+            metrics.expectedExternalTypesResolved(),
+            metrics.expectedExternalTypesTotal(),
             metrics.elapsedMilliseconds(),
-            metrics.heapUsedBytes());
+            metrics.heapUsedBytes(),
+            externalClasspathEntryCount > 0,
+            externalClasspathEntryCount);
     }
 
     private static void deleteDirectory(Path directory) throws IOException {
@@ -388,6 +455,8 @@ public final class SemanticEngineBenchmark {
         int resolvedBindings,
         int expectedSourceTypesResolved,
         int expectedSourceTypesTotal,
+        int expectedExternalTypesResolved,
+        int expectedExternalTypesTotal,
         long elapsedMilliseconds,
         long heapUsedBytes) {
     }

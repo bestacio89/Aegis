@@ -211,7 +211,7 @@ public sealed class DocumentationEvaluator :
         return results;
     }
 
-    private IReadOnlyList<ProjectScope> BuildProjectScopes(
+    private IReadOnlyList<DocumentationProjectScope> BuildProjectScopes(
         string projectPath,
         IReadOnlyCollection<string> files)
     {
@@ -219,7 +219,7 @@ public sealed class DocumentationEvaluator :
         {
             return files.Count == 0
                 ? []
-                : [new ProjectScope(
+                : [new DocumentationProjectScope(
                     Context?.ProjectName ?? Path.GetFileName(projectPath),
                     Path.GetFullPath(projectPath),
                     "Unknown",
@@ -233,7 +233,7 @@ public sealed class DocumentationEvaluator :
             .OrderByDescending(module => NormalizePath(module.Path).Length)
             .ToArray();
 
-        var scopes = new List<ProjectScope>();
+        var scopes = new List<DocumentationProjectScope>();
 
         foreach (var module in modules)
         {
@@ -250,7 +250,7 @@ public sealed class DocumentationEvaluator :
             if (ownedFiles.Length == 0)
                 continue;
 
-            scopes.Add(new ProjectScope(
+            scopes.Add(new DocumentationProjectScope(
                 module.Name,
                 module.Path,
                 module.ProjectKind,
@@ -265,7 +265,7 @@ public sealed class DocumentationEvaluator :
 
         if (unownedFiles.Length > 0)
         {
-            scopes.Add(new ProjectScope(
+            scopes.Add(new DocumentationProjectScope(
                 Context.ProjectName,
                 Path.GetFullPath(Context.RootPath),
                 "Unknown",
@@ -277,7 +277,7 @@ public sealed class DocumentationEvaluator :
     }
 
     private ArchitectureEvaluatorResult CreateProjectSummary(
-        ProjectScope scope,
+        DocumentationProjectScope scope,
         double coverage,
         int totalDeclarations,
         int documentedDeclarations,
@@ -333,7 +333,7 @@ public sealed class DocumentationEvaluator :
 
     private static void ApplyProjectIdentity(
         ArchitectureEvaluatorResult result,
-        ProjectScope scope)
+        DocumentationProjectScope scope)
     {
         result.ProjectName = scope.Name;
         result.Target = scope.Name;
@@ -581,7 +581,7 @@ public sealed class DocumentationEvaluator :
             Path.DirectorySeparatorChar,
             Path.AltDirectorySeparatorChar);
 
-    private sealed record ProjectScope(
+    private sealed record DocumentationProjectScope(
         string Name,
         string Path,
         string ProjectKind,

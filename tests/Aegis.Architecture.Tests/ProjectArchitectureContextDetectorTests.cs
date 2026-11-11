@@ -547,6 +547,7 @@ public sealed class ProjectArchitectureContextDetectorTests
 
         var moduleNames = new[]
         {
+            "Franz.Common",
             "Mediator",
             "Messaging",
             "Http",

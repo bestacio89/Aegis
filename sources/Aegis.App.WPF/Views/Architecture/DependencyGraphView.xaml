@@ -154,9 +154,9 @@
 
         <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="5*" />
                 <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="1*" />
+                <ColumnDefinition Width="260" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Background="{StaticResource Brush.Panel}"

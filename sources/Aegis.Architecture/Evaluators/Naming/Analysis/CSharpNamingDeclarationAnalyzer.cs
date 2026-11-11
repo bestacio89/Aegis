@@ -180,21 +180,28 @@ public sealed class CSharpNamingDeclarationAnalyzer : INamingDeclarationAnalyzer
 
         private static bool IsTestMethod(MethodDeclarationSyntax method)
         {
-            var testAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            foreach (var attribute in method.AttributeLists.SelectMany(
+                         attributeList => attributeList.Attributes))
             {
-                "Fact", "FactAttribute",
-                "Theory", "TheoryAttribute",
-                "Test", "TestAttribute",
-                "TestCase", "TestCaseAttribute",
-                "TestCaseSource", "TestCaseSourceAttribute",
-                "TestMethod", "TestMethodAttribute",
-                "DataTestMethod", "DataTestMethodAttribute"
-            };
+                var attributeName = attribute.Name.ToString();
+                var separator = attributeName.LastIndexOf('.');
+                if (separator >= 0)
+                    attributeName = attributeName[(separator + 1)..];
 
-            return method.AttributeLists
-                .SelectMany(attributeList => attributeList.Attributes)
-                .Select(attribute => attribute.Name.ToString().Split('.').Last())
-                .Any(attributeName => testAttributes.Contains(attributeName));
+                if (attributeName is
+                    "Fact" or "FactAttribute"
+                    or "Theory" or "TheoryAttribute"
+                    or "Test" or "TestAttribute"
+                    or "TestCase" or "TestCaseAttribute"
+                    or "TestCaseSource" or "TestCaseSourceAttribute"
+                    or "TestMethod" or "TestMethodAttribute"
+                    or "DataTestMethod" or "DataTestMethodAttribute")
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void Add(

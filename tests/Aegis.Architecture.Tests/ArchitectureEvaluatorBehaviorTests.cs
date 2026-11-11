@@ -297,6 +297,16 @@ public sealed class ArchitectureEvaluatorBehaviorTests
                 SourceLayer = "Domain",
                 TargetLayer = "Application",
                 DependencyType = "Project"
+            },
+            new ArchitectureDependencyContext
+            {
+                File = "tests/Domain/OrderTests.cs",
+                Source = "OrderTests",
+                Target = "PresentationAdapter",
+                SourceLayer = "Domain",
+                TargetLayer = "Presentation",
+                DependencyType = "Project",
+                Scope = "Test"
             }
         ]);
 

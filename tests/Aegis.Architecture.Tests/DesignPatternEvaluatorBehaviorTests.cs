@@ -183,6 +183,59 @@ public sealed class DesignPatternEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task MediatorPatternEvaluator_does_not_treat_handler_dependencies_as_mediator_coupling()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Application/OrderHandler.cs", """
+            public sealed class OrderHandler : IRequestHandler<CreateOrder, Order>
+            {
+                private readonly IOrderRepository _orderRepository;
+
+                public void Handle()
+                {
+                    _orderRepository.Save();
+                }
+            }
+            """);
+
+        var results = await Evaluate(project, "MediatorPatternEvaluator");
+        var handler = Assert.Single(
+            results,
+            result => result.Target.Contains("OrderHandler", StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(handler.Metrics.ContainsKey("CouplingRisk"));
+        Assert.False(handler.Metrics.ContainsKey("DirectServiceLikeCallCount"));
+    }
+
+    [Fact]
+    public async Task MediatorPatternEvaluator_emits_coupling_evidence_for_mediator_implementations()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Infrastructure/OrderMediator.cs", """
+            public sealed class OrderMediator : IMediator
+            {
+                private readonly IOrderService _orderService;
+
+                public void Dispatch()
+                {
+                    _orderService.Execute();
+                }
+            }
+            """);
+
+        var results = await Evaluate(project, "MediatorPatternEvaluator");
+        var mediator = Assert.Single(
+            results,
+            result => result.Target == "OrderMediator");
+
+        Assert.Equal(1, mediator.Metrics["CouplingRisk"]);
+        Assert.Equal("FileMetrics", mediator.Metadata["EvidenceScope.CouplingRisk"]);
+        Assert.Contains("_orderService.Execute", mediator.Metadata["Evidence.CouplingRisk"]);
+        Assert.Contains("_orderService.Execute", mediator.Metadata["CodeSnippet.CouplingRisk"]);
+        Assert.True(mediator.LineNumber is > 0);
+    }
+
+    [Fact]
     public async Task AnemicDomainModelEvaluator_reports_state_to_behavior_signals()
     {
         using var project = new TemporaryProject();

@@ -174,12 +174,11 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
             .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .Take(3)
             .Select(pair => $"Unsupported · {pair.Key}: {pair.Value}"));
-        var nonDuplicateNotEvaluatedReasons = stats.NotEvaluatedReasons
-            .Where(pair => !stats.UnsupportedRuleReasons.ContainsKey(pair.Key))
+        var notEvaluatedReasons = stats.NotEvaluatedReasons
             .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        details.AddRange(nonDuplicateNotEvaluatedReasons
+        details.AddRange(notEvaluatedReasons
             .Take(3)
             .Select(pair => $"Not evaluated · {pair.Key}: {pair.Value}"));
 
@@ -199,7 +198,7 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
                 : "All recorded applicable rules have evaluation evidence.";
 
         var remaining = stats.UnsupportedRuleReasons.Count
-            + nonDuplicateNotEvaluatedReasons.Length
+            + notEvaluatedReasons.Length
             + stats.DisabledByPolicyReasons.Count
             + stats.NotApplicableReasons.Count
             - details.Count;

@@ -586,13 +586,22 @@ public sealed class AegisArchitectureAnalysisRunner
                 currentReport.Id,
                 token).ConfigureAwait(false);
 
-            var previousViolationKeys = previousReport.RuleResults
-                .Select(CreateViolationIdentity)
+            var previousResultsWithSourcePaths = previousReport.RuleResults
+                .Where(result => !string.IsNullOrWhiteSpace(result.SourceFile))
+                .Select(CreateSourceIdentity)
+                .ToHashSet(ViolationIdentityComparer.Instance);
+
+            // Older persisted reports did not populate SourceFile. Their basename
+            // is the only available identity, so retain a deliberate legacy fallback.
+            var previousLegacyResults = previousReport.RuleResults
+                .Where(result => string.IsNullOrWhiteSpace(result.SourceFile))
+                .Select(CreateTargetIdentity)
                 .ToHashSet(ViolationIdentityComparer.Instance);
 
             var newViolations = currentResults
                 .Where(current =>
-                    !previousViolationKeys.Contains(CreateViolationIdentity(current)))
+                    !previousResultsWithSourcePaths.Contains(CreateSourceIdentity(current))
+                    && !previousLegacyResults.Contains(CreateTargetIdentity(current)))
                 .ToList();
 
             _logger.LogInformation(
@@ -628,8 +637,11 @@ public sealed class AegisArchitectureAnalysisRunner
         }
     }
 
-    private static ViolationIdentity CreateViolationIdentity(RuleResultEntity result) =>
+    private static ViolationIdentity CreateSourceIdentity(RuleResultEntity result) =>
         new(result.RuleId, result.SourceFile ?? result.Target, result.Category, result.Domain);
+
+    private static ViolationIdentity CreateTargetIdentity(RuleResultEntity result) =>
+        new(result.RuleId, result.Target, result.Category, result.Domain);
 
     private readonly record struct ViolationIdentity(
         string RuleId,

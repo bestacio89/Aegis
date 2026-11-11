@@ -536,6 +536,7 @@ public sealed class AegisArchitectureAnalysisRunner
                 Severity = result.Severity,
                 Category = result.Category.ToString(),
                 Target = Path.GetFileName(result.FilePath),
+                SourceFile = result.FilePath,
                 Message = result.Message,
                 ImpactScore = result.ImpactScore,
                 WeightedImpact = result.WeightedImpact,
@@ -627,7 +628,7 @@ public sealed class AegisArchitectureAnalysisRunner
     }
 
     private static ViolationIdentity CreateViolationIdentity(RuleResultEntity result) =>
-        new(result.RuleId, result.Target, result.Category, result.Domain);
+        new(result.RuleId, result.SourceFile ?? result.Target, result.Category, result.Domain);
 
     private readonly record struct ViolationIdentity(
         string RuleId,
@@ -637,18 +638,21 @@ public sealed class AegisArchitectureAnalysisRunner
 
     private sealed class ViolationIdentityComparer : IEqualityComparer<ViolationIdentity>
     {
+        private static StringComparer FilePathComparer =>
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
         public static ViolationIdentityComparer Instance { get; } = new();
 
         public bool Equals(ViolationIdentity left, ViolationIdentity right) =>
             StringComparer.OrdinalIgnoreCase.Equals(left.RuleId, right.RuleId)
-            && StringComparer.OrdinalIgnoreCase.Equals(left.Target, right.Target)
+            && FilePathComparer.Equals(left.Target, right.Target)
             && StringComparer.OrdinalIgnoreCase.Equals(left.Category, right.Category)
             && StringComparer.OrdinalIgnoreCase.Equals(left.Domain, right.Domain);
 
         public int GetHashCode(ViolationIdentity value) =>
             HashCode.Combine(
                 StringComparer.OrdinalIgnoreCase.GetHashCode(value.RuleId),
-                StringComparer.OrdinalIgnoreCase.GetHashCode(value.Target),
+                FilePathComparer.GetHashCode(value.Target),
                 StringComparer.OrdinalIgnoreCase.GetHashCode(value.Category),
                 value.Domain is null
                     ? 0

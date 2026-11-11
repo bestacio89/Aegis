@@ -102,6 +102,53 @@ public sealed class DesignPatternEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task FacadeEvaluator_counts_only_public_methods_and_preserves_surface_evidence()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/OrderFacade.cs", """
+            public sealed class OrderFacade
+            {
+                private readonly IOrderService _orderService;
+                private readonly IInvoiceService _invoiceService;
+
+                public Order GetOrder() => _orderService.Get();
+                public Invoice GetInvoice() => _invoiceService.Get();
+
+                private void Normalize() { }
+            }
+            """);
+        project.Write("back/InvoiceFacade.ts", """
+            export class InvoiceFacade {
+                private _service: InvoiceService;
+
+                public getInvoice() {
+                    return _service.get();
+                }
+
+                private normalize() {
+                    return _service.normalize();
+                }
+            }
+            """);
+
+        var results = await Evaluate(project, "FacadePatternEvaluator");
+        var order = Assert.Single(
+            results,
+            item => item.Target == "OrderFacade");
+        var invoice = Assert.Single(
+            results,
+            item => item.Target == "InvoiceFacade");
+
+        Assert.Equal(2, order.Metrics["PublicMethodCount"]);
+        Assert.Equal(1, invoice.Metrics["PublicMethodCount"]);
+        Assert.Equal("FileMetrics", order.Metadata["EvidenceScope.PublicSurfaceRatio"]);
+        Assert.Contains("GetOrder", order.Metadata["Evidence.PublicMethodCount"]);
+        Assert.Contains("getInvoice", invoice.Metadata["Evidence.PublicMethodCount"]);
+        Assert.DoesNotContain("normalize", invoice.Metadata["Evidence.PublicMethodCount"]);
+        Assert.True(order.LineNumber is > 0);
+    }
+
+    [Fact]
     public async Task DecoratorEvaluator_emits_abstraction_wrapping_and_delegation_evidence()
     {
         using var project = new TemporaryProject();

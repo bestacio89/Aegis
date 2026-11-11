@@ -208,7 +208,7 @@ public sealed class MaintainabilityEvaluator
         result.Metadata["CommentDensityMeasurement"] =
             "Percentage of non-empty physical lines containing comment text.";
         result.Metadata["MaintainabilityMeasurement"] =
-            "Aegis heuristic (0-100): 100 minus weighted lexical decision points and excess lines beyond the policy limit. Comment density is informational only and does not affect the score. This is not a compiler-backed or industry-standard maintainability index.";
+            "Aegis heuristic (0-100): 100 minus weighted lexical decision points and non-comment code lines beyond the policy limit. Comment density is informational only and does not affect the score. This is not a compiler-backed or industry-standard maintainability index.";
         result.Metadata["CommentDensityInterpretation"] =
             "Informational metric only. Low comment density is not treated as a maintainability defect.";
         result.Metadata["AnalysisComplete"] = "true";
@@ -315,13 +315,17 @@ public sealed class MaintainabilityEvaluator
             out var commentLines);
         var commentLineCount = commentLines.Count;
 
-        var nonEmptyLineCount = content
+        var physicalNonEmptyLineCount = content
             .Split('\n')
             .Count(line => !string.IsNullOrWhiteSpace(line));
 
-        var commentDensity = nonEmptyLineCount == 0
+        var nonEmptyLineCount = sanitized
+            .Split('\n')
+            .Count(line => !string.IsNullOrWhiteSpace(line));
+
+        var commentDensity = physicalNonEmptyLineCount == 0
             ? 0
-            : (double)commentLineCount / nonEmptyLineCount * 100.0;
+            : (double)commentLineCount / physicalNonEmptyLineCount * 100.0;
 
         var decisionRegex = GetDecisionRegex(language);
         var decisionMatches = decisionRegex?.Matches(sanitized)
@@ -344,7 +348,7 @@ public sealed class MaintainabilityEvaluator
         var evidenceSummary =
             $"Maintainability score {roundedScore:0.##}/100; " +
             $"decision points {decisionPointCount} (penalty {complexityPenalty:0.##}); " +
-            $"non-empty lines {nonEmptyLineCount}, maximum {_policy.MaxLinesPerFile} " +
+            $"non-comment code lines {nonEmptyLineCount}, maximum {_policy.MaxLinesPerFile} " +
             $"(penalty {linePenalty:0.##}); comment density {roundedCommentDensity:0.##}% " +
             "(informational only; not included in the score).";
 

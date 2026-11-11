@@ -267,7 +267,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
         result.Metadata["Language"] = language;
         result.Metadata["Framework"] = identity.Framework ?? "Unknown";
         result.Metadata["Layer"] = result.Layer ?? "Unknown";
-        result.Metadata["PolicyEnabled"] = _policy.Enabled.ToString();
+        result.Metadata["PolicyEnabled"] = _policy.Enabled.ToString().ToLowerInvariant();
         result.Metadata["EvaluationScope"] = FileScope;
         result.Metadata["AnalysisComplete"] = "true";
         result.Metadata["AnalysisStatus"] = "Completed";
@@ -337,9 +337,9 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 ["ProjectKind"] = scope.Identity.ProjectKind,
                 ["Framework"] = scope.Identity.Framework ?? "Unknown",
                 ["Evaluator"] = Name,
-                ["PolicyEnabled"] = _policy.Enabled.ToString(),
+                ["PolicyEnabled"] = _policy.Enabled.ToString().ToLowerInvariant(),
                 ["SupportedFrameworks"] = string.Join(", ", SupportedFrameworks),
-                ["AnalysisComplete"] = (scope.FailedFileCount == 0).ToString(),
+                ["AnalysisComplete"] = (scope.FailedFileCount == 0).ToString().ToLowerInvariant(),
                 ["AnalysisStatus"] = scope.FailedFileCount == 0
                     ? "Completed"
                     : "CompletedWithDiagnostics",
@@ -381,13 +381,13 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 ["ProjectKind"] = scope.Identity.ProjectKind,
                 ["Framework"] = scope.Identity.Framework ?? "Unknown",
                 ["Evaluator"] = Name,
-                ["PolicyEnabled"] = _policy.Enabled.ToString(),
+                ["PolicyEnabled"] = _policy.Enabled.ToString().ToLowerInvariant(),
                 ["EvaluationStatus"] = scope.AnalyzedFileCount == 0
                     ? "NoSourceFilesFound"
                     : scope.LoggingFileCount == 0
                         ? "NoRecognizedLoggingCalls"
                         : "NoFilesEvaluated",
-                ["AnalysisComplete"] = (scope.FailedFileCount == 0).ToString(),
+                ["AnalysisComplete"] = (scope.FailedFileCount == 0).ToString().ToLowerInvariant(),
                 ["AnalysisStatus"] = scope.FailedFileCount == 0
                     ? "Completed"
                     : "CompletedWithDiagnostics",

@@ -35,10 +35,11 @@ internal static class MavenProjectModelResolver
             .Distinct(PathComparer)
             .ToArray();
         var knownPomFiles = pomFiles.ToHashSet(PathComparer);
+        var coordinateIndex = BuildProjectCoordinateIndex(pomFiles);
 
         foreach (var pomFile in pomFiles)
         {
-            var model = Resolve(pomFile, knownPomFiles, cache, visiting);
+            var model = Resolve(pomFile, knownPomFiles, coordinateIndex, cache, visiting);
             var modulePath = Path.GetDirectoryName(pomFile);
             var module = context.Modules.FirstOrDefault(candidate =>
                 modulePath is not null && PathsEqual(candidate.Path, modulePath));
@@ -62,6 +63,7 @@ internal static class MavenProjectModelResolver
     private static MavenProjectModel Resolve(
         string pomFile,
         IReadOnlySet<string> knownPomFiles,
+        IReadOnlyDictionary<string, List<string>> coordinateIndex,
         IDictionary<string, MavenProjectModel> cache,
         ISet<string> visiting)
     {
@@ -139,7 +141,7 @@ internal static class MavenProjectModelResolver
                     if (File.Exists(parentPath) && knownPomFiles.Contains(parentPath))
                     {
                         parentProjectFile = parentPath;
-                        parentModel = Resolve(parentPath, knownPomFiles, cache, visiting);
+                        parentModel = Resolve(parentPath, knownPomFiles, coordinateIndex, cache, visiting);
                     }
                     else
                     {
@@ -225,14 +227,18 @@ internal static class MavenProjectModelResolver
                     bom,
                     fullPath,
                     knownPomFiles,
+                    coordinateIndex,
                     cache,
-                    visiting);
+                    visiting,
+                    out var ambiguous);
 
                 if (importedBom is null)
                 {
                     diagnostics.Add(Diagnostic(
-                        "MavenBomNotResolved",
-                        $"Imported BOM '{bom.GroupId}:{bom.ArtifactId}:{bom.Version}' is not available as a matching local POM. Remote repositories are not queried.",
+                        ambiguous ? "MavenBomCoordinatesAmbiguous" : "MavenBomNotResolved",
+                        ambiguous
+                            ? $"More than one scanned POM declares imported BOM coordinates '{bom.GroupId}:{bom.ArtifactId}:{bom.Version}'. No candidate is selected."
+                            : $"Imported BOM '{bom.GroupId}:{bom.ArtifactId}:{bom.Version}' is not available as a matching local POM. Remote repositories are not queried.",
                         fullPath));
                     continue;
                 }
@@ -420,35 +426,103 @@ internal static class MavenProjectModelResolver
         MavenProjectModel.Dependency bom,
         string importingProjectFile,
         IReadOnlySet<string> knownPomFiles,
+        IReadOnlyDictionary<string, List<string>> coordinateIndex,
         IDictionary<string, MavenProjectModel> cache,
-        ISet<string> visiting)
+        ISet<string> visiting,
+        out bool ambiguous)
     {
+        ambiguous = false;
         if (string.IsNullOrWhiteSpace(bom.GroupId)
             || string.IsNullOrWhiteSpace(bom.ArtifactId)
             || string.IsNullOrWhiteSpace(bom.Version)
             || PropertyReference.IsMatch(bom.GroupId)
             || PropertyReference.IsMatch(bom.ArtifactId)
-            || PropertyReference.IsMatch(bom.Version))
+            || PropertyReference.IsMatch(bom.Version)
+            || !coordinateIndex.TryGetValue(
+                CoordinateKey(bom.GroupId, bom.ArtifactId, bom.Version),
+                out var indexedCandidates))
         {
             return null;
         }
 
-        foreach (var candidate in knownPomFiles)
-        {
-            if (PathsEqual(candidate, importingProjectFile))
-                continue;
+        var candidates = indexedCandidates
+            .Where(candidate => !PathsEqual(candidate, importingProjectFile))
+            .Distinct(PathComparer)
+            .ToArray();
+        if (candidates.Length == 0)
+            return null;
 
-            var candidateModel = Resolve(candidate, knownPomFiles, cache, visiting);
-            if (string.Equals(candidateModel.ProjectCoordinates.GroupId, bom.GroupId, StringComparison.Ordinal)
-                && string.Equals(candidateModel.ProjectCoordinates.ArtifactId, bom.ArtifactId, StringComparison.Ordinal)
-                && string.Equals(candidateModel.ProjectCoordinates.Version, bom.Version, StringComparison.Ordinal))
+        if (candidates.Length > 1)
+        {
+            ambiguous = true;
+            return null;
+        }
+
+        var candidate = candidates[0];
+        return knownPomFiles.Contains(candidate)
+            ? Resolve(candidate, knownPomFiles, coordinateIndex, cache, visiting)
+            : null;
+    }
+
+    private static Dictionary<string, List<string>> BuildProjectCoordinateIndex(
+        IReadOnlyCollection<string> pomFiles)
+    {
+        var index = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var pomFile in pomFiles)
+        {
+            try
             {
-                return candidateModel;
+                var root = XDocument.Load(pomFile).Root;
+                if (root is null || !NameIs(root, "project"))
+                    continue;
+
+                var properties = Child(root, "properties")?
+                    .Elements()
+                    .ToDictionary(
+                        property => property.Name.LocalName,
+                        property => property.Value.Trim(),
+                        StringComparer.Ordinal)
+                    ?? new Dictionary<string, string>(StringComparer.Ordinal);
+                ResolveProperties(properties);
+
+                var parent = Child(root, "parent");
+                var group = ResolveValue(Value(root, "groupId") ?? Value(parent, "groupId"), properties);
+                var artifact = ResolveValue(Value(root, "artifactId"), properties);
+                var version = ResolveValue(Value(root, "version") ?? Value(parent, "version"), properties);
+                if (string.IsNullOrWhiteSpace(group)
+                    || string.IsNullOrWhiteSpace(artifact)
+                    || string.IsNullOrWhiteSpace(version)
+                    || PropertyReference.IsMatch(group)
+                    || PropertyReference.IsMatch(artifact)
+                    || PropertyReference.IsMatch(version))
+                {
+                    continue;
+                }
+
+                var key = CoordinateKey(group, artifact, version);
+                if (!index.TryGetValue(key, out var paths))
+                {
+                    paths = [];
+                    index.Add(key, paths);
+                }
+
+                paths.Add(Path.GetFullPath(pomFile));
+            }
+            catch (Exception exception) when (
+                exception is IOException
+                    or UnauthorizedAccessException
+                    or System.Xml.XmlException)
+            {
+                // The primary resolver reports manifest read failures with
+                // project-scoped diagnostics; the index never masks them.
             }
         }
 
-        return null;
+        return index;
     }
+
+    private static string CoordinateKey(string group, string artifact, string version) =>
+        $"{group}\u001f{artifact}\u001f{version}";
 
     private static List<MavenProjectModel.Dependency> ParseDependencies(
         XElement? dependenciesElement,

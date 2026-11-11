@@ -1,5 +1,5 @@
 using Aegis.Architecture.Analysis.Detectors;
-﻿
+
 using System.Text.RegularExpressions;
 
 using Aegis.Architecture.Evaluators;

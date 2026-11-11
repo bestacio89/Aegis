@@ -117,6 +117,10 @@
                 <TextBlock Text="{Binding UnsupportedRules}" Style="{StaticResource Text.KpiValue}" FontSize="22" Foreground="{StaticResource Brush.StatusCritical}"/></StackPanel>
             </Border>
             <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
+              <StackPanel><TextBlock Text="DISABLED BY POLICY" Style="{StaticResource Text.Eyebrow}"/>
+                <TextBlock Text="{Binding DisabledRules}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
               <StackPanel><TextBlock Text="RULE ERRORS" Style="{StaticResource Text.Eyebrow}"/>
                 <TextBlock Text="{Binding RulesWithErrors}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
             </Border>

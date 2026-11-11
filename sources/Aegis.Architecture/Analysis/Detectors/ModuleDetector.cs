@@ -496,12 +496,30 @@ internal static class ModuleDetector
         if (name.Contains("domain", StringComparison.Ordinal)
             || name.EndsWith(".core", StringComparison.Ordinal))
             return "Domain";
+        // Foundational technical capabilities belong to the infrastructure
+        // layer even when their project names use an abstraction-oriented suffix.
+        // Keep business-facing contracts distinct from runtime/platform concerns.
         if (name.Contains("infrastructure", StringComparison.Ordinal)
             || name.Contains("persistence", StringComparison.Ordinal)
-            || name.Contains("database", StringComparison.Ordinal))
+            || name.Contains("database", StringComparison.Ordinal)
+            || name.Contains("mediator", StringComparison.Ordinal)
+            || name.Contains("messaging", StringComparison.Ordinal)
+            || name.Contains("serialization", StringComparison.Ordinal)
+            || name.Contains("serializer", StringComparison.Ordinal)
+            || name.Contains("caching", StringComparison.Ordinal)
+            || name.Contains("cache", StringComparison.Ordinal)
+            || name.Contains("logging", StringComparison.Ordinal)
+            || name.Contains("security", StringComparison.Ordinal)
+            || name.Contains("integration", StringComparison.Ordinal)
+            || name.Contains("transport", StringComparison.Ordinal)
+            || name.Contains("storage", StringComparison.Ordinal)
+            || name.Contains("observability", StringComparison.Ordinal)
+            || name.Contains("resilience", StringComparison.Ordinal)
+            || name.Contains("abstractions", StringComparison.Ordinal)
+            || name.EndsWith(".base", StringComparison.Ordinal)
+            || name.StartsWith("base.", StringComparison.Ordinal))
             return "Infrastructure";
-        if (name.Contains("contracts", StringComparison.Ordinal)
-            || name.Contains("abstractions", StringComparison.Ordinal))
+        if (name.Contains("contracts", StringComparison.Ordinal))
             return "Contracts";
         if (name.Contains("consumer", StringComparison.Ordinal)
             || name.Contains("worker", StringComparison.Ordinal)

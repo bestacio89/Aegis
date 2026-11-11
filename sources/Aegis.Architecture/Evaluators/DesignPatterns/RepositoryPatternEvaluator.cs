@@ -834,49 +834,6 @@ public sealed class RepositoryPatternEvaluator
         return indent;
     }
 
-    private static bool HasMatchingAbstraction(
-        string repositoryName,
-        string classHeader,
-        string source,
-        string language)
-    {
-        // This verifies a name/relationship signal only. It does not resolve
-        // symbols or prove that the class implements the abstraction.
-        var expectedInterfaceName = $"I{repositoryName}";
-
-        var interfaceDeclaration = Regex.IsMatch(
-            source,
-            $@"\binterface\s+{Regex.Escape(expectedInterfaceName)}\b",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
-        if (!interfaceDeclaration)
-        {
-            return false;
-        }
-
-        var relationshipKeyword = language switch
-        {
-            "Java" => @"\bimplements\b",
-            "TypeScript" => @"\bimplements\b",
-            "Python" => string.Empty,
-            _ => @":"
-        };
-
-        if (language == "Python")
-        {
-            // Python uses base classes rather than an implements keyword.
-            return Regex.IsMatch(
-                classHeader,
-                $@"\b{Regex.Escape(expectedInterfaceName)}\b",
-                RegexOptions.CultureInvariant);
-        }
-
-        return Regex.IsMatch(
-            classHeader,
-            $@"{relationshipKeyword}\s*[^{{]*\b{Regex.Escape(expectedInterfaceName)}\b",
-            RegexOptions.CultureInvariant);
-    }
-
     private static int CountMethods(string classBody, string language)
     {
         var regex = language == "Python"

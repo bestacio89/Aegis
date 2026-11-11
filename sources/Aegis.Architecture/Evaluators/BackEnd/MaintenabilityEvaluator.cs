@@ -43,9 +43,7 @@ public sealed class MaintainabilityEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "ASP.NET",
-        "Spring Boot",
-        "FastAPI"
+        "LanguageAgnostic"
     ];
 
     public MaintainabilityEvaluator(
@@ -73,20 +71,13 @@ public sealed class MaintainabilityEvaluator
             return results;
         }
 
-        var extensions = GetExtensions(context.Language);
-
-        if (extensions.Length == 0)
-        {
-            AegisDiagnostics.Report(
-                Name,
-                DiagnosticLevel.Trace,
-                $"Unsupported language for maintainability analysis: {context.Language}.");
-
-            return results;
-        }
-
-        // Reuse the shared source-file filtering and exclusion rules.
-        var files = ResolveSourceFiles(projectPath, extensions);
+        // Maintainability is language-specific, not framework-specific.
+        // Resolve every supported source file independently in mixed repositories.
+        var files = ResolveSourceFiles(
+            projectPath,
+            ".cs",
+            ".java",
+            ".py");
 
         AegisDiagnostics.Report(
             Name,
@@ -145,9 +136,12 @@ public sealed class MaintainabilityEvaluator
 
             token.ThrowIfCancellationRequested();
 
-            var metrics = AnalyzeMaintainability(
-                content,
-                context.Language);
+            var language = DetectLanguage(file);
+            if (!SupportedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            var framework = ResolveFrameworkForFile(file, projectPath, context);
+            var metrics = AnalyzeMaintainability(content, language);
 
             analyzedFiles++;
 
@@ -157,7 +151,7 @@ public sealed class MaintainabilityEvaluator
             totalCommentLines += metrics.CommentLineCount;
             totalMaintainabilityScore += metrics.MaintainabilityScore;
 
-            results.Add(CreateFileResult(file, metrics));
+            results.Add(CreateFileResult(file, metrics, language, framework));
         }
 
         token.ThrowIfCancellationRequested();
@@ -184,13 +178,14 @@ public sealed class MaintainabilityEvaluator
 
     private ArchitectureEvaluatorResult CreateFileResult(
         string file,
-        MaintainabilityMetrics metrics)
+        MaintainabilityMetrics metrics,
+        string language,
+        string? framework)
     {
         var result = CreateResult(file, "Maintainability");
 
-        result.ProjectName = Context?.ProjectName;
-        result.Language = Context?.Language;
-        result.Framework = Context?.Framework;
+        result.Language = language;
+        result.Framework = framework;
         result.Layer = ResolveLayer(file);
         result.DetectionConfidence = Context?.Confidence ?? 0;
 
@@ -202,8 +197,8 @@ public sealed class MaintainabilityEvaluator
         result.Metrics["MaintainabilityScore"] = metrics.MaintainabilityScore;
 
         result.Metadata["FilePath"] = file;
-        result.Metadata["Language"] = Context?.Language ?? "Unknown";
-        result.Metadata["Framework"] = Context?.Framework ?? "Unknown";
+        result.Metadata["Language"] = language;
+        result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["Layer"] = result.Layer ?? "Unknown";
         result.Metadata["EvaluationScope"] = FileScope;
 
@@ -216,6 +211,22 @@ public sealed class MaintainabilityEvaluator
             "Aegis heuristic (0-100): 100 minus weighted lexical decision points, excess lines beyond policy limit, and a bounded penalty for comment density below policy minimum. This is not a compiler-backed or industry-standard maintainability index.";
         result.Metadata["AnalysisComplete"] = "true";
         result.Metadata["AnalysisStatus"] = "Completed";
+        result.Evidence = string.Join(Environment.NewLine, metrics.Evidence);
+        result.Metadata["Evidence.MaintainabilityScore"] = result.Evidence;
+        result.Metadata["EvidenceSummary.MaintainabilityScore"] = metrics.EvidenceSummary;
+        result.Metadata["EvidenceScope.MaintainabilityScore"] = "FileMetrics";
+        result.Metadata["EvidenceTruncated.MaintainabilityScore"] =
+            metrics.EvidenceTruncated.ToString();
+
+        if (metrics.FirstEvidenceLine is > 0)
+        {
+            result.LineNumber = metrics.FirstEvidenceLine;
+            result.Metadata["EvidenceLine.MaintainabilityScore"] =
+                metrics.FirstEvidenceLine.Value.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture);
+            result.Metadata["CodeSnippet.MaintainabilityScore"] =
+                GetSourceLine(metrics.Source, metrics.FirstEvidenceLine.Value);
+        }
 
         return result;
     }
@@ -299,7 +310,8 @@ public sealed class MaintainabilityEvaluator
         var sanitized = SanitizeSource(
             content,
             language,
-            out var commentLineCount);
+            out var commentLines);
+        var commentLineCount = commentLines.Count;
 
         var nonEmptyLineCount = content
             .Split('\n')
@@ -309,9 +321,11 @@ public sealed class MaintainabilityEvaluator
             ? 0
             : (double)commentLineCount / nonEmptyLineCount * 100.0;
 
-        var decisionPointCount = CountDecisionPoints(
-            sanitized,
-            language);
+        var decisionRegex = GetDecisionRegex(language);
+        var decisionMatches = decisionRegex?.Matches(sanitized)
+            .Cast<Match>()
+            .ToArray() ?? [];
+        var decisionPointCount = decisionMatches.Length;
 
         var roundedCommentDensity = Math.Round(commentDensity, 2);
         var complexityPenalty = decisionPointCount * Math.Max(0, _policy.ComplexityWeight);
@@ -328,37 +342,84 @@ public sealed class MaintainabilityEvaluator
             0.0,
             100.0);
 
+        var roundedScore = Math.Round(score, 2);
+        var evidenceSummary =
+            $"Maintainability score {roundedScore:0.##}/100; " +
+            $"decision points {decisionPointCount} (penalty {complexityPenalty:0.##}); " +
+            $"non-empty lines {nonEmptyLineCount}, maximum {_policy.MaxLinesPerFile} " +
+            $"(penalty {linePenalty:0.##}); comment density {roundedCommentDensity:0.##}% " +
+            $"against minimum {_policy.MinCommentDensity:0.##}% (penalty {commentPenalty:0.##}).";
+
+        var evidence = new List<string> { evidenceSummary };
+        foreach (var match in decisionMatches.Take(50))
+        {
+            var lineNumber = GetLineNumber(sanitized, match.Index);
+            evidence.Add(
+                $"Line {lineNumber}: decision point '{match.Value}' — {GetSourceLine(content, lineNumber)}");
+        }
+
+        if (commentPenalty > 0)
+        {
+            evidence.AddRange(commentLines
+                .Order()
+                .Take(10)
+                .Select(lineNumber =>
+                    $"Line {lineNumber}: comment — {GetSourceLine(content, lineNumber)}"));
+        }
+
         return new MaintainabilityMetrics(
             decisionPointCount,
             nonEmptyLineCount,
             commentLineCount,
             roundedCommentDensity,
-            Math.Round(score, 2));
+            roundedScore,
+            evidence,
+            evidenceSummary,
+            decisionMatches.Length > 0
+                ? GetLineNumber(sanitized, decisionMatches[0].Index)
+                : null,
+            content,
+            decisionMatches.Length > 50);
     }
 
-    private static int CountDecisionPoints(
-        string sanitized,
-        string? language)
-    {
-        var regex = language?.Trim() switch
+    private static Regex? GetDecisionRegex(string? language) =>
+        language?.Trim() switch
         {
             "Python" => PythonDecisionRegex,
             "C#" or "Java" => BraceLanguageDecisionRegex,
             _ => null
         };
 
-        return regex?.Matches(sanitized).Count ?? 0;
+    private static string DetectLanguage(string file) =>
+        Path.GetExtension(file).ToLowerInvariant() switch
+        {
+            ".cs" => "C#",
+            ".java" => "Java",
+            ".py" => "Python",
+            _ => "Unknown"
+        };
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position && index < content.Length; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
     }
 
-    private static string[] GetExtensions(string? language)
+    private static string GetSourceLine(string content, int lineNumber)
     {
-        return language?.Trim() switch
-        {
-            "C#" => [".cs"],
-            "Java" => [".java"],
-            "Python" => [".py"],
-            _ => []
-        };
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        return lineNumber > 0 && lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
     }
 
     private string? ResolveLayer(string file)
@@ -374,21 +435,21 @@ public sealed class MaintainabilityEvaluator
     private static string SanitizeSource(
         string content,
         string? language,
-        out int commentLineCount)
+        out IReadOnlyCollection<int> commentLines)
     {
         var characters = content.ToCharArray();
-        var commentLines = new HashSet<int>();
+        var discoveredCommentLines = new HashSet<int>();
 
         if (language?.Trim() == "Python")
         {
-            SanitizePython(content, characters, commentLines);
+            SanitizePython(content, characters, discoveredCommentLines);
         }
         else
         {
-            SanitizeBraceLanguage(content, characters, commentLines);
+            SanitizeBraceLanguage(content, characters, discoveredCommentLines);
         }
 
-        commentLineCount = commentLines.Count;
+        commentLines = discoveredCommentLines;
 
         return new string(characters);
     }
@@ -427,7 +488,7 @@ public sealed class MaintainabilityEvaluator
                 else
                 {
                     Blank(characters, index);
-                    commentLines.Add(line);
+                    commentLines.Add(line + 1);
                 }
 
                 continue;
@@ -695,5 +756,10 @@ public sealed class MaintainabilityEvaluator
         int NonEmptyLineCount,
         int CommentLineCount,
         double CommentDensity,
-        double MaintainabilityScore);
+        double MaintainabilityScore,
+        IReadOnlyCollection<string> Evidence,
+        string EvidenceSummary,
+        int? FirstEvidenceLine,
+        string Source,
+        bool EvidenceTruncated);
 }

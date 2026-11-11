@@ -571,6 +571,15 @@ public sealed class ArchitectureEvaluatorBehaviorTests
     public async Task PerformanceEvaluator_resolves_concrete_frameworks_within_multi_framework_projects()
     {
         using var project = new TemporaryProject();
+        project.Write("back/Web/Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        project.Write("back/Web/Pages/Counter.razor", """
+            @page "/counter"
+            <h1>Counter</h1>
+            """);
         project.Write("back/Web/Pages/Counter.razor.cs", """
             public sealed class Counter
             {
@@ -584,16 +593,11 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             }
             """);
 
-        var context = CreateContext(project);
-        context.Modules.Add(new Aegis.Shared.Architecture.Models.ProjectModuleContext
-        {
-            Name = "Web",
-            Path = Path.Combine(project.Root, "back", "Web"),
-            Framework = "Multi-Framework",
-            Frameworks = ["ASP.NET Core", "Blazor"],
-            ProjectKind = "WebApplication",
-            Type = "Presentation"
-        });
+        var context = Aegis.Architecture.Analysis.ProjectArchitectureContextDetector.Detect(project.Root);
+        var module = Assert.Single(context.Modules, candidate => candidate.Name == "Web");
+        Assert.Equal("Multi-Framework", module.Framework);
+        Assert.Contains("ASP.NET Core", module.Frameworks);
+        Assert.Contains("Blazor", module.Frameworks);
 
         using var provider = CreateProvider();
         using var scope = provider.CreateScope();

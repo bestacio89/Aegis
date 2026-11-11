@@ -55,7 +55,9 @@ public sealed class MavenProjectModel
         bool Optional,
         bool IsInherited,
         bool IsVersionManaged,
-        List<Exclusion> Exclusions);
+        List<Exclusion> Exclusions,
+        string SourceProjectFile,
+        bool IsManaged);
 
     public sealed record Plugin(
         string? GroupId,

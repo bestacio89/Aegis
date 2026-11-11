@@ -34,10 +34,11 @@ internal static class MavenProjectModelResolver
             .Select(Path.GetFullPath)
             .Distinct(PathComparer)
             .ToArray();
+        var knownPomFiles = pomFiles.ToHashSet(PathComparer);
 
         foreach (var pomFile in pomFiles)
         {
-            var model = Resolve(pomFile, pomFiles, cache, visiting);
+            var model = Resolve(pomFile, knownPomFiles, cache, visiting);
             var modulePath = Path.GetDirectoryName(pomFile);
             var module = context.Modules.FirstOrDefault(candidate =>
                 modulePath is not null && PathsEqual(candidate.Path, modulePath));
@@ -60,7 +61,7 @@ internal static class MavenProjectModelResolver
 
     private static MavenProjectModel Resolve(
         string pomFile,
-        IReadOnlyCollection<string> allPomFiles,
+        IReadOnlySet<string> knownPomFiles,
         IDictionary<string, MavenProjectModel> cache,
         ISet<string> visiting)
     {
@@ -135,13 +136,10 @@ internal static class MavenProjectModelResolver
                     if (Directory.Exists(parentPath))
                         parentPath = Path.Combine(parentPath, "pom.xml");
 
-                    var knownPomFiles = new HashSet<string>(
-                        allPomFiles.Select(Path.GetFullPath),
-                        PathComparer);
                     if (File.Exists(parentPath) && knownPomFiles.Contains(parentPath))
                     {
                         parentProjectFile = parentPath;
-                        parentModel = Resolve(parentPath, allPomFiles, cache, visiting);
+                        parentModel = Resolve(parentPath, knownPomFiles, cache, visiting);
                     }
                     else
                     {
@@ -184,6 +182,13 @@ internal static class MavenProjectModelResolver
 
             AddBuiltInProperties(properties, coordinates, parentModel?.ProjectCoordinates, packaging, fullPath);
             ResolveProperties(properties);
+            foreach (var unresolvedProperty in properties.Where(property => PropertyReference.IsMatch(property.Value)))
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenPropertyNotResolved",
+                    $"Property '{unresolvedProperty.Key}' contains an unresolved expression: {unresolvedProperty.Value}.",
+                    fullPath));
+            }
             groupId = ResolveValue(groupId, properties);
             artifactId = ResolveValue(artifactId, properties);
             version = ResolveValue(version, properties);
@@ -204,7 +209,8 @@ internal static class MavenProjectModelResolver
                 Child(Child(root, "dependencyManagement"), "dependencies"),
                 properties,
                 managed: true,
-                inherited: false);
+                inherited: false,
+                sourceProjectFile: fullPath);
             MergeDependencies(managed, localManaged);
 
             foreach (var bom in localManaged.Where(dependency =>
@@ -224,7 +230,8 @@ internal static class MavenProjectModelResolver
                 Child(root, "dependencies"),
                 properties,
                 managed: false,
-                inherited: false);
+                inherited: false,
+                sourceProjectFile: fullPath);
 
             for (var index = 0; index < localDependencies.Count; index++)
             {
@@ -251,7 +258,10 @@ internal static class MavenProjectModelResolver
             foreach (var unresolvedDependency in effectiveDependencies.Where(dependency =>
                          string.IsNullOrWhiteSpace(dependency.GroupId)
                          || string.IsNullOrWhiteSpace(dependency.ArtifactId)
-                         || string.IsNullOrWhiteSpace(dependency.Version)))
+                         || string.IsNullOrWhiteSpace(dependency.Version)
+                         || PropertyReference.IsMatch(dependency.GroupId)
+                         || PropertyReference.IsMatch(dependency.ArtifactId)
+                         || PropertyReference.IsMatch(dependency.Version)))
             {
                 diagnostics.Add(Diagnostic(
                     "MavenDependencyCoordinateIncomplete",
@@ -267,7 +277,7 @@ internal static class MavenProjectModelResolver
             var processorPaths = parentModel?.AnnotationProcessorPaths
                 .Select(dependency => dependency with { IsInherited = true })
                 .ToList() ?? [];
-            processorPaths.AddRange(ParseAnnotationProcessorPaths(root, properties));
+            processorPaths.AddRange(ParseAnnotationProcessorPaths(root, properties, fullPath));
 
             var profileIds = Child(root, "profiles")?
                 .Elements()
@@ -276,6 +286,13 @@ internal static class MavenProjectModelResolver
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(value => value!)
                 .ToList() ?? [];
+            if (profileIds.Count > 0)
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenProfilesNotEvaluated",
+                    "Maven profiles are recorded but not activated; profile-specific dependencies and properties are excluded from the effective model.",
+                    fullPath));
+            }
 
             var model = new MavenProjectModel
             {
@@ -310,7 +327,8 @@ internal static class MavenProjectModelResolver
         XElement? dependenciesElement,
         IReadOnlyDictionary<string, string> properties,
         bool managed,
-        bool inherited)
+        bool inherited,
+        string sourceProjectFile)
     {
         if (dependenciesElement is null)
             return [];
@@ -338,7 +356,9 @@ internal static class MavenProjectModelResolver
                         && optional,
                     inherited,
                     false,
-                    exclusions);
+                    exclusions,
+                    sourceProjectFile,
+                    managed);
             })
             .ToList();
     }
@@ -363,7 +383,8 @@ internal static class MavenProjectModelResolver
 
     private static List<MavenProjectModel.Dependency> ParseAnnotationProcessorPaths(
         XElement root,
-        IReadOnlyDictionary<string, string> properties)
+        IReadOnlyDictionary<string, string> properties,
+        string sourceProjectFile)
     {
         return root.Descendants()
             .Where(element => NameIs(element, "annotationProcessorPaths"))
@@ -378,7 +399,9 @@ internal static class MavenProjectModelResolver
                 false,
                 false,
                 false,
-                []))
+                [],
+                sourceProjectFile,
+                false))
             .ToList();
     }
 
@@ -427,6 +450,7 @@ internal static class MavenProjectModelResolver
                 IsDirect = !dependency.IsInherited,
                 IsTestOnly = dependency.Scope.Equals("test", StringComparison.OrdinalIgnoreCase),
                 ResolutionStatus = string.IsNullOrWhiteSpace(dependency.Version)
+                    || PropertyReference.IsMatch(dependency.Version)
                     ? DependencyResolutionStatus.PartiallyResolved
                     : DependencyResolutionStatus.Declared,
                 Provenance =
@@ -435,7 +459,7 @@ internal static class MavenProjectModelResolver
                     {
                         AnalyzerId = "aegis.maven-model",
                         Source = SemanticEvidenceSource.BuildModel,
-                        FilePath = model.ProjectFile,
+                        FilePath = dependency.SourceProjectFile,
                         Confidence = 1.0
                     }
                 ]
@@ -467,7 +491,7 @@ internal static class MavenProjectModelResolver
                     {
                         AnalyzerId = "aegis.maven-model",
                         Source = SemanticEvidenceSource.BuildModel,
-                        FilePath = model.ProjectFile,
+                        FilePath = bom.SourceProjectFile,
                         Confidence = 1.0
                     }
                 ]

@@ -30,6 +30,7 @@ public sealed class MavenProjectModelTests
                     <spring.version>6.2.8</spring.version>
                   </properties>
                   <modules><module>../service</module></modules>
+                  <dependencies><dependency><groupId>org.example</groupId><artifactId>parent-api</artifactId><version>1.0.0</version></dependency></dependencies>
                   <dependencyManagement>
                     <dependencies>
                       <dependency>
@@ -111,6 +112,13 @@ public sealed class MavenProjectModelTests
             Assert.Equal(Path.Combine(parentDirectory, "pom.xml"), model.ParentProjectFile);
             Assert.Equal("2.4.0", model.EffectiveProperties["service.revision"]);
 
+            var inheritedDependency = Assert.Single(model.Dependencies, dependency => dependency.ArtifactId == "parent-api");
+            Assert.True(inheritedDependency.IsInherited);
+            Assert.Contains(context.DependencyEvidence, item =>
+                item.Name == "org.example:parent-api"
+                && !item.IsDirect
+                && item.Provenance.Any(provenance => provenance.FilePath == Path.Combine(parentDirectory, "pom.xml")));
+
             var spring = Assert.Single(model.Dependencies, dependency =>
                 dependency.ArtifactId == "spring-context");
             Assert.Equal("6.2.8", spring.Version);
@@ -178,10 +186,16 @@ public sealed class MavenProjectModelTests
                       </dependency>
                     </dependencies>
                   </dependencyManagement>
+                  <profiles><profile><id>integration-only</id></profile></profiles>
                   <dependencies>
                     <dependency>
                       <groupId>org.external</groupId>
                       <artifactId>managed-by-missing-bom</artifactId>
+                    </dependency>
+                    <dependency>
+                      <groupId>org.external</groupId>
+                      <artifactId>unresolved-property-version</artifactId>
+                      <version>${missing.version}</version>
                     </dependency>
                   </dependencies>
                 </project>
@@ -194,11 +208,15 @@ public sealed class MavenProjectModelTests
             Assert.False(model.IsComplete);
             Assert.Contains(model.Diagnostics, diagnostic => diagnostic.Code == "MavenParentNotResolved");
             Assert.Contains(model.Diagnostics, diagnostic => diagnostic.Code == "MavenBomNotResolved");
+            Assert.Contains(model.Diagnostics, diagnostic => diagnostic.Code == "MavenProfilesNotEvaluated");
             var dependency = Assert.Single(model.Dependencies, item =>
                 item.ArtifactId == "managed-by-missing-bom");
             Assert.Null(dependency.Version);
             Assert.Contains(context.DependencyEvidence, item =>
                 item.Name == "org.external:managed-by-missing-bom"
+                && item.ResolutionStatus == DependencyResolutionStatus.PartiallyResolved);
+            Assert.Contains(context.DependencyEvidence, item =>
+                item.Name == "org.external:unresolved-property-version"
                 && item.ResolutionStatus == DependencyResolutionStatus.PartiallyResolved);
             Assert.Contains(context.DependencyEvidence, item =>
                 item.Name == "org.external:missing-bom"

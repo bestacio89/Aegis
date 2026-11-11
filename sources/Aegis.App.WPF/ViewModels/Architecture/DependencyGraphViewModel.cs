@@ -38,6 +38,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
     [ObservableProperty] private string selectedLayer = "All";
     [ObservableProperty] private ArchitectureGraphNodeViewModel? selectedGraphNode;
     [ObservableProperty] private int totalDependencies;
+    [ObservableProperty] private int testRelationshipCount;
     [ObservableProperty] private int filteredDependencies;
     [ObservableProperty] private int componentCount;
     [ObservableProperty] private int layerCount;
@@ -61,7 +62,9 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             ? "No architecture context available"
             : context.ProjectName;
 
-        var dependencies = context?.Dependencies
+        TestRelationshipCount = context?.TestDependencies.Count ?? 0;
+
+        var dependencies = context?.ProductionDependencies
             .Where(dependency =>
                 !string.IsNullOrWhiteSpace(dependency.Source)
                 && !string.IsNullOrWhiteSpace(dependency.Target))

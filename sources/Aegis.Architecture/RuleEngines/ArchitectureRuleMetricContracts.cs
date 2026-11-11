@@ -428,6 +428,66 @@ internal static class ArchitectureRuleMetricContracts
         return true;
     }
 
+    /// <summary>
+    /// Recognizes a completed documentation scan in which no project scope
+    /// contains public declarations to document. This is an applicability
+    /// outcome, not a zero-percent documentation score.
+    /// </summary>
+    public static bool TryGetExplicitNoApplicableDisposition(
+        string ruleId,
+        IReadOnlyCollection<ArchitectureEvaluatorResult> facts,
+        ProjectArchitectureContext context,
+        out string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ruleId);
+        ArgumentNullException.ThrowIfNull(facts);
+        ArgumentNullException.ThrowIfNull(context);
+
+        reason = string.Empty;
+
+        if (!string.Equals(
+                ruleId,
+                "AEG-ARCH-R11",
+                StringComparison.OrdinalIgnoreCase)
+            || context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
+        {
+            return false;
+        }
+
+        var documentationFacts = facts
+            .Where(fact =>
+                string.Equals(
+                    fact.Source,
+                    "DocumentationEvaluator",
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    fact.Metadata?.GetValueOrDefault("EvaluationScope"),
+                    "Project",
+                    StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (documentationFacts.Count == 0
+            || documentationFacts.Any(fact =>
+                TryGetMetric(fact.Metrics, "DocumentationCoverage", out _)
+                || !string.Equals(
+                    fact.Metadata?.GetValueOrDefault("EvaluatorExecutionStatus"),
+                    "NoApplicableDeclarations",
+                    StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(
+                    fact.Metadata?.GetValueOrDefault("AnalysisComplete"),
+                    "true",
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        reason =
+            "Documentation coverage is not applicable because every completed " +
+            "documentation scope contained no eligible public declarations.";
+
+        return true;
+    }
+
     private static bool TryGetMetric(
         IReadOnlyDictionary<string, double> metrics,
         string metricName,

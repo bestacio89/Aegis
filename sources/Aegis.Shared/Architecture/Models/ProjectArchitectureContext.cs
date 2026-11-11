@@ -155,6 +155,25 @@ public sealed class ProjectArchitectureContext
     public List<ArchitectureDependencyContext> Dependencies { get; set; } = new();
 
     /// <summary>
+    /// Declared, resolved, or observed package/build dependencies. This inventory
+    /// is separate from internal project-to-project architecture graph edges.
+    /// </summary>
+    public List<ArchitectureDependencyEvidence> DependencyEvidence { get; set; } = [];
+
+    /// <summary>
+    /// Framework and technology observations with project attribution and provenance.
+    /// Existing string framework projections remain for compatibility.
+    /// </summary>
+    public List<FrameworkEvidence> FrameworkEvidence { get; set; } = [];
+
+    /// <summary>
+    /// Semantic-analysis attempts performed for this repository or its modules.
+    /// An empty collection means no semantic run has been recorded; it does not
+    /// imply that semantic analysis completed successfully.
+    /// </summary>
+    public List<SemanticAnalysisRun> SemanticAnalysisRuns { get; set; } = [];
+
+    /// <summary>
     /// Production-to-production relationships used to describe the deployed
     /// architecture. Test-project relationships are intentionally excluded.
     /// </summary>
@@ -363,6 +382,11 @@ public sealed class ProjectArchitectureContext
             DependencyCount = Dependencies.Count,
             ProductionDependencyCount = ProductionDependencies.Count,
             TestDependencyCount = TestDependencies.Count,
+            DependencyEvidenceCount = DependencyEvidence.Count,
+            FrameworkEvidenceCount = FrameworkEvidence.Count,
+            SemanticAnalysisRunCount = SemanticAnalysisRuns.Count,
+            CompletedSemanticAnalysisRunCount = SemanticAnalysisRuns.Count(
+                run => run.IsComplete),
 
             Confidence,
             DetectionStrategy,

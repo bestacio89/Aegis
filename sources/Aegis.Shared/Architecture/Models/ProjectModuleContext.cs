@@ -24,6 +24,9 @@ public sealed class ProjectModuleContext
 
     public List<string> Frameworks { get; set; } = [];
 
+    /// <summary>Framework observations attributed to this project module.</summary>
+    public List<FrameworkEvidence> FrameworkEvidence { get; set; } = [];
+
     public List<string> TargetFrameworks { get; set; } = [];
 
     public List<string> Languages { get; set; } = [];

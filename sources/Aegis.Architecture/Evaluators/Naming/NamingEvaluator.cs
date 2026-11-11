@@ -671,11 +671,13 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                 || convention.IsValidTypeName(declaration.Name);
         }
 
-        if (declaration.IsPublic)
+        if (declaration.Accessibility.Equals(
+                "public",
+                StringComparison.OrdinalIgnoreCase))
             return convention.IsValidTypeName(declaration.Name);
 
-        // A single underscore prefix is a conventional private-field style
-        // in .NET. It is not a naming violation in production or test code.
+        // Private, protected and internal C# fields commonly use _camelCase.
+        // The convention applies to the identifier after that prefix.
         var candidate = declaration.Name.StartsWith('_')
             ? declaration.Name[1..]
             : declaration.Name;

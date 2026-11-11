@@ -86,7 +86,8 @@
             <Border Grid.Column="0" Background="{StaticResource Brush.Panel}"
                     BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
                     CornerRadius="4" Padding="8">
-                <DataGrid
+                <Grid>
+                    <DataGrid
                     ItemsSource="{Binding DependenciesView}"
                     SelectedItem="{Binding SelectedDependency, Mode=TwoWay}"
                     AutoGenerateColumns="False" IsReadOnly="True"
@@ -109,7 +110,30 @@
                         <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="*" />
                         <DataGridTextColumn Header="Evidence file" Binding="{Binding File}" Width="1.4*" />
                     </DataGrid.Columns>
-                </DataGrid>
+                    </DataGrid>
+                    <Border Background="{StaticResource Brush.PanelElevated}" Padding="24"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="430">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FilteredDependencies}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel>
+                            <TextBlock Text="No relationship records to display"
+                                       FontSize="15" FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.TextPrimary}"
+                                       TextAlignment="Center" TextWrapping="Wrap" />
+                            <TextBlock Text="No detector-reported relationships match the current filters. Clear the filters or run an assessment that discovers dependencies."
+                                       Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
+                                       TextAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,0" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Border>
 
             <Border Grid.Column="2" Background="{StaticResource Brush.Panel}"

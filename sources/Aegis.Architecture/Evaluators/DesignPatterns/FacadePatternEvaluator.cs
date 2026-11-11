@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 
 using Aegis.Architecture.Diagnostics;
 using Aegis.Architecture.Evaluators;
+using Aegis.Architecture.Evaluators.Analysis;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies;
@@ -47,26 +48,6 @@ public sealed class FacadePatternEvaluator
         @"\bclass\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-
-    private static readonly Regex StringAndCharacterLiteralRegex = new(
-        """
-    @(?:""|[^"])*"|
-    "(?:\\.|[^"\\])*"|
-    '(?:\\.|[^'\\])*'|
-    `(?:\\.|[^`\\])*`
-    """,
-        RegexOptions.Compiled |
-        RegexOptions.CultureInvariant |
-        RegexOptions.IgnorePatternWhitespace);
-
-
-    private static readonly Regex BlockCommentRegex = new(
-        @"/\*[\s\S]*?\*/",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly Regex LineCommentRegex = new(
-        @"//[^\r\n]*",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex CSharpJavaDependencyRegex = new(
         """
@@ -107,7 +88,7 @@ public sealed class FacadePatternEvaluator
 
     private static readonly Regex TypeScriptPublicMethodRegex = new(
         """
-        \b(?:(?:public|protected|private|static|async|override|abstract)\s+)*
+        ^[ \t]*(?:(?:public|static|async|override|abstract)\s+)*
         (?<name>[A-Za-z_$][A-Za-z0-9_$]*)\s*
         \([^;{}]*\)\s*(?::\s*[^;{}]+)?\s*\{
         """,
@@ -161,11 +142,7 @@ public sealed class FacadePatternEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "ASP.NET",
-        "Spring",
-        "NestJS",
-        "CleanArchitecture",
-        "DDD"
+        "LanguageAgnostic"
     ];
 
     protected override async Task<IEnumerable<ArchitectureEvaluatorResult>>
@@ -238,7 +215,7 @@ public sealed class FacadePatternEvaluator
             analyzedFiles++;
 
             var language = ResolveLanguage(file);
-            var sanitized = SanitizeSource(content, language);
+            var sanitized = SourceCodeMasker.Mask(content);
 
             foreach (Match classMatch in ClassDeclarationRegex.Matches(sanitized))
             {
@@ -343,6 +320,12 @@ public sealed class FacadePatternEvaluator
                     file,
                     className,
                     language,
+                    content,
+                    sanitized,
+                    classMatch,
+                    openingBrace + 1,
+                    classBody,
+                    dependencyNames,
                     metrics,
                     isExplicitFacade,
                     structurallySupported));
@@ -373,16 +356,25 @@ public sealed class FacadePatternEvaluator
         string file,
         string className,
         string language,
+        string source,
+        string sanitized,
+        Match classMatch,
+        int bodyStart,
+        string classBody,
+        HashSet<string> dependencyNames,
         Dictionary<string, double> metrics,
         bool hasFacadeSuffix,
         bool structurallySupported)
     {
-        var result = new ArchitectureEvaluatorResult(Name, className)
-        {
-            Target = file,
-            Category = ArchitectureRuleCategory.DesignPatterns.ToString(),
-            Metrics = metrics
-        };
+        var framework = ResolveFrameworkForFile(file, projectPath, Context!);
+        var result = CreateResult(file, ArchitectureRuleCategory.DesignPatterns.ToString());
+
+        result.Target = className;
+        result.Language = language;
+        result.Framework = framework;
+        result.Layer = ResolveLayer(file);
+        result.DetectionConfidence = Context?.Confidence ?? 0;
+        result.Metrics = metrics;
 
         result.Metadata[FilePathMetadataKey] = file;
         result.Metadata[EvaluationScopeMetadataKey] = FileScope;
@@ -394,8 +386,197 @@ public sealed class FacadePatternEvaluator
         result.Metadata["StructurallySupported"] = structurallySupported.ToString();
         result.Metadata["SemanticAnalysisPerformed"] = "false";
         result.Metadata["StructuralAnalysisHeuristic"] = "true";
+        result.Metadata["Framework"] = framework ?? "Unknown";
+        result.Metadata["AnalysisComplete"] = bool.TrueString;
+
+        var classLine = GetLineNumber(sanitized, classMatch.Index);
+        var classSnippet = GetSourceLine(source, classLine);
+        var dependencyRegex = language == "TypeScript"
+            ? TypeScriptDependencyRegex
+            : CSharpJavaDependencyRegex;
+        var dependencyMatches = dependencyRegex.Matches(classBody)
+            .Cast<Match>()
+            .Where(match => dependencyNames.Contains(match.Groups["name"].Value))
+            .ToArray();
+        var publicMethodRegex = language == "TypeScript"
+            ? TypeScriptPublicMethodRegex
+            : PublicMethodRegex;
+        var publicMethodMatches = publicMethodRegex.Matches(classBody)
+            .Cast<Match>()
+            .ToArray();
+        var serviceCallMatches = MemberAccessCallRegex.Matches(classBody)
+            .Cast<Match>()
+            .Where(match =>
+            {
+                var receiver = match.Groups["receiver"].Value;
+                return dependencyNames.Contains(receiver)
+                    || dependencyNames.Contains(receiver.TrimStart('_'));
+            })
+            .ToArray();
+        var constructorMatches = (language switch
+        {
+            "TypeScript" => ConstructorRegex.Matches(classBody),
+            "Java" => JavaConstructorRegex.Matches(classBody),
+            _ => CSharpConstructorRegex.Matches(classBody)
+        }).Cast<Match>().ToArray();
+
+        var dependencyEvidence = BuildMatchEvidence(
+            dependencyMatches,
+            source,
+            sanitized,
+            bodyStart,
+            "No service-like dependency fields were detected.");
+        var publicMethodEvidence = BuildMatchEvidence(
+            publicMethodMatches,
+            source,
+            sanitized,
+            bodyStart,
+            "No public methods were detected in this facade candidate.");
+        var serviceCallEvidence = BuildMatchEvidence(
+            serviceCallMatches,
+            source,
+            sanitized,
+            bodyStart,
+            "No calls through recognized service-like dependencies were detected.");
+        var constructorEvidence = BuildMatchEvidence(
+            constructorMatches,
+            source,
+            sanitized,
+            bodyStart,
+            "No constructor signature was detected.");
+
+        var publicMethodSummary =
+            $"Facade '{className}' exposes {publicMethodMatches.Length} public method(s); " +
+            $"configured maximum {_policy.MaxPublicMethodsPerFacade}; " +
+            $"public surface ratio {metrics["PublicSurfaceRatio"]:0.##}.";
+        AddMetricEvidence(
+            result,
+            "PublicMethodCount",
+            $"{publicMethodSummary}{Environment.NewLine}{publicMethodEvidence}",
+            publicMethodMatches.Length > 0
+                ? GetLineNumber(sanitized, bodyStart + publicMethodMatches[0].Index)
+                : classLine,
+            publicMethodMatches.Length > 0
+                ? GetSourceLine(
+                    source,
+                    GetLineNumber(sanitized, bodyStart + publicMethodMatches[0].Index))
+                : classSnippet);
+        AddMetricEvidence(
+            result,
+            "PublicSurfaceRatio",
+            $"{publicMethodSummary}{Environment.NewLine}{publicMethodEvidence}",
+            publicMethodMatches.Length > 0
+                ? GetLineNumber(sanitized, bodyStart + publicMethodMatches[0].Index)
+                : classLine,
+            publicMethodMatches.Length > 0
+                ? GetSourceLine(
+                    source,
+                    GetLineNumber(sanitized, bodyStart + publicMethodMatches[0].Index))
+                : classSnippet);
+        AddMetricEvidence(
+            result,
+            "DependencyCount",
+            dependencyEvidence,
+            dependencyMatches.Length > 0
+                ? GetLineNumber(sanitized, bodyStart + dependencyMatches[0].Index)
+                : classLine,
+            dependencyMatches.Length > 0
+                ? GetSourceLine(
+                    source,
+                    GetLineNumber(sanitized, bodyStart + dependencyMatches[0].Index))
+                : classSnippet);
+        AddMetricEvidence(
+            result,
+            "ServiceCallCount",
+            serviceCallEvidence,
+            serviceCallMatches.Length > 0
+                ? GetLineNumber(sanitized, bodyStart + serviceCallMatches[0].Index)
+                : classLine,
+            serviceCallMatches.Length > 0
+                ? GetSourceLine(
+                    source,
+                    GetLineNumber(sanitized, bodyStart + serviceCallMatches[0].Index))
+                : classSnippet);
+        AddMetricEvidence(
+            result,
+            "FacadeStructuralEvidence",
+            $"Facade candidate '{className}': explicit suffix {hasFacadeSuffix}; " +
+            $"structurally supported {structurallySupported}; dependencies {dependencyNames.Count}; " +
+            $"service calls {serviceCallMatches.Length}; public methods {publicMethodMatches.Length}." +
+            $"{Environment.NewLine}{dependencyEvidence}{Environment.NewLine}{constructorEvidence}{Environment.NewLine}{serviceCallEvidence}",
+            classLine,
+            classSnippet);
+
+        result.Evidence = string.Join(
+            Environment.NewLine,
+            new[]
+            {
+                publicMethodSummary,
+                dependencyEvidence,
+                publicMethodEvidence,
+                serviceCallEvidence,
+                constructorEvidence
+            });
+        result.LineNumber = classLine;
 
         return result;
+    }
+
+    private static string BuildMatchEvidence(
+        IReadOnlyCollection<Match> matches,
+        string source,
+        string sanitized,
+        int bodyStart,
+        string emptyEvidence)
+    {
+        if (matches.Count == 0)
+            return emptyEvidence;
+
+        return string.Join(
+            Environment.NewLine,
+            matches.Take(50).Select(match =>
+            {
+                var line = GetLineNumber(sanitized, bodyStart + match.Index);
+                return $"Line {line}: {GetSourceLine(source, line)}";
+            }));
+    }
+
+    private static void AddMetricEvidence(
+        ArchitectureEvaluatorResult result,
+        string metricKey,
+        string evidence,
+        int lineNumber,
+        string codeSnippet)
+    {
+        result.Metadata[$"Evidence.{metricKey}"] = evidence;
+        result.Metadata[$"EvidenceSummary.{metricKey}"] = evidence;
+        result.Metadata[$"EvidenceScope.{metricKey}"] = "FileMetrics";
+        result.Metadata[$"EvidenceLine.{metricKey}"] =
+            lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        result.Metadata[$"CodeSnippet.{metricKey}"] = codeSnippet;
+    }
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position && index < content.Length; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        return lineNumber > 0 && lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
     }
 
     private ArchitectureEvaluatorResult CreateSummary(
@@ -545,42 +726,6 @@ public sealed class FacadePatternEvaluator
             ".ts" => "TypeScript",
             _ => "Unknown"
         };
-    }
-
-    private static string SanitizeSource(
-        string source,
-        string language)
-    {
-        // Preserve source length and newlines so brace offsets remain valid.
-        var sanitized = StringAndCharacterLiteralRegex.Replace(
-            source,
-            match => PreserveLayout(match.Value));
-
-        if (language == "Python")
-            return sanitized;
-
-        sanitized = BlockCommentRegex.Replace(
-            sanitized,
-            match => PreserveLayout(match.Value));
-
-        sanitized = LineCommentRegex.Replace(
-            sanitized,
-            match => PreserveLayout(match.Value));
-
-        return sanitized;
-    }
-
-    private static string PreserveLayout(string value)
-    {
-        var chars = value.ToCharArray();
-
-        for (var i = 0; i < chars.Length; i++)
-        {
-            if (chars[i] is not '\r' and not '\n')
-                chars[i] = ' ';
-        }
-
-        return new string(chars);
     }
 
     private static int FindMatchingBrace(

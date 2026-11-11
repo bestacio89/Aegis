@@ -87,14 +87,16 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-TXN-R1"] = ["ArchitecturalTransactionEvaluator"],
             };
 
-    private static readonly IReadOnlyDictionary<string, (string Producer, string CandidateMetric, string UnreadableMetric, string DiscoveredMetric)>
+    private static readonly IReadOnlyDictionary<string, (string Producer, string CandidateMetric, string UnreadableMetric, string AnalyzedMetric, string DiscoveredMetric)>
         CandidateApplicabilityContracts =
-            new Dictionary<string, (string, string, string, string)>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, (string, string, string, string, string)>(StringComparer.OrdinalIgnoreCase)
             {
-                ["AEG-DES-BLD001"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
-                ["AEG-DES-BLD002"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "DiscoveredFileCount"),
-                ["AEG-DES-CMD001"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "DiscoveredFileCount"),
-                ["AEG-DES-DEC001"] = ("DecoratorPatternEvaluator", "DecoratorCandidateCount", "UnreadableFiles", "DiscoveredFiles")
+                ["AEG-DES-BLD001"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-BLD002"] = ("BuilderPatternEvaluator", "BuilderCandidateCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-CMD001"] = ("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount"),
+                ["AEG-DES-DEC001"] = ("DecoratorPatternEvaluator", "DecoratorCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-OBS001"] = ("ObserverPatternEvaluator", "AnalyzedComponents", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-SING001"] = ("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles")
             };
 
     private static readonly IReadOnlyDictionary<string, string>
@@ -241,10 +243,13 @@ internal static class ArchitectureRuleMetricContracts
                 || candidates > 0
                 || !TryGetMetric(summary.Metrics, contract.UnreadableMetric, out var unreadable)
                 || unreadable > 0
+                || !TryGetMetric(summary.Metrics, contract.AnalyzedMetric, out var analyzed)
                 || !TryGetMetric(summary.Metrics, contract.DiscoveredMetric, out var discovered)
                 || !double.IsFinite(candidates)
                 || !double.IsFinite(unreadable)
-                || !double.IsFinite(discovered))
+                || !double.IsFinite(analyzed)
+                || !double.IsFinite(discovered)
+                || analyzed != discovered)
             {
                 return false;
             }

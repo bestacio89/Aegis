@@ -449,7 +449,7 @@ internal static class MavenProjectModelResolver
                 ResolveProperties(profileProperties);
                 var activation = Child(profile, "activation");
                 var os = Child(activation, "os");
-                var property = Child(activation, "property");
+                var activationProperty = Child(activation, "property");
                 var file = Child(activation, "file");
                 return new MavenProjectModel.Profile(
                     Value(profile, "id") ?? string.Empty,
@@ -461,8 +461,8 @@ internal static class MavenProjectModelResolver
                         Value(os, "family"),
                         Value(os, "arch"),
                         Value(os, "version"),
-                        Value(property, "name"),
-                        Value(property, "value"),
+                        Value(activationProperty, "name"),
+                        Value(activationProperty, "value"),
                         Value(file, "exists"),
                         Value(file, "missing")),
                     profileProperties,

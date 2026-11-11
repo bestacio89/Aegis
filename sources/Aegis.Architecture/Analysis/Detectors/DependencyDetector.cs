@@ -84,9 +84,7 @@ internal static class DependencyDetector
             if (sourceModule is null)
                 continue;
 
-            var sourceLayer = sourceModule.Layers.FirstOrDefault()?.Name;
-            if (string.IsNullOrWhiteSpace(sourceLayer))
-                continue;
+            var sourceLayer = sourceModule.Layers.FirstOrDefault()?.Name ?? "Unclassified";
 
             foreach (var reference in document.Descendants()
                          .Where(element => element.Name.LocalName == "ProjectReference"))
@@ -109,25 +107,33 @@ internal static class DependencyDetector
                 if (targetModule is null)
                     continue;
 
-                var targetLayer = targetModule.Layers.FirstOrDefault()?.Name;
-                if (string.IsNullOrWhiteSpace(targetLayer))
-                    continue;
+                var targetLayer = targetModule.Layers.FirstOrDefault()?.Name ?? "Unclassified";
+
+                // Preserve every project relationship as evidence. A relationship
+                // involving a test project is test-scoped even when its other
+                // endpoint is a production component.
+                var scope = sourceModule.IsTestProject || targetModule.IsTestProject
+                    ? "Test"
+                    : "Production";
 
                 context.Dependencies.Add(new ArchitectureDependencyContext
                 {
                     Source = sourceModule.Name,
                     SourceLayer = sourceLayer,
+                    SourceProjectPath = Path.GetFullPath(sourceModule.Path),
                     Target = targetModule.Name,
                     TargetLayer = targetLayer,
+                    TargetProjectPath = Path.GetFullPath(targetModule.Path),
                     DependencyType = "ProjectReference",
-                    File = projectFile
+                    Scope = scope,
+                    File = Path.GetFullPath(projectFile)
                 });
             }
         }
 
         var unique = context.Dependencies
             .GroupBy(dependency =>
-                    $"{dependency.DependencyType}|{dependency.File}|{dependency.Source}|{dependency.Target}",
+                    $"{dependency.DependencyType}|{dependency.File}|{dependency.SourceProjectPath}|{dependency.TargetProjectPath}|{dependency.Source}|{dependency.Target}|{dependency.Scope}",
                 StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToArray();
@@ -139,7 +145,9 @@ internal static class DependencyDetector
         string.Equals(
             Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
             Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            StringComparison.OrdinalIgnoreCase);
+            OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal);
 
     private static void AnalyzeDotNet(
         ProjectArchitectureContext ctx,

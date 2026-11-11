@@ -304,7 +304,7 @@ public sealed class ArchitecturalPerformanceEvaluator
         result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["Evaluator"] = Name;
         result.Metadata["EvaluationScope"] = BaseArchitectureEvaluator.FileScope;
-        result.Metadata["AnalysisComplete"] = bool.TrueString;
+        result.Metadata["AnalysisComplete"] = "true";
         result.Metadata["AnalysisStatus"] = "Completed";
         result.Metadata["MeasurementMethod"] = "SourcePatternHeuristic";
         result.Metadata["StringConcatenationInterpretation"] =
@@ -1093,7 +1093,7 @@ public sealed class ArchitecturalPerformanceEvaluator
                 ["ProjectKind"] = projectKind,
                 ["Framework"] = framework ?? "Unknown",
                 ["Evaluator"] = Name,
-                ["AnalysisComplete"] = complete.ToString(),
+                ["AnalysisComplete"] = complete.ToString().ToLowerInvariant(),
                 ["AnalysisStatus"] = complete
                     ? "Completed"
                     : "CompletedWithDiagnostics",

@@ -61,7 +61,7 @@ public sealed class CircularDependencyEvaluator
             new List<ArchitectureEvaluatorResult>();
 
 
-        if (Context is null || Context.Dependencies.Count == 0)
+        if (Context is null || Context.ProductionDependencies.Count == 0)
         {
             // An empty dependency model may mean discovery did not run or found no usable
             // edges. Do not claim a clean cycle check without graph evidence.
@@ -72,7 +72,7 @@ public sealed class CircularDependencyEvaluator
 
         var graph =
             BuildDependencyGraph(
-                Context.Dependencies);
+                Context.ProductionDependencies);
 
 
 

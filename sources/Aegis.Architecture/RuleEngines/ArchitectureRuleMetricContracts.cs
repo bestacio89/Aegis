@@ -2,6 +2,7 @@
 using Aegis.Architecture.Analysis;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
+using Aegis.Shared.Architecture.Models.Policies;
 using Aegis.Shared.Architecture.Models.Rules;
 
 namespace Aegis.Architecture.RuleEngines;

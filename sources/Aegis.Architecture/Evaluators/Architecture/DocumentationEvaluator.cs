@@ -411,7 +411,17 @@ public sealed class DocumentationEvaluator :
 
         foreach (var declaration in declarations)
         {
-            var isDocumented = declaration.GetLeadingTrivia().Any(trivia =>
+            // XML documentation preceding an attribute list is attached
+            // to the attribute list rather than the declaration node itself.
+            // Include only the declaration's own leading trivia and its direct
+            // attribute-list trivia; descendant trivia would incorrectly let
+            // nested member documentation document the containing type.
+            var leadingTrivia = declaration.GetLeadingTrivia()
+                .Concat(declaration.ChildNodes()
+                    .OfType<AttributeListSyntax>()
+                    .SelectMany(attributeList => attributeList.GetLeadingTrivia()));
+
+            var isDocumented = leadingTrivia.Any(trivia =>
                 trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
                 || trivia.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia));
 

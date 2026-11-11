@@ -22,6 +22,8 @@ public sealed class MavenProjectModel
 
     public List<string> DeclaredModules { get; init; } = [];
 
+    public List<string> ReactorModuleFiles { get; init; } = [];
+
     public List<Dependency> Dependencies { get; init; } = [];
 
     public List<Dependency> ManagedDependencies { get; init; } = [];

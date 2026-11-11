@@ -201,6 +201,11 @@ internal static class MavenProjectModelResolver
                 .Where(value => value.Length > 0)
                 .Distinct(StringComparer.Ordinal)
                 .ToList() ?? [];
+            var reactorModuleFiles = ResolveReactorModuleFiles(
+                declaredModules,
+                fullPath,
+                knownPomFiles,
+                diagnostics);
 
             var managed = parentModel?.ManagedDependencies
                 .Select(dependency => dependency with { IsInherited = true })
@@ -338,6 +343,7 @@ internal static class MavenProjectModelResolver
                 Packaging = packaging,
                 EffectiveProperties = properties,
                 DeclaredModules = declaredModules,
+                ReactorModuleFiles = reactorModuleFiles,
                 Dependencies = effectiveDependencies,
                 ManagedDependencies = managed,
                 Plugins = plugins,
@@ -355,6 +361,59 @@ internal static class MavenProjectModelResolver
         {
             visiting.Remove(fullPath);
         }
+    }
+
+    private static List<string> ResolveReactorModuleFiles(
+        IReadOnlyCollection<string> declaredModules,
+        string projectFile,
+        IReadOnlySet<string> knownPomFiles,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        var projectDirectory = Path.GetDirectoryName(projectFile)!;
+        var resolved = new HashSet<string>(PathComparer);
+
+        foreach (var declaredModule in declaredModules)
+        {
+            if (PropertyReference.IsMatch(declaredModule))
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenReactorModulePathNotResolved",
+                    $"Reactor module path '{declaredModule}' contains an unresolved property expression.",
+                    projectFile));
+                continue;
+            }
+
+            string modulePom;
+            try
+            {
+                var modulePath = Path.GetFullPath(Path.Combine(projectDirectory, declaredModule));
+                modulePom = Path.GetFileName(modulePath).Equals("pom.xml", StringComparison.OrdinalIgnoreCase)
+                    ? modulePath
+                    : Path.Combine(modulePath, "pom.xml");
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenReactorModulePathInvalid",
+                    $"Reactor module path '{declaredModule}' is not a valid local path: {exception.Message}",
+                    projectFile));
+                continue;
+            }
+
+            if (!knownPomFiles.Contains(modulePom))
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenReactorModuleNotFound",
+                    $"Declared reactor module '{declaredModule}' does not map to a scanned POM. The module is not inferred.",
+                    projectFile));
+                continue;
+            }
+
+            resolved.Add(modulePom);
+        }
+
+        return resolved.OrderBy(path => path, PathComparer).ToList();
     }
 
     private static MavenProjectModel? FindLocalBomModel(

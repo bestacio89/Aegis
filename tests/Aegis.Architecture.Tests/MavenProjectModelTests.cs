@@ -146,6 +146,10 @@ public sealed class MavenProjectModelTests
                 """);
 
             var context = ProjectArchitectureContextDetector.Detect(root);
+            var parentModule = Assert.Single(context.Modules, candidate => candidate.Name == "fixture-parent");
+            var parentModel = Assert.IsType<Aegis.Shared.Architecture.Models.MavenProjectModel>(parentModule.MavenModel);
+            Assert.Contains(Path.Combine(serviceDirectory, "pom.xml"), parentModel.ReactorModuleFiles);
+
             var module = Assert.Single(context.Modules, candidate => candidate.Name == "fixture-service");
             var model = Assert.IsType<Aegis.Shared.Architecture.Models.MavenProjectModel>(module.MavenModel);
 
@@ -246,6 +250,7 @@ public sealed class MavenProjectModelTests
                       </dependency>
                     </dependencies>
                   </dependencyManagement>
+                  <modules><module>missing-module</module></modules>
                   <profiles><profile><id>integration-only</id></profile></profiles>
                   <dependencies>
                     <dependency>
@@ -269,6 +274,7 @@ public sealed class MavenProjectModelTests
             Assert.Contains(model.Diagnostics, diagnostic => diagnostic.Code == "MavenParentNotResolved");
             Assert.Contains(model.Diagnostics, diagnostic => diagnostic.Code == "MavenBomNotResolved");
             Assert.Contains(model.Diagnostics, diagnostic => diagnostic.Code == "MavenProfilesNotEvaluated");
+            Assert.Contains(model.Diagnostics, diagnostic => diagnostic.Code == "MavenReactorModuleNotFound");
             var dependency = Assert.Single(model.Dependencies, item =>
                 item.ArtifactId == "managed-by-missing-bom");
             Assert.Null(dependency.Version);

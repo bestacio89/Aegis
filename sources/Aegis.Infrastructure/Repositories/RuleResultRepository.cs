@@ -76,34 +76,6 @@ public sealed class RuleResultRepository : IRuleResultRepository
         await _db.SaveChangesAsync(token);
     }
 
-    public async Task<List<RuleResultEntity>> GetPreviousReportAsync(
-    string project,
-    DateTimeOffset currentReportDate,
-    CancellationToken token)
-    {
-        var previousReportId = await _db.RuleResults
-            .AsNoTracking()
-            .Where(r =>
-            r.Project == project &&
-            r.DateCreated < currentReportDate)
-            .Select(r => r.ReportId)
-            .Distinct()
-            .OrderByDescending(id => id)
-            .FirstOrDefaultAsync(token);
-        
-        var previousScan = await _db.RuleResults
-            .AsNoTracking()
-            .Where(r =>
-             r.Project == project &&
-             r.DateCreated < currentReportDate)
-            .GroupBy(r => r.DateCreated)
-            .OrderByDescending(g => g.Key)
-            .FirstOrDefaultAsync(token);
-
-        return previousScan?.ToList() ?? [];
-
-
-    }
 }
 
 

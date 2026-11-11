@@ -179,6 +179,7 @@ public sealed class AegisArchitectureReport
         $"Assessed HealthIndex: {(Metrics.HasAssessmentEvidence ? $"{Metrics.ProjectHealthIndex:0.##}%" : "N/A")}; " +
         $"CoverageAdjustedDiagnostic: {(Metrics.HasCoverageEvidence ? $"{Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A")}; " +
         $"RuleCoverage: {(Metrics.HasCoverageEvidence ? $"{Metrics.RuleEvaluationCoverage:0.##}%" : "N/A")}; " +
+        $"RuleCapability: {(EvaluationStats is not null ? $"{Metrics.RuleCapabilityCoverage:0.##}%" : "N/A")}; " +
         $"AssessmentComplete: {Metrics.AssessmentComplete}.";
 
     // 🧩 Export-friendly DTO (AI / report writer)

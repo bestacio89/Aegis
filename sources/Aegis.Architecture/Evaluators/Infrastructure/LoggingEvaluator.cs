@@ -475,7 +475,6 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
 
         var structuredCalls = 0;
         var parameterizedCalls = 0;
-        var interpolatedCalls = 0;
 
         foreach (Match call in calls)
         {
@@ -495,8 +494,6 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 structuredCalls++;
             else if (hasPythonParameters)
                 parameterizedCalls++;
-            else if (hasInterpolation)
-                interpolatedCalls++;
         }
 
         // Structured message templates and parameterized Python logging

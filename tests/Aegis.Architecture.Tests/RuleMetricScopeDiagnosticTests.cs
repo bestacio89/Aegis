@@ -305,6 +305,47 @@ public sealed class RuleMetricScopeDiagnosticTests
             "no applicable candidates",
             outcome.Stats.NotApplicableReasons["AEG-DES-BLD001"],
             StringComparison.OrdinalIgnoreCase);
+
+        var missingScopeContext = new ProjectArchitectureContext
+        {
+            Modules =
+            [
+                new ProjectModuleContext { Name = "ProjectA", Path = "src/ProjectA" },
+                new ProjectModuleContext { Name = "ProjectB", Path = "src/ProjectB" }
+            ]
+        };
+
+        var missingScopeOutcome = engine.EvaluateDetailed(
+            missingScopeContext,
+            [summary]);
+
+        Assert.DoesNotContain("AEG-DES-BLD001", missingScopeOutcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-DES-BLD001", missingScopeOutcome.Stats.RulesNotEvaluated);
+
+        var incompleteDiscoveryContext = new ProjectArchitectureContext
+        {
+            Modules =
+            [
+                new ProjectModuleContext { Name = "ProjectA", Path = "src/ProjectA" }
+            ],
+            DiscoveryDiagnostics =
+            [
+                new AnalysisDiagnostic
+                {
+                    Code = "ProjectDiscoveryIncomplete",
+                    Component = "ProjectArchitectureContextDetector",
+                    Message = "A project scope could not be fully discovered.",
+                    AffectsCoverage = true
+                }
+            ]
+        };
+
+        var incompleteDiscoveryOutcome = engine.EvaluateDetailed(
+            incompleteDiscoveryContext,
+            [summary]);
+
+        Assert.DoesNotContain("AEG-DES-BLD001", incompleteDiscoveryOutcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-DES-BLD001", incompleteDiscoveryOutcome.Stats.RulesNotEvaluated);
     }
 
     [Theory]

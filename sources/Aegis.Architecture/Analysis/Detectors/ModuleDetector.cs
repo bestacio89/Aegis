@@ -467,6 +467,17 @@ internal static class ModuleDetector
 
     private static string DetectModuleType(string path, string moduleName)
     {
+        // A project nested under an explicit test directory is test scope even
+        // when its project name or build metadata does not use a test suffix.
+        if (Path.GetFullPath(path)
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                StringSplitOptions.RemoveEmptyEntries)
+            .Any(segment => segment.Equals("test", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals("tests", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Test";
+        }
+
         var pathName = Path.GetFileName(
             Path.TrimEndingDirectorySeparator(path)).ToLowerInvariant();
 

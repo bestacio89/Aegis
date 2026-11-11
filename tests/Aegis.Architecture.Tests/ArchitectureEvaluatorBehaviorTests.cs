@@ -893,7 +893,7 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         var results = (await evaluator.EvaluateAsync(project.Root, CreateContext(project))).ToArray();
         var fileResult = Assert.Single(
             results,
-            result => result.Metrics.ContainsKey("TransactionIntegrityIndex")
+            result => result.Metrics.ContainsKey("TransactionIntegrityScore")
                 && result.Metadata.GetValueOrDefault("FileName") == "TransactionFixture.cs");
 
         Assert.Equal("True", fileResult.Metadata["ContainsTransactionScope"]);

@@ -10,6 +10,12 @@ public sealed class RuleEvaluationStats
 
     public int RulesApplicable { get; init; }
 
+    /// <summary>Rules explicitly disabled by the active policy; excluded from applicability and coverage.</summary>
+    public int RulesDisabledByPolicy { get; init; }
+
+    public IReadOnlyDictionary<string, string> DisabledByPolicyReasons { get; init; }
+        = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Rules whose declared metric semantics have no supported producer.</summary>
     public int RulesUnsupported { get; init; }
 

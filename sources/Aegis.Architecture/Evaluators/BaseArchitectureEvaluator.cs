@@ -229,6 +229,29 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         }
     }
 
+    protected static string ResolveLanguageForFile(string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        return Path.GetExtension(filePath).ToLowerInvariant() switch
+        {
+            ".cs" => "C#",
+            ".java" => "Java",
+            ".py" => "Python",
+            ".ts" or ".tsx" => "TypeScript",
+            ".js" or ".jsx" => "JavaScript",
+            _ => "Unknown"
+        };
+    }
+
+    protected string? ResolveLayerForFile(string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        return Context?.Layers.FirstOrDefault(layer =>
+            layer.Files.Contains(filePath, StringComparer.OrdinalIgnoreCase))?.Name;
+    }
+
     protected static string? ResolveFrameworkForFile(
         string filePath,
         string projectPath,

@@ -210,7 +210,7 @@ public sealed class MaintainabilityEvaluator
         result.Metadata["MaintainabilityMeasurement"] =
             "Aegis heuristic (0-100): 100 minus weighted lexical decision points and non-comment code lines beyond the policy limit. Comment density is informational only and does not affect the score. This is not a compiler-backed or industry-standard maintainability index.";
         result.Metadata["CommentDensityInterpretation"] =
-            "Informational metric only. Low comment density is not treated as a maintainability defect.";
+            "Comment density is informational only; low comment density is not treated as a maintainability defect.";
         result.Metadata["AnalysisComplete"] = "true";
         result.Metadata["AnalysisStatus"] = "Completed";
         result.Evidence = string.Join(Environment.NewLine, metrics.Evidence);

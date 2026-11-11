@@ -568,6 +568,53 @@ public sealed class ArchitectureEvaluatorBehaviorTests
     }
 
     [Fact]
+    public async Task PerformanceEvaluator_resolves_concrete_frameworks_within_multi_framework_projects()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Web/Pages/Counter.razor.cs", """
+            public sealed class Counter
+            {
+                public void Increment() { }
+            }
+            """);
+        project.Write("back/Web/OrderService.cs", """
+            public sealed class OrderService
+            {
+                public void Execute() { }
+            }
+            """);
+
+        var context = CreateContext(project);
+        context.Modules.Add(new Aegis.Shared.Architecture.Models.ProjectModuleContext
+        {
+            Name = "Web",
+            Path = Path.Combine(project.Root, "back", "Web"),
+            Framework = "Multi-Framework",
+            Frameworks = ["ASP.NET Core", "Blazor"],
+            ProjectKind = "WebApplication",
+            Type = "Presentation"
+        });
+
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var evaluator = GetEvaluator(scope.ServiceProvider, "PerformanceEvaluator");
+
+        var results = (await evaluator.EvaluateAsync(project.Root, context)).ToArray();
+        var razorCode = Assert.Single(results, result =>
+            result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "Counter.razor.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+        var serverCode = Assert.Single(results, result =>
+            result.Metadata.GetValueOrDefault("FilePath")?.EndsWith(
+                "OrderService.cs",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal("Blazor", razorCode.Framework);
+        Assert.Equal("ASP.NET Core", serverCode.Framework);
+        Assert.DoesNotContain(results, result => result.Framework == "Multi-Framework");
+    }
+
+    [Fact]
     public async Task TransactionEvaluator_flags_transaction_scopes_without_explicit_commit_or_rollback()
     {
         using var project = new TemporaryProject();

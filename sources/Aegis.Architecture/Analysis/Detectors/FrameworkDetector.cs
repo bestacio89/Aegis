@@ -8,6 +8,8 @@ internal static class FrameworkDetector
 {
     public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
     {
+        ctx.FrontendFrameworkDiscoveryComplete = true;
+
         var deps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         switch (ctx.Language)
@@ -315,8 +317,11 @@ internal static class FrameworkDetector
                     or UnauthorizedAccessException
                     or InvalidOperationException)
             {
-                // A malformed package manifest is not evidence for a framework.
-                // Continue discovering other manifests in a mixed repository.
+                ctx.FrontendFrameworkDiscoveryComplete = false;
+
+                // A malformed or unreadable package manifest cannot establish
+                // that a frontend framework is absent. Continue with readable
+                // manifests while retaining the incomplete-discovery state.
             }
         }
 

@@ -7,7 +7,7 @@ namespace Aegis.Wpf.ViewModels.Architecture;
 public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
 {
     private readonly ArchitectureOverviewViewModel _overview;
-    private readonly ArchitectureExplorerViewModel _explorer;
+    private readonly DependencyGraphViewModel _explorer;
     private readonly RelationshipLedgerViewModel _relationshipLedger;
     private readonly SectionDashboardViewModel _sections;
     private readonly LayerDashboardViewModel _layers;
@@ -18,7 +18,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
 
     public ArchitectureWorkspaceViewModel(
         ArchitectureOverviewViewModel overview,
-        ArchitectureExplorerViewModel explorer,
+        DependencyGraphViewModel explorer,
         RelationshipLedgerViewModel relationshipLedger,
         SectionDashboardViewModel sections,
         LayerDashboardViewModel layers,

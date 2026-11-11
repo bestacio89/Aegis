@@ -45,6 +45,9 @@ public final class SemanticEngineBenchmark {
         "org.springframework.stereotype.Service",
         "org.springframework.stereotype.Component",
         "org.junit.jupiter.api.Test");
+    private static final Set<String> EXPECTED_UNRESOLVED_TYPES = Set.of(
+        "org.aegis.fixture.integration.Extension",
+        "org.aegis.fixture.gradle.Extension");
     private static final Set<String> EXPECTED_SOURCE_TYPES = Set.of(
         "org.aegis.fixture.domain.Entity",
         "org.aegis.fixture.domain.Order",
@@ -84,6 +87,11 @@ public final class SemanticEngineBenchmark {
                 : analyzeWithJavaParser(sourceFiles, sourceRoots, externalClasspath);
 
             printJson(engine, metrics, sourceRoots.size(), externalClasspath.size());
+            if (metrics.unexpectedlyResolvedMissingTypes() > 0) {
+                throw new IllegalStateException(
+                    "The engine resolved intentionally missing fixture types: "
+                        + metrics.unexpectedlyResolvedMissingTypes());
+            }
         } finally {
             deleteDirectory(workspace);
         }
@@ -171,6 +179,7 @@ public final class SemanticEngineBenchmark {
         int resolutionAttempts = 0;
         int resolvedBindings = 0;
         Set<String> resolvedExpectedTypes = new HashSet<>();
+        Set<String> unexpectedlyResolvedMissingTypes = new HashSet<>();
         Set<String> resolvedExternalTypes = new HashSet<>();
         long started = System.nanoTime();
 
@@ -201,6 +210,9 @@ public final class SemanticEngineBenchmark {
                     }
                     if (EXPECTED_EXTERNAL_TYPES.contains(qualifiedName)) {
                         resolvedExternalTypes.add(qualifiedName);
+                    }
+                    if (EXPECTED_UNRESOLVED_TYPES.contains(qualifiedName)) {
+                        unexpectedlyResolvedMissingTypes.add(qualifiedName);
                     }
                 } catch (RuntimeException unresolvedOrUnsupported) {
                     // Resolution failures are evidence; they do not abort the corpus.
@@ -242,6 +254,7 @@ public final class SemanticEngineBenchmark {
             EXPECTED_SOURCE_TYPES.size(),
             resolvedExternalTypes.size(),
             EXPECTED_EXTERNAL_TYPES.size(),
+            unexpectedlyResolvedMissingTypes.size(),
             elapsedMilliseconds,
             heapUsedBytes);
     }
@@ -310,6 +323,9 @@ public final class SemanticEngineBenchmark {
                                 }
                                 if (EXPECTED_EXTERNAL_TYPES.contains(binding.getQualifiedName())) {
                                     resolvedExternalTypes.add(binding.getQualifiedName());
+                                }
+                                if (EXPECTED_UNRESOLVED_TYPES.contains(binding.getQualifiedName())) {
+                                    unexpectedlyResolvedMissingTypes.add(binding.getQualifiedName());
                                 }
                             }
                         } catch (RuntimeException unresolvedOrUnsupported) {
@@ -416,7 +432,8 @@ public final class SemanticEngineBenchmark {
                 + "\"resolutionAttempts\":%d,\"resolvedBindings\":%d,"
                 + "\"resolutionRatio\":%.4f,\"expectedSourceTypesResolved\":%d,"
                 + "\"expectedSourceTypesTotal\":%d,\"expectedExternalTypesResolved\":%d,"
-                + "\"expectedExternalTypesTotal\":%d,\"elapsedMilliseconds\":%d,"
+                + "\"expectedExternalTypesTotal\":%d,\"unexpectedlyResolvedMissingTypes\":%d,"
+                + "\"elapsedMilliseconds\":%d,"
                 + "\"heapUsedBytes\":%d,\"externalClasspathEnabled\":%s,\"externalClasspathEntries\":%d}%n",
             engine,
             metrics.sourceFiles(),
@@ -432,6 +449,7 @@ public final class SemanticEngineBenchmark {
             metrics.expectedSourceTypesTotal(),
             metrics.expectedExternalTypesResolved(),
             metrics.expectedExternalTypesTotal(),
+            metrics.unexpectedlyResolvedMissingTypes(),
             metrics.elapsedMilliseconds(),
             metrics.heapUsedBytes(),
             externalClasspathEntryCount > 0,
@@ -460,6 +478,7 @@ public final class SemanticEngineBenchmark {
         int expectedSourceTypesTotal,
         int expectedExternalTypesResolved,
         int expectedExternalTypesTotal,
+        int unexpectedlyResolvedMissingTypes,
         long elapsedMilliseconds,
         long heapUsedBytes) {
     }

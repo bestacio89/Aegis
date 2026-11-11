@@ -16,6 +16,8 @@ public sealed class GradleBuildModel
 
     public List<SourceSet> SourceSets { get; init; } = [];
 
+    public List<ProjectSourceRoot> SourceRoots { get; init; } = [];
+
     public string? JavaToolchainVersion { get; init; }
 
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];

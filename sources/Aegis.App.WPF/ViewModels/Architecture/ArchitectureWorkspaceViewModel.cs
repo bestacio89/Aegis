@@ -8,6 +8,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
 {
     private readonly ArchitectureOverviewViewModel _overview;
     private readonly ArchitectureExplorerViewModel _explorer;
+    private readonly RelationshipLedgerViewModel _relationshipLedger;
     private readonly SectionDashboardViewModel _sections;
     private readonly LayerDashboardViewModel _layers;
     private readonly RuleDashboardViewModel _rules;
@@ -18,6 +19,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
     public ArchitectureWorkspaceViewModel(
         ArchitectureOverviewViewModel overview,
         ArchitectureExplorerViewModel explorer,
+        RelationshipLedgerViewModel relationshipLedger,
         SectionDashboardViewModel sections,
         LayerDashboardViewModel layers,
         RuleDashboardViewModel rules,
@@ -26,6 +28,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
     {
         _overview = overview;
         _explorer = explorer;
+        _relationshipLedger = relationshipLedger;
         _sections = sections;
         _layers = layers;
         _rules = rules;
@@ -35,7 +38,8 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         Tabs =
         [
             new ArchitectureTab("Overview", "◈", _overview),
-            new ArchitectureTab("Explorer", "⌘", _explorer),
+            new ArchitectureTab("Dependency Graph", "⌘", _explorer),
+            new ArchitectureTab("Relationship Ledger", "▤", _relationshipLedger),
             new ArchitectureTab("Sections", "▦", _sections),
             new ArchitectureTab("Layers", "◫", _layers),
             new ArchitectureTab("Rules & Metrics", "◎", _rules),

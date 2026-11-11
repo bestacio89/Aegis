@@ -207,7 +207,7 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
         Assert.Equal("FileMetrics", result.Metadata["EvidenceScope.AnemicDomainModelIndex"]);
         Assert.Contains("OrderEntity", result.Evidence);
-        Assert.Contains("Properties", result.Metadata["Evidence.AnemicDomainModelIndex"]);
+        Assert.Contains("properties", result.Metadata["Evidence.AnemicDomainModelIndex"]);
     }
 
 

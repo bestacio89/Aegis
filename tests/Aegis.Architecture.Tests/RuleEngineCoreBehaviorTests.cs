@@ -421,9 +421,16 @@ public sealed class RuleEngineCoreBehaviorTests
         Assert.Equal(76, ArchitectureRuleRegistry.All.Count);
         Assert.Equal(28, outcome.Stats.RulesUnsupported);
         Assert.Equal(42, outcome.Stats.RulesApplicable);
-        Assert.Equal(70, outcome.Stats.NotEvaluatedReasons.Count);
-        Assert.Equal(70, outcome.Stats.RulesNotEvaluated.Count);
-        Assert.Equal(6, outcome.Stats.RulesNotApplicable.Count);
+        Assert.Equal(2, outcome.Stats.RulesDisabledByPolicy);
+        Assert.Equal(42, outcome.Stats.NotEvaluatedReasons.Count);
+        Assert.Equal(42, outcome.Stats.RulesNotEvaluated.Count);
+        Assert.Equal(4, outcome.Stats.RulesNotApplicable.Count);
+        Assert.Equal(
+            outcome.Stats.RulesRegistered,
+            outcome.Stats.RulesApplicable
+                + outcome.Stats.RulesUnsupported
+                + outcome.Stats.RulesNotApplicable.Count
+                + outcome.Stats.RulesDisabledByPolicy);
 
         // Rule-level missing evidence is not a scoped evaluation result.
         Assert.Empty(outcome.Evaluations);
@@ -435,9 +442,14 @@ public sealed class RuleEngineCoreBehaviorTests
 
         foreach (var rule in ArchitectureRuleRegistry.All)
         {
-            if (outcome.Stats.NotApplicableReasons.ContainsKey(rule.Id))
+            if (outcome.Stats.NotApplicableReasons.ContainsKey(rule.Id)
+                || outcome.Stats.DisabledByPolicyReasons.ContainsKey(rule.Id)
+                || outcome.Stats.UnsupportedRuleReasons.ContainsKey(rule.Id))
+            {
                 continue;
+            }
 
+            Assert.Contains(rule.Id, outcome.Stats.NotEvaluatedReasons.Keys);
             var reason = outcome.Stats.NotEvaluatedReasons[rule.Id];
             Assert.DoesNotContain(
                 "No producer-to-rule contract is registered",

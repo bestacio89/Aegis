@@ -255,6 +255,9 @@ public sealed class RuleEngineCoreBehaviorTests
     public void EvaluateDetailed_classifies_policy_disabled_rules_separately()
     {
         var disabledPolicy = new AegisArchitecturePolicy();
+        disabledPolicy.Architecture.DesignPatterns.EnforceCommandPattern = true;
+        disabledPolicy.Architecture.DesignPatterns.EnforceMediatorPattern = true;
+        disabledPolicy.Architecture.DesignPatterns.EnforceObserverPattern = true;
         disabledPolicy.Architecture.DesignPatterns.EnforceStrategyPattern = false;
 
         var cycleSummary = new ArchitectureEvaluatorResult(
@@ -286,6 +289,9 @@ public sealed class RuleEngineCoreBehaviorTests
         Assert.Equal(2, disabledOutcome.Stats.RulesDisabledByPolicy);
 
         var enabledPolicy = new AegisArchitecturePolicy();
+        enabledPolicy.Architecture.DesignPatterns.EnforceCommandPattern = true;
+        enabledPolicy.Architecture.DesignPatterns.EnforceMediatorPattern = true;
+        enabledPolicy.Architecture.DesignPatterns.EnforceObserverPattern = true;
         enabledPolicy.Architecture.DesignPatterns.EnforceStrategyPattern = true;
 
         var enabledOutcome = new RuleEngineCore(
@@ -499,12 +505,12 @@ public sealed class RuleEngineCoreBehaviorTests
             []);
 
         Assert.Equal(76, ArchitectureRuleRegistry.All.Count);
-        Assert.Equal(28, outcome.Stats.RulesUnsupported);
+        Assert.Equal(24, outcome.Stats.RulesUnsupported);
         Assert.Equal(42, outcome.Stats.RulesApplicable);
-        Assert.Equal(2, outcome.Stats.RulesDisabledByPolicy);
+        Assert.Equal(8, outcome.Stats.RulesDisabledByPolicy);
         Assert.Equal(42, outcome.Stats.NotEvaluatedReasons.Count);
         Assert.Equal(42, outcome.Stats.RulesNotEvaluated.Count);
-        Assert.Equal(4, outcome.Stats.RulesNotApplicable.Count);
+        Assert.Equal(2, outcome.Stats.RulesNotApplicable.Count);
         Assert.Equal(
             outcome.Stats.RulesRegistered,
             outcome.Stats.RulesApplicable

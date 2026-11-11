@@ -7,17 +7,6 @@
     FontFamily="{StaticResource Font.Body}">
 
     <UserControl.Resources>
-        <Style x:Key="ExplorerLabel" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}" />
-            <Setter Property="FontSize" Value="10" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,12,0,4" />
-        </Style>
-        <Style x:Key="ExplorerValue" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="TextWrapping" Value="Wrap" />
-        </Style>
         <Style x:Key="GraphNodeButton" TargetType="Button">
             <Setter Property="Width" Value="196" />
             <Setter Property="Height" Value="72" />
@@ -29,42 +18,30 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border
-                            x:Name="NodeBorder"
-                            Background="{StaticResource Brush.PanelElevated}"
-                            BorderBrush="{StaticResource Brush.Line}"
-                            BorderThickness="1"
-                            CornerRadius="5"
-                            Padding="10,8">
+                        <Border x:Name="NodeBorder"
+                                Background="{StaticResource Brush.PanelElevated}"
+                                BorderBrush="{StaticResource Brush.Line}"
+                                BorderThickness="1" CornerRadius="5" Padding="10,8">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="*" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <StackPanel>
-                                    <TextBlock
-                                        Text="{Binding Name}"
-                                        Foreground="{StaticResource Brush.TextPrimary}"
-                                        FontSize="12"
-                                        FontWeight="SemiBold"
-                                        TextTrimming="CharacterEllipsis"
-                                        ToolTip="{Binding Name}" />
-                                    <TextBlock
-                                        Grid.Row="1"
-                                        Text="{Binding Layer}"
-                                        Foreground="{StaticResource Brush.TextMuted}"
-                                        FontSize="10"
-                                        Margin="0,4,0,0"
-                                        TextTrimming="CharacterEllipsis"
-                                        ToolTip="{Binding Layer}" />
-                                </StackPanel>
-                                <TextBlock
-                                    Grid.Row="1"
-                                    Text="{Binding RelationshipCount, StringFormat={}{0} relationships}"
-                                    Foreground="{StaticResource Brush.AccentStructural}"
-                                    FontSize="9"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Bottom" />
+                                <TextBlock Text="{Binding Name}"
+                                           Foreground="{StaticResource Brush.TextPrimary}"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Name}" />
+                                <TextBlock Grid.Row="1" Text="{Binding Layer}"
+                                           Foreground="{StaticResource Brush.TextMuted}"
+                                           FontSize="10" Margin="0,4,0,0"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Layer}" />
+                                <TextBlock Grid.Row="1"
+                                           Text="{Binding RelationshipCount, StringFormat={}{0} relationships}"
+                                           Foreground="{StaticResource Brush.AccentStructural}"
+                                           FontSize="9" HorizontalAlignment="Right"
+                                           VerticalAlignment="Bottom" />
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -103,12 +80,12 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock Text="ARCHITECTURE EXPLORER" Style="{StaticResource Text.Eyebrow}"
+                    <TextBlock Text="DEPENDENCY GRAPH" Style="{StaticResource Text.Eyebrow}"
                                Foreground="{StaticResource Brush.AccentStructural}" />
                     <TextBlock Text="{Binding ProjectName}" Style="{StaticResource Text.Title}"
                                Margin="0,5,0,0" TextWrapping="Wrap" />
                     <TextBlock
-                        Text="Inspect the dependency graph discovered during assessment. Select a component to isolate adjacent relationships, or select a relationship in the ledger to highlight its directed edge."
+                        Text="Explore detector-reported source-to-target dependencies across the system. Select a component to isolate its incoming and outgoing relationships."
                         Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
                         Margin="0,6,12,0" TextWrapping="Wrap" MaxWidth="900" />
                 </StackPanel>
@@ -141,7 +118,7 @@
             </Border>
             <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="76">
                 <StackPanel>
-                    <TextBlock Text="DISCOVERED RELATIONSHIPS" Style="{StaticResource Text.Eyebrow}" />
+                    <TextBlock Text="DIRECTED RELATIONSHIPS" Style="{StaticResource Text.Eyebrow}" />
                     <TextBlock Text="{Binding TotalDependencies}" Style="{StaticResource Text.KpiValue}" FontSize="24" />
                 </StackPanel>
             </Border>
@@ -153,308 +130,182 @@
                 <ColumnDefinition Width="190" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBox
-                Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                ToolTip="Search components, layers, dependency types, or evidence files"
-                MinHeight="38" Padding="12,8" Margin="0,0,10,0"
-                Background="{StaticResource Brush.PanelElevated}"
-                Foreground="{StaticResource Brush.TextPrimary}"
-                BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
-                VerticalContentAlignment="Center" />
-            <ComboBox
-                Grid.Column="1"
-                ItemsSource="{Binding LayerFilters}"
-                SelectedItem="{Binding SelectedLayer, Mode=TwoWay}"
-                MinHeight="38" Margin="0,0,10,0" Padding="8,4"
-                Background="{StaticResource Brush.PanelElevated}"
-                Foreground="{StaticResource Brush.TextPrimary}"
-                BorderBrush="{StaticResource Brush.Line}"
-                VerticalContentAlignment="Center" />
-            <Button
-                Grid.Column="2"
-                Content="Clear filters"
-                Command="{Binding ClearFiltersCommand}"
-                Padding="14,8" MinHeight="38"
-                Background="{StaticResource Brush.PanelElevated}"
-                Foreground="{StaticResource Brush.TextPrimary}"
-                BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" />
+            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="Search components, layers, dependency types, or evidence files"
+                     MinHeight="38" Padding="12,8" Margin="0,0,10,0"
+                     Background="{StaticResource Brush.PanelElevated}"
+                     Foreground="{StaticResource Brush.TextPrimary}"
+                     BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                     VerticalContentAlignment="Center" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding LayerFilters}"
+                      SelectedItem="{Binding SelectedLayer, Mode=TwoWay}"
+                      MinHeight="38" Margin="0,0,10,0" Padding="8,4"
+                      Background="{StaticResource Brush.PanelElevated}"
+                      Foreground="{StaticResource Brush.TextPrimary}"
+                      BorderBrush="{StaticResource Brush.Line}"
+                      VerticalContentAlignment="Center" />
+            <Button Grid.Column="2" Content="Clear filters"
+                    Command="{Binding ClearFiltersCommand}"
+                    Padding="14,8" MinHeight="38"
+                    Background="{StaticResource Brush.PanelElevated}"
+                    Foreground="{StaticResource Brush.TextPrimary}"
+                    BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" />
         </Grid>
 
         <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2.1*" />
+                <ColumnDefinition Width="3*" />
                 <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="1.1*" />
+                <ColumnDefinition Width="1*" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Background="{StaticResource Brush.Panel}"
                     BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
                     CornerRadius="4" Padding="8">
-                <TabControl Background="Transparent" BorderThickness="0"
-                            Foreground="{StaticResource Brush.TextPrimary}">
-                    <TabItem Header="Dependency graph">
-                        <Grid Margin="0,8,0,0">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-                            <TextBlock
-                                Grid.Row="0"
-                                Text="ARROWS REPRESENT DETECTOR-REPORTED SOURCE → TARGET DEPENDENCIES"
-                                Foreground="{StaticResource Brush.TextMuted}"
-                                FontSize="9" FontWeight="SemiBold" Margin="8,4,8,10" />
-                            <ScrollViewer Grid.Row="1"
-                                          HorizontalScrollBarVisibility="Auto"
-                                          VerticalScrollBarVisibility="Auto"
-                                          CanContentScroll="False">
-                                <Canvas Width="{Binding GraphWidth}" Height="{Binding GraphHeight}"
-                                        Background="{StaticResource Brush.Panel}">
-                                    <ItemsControl ItemsSource="{Binding GraphEdges}"
-                                                  Width="{Binding GraphWidth}" Height="{Binding GraphHeight}"
-                                                  IsHitTestVisible="False">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemContainerStyle>
-                                            <Style TargetType="ContentPresenter">
-                                                <Setter Property="Canvas.Left" Value="{Binding Left}" />
-                                                <Setter Property="Canvas.Top" Value="{Binding Top}" />
-                                            </Style>
-                                        </ItemsControl.ItemContainerStyle>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Grid>
-                                                    <Grid.ToolTip>
-                                                        <StackPanel>
-                                                            <TextBlock Text="{Binding Source}" FontWeight="SemiBold" />
-                                                            <TextBlock Text="{Binding Target, StringFormat='→  {0}'}" />
-                                                            <TextBlock Text="{Binding EvidenceLabel}" Foreground="{StaticResource Brush.TextMuted}" />
-                                                        </StackPanel>
-                                                    </Grid.ToolTip>
-                                                    <Path Data="{Binding LineGeometry}" Stretch="None">
-                                                        <Path.Style>
-                                                            <Style TargetType="Path">
-                                                                <Setter Property="Stroke" Value="{StaticResource Brush.TextMuted}" />
-                                                                <Setter Property="StrokeThickness" Value="1.5" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                                                                        <Setter Property="Stroke" Value="{StaticResource Brush.AccentStructural}" />
-                                                                        <Setter Property="StrokeThickness" Value="3" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Path.Style>
-                                                    </Path>
-                                                    <Path Data="{Binding ArrowGeometry}" Stretch="None">
-                                                        <Path.Style>
-                                                            <Style TargetType="Path">
-                                                                <Setter Property="Stroke" Value="{StaticResource Brush.TextMuted}" />
-                                                                <Setter Property="Fill" Value="{StaticResource Brush.TextMuted}" />
-                                                                <Setter Property="StrokeThickness" Value="1.5" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                                                                        <Setter Property="Stroke" Value="{StaticResource Brush.AccentStructural}" />
-                                                                        <Setter Property="Fill" Value="{StaticResource Brush.AccentStructural}" />
-                                                                        <Setter Property="StrokeThickness" Value="3" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Path.Style>
-                                                    </Path>
-                                                </Grid>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-
-                                    <ItemsControl ItemsSource="{Binding GraphLayerHeaders}"
-                                                  Width="{Binding GraphWidth}" Height="{Binding GraphHeight}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemContainerStyle>
-                                            <Style TargetType="ContentPresenter">
-                                                <Setter Property="Canvas.Left" Value="{Binding Left}" />
-                                                <Setter Property="Canvas.Top" Value="18" />
-                                            </Style>
-                                        </ItemsControl.ItemContainerStyle>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Name}" Width="196"
-                                                           Foreground="{StaticResource Brush.AccentStructural}"
-                                                           FontSize="11" FontWeight="SemiBold"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           ToolTip="{Binding Name}" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-
-                                    <ItemsControl ItemsSource="{Binding GraphNodes}"
-                                                  Width="{Binding GraphWidth}" Height="{Binding GraphHeight}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemContainerStyle>
-                                            <Style TargetType="ContentPresenter">
-                                                <Setter Property="Canvas.Left" Value="{Binding Left}" />
-                                                <Setter Property="Canvas.Top" Value="{Binding Top}" />
-                                            </Style>
-                                        </ItemsControl.ItemContainerStyle>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Button Style="{StaticResource GraphNodeButton}"
-                                                        Command="{Binding DataContext.SelectGraphNodeCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
-                                                        CommandParameter="{Binding}"
-                                                        ToolTip="Select to isolate incoming and outgoing relationships">
-                                                    <TextBlock Text="{Binding Name}" />
-                                                </Button>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </Canvas>
-                            </ScrollViewer>
-
-                            <Border Background="{StaticResource Brush.PanelElevated}" Padding="24"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    MaxWidth="430">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding GraphNodes.Count}" Value="0">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <StackPanel>
-                                    <TextBlock Text="No dependency graph to display"
-                                               FontSize="15" FontWeight="SemiBold"
-                                               Foreground="{StaticResource Brush.TextPrimary}"
-                                               TextAlignment="Center" TextWrapping="Wrap" />
-                                    <TextBlock
-                                        Text="No relationships match the current filters. Clear the filters or load an assessment that provides dependency edges."
-                                        Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
-                                        TextAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,0" />
-                                </StackPanel>
-                            </Border>
-                        </Grid>
-                    </TabItem>
-
-                    <TabItem Header="Relationship ledger">
-                        <Grid Margin="0,8,0,0">
-                            <DataGrid
-                                ItemsSource="{Binding DependenciesView}"
-                                SelectedItem="{Binding SelectedDependency, Mode=TwoWay}"
-                                AutoGenerateColumns="False" IsReadOnly="True"
-                                CanUserAddRows="False" CanUserDeleteRows="False"
-                                CanUserReorderColumns="False" CanUserResizeRows="False"
-                                CanUserSortColumns="True" SelectionMode="Single"
-                                SelectionUnit="FullRow" HeadersVisibility="Column"
-                                EnableRowVirtualization="True" EnableColumnVirtualization="True"
-                                VirtualizingPanel.IsVirtualizing="True"
-                                VirtualizingPanel.VirtualizationMode="Recycling"
-                                ScrollViewer.CanContentScroll="True"
-                                Style="{StaticResource Grid.Ledger}"
-                                ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}"
-                                RowStyle="{StaticResource Grid.LedgerRow}">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
-                                    <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="125" />
-                                    <DataGridTextColumn Header="Direction" Binding="{Binding DependencyType}" Width="105" />
-                                    <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="125" />
-                                    <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="*" />
-                                </DataGrid.Columns>
-                            </DataGrid>
-                            <Border Background="{StaticResource Brush.PanelElevated}" Padding="24"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    MaxWidth="430">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding FilteredDependencies}" Value="0">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <TextBlock Text="No relationships match the current selection or filters."
-                                           Foreground="{StaticResource Brush.TextMuted}"
-                                           TextAlignment="Center" TextWrapping="Wrap" />
-                            </Border>
-                        </Grid>
-                    </TabItem>
-                </TabControl>
-            </Border>
-
-            <Border Grid.Column="2" Background="{StaticResource Brush.Panel}"
-                    BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
-                    CornerRadius="4">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0"
+                               Text="ARROWS REPRESENT DETECTOR-REPORTED SOURCE → TARGET DEPENDENCIES"
+                               Foreground="{StaticResource Brush.TextMuted}"
+                               FontSize="9" FontWeight="SemiBold" Margin="8,4,8,10" />
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto" CanContentScroll="False">
+                        <Canvas Width="{Binding GraphWidth}" Height="{Binding GraphHeight}"
+                                Background="{StaticResource Brush.Panel}">
+                            <ItemsControl ItemsSource="{Binding GraphEdges}"
+                                          Width="{Binding GraphWidth}" Height="{Binding GraphHeight}"
+                                          IsHitTestVisible="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                                        <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ToolTip="{Binding EvidenceLabel}">
+                                            <Path Data="{Binding LineGeometry}" Stretch="None"
+                                                  Stroke="{StaticResource Brush.TextMuted}" StrokeThickness="1.5" />
+                                            <Path Data="{Binding ArrowGeometry}" Stretch="None"
+                                                  Stroke="{StaticResource Brush.TextMuted}"
+                                                  Fill="{StaticResource Brush.TextMuted}" StrokeThickness="1.5" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <ItemsControl ItemsSource="{Binding GraphLayerHeaders}"
+                                          Width="{Binding GraphWidth}" Height="{Binding GraphHeight}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                                        <Setter Property="Canvas.Top" Value="18" />
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Name}" Width="196"
+                                                   Foreground="{StaticResource Brush.AccentStructural}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <ItemsControl ItemsSource="{Binding GraphNodes}"
+                                          Width="{Binding GraphWidth}" Height="{Binding GraphHeight}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                                        <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource GraphNodeButton}"
+                                                Command="{Binding DataContext.SelectGraphNodeCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="Select to isolate incoming and outgoing relationships">
+                                            <TextBlock Text="{Binding Name}" />
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Canvas>
+                    </ScrollViewer>
+
+                    <Border Background="{StaticResource Brush.PanelElevated}" Padding="24"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="430">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding GraphNodes.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel>
+                            <TextBlock Text="No dependency graph to display" FontSize="15"
+                                       FontWeight="SemiBold" Foreground="{StaticResource Brush.TextPrimary}"
+                                       TextAlignment="Center" TextWrapping="Wrap" />
+                            <TextBlock Text="No relationships match the current filters. Clear the filters or load an assessment that provides dependency edges."
+                                       Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
+                                       TextAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,0" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="2" Background="{StaticResource Brush.Panel}"
+                    BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" CornerRadius="4">
+                <Grid>
+                    <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <Border Grid.Row="0" Padding="16,13" Background="{StaticResource Brush.PanelElevated}"
                             BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,0,0,1">
                         <StackPanel>
-                            <TextBlock Text="INVESTIGATION DETAILS" Style="{StaticResource Text.Eyebrow}"
+                            <TextBlock Text="COMPONENT INSPECTOR" Style="{StaticResource Text.Eyebrow}"
                                        Foreground="{StaticResource Brush.AccentStructural}" />
-                            <TextBlock Text="{Binding SelectedGraphNode.Name, TargetNullValue='Select a component or relationship'}"
+                            <TextBlock Text="{Binding SelectedGraphNode.Name, TargetNullValue='Select a component'}"
                                        FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,5,0,0" />
                             <TextBlock Text="{Binding SelectedGraphNode.Layer, TargetNullValue='Select a node to inspect its layer'}"
                                        Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
                                        TextWrapping="Wrap" Margin="0,4,0,0" />
                         </StackPanel>
                     </Border>
-
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="16,4,16,16">
-                            <TextBlock Text="COMPONENT" Style="{StaticResource ExplorerLabel}" />
-                            <TextBlock Text="{Binding SelectedGraphNode.Name, TargetNullValue='—'}"
-                                       Style="{StaticResource ExplorerValue}" />
-                            <TextBlock Text="INCOMING RELATIONSHIPS" Style="{StaticResource ExplorerLabel}" />
+                            <TextBlock Text="INCOMING RELATIONSHIPS" Foreground="{StaticResource Brush.TextMuted}"
+                                       FontSize="10" FontWeight="SemiBold" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedGraphNode.IncomingCount, TargetNullValue='—'}"
-                                       Style="{StaticResource ExplorerValue}" />
-                            <TextBlock Text="OUTGOING RELATIONSHIPS" Style="{StaticResource ExplorerLabel}" />
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
+                            <TextBlock Text="OUTGOING RELATIONSHIPS" Foreground="{StaticResource Brush.TextMuted}"
+                                       FontSize="10" FontWeight="SemiBold" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedGraphNode.OutgoingCount, TargetNullValue='—'}"
-                                       Style="{StaticResource ExplorerValue}" />
-
-                            <Border Height="1" Background="{StaticResource Brush.Line}" Margin="0,18,0,4" />
-
-                            <TextBlock Text="SELECTED RELATIONSHIP" Style="{StaticResource Text.Eyebrow}"
-                                       Foreground="{StaticResource Brush.AccentStructural}" Margin="0,10,0,0" />
-                            <TextBlock Text="{Binding SelectedDependency.Source, TargetNullValue='Select a row in the relationship ledger'}"
-                                       Style="{StaticResource ExplorerValue}" FontWeight="SemiBold" Margin="0,8,0,0" />
-                            <TextBlock Text="{Binding SelectedDependency.Target, StringFormat='→  {0}', TargetNullValue='—'}"
-                                       Style="{StaticResource ExplorerValue}" Margin="0,4,0,0" />
-                            <TextBlock Text="SOURCE LAYER" Style="{StaticResource ExplorerLabel}" />
-                            <TextBlock Text="{Binding SelectedDependency.SourceLayer, TargetNullValue='Not classified'}"
-                                       Style="{StaticResource ExplorerValue}" />
-                            <TextBlock Text="TARGET LAYER" Style="{StaticResource ExplorerLabel}" />
-                            <TextBlock Text="{Binding SelectedDependency.TargetLayer, TargetNullValue='Not classified'}"
-                                       Style="{StaticResource ExplorerValue}" />
-                            <TextBlock Text="DEPENDENCY TYPE" Style="{StaticResource ExplorerLabel}" />
-                            <TextBlock Text="{Binding SelectedDependency.DependencyType, TargetNullValue='Not supplied'}"
-                                       Style="{StaticResource ExplorerValue}" />
-                            <TextBlock Text="DISCOVERY EVIDENCE" Style="{StaticResource ExplorerLabel}" />
-                            <TextBlock Text="{Binding SelectedDependency.File, TargetNullValue='No source file supplied'}"
-                                       Style="{StaticResource ExplorerValue}" FontFamily="{StaticResource Font.Data}" />
-                            <TextBlock
-                                Text="Direction is preserved exactly as reported by the dependency detector. The graph does not infer allowed or forbidden architecture boundaries."
-                                Foreground="{StaticResource Brush.TextMuted}" FontSize="11"
-                                TextWrapping="Wrap" Margin="0,16,0,0" />
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
+                            <TextBlock Text="GRAPH SEMANTICS" Foreground="{StaticResource Brush.TextMuted}"
+                                       FontSize="10" FontWeight="SemiBold" Margin="0,18,0,4" />
+                            <TextBlock Text="Edges preserve the source-to-target direction reported by the detector. Repeated source-target pairs are represented as one visual edge; the relationship ledger retains the individual records."
+                                       Foreground="{StaticResource Brush.TextMuted}" FontSize="11"
+                                       TextWrapping="Wrap" />
                         </StackPanel>
                     </ScrollViewer>
-
-                    <Border Grid.Row="2" Padding="12" BorderBrush="{StaticResource Brush.Line}"
-                            BorderThickness="0,1,0,0">
-                        <Button Content="Copy relationship details"
-                                Command="{Binding CopySelectedDependencyCommand}"
-                                Style="{StaticResource Button.Primary}"
-                                HorizontalAlignment="Stretch" MinHeight="36" />
-                    </Border>
                 </Grid>
             </Border>
         </Grid>

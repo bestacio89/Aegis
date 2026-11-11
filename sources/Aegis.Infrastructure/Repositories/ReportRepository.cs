@@ -57,10 +57,11 @@ public sealed class ReportRepository : IReportRepository
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
 
-        var projectPathIdentity = NormalizeProjectPath(projectPath);
+        var fullProjectPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(projectPath));
+        var projectPathIdentity = NormalizeProjectPath(fullProjectPath);
         var entity = new ReportEntity
         {
-            ProjectName = Path.GetFileName(projectPathIdentity),
+            ProjectName = Path.GetFileName(fullProjectPath),
             ProjectPath = projectPathIdentity,
             Language = context.Language,
             Framework = context.DetectedFrameworks.FirstOrDefault() ?? context.Framework ?? "Unknown",

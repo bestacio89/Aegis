@@ -105,6 +105,12 @@ public sealed class RuleEngine
             projectPath,
             context,
             diagnostics);
+
+        // Rule applicability must see the same discovery evidence that is
+        // preserved in the report. Otherwise a failed module discovery could
+        // be mistaken for proof that a candidate pattern is absent.
+        context.DiscoveryDiagnostics = diagnostics.ToList();
+
         var executions = new List<(IEvaluator Evaluator, string Path, ProjectArchitectureContext Context)>();
 
         foreach (var evaluator in _evaluators)

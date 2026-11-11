@@ -174,7 +174,7 @@ public final class SemanticEngineBenchmark {
             for (ClassOrInterfaceType type : unit.findAll(ClassOrInterfaceType.class)) {
                 resolutionAttempts++;
                 try {
-                    String qualifiedName = type.resolve().getQualifiedName();
+                    String qualifiedName = type.resolve().asReferenceType().getQualifiedName();
                     resolvedBindings++;
                     if (EXPECTED_SOURCE_TYPES.contains(qualifiedName)) {
                         resolvedExpectedTypes.add(qualifiedName);

@@ -623,6 +623,12 @@ public sealed class DocumentationEvaluator :
         return false;
     }
 
+    private static string NormalizePath(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        return Path.GetFullPath(path);
+    }
+
     private static string DetectLanguage(string file)
     {
         return Path.GetExtension(file).ToLowerInvariant() switch

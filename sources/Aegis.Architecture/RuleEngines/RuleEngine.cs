@@ -400,6 +400,8 @@ public sealed class RuleEngine
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
 
+        var serializedDetailCount = messages.Count;
+
         var incompleteReason = metadata.GetValueOrDefault("IncompleteReason");
         if (!string.IsNullOrWhiteSpace(incompleteReason))
             messages.Add(incompleteReason);
@@ -442,7 +444,7 @@ public sealed class RuleEngine
 
         // Some evaluators cap serialized detail to keep reports bounded. Preserve
         // the declared count as evidence so truncation cannot make coverage look clean.
-        var omittedCount = Math.Max(0, reportedCount - messages.Count);
+        var omittedCount = Math.Max(0, reportedCount - serializedDetailCount);
         if (omittedCount > 0 || (hasPartialStatus && messages.Count == 0 && reportedCount == 0))
         {
             diagnostics.Add(new AnalysisDiagnostic

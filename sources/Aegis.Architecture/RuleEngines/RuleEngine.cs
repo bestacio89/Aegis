@@ -390,12 +390,24 @@ public sealed class RuleEngine
         var status = metadata.GetValueOrDefault("AnalysisStatus");
         var detailText = metadata.GetValueOrDefault("Diagnostics");
         var messages = string.IsNullOrWhiteSpace(detailText)
-            ? Array.Empty<string>()
+            ? new List<string>()
             : detailText.Split(
                     ['\r', '\n'],
                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Distinct(StringComparer.Ordinal)
-                .ToArray();
+                .ToList();
+
+        var incompleteReason = metadata.GetValueOrDefault("IncompleteReason");
+        if (!string.IsNullOrWhiteSpace(incompleteReason))
+            messages.Add(incompleteReason);
+
+        var unreadableFilePaths = metadata.GetValueOrDefault("UnreadableFilePaths");
+        if (!string.IsNullOrWhiteSpace(unreadableFilePaths))
+            messages.Add($"Unreadable source paths (up to 20):{Environment.NewLine}{unreadableFilePaths}");
+
+        messages = messages
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
         var reportedCount = result.Metrics.TryGetValue("DiagnosticCount", out var count)
             && double.IsFinite(count)

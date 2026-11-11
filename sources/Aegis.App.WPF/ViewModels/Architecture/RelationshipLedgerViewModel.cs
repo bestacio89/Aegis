@@ -19,6 +19,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
     public RelationshipLedgerViewModel()
     {
         LayerFilters = ["All"];
+        ScopeFilters = ["All", "Production", "Test"];
         _dependenciesView = CollectionViewSource.GetDefaultView(Dependencies);
         _dependenciesView.Filter = MatchesFilter;
     }
@@ -29,9 +30,12 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
 
     public IReadOnlyList<string> LayerFilters { get; private set; }
 
+    public IReadOnlyList<string> ScopeFilters { get; } 
+
     [ObservableProperty] private string projectName = "No assessment loaded";
     [ObservableProperty] private string searchText = string.Empty;
     [ObservableProperty] private string selectedLayer = "All";
+    [ObservableProperty] private string selectedScope = "All";
     [ObservableProperty] private ArchitectureDependencyContext? selectedDependency;
     [ObservableProperty] private int totalDependencies;
     [ObservableProperty] private int filteredDependencies;
@@ -39,6 +43,8 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
     partial void OnSearchTextChanged(string value) => RefreshFilter();
 
     partial void OnSelectedLayerChanged(string value) => RefreshFilter();
+
+    partial void OnSelectedScopeChanged(string value) => RefreshFilter();
 
     partial void OnSelectedDependencyChanged(ArchitectureDependencyContext? value) =>
         CopySelectedDependencyCommand.NotifyCanExecuteChanged();
@@ -74,6 +80,9 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
         if (!LayerFilters.Contains(SelectedLayer, StringComparer.OrdinalIgnoreCase))
             SelectedLayer = "All";
 
+        if (!ScopeFilters.Contains(SelectedScope, StringComparer.OrdinalIgnoreCase))
+            SelectedScope = "All";
+
         OnPropertyChanged(nameof(Dependencies));
         OnPropertyChanged(nameof(DependenciesView));
         OnPropertyChanged(nameof(LayerFilters));
@@ -87,6 +96,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
     {
         SearchText = string.Empty;
         SelectedLayer = "All";
+        SelectedScope = "All";
         SelectedDependency = null;
     }
 
@@ -101,6 +111,9 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             Source layer: {dependency.SourceLayer}
             Target layer: {dependency.TargetLayer}
             Dependency type: {dependency.DependencyType}
+            Scope: {dependency.Scope}
+            Source project: {dependency.SourceProjectPath}
+            Target project: {dependency.TargetProjectPath}
             Evidence file: {dependency.File}
             """);
     }
@@ -119,6 +132,12 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             return false;
         }
 
+        if (!string.Equals(SelectedScope, "All", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(dependency.Scope, SelectedScope, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         if (string.IsNullOrWhiteSpace(SearchText))
             return true;
 
@@ -128,6 +147,9 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             || Contains(dependency.SourceLayer, query)
             || Contains(dependency.TargetLayer, query)
             || Contains(dependency.DependencyType, query)
+            || Contains(dependency.Scope, query)
+            || Contains(dependency.SourceProjectPath, query)
+            || Contains(dependency.TargetProjectPath, query)
             || Contains(dependency.File, query);
     }
 

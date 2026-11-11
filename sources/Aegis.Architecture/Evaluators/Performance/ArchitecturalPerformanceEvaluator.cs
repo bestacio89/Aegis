@@ -248,10 +248,16 @@ public sealed class ArchitecturalPerformanceEvaluator
         var sanitized = SourceCodeMasker.Mask(content);
         var loopAnalysis = AnalyzeLoopBodies(sanitized, language);
         var score = AnalyzePerformanceSignals(sanitized, language, loopAnalysis);
-        var blockingMatches = FindBlockingOperations(sanitized, language);
+        var blockingCallMatches = FindBlockingCallOperations(sanitized, language);
         var syncIoMatches = _policy.RequireAsyncForIOMethods
             ? FindSynchronousIOOperations(sanitized, language)
             : Array.Empty<Match>();
+        var blockingMatches = blockingCallMatches
+            .Concat(syncIoMatches)
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToArray();
         var nestedLoopMatches = loopAnalysis.NestedLoopMatches;
         var threadCreationMatches = loopAnalysis.ThreadCreationMatches;
         var stringConcatenationMatches = loopAnalysis.StringConcatenationMatches;
@@ -313,13 +319,13 @@ public sealed class ArchitecturalPerformanceEvaluator
             .Select(group => group.First())
             .OrderBy(match => match.Index)
             .ToArray();
-        var asyncMatches = blockingMatches
+        var asyncMatches = blockingCallMatches
             .Concat(syncIoMatches)
             .GroupBy(match => match.Index)
             .Select(group => group.First())
             .OrderBy(match => match.Index)
             .ToArray();
-        var concurrencyMatches = blockingMatches
+        var concurrencyMatches = blockingCallMatches
             .Concat(threadCreationMatches)
             .GroupBy(match => match.Index)
             .Select(group => group.First())
@@ -342,7 +348,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             asyncMatches,
             content,
             sanitized,
-            $"Async maturity {score.Async * 100:0.##}/100; configured blocking calls {blockingMatches.Count}; synchronous I/O operations {syncIoMatches.Length}.");
+            $"Async maturity {score.Async * 100:0.##}/100; configured blocking calls {blockingCallMatches.Count}; synchronous I/O operations {syncIoMatches.Length}.");
         AddMetricEvidence(
             result,
             evidence,
@@ -360,7 +366,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             concurrencyMatches,
             content,
             sanitized,
-            $"Concurrency score {score.Concurrency * 100:0.##}/100; blocking calls {blockingMatches.Count}; thread-creation signals {threadCreationMatches.Length}.");
+            $"Concurrency score {score.Concurrency * 100:0.##}/100; blocking calls {blockingCallMatches.Count}; thread-creation signals {threadCreationMatches.Length}.");
         AddMetricEvidence(
             result,
             evidence,

@@ -571,14 +571,31 @@ public sealed class ProjectArchitectureContextDetectorTests
                 "public sealed class Component { }");
         }
 
+        var contractPath = Path.Combine(directory.Path, "src", "Http.Contracts");
+        Directory.CreateDirectory(contractPath);
+        File.WriteAllText(
+            Path.Combine(contractPath, "Http.Contracts.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+
         var context = ProjectArchitectureContextDetector.Detect(directory.Path);
 
-        Assert.Equal(moduleNames.Length, context.Modules.Count);
-        Assert.All(context.Modules, module =>
+        Assert.Equal(moduleNames.Length + 1, context.Modules.Count);
+        foreach (var moduleName in moduleNames)
         {
+            var module = Assert.Single(context.Modules, item => item.Name == moduleName);
             Assert.Equal("Infrastructure", module.Type);
             Assert.Equal("Infrastructure", Assert.Single(module.Layers).Name);
-        });
+        }
+
+        var contractsModule = Assert.Single(
+            context.Modules,
+            module => module.Name == "Http.Contracts");
+        Assert.Equal("Contracts", contractsModule.Type);
+        Assert.Equal("Contracts", Assert.Single(contractsModule.Layers).Name);
     }
 
     [Fact]

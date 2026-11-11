@@ -31,6 +31,23 @@ public sealed class MavenProjectModelTests
                   </properties>
                   <modules><module>../service</module></modules>
                   <dependencies><dependency><groupId>org.example</groupId><artifactId>parent-api</artifactId><version>1.0.0</version></dependency></dependencies>
+                  <build>
+                    <plugins>
+                      <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                          <annotationProcessorPaths>
+                            <path>
+                              <groupId>org.example</groupId>
+                              <artifactId>parent-processor</artifactId>
+                              <version>1.0.0</version>
+                            </path>
+                          </annotationProcessorPaths>
+                        </configuration>
+                      </plugin>
+                    </plugins>
+                  </build>
                   <dependencyManagement>
                     <dependencies>
                       <dependency>
@@ -304,6 +321,84 @@ public sealed class MavenProjectModelTests
                 item.Name == "org.external:missing-bom"
                 && item.Kind == DependencyEvidenceKind.Platform
                 && item.Scope == "import");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_preserves_maven_dependency_scope_and_declaration_metadata_matrix()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>org.example</groupId>
+                  <artifactId>scope-matrix</artifactId>
+                  <version>1.0.0</version>
+                  <dependencies>
+                    <dependency>
+                      <groupId>org.example</groupId>
+                      <artifactId>compile-api</artifactId>
+                      <version>1.0.0</version>
+                    </dependency>
+                    <dependency>
+                      <groupId>org.example</groupId>
+                      <artifactId>provided-api</artifactId>
+                      <version>2.0.0</version>
+                      <scope>provided</scope>
+                    </dependency>
+                    <dependency>
+                      <groupId>org.example</groupId>
+                      <artifactId>system-api</artifactId>
+                      <version>3.0.0</version>
+                      <scope>system</scope>
+                      <systemPath>${project.basedir}/lib/system-api.jar</systemPath>
+                    </dependency>
+                    <dependency>
+                      <groupId>org.example</groupId>
+                      <artifactId>optional-test-support</artifactId>
+                      <version>4.0.0</version>
+                      <scope>test</scope>
+                      <optional>true</optional>
+                      <type>test-jar</type>
+                      <classifier>tests</classifier>
+                    </dependency>
+                  </dependencies>
+                </project>
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.MavenProjectModel>(module.MavenModel);
+
+            Assert.Equal("compile", Assert.Single(model.Dependencies,
+                dependency => dependency.ArtifactId == "compile-api").Scope);
+            Assert.Equal("provided", Assert.Single(model.Dependencies,
+                dependency => dependency.ArtifactId == "provided-api").Scope);
+            Assert.Equal("system", Assert.Single(model.Dependencies,
+                dependency => dependency.ArtifactId == "system-api").Scope);
+
+            var optional = Assert.Single(model.Dependencies,
+                dependency => dependency.ArtifactId == "optional-test-support");
+            Assert.Equal("test", optional.Scope);
+            Assert.True(optional.Optional);
+            Assert.Equal("test-jar", optional.Type);
+            Assert.Equal("tests", optional.Classifier);
+
+            Assert.Contains(context.DependencyEvidence, evidence =>
+                evidence.Name == "org.example:provided-api"
+                && evidence.Scope == "provided" && !evidence.IsTestOnly);
+            Assert.Contains(context.DependencyEvidence, evidence =>
+                evidence.Name == "org.example:system-api"
+                && evidence.Scope == "system" && !evidence.IsTestOnly);
+            Assert.Contains(context.DependencyEvidence, evidence =>
+                evidence.Name == "org.example:optional-test-support"
+                && evidence.Scope == "test" && evidence.IsTestOnly);
         }
         finally
         {

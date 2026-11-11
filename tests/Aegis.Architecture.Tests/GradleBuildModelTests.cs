@@ -42,6 +42,7 @@ public sealed class GradleBuildModelTests
                     compileOnly("org.example:provided-api:1.0.0")
                     runtimeOnly("org.example:runtime-implementation:1.0.0")
                     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.2.0")
+                    contestImplementation("org.example:contest-support:1.0.0")
                 }
                 """);
             File.WriteAllText(Path.Combine(catalogDirectory, "libs.versions.toml"),
@@ -111,6 +112,9 @@ public sealed class GradleBuildModelTests
             Assert.Contains(context.DependencyEvidence, dependency =>
                 dependency.Name == "org.junit.platform:junit-platform-launcher"
                 && dependency.Scope == "testRuntimeOnly" && dependency.IsTestOnly);
+            Assert.Contains(context.DependencyEvidence, dependency =>
+                dependency.Name == "org.example:contest-support"
+                && dependency.Scope == "contestImplementation" && !dependency.IsTestOnly);
             Assert.Contains("org.springframework:spring-context", context.DetectedDependencies);
         }
         finally

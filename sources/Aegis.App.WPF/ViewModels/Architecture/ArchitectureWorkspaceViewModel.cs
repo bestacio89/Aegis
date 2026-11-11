@@ -7,7 +7,7 @@ namespace Aegis.Wpf.ViewModels.Architecture;
 public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
 {
     private readonly ArchitectureOverviewViewModel _overview;
-    private readonly DependencyGraphViewModel _explorer;
+    private readonly DependencyGraphViewModel _dependencyGraph;
     private readonly RelationshipLedgerViewModel _relationshipLedger;
     private readonly SectionDashboardViewModel _sections;
     private readonly LayerDashboardViewModel _layers;
@@ -27,7 +27,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         ReportVisualizationViewModel reports)
     {
         _overview = overview;
-        _explorer = explorer;
+        _dependencyGraph = explorer;
         _relationshipLedger = relationshipLedger;
         _sections = sections;
         _layers = layers;
@@ -38,7 +38,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         Tabs =
         [
             new ArchitectureTab("Overview", "◈", _overview),
-            new ArchitectureTab("Dependency Graph", "⌘", _explorer),
+            new ArchitectureTab("Dependency Graph", "⌘", _dependencyGraph),
             new ArchitectureTab("Relationship Ledger", "▤", _relationshipLedger),
             new ArchitectureTab("Sections", "▦", _sections),
             new ArchitectureTab("Layers", "◫", _layers),

@@ -396,12 +396,12 @@ internal static class ArchitectureRuleMetricContracts
     }
 
     /// <summary>
-    /// Determines whether a frontend rule is compatible with the detected
-    /// frontend family.
+    /// Determines whether a rule is compatible with the detected repository
+    /// context, including language-specific, architectural-layer, and frontend
+    /// framework applicability.
     ///
-    /// Unknown technology is not treated as proof that a rule is inapplicable.
-    /// A positively identified, different frontend family excludes a
-    /// framework-specific rule.
+    /// Unknown or incomplete technology discovery is not treated as proof
+    /// that a rule is inapplicable.
     /// </summary>
     public static bool TryGetApplicability(
         ArchitectureRuleDefinition rule,

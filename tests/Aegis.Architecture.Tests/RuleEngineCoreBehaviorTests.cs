@@ -416,13 +416,16 @@ public sealed class RuleEngineCoreBehaviorTests
         new("CircularDependencyEvaluator", target)
         {
             Category = "Architecture",
+            Evidence = $"Dependency cycle: {target} -> DependencyA -> {target}.",
             Metrics = new Dictionary<string, double>
             {
                 ["CircularDependencyCount"] = circularDependencyCount
             },
             Metadata = new Dictionary<string, string>
             {
-                ["EvaluationScope"] = "Project"
+                ["EvaluationScope"] = "Project",
+                ["Evidence.CircularDependencyCount"] =
+                    $"Dependency cycle: {target} -> DependencyA -> {target}."
             }
         };
 }

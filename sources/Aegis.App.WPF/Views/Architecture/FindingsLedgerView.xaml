@@ -225,7 +225,8 @@
                 BorderThickness="1"
                 CornerRadius="4"
                 Padding="8">
-                <DataGrid
+                <Grid>
+                    <DataGrid
                     ItemsSource="{Binding FindingsView}"
                     SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
                     AutoGenerateColumns="False"
@@ -272,6 +273,37 @@
                         <DataGridTextColumn Header="Finding" Binding="{Binding Message}" Width="*" />
                     </DataGrid.Columns>
                 </DataGrid>
+                    <Border Background="{StaticResource Brush.PanelElevated}"
+                            Padding="24"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            MaxWidth="430">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FilteredFindings}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel>
+                            <TextBlock Text="No findings to display"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.TextPrimary}"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="No findings match the current filters. Clear the filters or run an assessment to populate the findings ledger."
+                                       Foreground="{StaticResource Brush.TextMuted}"
+                                       FontSize="12"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap"
+                                       Margin="0,8,0,0" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Border>
 
             <Border

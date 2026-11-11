@@ -17,15 +17,15 @@ internal static class NatureDetector
 
         var project = ctx.ProductionModules.SingleOrDefault();
 
-        if (project is null && ctx.TestModules.Count > 0)
-        {
-            ctx.Nature = "TestSuite";
-            return;
-        }
-
         if (project is null && ctx.TestSupportModules.Count > 0)
         {
             ctx.Nature = "Library";
+            return;
+        }
+
+        if (project is null && ctx.TestModules.Count > 0)
+        {
+            ctx.Nature = "TestSuite";
             return;
         }
         if (project is not null)

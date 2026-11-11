@@ -282,7 +282,16 @@ public sealed class ObserverPatternEvaluator
             result.Metrics["PublishCount"] = publishCount;
             result.Metrics["SubscriptionCount"] = subscribeCount;
             result.Metrics["LifecycleManaged"] = hasLifecycle ? 1 : 0;
-            result.Metrics["ObserverUnsubscribeMissingCount"] = leakRisk;
+
+            // This rule is defined over subscription candidates, not every
+            // event-driven component. Omitting the rule metric from publishers,
+            // handlers, and polling-only components lets the project summary
+            // prove NotApplicable when no subscriptions exist.
+            if (subscribeCount > 0)
+            {
+                result.Metrics["ObserverUnsubscribeMissingCount"] = leakRisk;
+            }
+
             // Retained as a descriptive heuristic for legacy consumers; rules
             // use the observer-specific metric to avoid collisions with other patterns.
             result.Metrics["LeakRisk"] = leakRisk;

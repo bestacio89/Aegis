@@ -287,7 +287,7 @@ public sealed class AnemicDomainModelEvaluator
                     stateMemberCount,
                     methodCount);
 
-                var language = DetectLanguage(file);
+                var language = ResolveLanguageForFile(file);
                 var framework = ResolveFrameworkForFile(file, projectPath, context);
                 var evidence = BuildTypeEvidence(
                     content,
@@ -363,7 +363,7 @@ public sealed class AnemicDomainModelEvaluator
 
         result.Language = language;
         result.Framework = framework;
-        result.Layer = ResolveLayer(file);
+        result.Layer = ResolveLayerForFile(file);
         result.DetectionConfidence = context?.Confidence ?? 0;
         result.Category = "DesignPattern";
 

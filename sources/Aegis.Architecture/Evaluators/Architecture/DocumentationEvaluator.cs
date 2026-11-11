@@ -463,12 +463,14 @@ public sealed class DocumentationEvaluator :
     }
 
     private static bool HasPublicModifier(MemberDeclarationSyntax declaration) =>
-        declaration.Modifiers.Any(SyntaxKind.PublicKeyword);
+        declaration.ChildTokens().Any(token =>
+            token.IsKind(SyntaxKind.PublicKeyword));
 
     private static bool HasNonPublicModifier(MemberDeclarationSyntax declaration) =>
-        declaration.Modifiers.Any(SyntaxKind.PrivateKeyword)
-        || declaration.Modifiers.Any(SyntaxKind.ProtectedKeyword)
-        || declaration.Modifiers.Any(SyntaxKind.InternalKeyword);
+        declaration.ChildTokens().Any(token =>
+            token.IsKind(SyntaxKind.PrivateKeyword)
+            || token.IsKind(SyntaxKind.ProtectedKeyword)
+            || token.IsKind(SyntaxKind.InternalKeyword));
 
     private static DeclarationCounts CountCommentDocumentedDeclarations(
         string content,

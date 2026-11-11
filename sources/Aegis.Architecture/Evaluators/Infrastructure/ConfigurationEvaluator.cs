@@ -14,9 +14,6 @@ namespace Aegis.Architecture.Evaluators.Infrastructure;
 
 public sealed class ConfigurationEvaluator : BaseArchitectureEvaluator
 {
-    private const string FileScope = "File";
-    private const string ProjectScope = "Project";
-
     // Match the JSON-with-comments/trailing-commas behavior accepted by
     // Microsoft.Extensions.Configuration for application configuration files.
     private static readonly JsonDocumentOptions JsonOptions = new()

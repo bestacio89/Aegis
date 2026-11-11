@@ -205,6 +205,9 @@ public sealed class DesignPatternEvaluatorBehaviorTests
         Assert.Equal(0, result.Metrics["Methods"]);
         Assert.Equal(0, result.Metrics["BehaviorRatio"]);
         Assert.Equal(bool.FalseString, result.Metadata["SemanticAnalysisPerformed"]);
+        Assert.Equal("FileMetrics", result.Metadata["EvidenceScope.AnemicDomainModelIndex"]);
+        Assert.Contains("OrderEntity", result.Evidence);
+        Assert.Contains("Properties", result.Metadata["Evidence.AnemicDomainModelIndex"]);
     }
 
 
@@ -221,6 +224,39 @@ public sealed class DesignPatternEvaluatorBehaviorTests
             result => result.Metadata.GetValueOrDefault("EvaluationScope") == "Project");
 
         Assert.False(summary.Metrics.ContainsKey("GodClassDensity"));
+    }
+
+    [Fact]
+    public async Task AnemicDomainModelEvaluator_excludes_dtos_services_records_and_abstract_base_types()
+    {
+        using var project = new TemporaryProject();
+        project.Write("back/Domain/DomainSupportTypes.cs", """
+            public sealed class OrderDto
+            {
+                public int Id { get; set; }
+            }
+
+            public sealed class DomainService
+            {
+                public string Name { get; set; } = string.Empty;
+            }
+
+            public abstract class Entity<T>
+            {
+                public T Id { get; set; }
+            }
+
+            public record Currency
+            {
+                public decimal Amount { get; init; }
+            }
+            """);
+
+        var results = await Evaluate(project, "AnemicDomainModelEvaluator");
+
+        Assert.DoesNotContain(
+            results,
+            result => result.Metrics.ContainsKey("AnemicDomainModelIndex"));
     }
 
     [Fact]

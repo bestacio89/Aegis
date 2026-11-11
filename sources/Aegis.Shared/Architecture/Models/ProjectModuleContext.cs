@@ -1,3 +1,5 @@
+using Aegis.Shared.Architecture.Enums;
+
 namespace Aegis.Shared.Architecture.Models;
 
 /// <summary>
@@ -13,6 +15,9 @@ public sealed class ProjectModuleContext
     public string? ProjectFile { get; set; }
 
     public List<string> ProjectFiles { get; set; } = [];
+
+    /// <summary>Build system owning this project module, independent of the repository aggregate.</summary>
+    public ArchitectureBuildSystem BuildSystem { get; set; } = ArchitectureBuildSystem.Unknown;
 
     /// <summary>Semantic architecture layer inferred from the module identity.</summary>
     public string? Type { get; set; }

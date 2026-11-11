@@ -15,7 +15,11 @@ internal static class ModuleDetector
     private static readonly string[] ProjectManifestNames =
     [
         "package.json",
-        "pom.xml"
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "settings.gradle",
+        "settings.gradle.kts"
     ];
 
     public static void Analyze(
@@ -59,6 +63,7 @@ internal static class ModuleDetector
                 Path = modulePath,
                 ProjectFile = primaryProjectFile,
                 ProjectFiles = projectFiles,
+                BuildSystem = ResolveBuildSystem(projectFiles),
                 Type = DetectModuleType(context.RootPath, modulePath, moduleName)
             };
 
@@ -72,10 +77,17 @@ internal static class ModuleDetector
             if (packageManifest is not null)
                 PopulateNodeMetadata(module, packageManifest);
 
-            var pomManifest = projectFiles.FirstOrDefault(file =>
-                Path.GetFileName(file).Equals("pom.xml", StringComparison.OrdinalIgnoreCase));
-            if (pomManifest is not null)
-                PopulateMavenMetadata(module, pomManifest);
+            if (module.BuildSystem == Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Maven)
+            {
+                var pomManifest = projectFiles.FirstOrDefault(
+                    LanguageAndBuildDetector.IsMavenManifest);
+                if (pomManifest is not null)
+                    PopulateMavenMetadata(module, pomManifest);
+            }
+            else if (module.BuildSystem == Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Gradle)
+            {
+                PopulateGradleMetadata(module);
+            }
 
             if (module.IsTestProject
                 || string.Equals(
@@ -369,6 +381,33 @@ internal static class ModuleDetector
         }
     }
 
+    private static void PopulateGradleMetadata(ProjectModuleContext module)
+    {
+        module.ProjectKind = "JavaProject";
+        module.Framework = "Java";
+        AddFramework(module, "Java");
+    }
+
+    private static Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem ResolveBuildSystem(
+        IReadOnlyCollection<string> projectFiles)
+    {
+        var buildSystems = new List<Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem>();
+
+        if (projectFiles.Any(file => file.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
+            buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.DotNet);
+        if (projectFiles.Any(LanguageAndBuildDetector.IsMavenManifest))
+            buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Maven);
+        if (projectFiles.Any(LanguageAndBuildDetector.IsGradleManifest))
+            buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Gradle);
+        if (projectFiles.Any(file =>
+                Path.GetFileName(file).Equals("package.json", StringComparison.OrdinalIgnoreCase)))
+            buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Npm);
+
+        return buildSystems.Count == 1
+            ? buildSystems[0]
+            : Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Unknown;
+    }
+
     private static void PopulateMavenMetadata(
         ProjectModuleContext module,
         string pomFile)
@@ -427,7 +466,13 @@ internal static class ModuleDetector
             return 0;
         if (name.Equals("pom.xml", StringComparison.OrdinalIgnoreCase))
             return 1;
-        return 2;
+        if (name.Equals("settings.gradle", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("settings.gradle.kts", StringComparison.OrdinalIgnoreCase))
+            return 2;
+        if (name.Equals("build.gradle", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase))
+            return 3;
+        return 4;
     }
 
     private static string ResolveModuleName(string projectFile, string modulePath)
@@ -470,7 +515,9 @@ internal static class ModuleDetector
             }
         }
 
-        return Path.GetFileNameWithoutExtension(projectFile);
+        return Path.GetFileName(modulePath.TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar));
     }
 
     private static string DetectModuleType(

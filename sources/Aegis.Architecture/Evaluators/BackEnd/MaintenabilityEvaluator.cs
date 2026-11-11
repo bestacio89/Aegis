@@ -208,7 +208,9 @@ public sealed class MaintainabilityEvaluator
         result.Metadata["CommentDensityMeasurement"] =
             "Percentage of non-empty physical lines containing comment text.";
         result.Metadata["MaintainabilityMeasurement"] =
-            "Aegis heuristic (0-100): 100 minus weighted lexical decision points, excess lines beyond policy limit, and a bounded penalty for comment density below policy minimum. This is not a compiler-backed or industry-standard maintainability index.";
+            "Aegis heuristic (0-100): 100 minus weighted lexical decision points and excess lines beyond the policy limit. Comment density is informational only and does not affect the score. This is not a compiler-backed or industry-standard maintainability index.";
+        result.Metadata["CommentDensityInterpretation"] =
+            "Informational metric only. Low comment density is not treated as a maintainability defect.";
         result.Metadata["AnalysisComplete"] = "true";
         result.Metadata["AnalysisStatus"] = "Completed";
         result.Evidence = string.Join(Environment.NewLine, metrics.Evidence);
@@ -331,14 +333,10 @@ public sealed class MaintainabilityEvaluator
         var complexityPenalty = decisionPointCount * Math.Max(0, _policy.ComplexityWeight);
         var excessLines = Math.Max(0, nonEmptyLineCount - _policy.MaxLinesPerFile);
         var linePenalty = excessLines * Math.Max(0, _policy.LineWeight);
-        var commentPenalty = _policy.RequireCommentDensityCheck
-            && roundedCommentDensity < _policy.MinCommentDensity
-                ? Math.Min(
-                    20.0,
-                    (_policy.MinCommentDensity - roundedCommentDensity) * 2.0)
-                : 0.0;
+        // Comment volume is deliberately excluded from maintainability scoring.
+        // Low comment density is not a defect when code is self-descriptive.
         var score = Math.Clamp(
-            100.0 - complexityPenalty - linePenalty - commentPenalty,
+            100.0 - complexityPenalty - linePenalty,
             0.0,
             100.0);
 
@@ -348,7 +346,7 @@ public sealed class MaintainabilityEvaluator
             $"decision points {decisionPointCount} (penalty {complexityPenalty:0.##}); " +
             $"non-empty lines {nonEmptyLineCount}, maximum {_policy.MaxLinesPerFile} " +
             $"(penalty {linePenalty:0.##}); comment density {roundedCommentDensity:0.##}% " +
-            $"against minimum {_policy.MinCommentDensity:0.##}% (penalty {commentPenalty:0.##}).";
+            "(informational only; not included in the score).";
 
         var evidence = new List<string> { evidenceSummary };
         foreach (var match in decisionMatches.Take(50))
@@ -356,15 +354,6 @@ public sealed class MaintainabilityEvaluator
             var lineNumber = GetLineNumber(sanitized, match.Index);
             evidence.Add(
                 $"Line {lineNumber}: decision point '{match.Value}' — {GetSourceLine(content, lineNumber)}");
-        }
-
-        if (commentPenalty > 0)
-        {
-            evidence.AddRange(commentLines
-                .Order()
-                .Take(10)
-                .Select(lineNumber =>
-                    $"Line {lineNumber}: comment — {GetSourceLine(content, lineNumber)}"));
         }
 
         return new MaintainabilityMetrics(

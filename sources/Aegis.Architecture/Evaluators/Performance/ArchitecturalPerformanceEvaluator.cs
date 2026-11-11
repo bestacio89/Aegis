@@ -137,9 +137,14 @@ public sealed class ArchitecturalPerformanceEvaluator
 
     private static readonly Regex LargeAllocationRegex =
         new(
-            @"\b(new\s+(List|Array|Dictionary|HashMap|Set))\b",
+            @"\bnew\s+(?:List|Dictionary|HashMap|HashSet)\s*(?:<[^>]+>)?\s*\(\s*(?<capacity>\d+)\s*\)|\bnew\s+[A-Za-z_][A-Za-z0-9_<>?]*\s*\[\s*(?<capacity>\d+)\s*\]",
             RegexOptions.IgnoreCase |
-            RegexOptions.Compiled);
+            RegexOptions.Compiled |
+            RegexOptions.CultureInvariant);
+
+    private static readonly Regex AwaitRegex = new(
+        @"\bawait\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
 
 
@@ -223,7 +228,7 @@ public sealed class ArchitecturalPerformanceEvaluator
                 continue;
             }
 
-            results.Add(EvaluateFile(file, content));
+            results.Add(EvaluateFile(file, content, projectPath));
         }
 
         if (results.Count > 0 || unreadableFiles.Count > 0)
@@ -244,29 +249,38 @@ public sealed class ArchitecturalPerformanceEvaluator
 
     private ArchitectureEvaluatorResult EvaluateFile(
         string file,
-        string content)
+        string content,
+        string projectPath)
     {
         var language = DetectLanguage(file);
         var sanitized = SourceCodeMasker.Mask(content);
         var score = AnalyzePerformanceSignals(sanitized, language);
         var blockingMatches = FindBlockingOperations(sanitized, language);
-        var evidenceItems = blockingMatches
-            .Select(match =>
-            {
-                var lineNumber = GetLineNumber(sanitized, match.Index);
-                var sourceLine = GetSourceLine(content, lineNumber);
-                return $"Line {lineNumber}: {match.Value.Trim()} — {sourceLine}";
-            })
+        var syncIoMatches = _policy.RequireAsyncForIOMethods
+            ? FindSynchronousIOOperations(sanitized, language)
+            : Array.Empty<Match>();
+        var nestedLoopMatches = NestedLoopRegex.Matches(sanitized)
+            .Cast<Match>()
             .ToArray();
+        var threadCreationMatches = _policy.WarnThreadCreationInHotPaths
+            ? ThreadCreationRegex.Matches(sanitized).Cast<Match>().ToArray()
+            : Array.Empty<Match>();
+        var stringConcatenationMatches = _policy.DetectStringConcatenationInLoops
+            ? StringConcatenationRegex.Matches(sanitized).Cast<Match>().ToArray()
+            : Array.Empty<Match>();
+        var largeAllocationMatches = _policy.DetectLargeCollectionsInitialization
+            ? FindLargeAllocationMatches(sanitized)
+            : Array.Empty<Match>();
 
+        var framework = ResolveFrameworkForFile(file, projectPath, Context!);
         var result = CreateResult(file, "Performance");
         result.Language = language;
-        result.Framework = Context?.Framework;
+        result.Framework = framework;
+
         var owningModule = Context?.Modules
             .Where(module => !string.IsNullOrWhiteSpace(module.Path))
             .OrderByDescending(module => module.Path.Length)
-            .FirstOrDefault(module =>
-                IsSameOrDescendantPath(file, module.Path));
+            .FirstOrDefault(module => IsSameOrDescendantPath(file, module.Path));
         result.Layer = owningModule?.Layers.FirstOrDefault()?.Name
             ?? owningModule?.Type;
         result.DetectionConfidence = Context?.Confidence ?? 0;
@@ -277,44 +291,163 @@ public sealed class ArchitecturalPerformanceEvaluator
         result.Metrics["IOMaturityScore"] = score.IO * 100;
         result.Metrics["BlockingIOCount"] = blockingMatches.Count;
         result.Metrics["PerformanceHealthIndex"] = score.Health;
+        result.Metrics["StringConcatenationAssignmentCount"] = stringConcatenationMatches.Length;
+        result.Metrics["LargeAllocationSignalCount"] = largeAllocationMatches.Length;
 
         result.Metadata["FileName"] = Path.GetFileName(file);
         result.Metadata["FilePath"] = file;
         result.Metadata["Language"] = language;
-        result.Metadata["Framework"] = result.Framework ?? "Unknown";
+        result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["Evaluator"] = Name;
         result.Metadata["EvaluationScope"] = BaseArchitectureEvaluator.FileScope;
-        result.Metadata["AnalysisComplete"] = "true";
+        result.Metadata["AnalysisComplete"] = bool.TrueString;
         result.Metadata["AnalysisStatus"] = "Completed";
         result.Metadata["MeasurementMethod"] = "SourcePatternHeuristic";
+        result.Metadata["StringConcatenationInterpretation"] =
+            "Informational only until concatenation can be associated with a specific loop body.";
+        result.Metadata["LargeAllocationInterpretation"] =
+            "Informational only; an allocation signal alone does not establish a performance defect.";
+        result.Metadata["AsyncMaturityInterpretation"] =
+            "Only configured blocking calls and synchronous I/O lower async maturity. A loop without I/O does not imply an async requirement.";
 
-        if (evidenceItems.Length > 0)
-        {
-            var firstLine = GetLineNumber(sanitized, blockingMatches[0].Index);
-            result.LineNumber = firstLine;
-            result.Evidence = string.Join(Environment.NewLine, evidenceItems);
-            result.Metadata["Evidence.BlockingIOCount"] =
-                string.Join(Environment.NewLine, evidenceItems);
-            result.Metadata["EvidenceLine.BlockingIOCount"] =
-                firstLine.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            result.Metadata["CodeSnippet.BlockingIOCount"] =
-                GetSourceLine(content, firstLine);
-        }
+        var healthMatches = nestedLoopMatches
+            .Concat(blockingMatches)
+            .Concat(threadCreationMatches)
+            .Concat(syncIoMatches)
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToArray();
+        var asyncMatches = blockingMatches
+            .Concat(syncIoMatches)
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToArray();
+        var concurrencyMatches = blockingMatches
+            .Concat(threadCreationMatches)
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToArray();
+
+        var evidence = new List<string>();
+        AddMetricEvidence(
+            result,
+            evidence,
+            "PerformanceHealthIndex",
+            healthMatches,
+            content,
+            sanitized,
+            $"Performance health {score.Health:0.##}/100; algorithmic {score.Algorithmic * 100:0.##}, concurrency {score.Concurrency * 100:0.##}, async {score.Async * 100:0.##}, I/O {score.IO * 100:0.##}.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "AsyncMaturityScore",
+            asyncMatches,
+            content,
+            sanitized,
+            $"Async maturity {score.Async * 100:0.##}/100; configured blocking calls {blockingMatches.Count}; synchronous I/O operations {syncIoMatches.Length}.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "AlgorithmicEfficiencyScore",
+            nestedLoopMatches,
+            content,
+            sanitized,
+            $"Algorithmic efficiency {score.Algorithmic * 100:0.##}/100; nested-loop patterns detected {nestedLoopMatches.Length}.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "ConcurrencyScore",
+            concurrencyMatches,
+            content,
+            sanitized,
+            $"Concurrency score {score.Concurrency * 100:0.##}/100; blocking calls {blockingMatches.Count}; thread-creation signals {threadCreationMatches.Length}.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "IOMaturityScore",
+            syncIoMatches,
+            content,
+            sanitized,
+            $"I/O maturity {score.IO * 100:0.##}/100; synchronous I/O operations detected {syncIoMatches.Length}.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "BlockingIOCount",
+            blockingMatches,
+            content,
+            sanitized,
+            $"Blocking I/O/blocking-operation count: {blockingMatches.Count}.");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "StringConcatenationAssignmentCount",
+            stringConcatenationMatches,
+            content,
+            sanitized,
+            $"String concatenation assignment signals: {stringConcatenationMatches.Length} (informational only).");
+        AddMetricEvidence(
+            result,
+            evidence,
+            "LargeAllocationSignalCount",
+            largeAllocationMatches,
+            content,
+            sanitized,
+            $"Large collection allocation signals: {largeAllocationMatches.Length} (informational only).");
+
+        result.Evidence = string.Join(Environment.NewLine, evidence);
+        var firstEvidence = healthMatches.FirstOrDefault()
+            ?? blockingMatches.FirstOrDefault()
+            ?? threadCreationMatches.FirstOrDefault()
+            ?? syncIoMatches.FirstOrDefault();
+        if (firstEvidence is not null)
+            result.LineNumber = GetLineNumber(sanitized, firstEvidence.Index);
 
         return result;
     }
 
-    private static List<Match> FindBlockingOperations(
+    private static void AddMetricEvidence(
+        ArchitectureEvaluatorResult result,
+        ICollection<string> aggregateEvidence,
+        string metricKey,
+        IReadOnlyCollection<Match> matches,
+        string source,
+        string sanitized,
+        string summary)
+    {
+        var evidence = matches.Count == 0
+            ? summary
+            : $"{summary}{Environment.NewLine}" + string.Join(
+                Environment.NewLine,
+                matches.Take(50).Select(match =>
+                {
+                    var line = GetLineNumber(sanitized, match.Index);
+                    return $"Line {line}: {GetSourceLine(source, line)}";
+                }));
+
+        result.Metadata[$"Evidence.{metricKey}"] = evidence;
+        result.Metadata[$"EvidenceSummary.{metricKey}"] = summary;
+        result.Metadata[$"EvidenceScope.{metricKey}"] = "FileMetrics";
+        aggregateEvidence.Add($"{metricKey}: {evidence}");
+
+        var first = matches.FirstOrDefault();
+        if (first is null)
+            return;
+
+        var lineNumber = GetLineNumber(sanitized, first.Index);
+        result.Metadata[$"EvidenceLine.{metricKey}"] =
+            lineNumber.ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
+        result.Metadata[$"CodeSnippet.{metricKey}"] = GetSourceLine(source, lineNumber);
+    }
+
+    private static IReadOnlyCollection<Match> FindSynchronousIOOperations(
         string content,
         string language)
     {
-        var matches = new List<Match>();
-
-        var blockingRegex = GetBlockingRegex(language);
-        if (blockingRegex is not null)
-            matches.AddRange(blockingRegex.Matches(content).Cast<Match>());
-
-        var syncIoRegex = language switch
+        var regex = language switch
         {
             "C#" => DotNetSyncIORegex,
             "Java" => JavaSyncIORegex,
@@ -323,10 +456,67 @@ public sealed class ArchitecturalPerformanceEvaluator
             _ => null
         };
 
-        if (syncIoRegex is not null)
-            matches.AddRange(syncIoRegex.Matches(content).Cast<Match>());
+        var matches = regex is null
+            ? new List<Match>()
+            : regex.Matches(content).Cast<Match>().ToList();
 
         if (language == "C#")
+        {
+            var readerVariables = ReaderVariableDeclarationRegex.Matches(content)
+                .Select(match => match.Groups["name"].Value.TrimStart('@'))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+            foreach (var variable in readerVariables)
+            {
+                var escaped = Regex.Escape(variable);
+                var readToEndRegex = new Regex(
+                    $@"\b{escaped}\s*\.\s*ReadToEnd\s*\(",
+                    RegexOptions.Compiled | RegexOptions.CultureInvariant);
+                matches.AddRange(readToEndRegex.Matches(content).Cast<Match>());
+            }
+        }
+
+        return matches
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToArray();
+    }
+
+    private IReadOnlyCollection<Match> FindBlockingCallOperations(
+        string content,
+        string language)
+    {
+        if (!_policy.DisallowBlockingCalls)
+            return Array.Empty<Match>();
+
+        var matches = new List<Match>();
+        var blockingRegex = GetBlockingRegex(language);
+        if (blockingRegex is not null)
+        {
+            foreach (Match match in blockingRegex.Matches(content))
+            {
+                var isSleep = Regex.IsMatch(
+                    match.Value,
+                    @"(?:Thread\.Sleep|time\.sleep)",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                var isSynchronousWait = Regex.IsMatch(
+                    match.Value,
+                    @"(?:Task\.Wait|GetAwaiter|\.Wait|\.Result)",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+                if (isSleep && !_policy.CheckThreadSleepUsage)
+                    continue;
+
+                if (isSynchronousWait && !_policy.DetectSynchronousWaits)
+                    continue;
+
+                matches.Add(match);
+            }
+        }
+
+        if (language == "C#" && _policy.DetectSynchronousWaits)
         {
             var taskVariables = TaskVariableDeclarationRegex.Matches(content)
                 .Select(match => match.Groups["name"].Value.TrimStart('@'))
@@ -346,28 +536,41 @@ public sealed class ArchitecturalPerformanceEvaluator
                 matches.AddRange(waitRegex.Matches(content).Cast<Match>());
                 matches.AddRange(resultRegex.Matches(content).Cast<Match>());
             }
-
-            var readerVariables = ReaderVariableDeclarationRegex.Matches(content)
-                .Select(match => match.Groups["name"].Value.TrimStart('@'))
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
-
-            foreach (var variable in readerVariables)
-            {
-                var escaped = Regex.Escape(variable);
-                var readToEndRegex = new Regex(
-                    $@"\b{escaped}\s*\.\s*ReadToEnd\s*\(",
-                    RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-                matches.AddRange(readToEndRegex.Matches(content).Cast<Match>());
-            }
         }
 
         return matches
             .GroupBy(match => match.Index)
             .Select(group => group.First())
             .OrderBy(match => match.Index)
-            .ToList();
+            .ToArray();
+    }
+
+    private static IReadOnlyCollection<Match> FindLargeAllocationMatches(string content)
+    {
+        var matches = LargeAllocationRegex.Matches(content)
+            .Cast<Match>()
+            .Where(match =>
+                int.TryParse(match.Groups["capacity"].Value, out var capacity)
+                && capacity >= 1000)
+            .ToArray();
+
+        return matches;
+    }
+
+    private IReadOnlyCollection<Match> FindBlockingOperations(
+        string content,
+        string language)
+    {
+        var matches = FindBlockingCallOperations(content, language).ToList();
+
+        if (_policy.RequireAsyncForIOMethods)
+            matches.AddRange(FindSynchronousIOOperations(content, language));
+
+        return matches
+            .GroupBy(match => match.Index)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToArray();
     }
 
     private static int GetLineNumber(string content, int position)
@@ -404,69 +607,43 @@ public sealed class ArchitecturalPerformanceEvaluator
         var async = 1d;
         var io = 1d;
 
+        var hasLoop = LoopRegex.IsMatch(content);
+        var nestedLoopMatches = NestedLoopRegex.Matches(content);
+        var blockingCalls = FindBlockingCallOperations(content, language);
+        var synchronousIo = _policy.RequireAsyncForIOMethods
+            ? FindSynchronousIOOperations(content, language)
+            : Array.Empty<Match>();
 
-
-        var hasLoop =
-            LoopRegex.IsMatch(content);
-
-
-
-        if (hasLoop &&
-            NestedLoopRegex.IsMatch(content))
-        {
+        if (nestedLoopMatches.Count > 0)
             algorithmic -= 0.20;
-        }
 
-
-
-        if (_policy.DetectStringConcatenationInLoops &&
-            hasLoop &&
-            StringConcatenationRegex.IsMatch(content))
-        {
-            algorithmic -= 0.05;
-        }
-
-
-
-        if (_policy.DisallowBlockingCalls
-            && HasBlockingCalls(content, language))
+        // A blocking call affects both responsiveness and concurrency health.
+        if (blockingCalls.Count > 0)
         {
             concurrency -= 0.25;
+            async -= 0.25;
         }
 
-
-
-        if (_policy.WarnThreadCreationInHotPaths &&
-            ThreadCreationRegex.IsMatch(content))
+        if (_policy.WarnThreadCreationInHotPaths
+            && ThreadCreationRegex.IsMatch(content))
         {
             concurrency -= 0.15;
         }
 
-
-
-        if (_policy.DetectLargeCollectionsInitialization &&
-            LargeAllocationRegex.IsMatch(content))
-        {
-            algorithmic -= 0.05;
-        }
-
-
-
-        if (_policy.RequireAsyncForIOMethods
-            && HasSynchronousIO(content, language))
+        if (synchronousIo.Count > 0)
         {
             io -= 0.20;
+            async -= 0.20;
         }
 
-
-
-        if (_policy.SuggestAsyncStreams &&
-            hasLoop &&
-            !content.Contains(
-                "await",
-                StringComparison.OrdinalIgnoreCase))
+        // A loop alone does not imply an async requirement. Only lower maturity
+        // when synchronous I/O occurs in a loop without an awaitable path.
+        if (_policy.SuggestAsyncStreams
+            && hasLoop
+            && synchronousIo.Count > 0
+            && !AwaitRegex.IsMatch(content))
         {
-            async -= 0.10;
+            async -= 0.05;
         }
 
 
@@ -506,40 +683,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             _ => null
         };
 
-    private static bool HasBlockingCalls(string content, string language)
-    {
-        if (GetBlockingRegex(language)?.IsMatch(content) == true)
-            return true;
 
-        if (!string.Equals(language, "C#", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        return TaskVariableDeclarationRegex.Matches(content)
-            .Select(match => match.Groups["name"].Value.TrimStart('@'))
-            .Distinct(StringComparer.Ordinal)
-            .Any(variable =>
-            {
-                var escaped = Regex.Escape(variable);
-                return Regex.IsMatch(
-                    content,
-                    $@"\b{escaped}\s*\.\s*(?:Wait\s*\(|Result\b)",
-                    RegexOptions.CultureInvariant);
-            });
-    }
-
-    private static bool HasSynchronousIO(string content, string language)
-    {
-        var regex = language switch
-        {
-            "C#" => DotNetSyncIORegex,
-            "Java" => JavaSyncIORegex,
-            "Python" => PythonSyncIORegex,
-            "TypeScript" or "JavaScript" => JavaScriptSyncIORegex,
-            _ => null
-        };
-
-        return regex?.IsMatch(content) == true;
-    }
 
     private void AddSummaries(
         List<ArchitectureEvaluatorResult> results,

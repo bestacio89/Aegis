@@ -117,6 +117,7 @@ public sealed class RuleEngineCore
             if (ArchitectureRuleMetricContracts.TryGetNoCandidateDisposition(
                     rule.Id,
                     factList.Where(fact => fact is not null).ToList(),
+                    context,
                     out var noCandidateReason))
             {
                 notApplicableReasons[rule.Id] = noCandidateReason;

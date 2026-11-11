@@ -67,14 +67,10 @@ internal static class GradleBuildModelResolver
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(files);
 
-        var catalogFiles = context.Modules
-            .Select(module => module.GradleModel)
-            .Where(model => model is not null)
-            .SelectMany(model => model!.VersionCatalogFiles)
-            .Distinct(PathComparer)
+        var gradleRoots = context.Modules
+            .Where(module => module.GradleModel is not null)
+            .OrderByDescending(module => NormalizePath(module.Path).Length)
             .ToArray();
-        var catalogDiagnostics = new List<AnalysisDiagnostic>();
-        var catalog = ReadVersionCatalog(catalogFiles, catalogDiagnostics);
 
         context.DependencyEvidence.RemoveAll(evidence =>
             evidence.Ecosystem.Equals("Gradle", StringComparison.OrdinalIgnoreCase));
@@ -82,6 +78,14 @@ internal static class GradleBuildModelResolver
         foreach (var module in context.Modules.Where(module =>
                      module.BuildSystem == ArchitectureBuildSystem.Gradle))
         {
+            var owningRoot = gradleRoots.FirstOrDefault(root =>
+                IsSameOrDescendantPath(module.Path, root.Path));
+            var catalogFiles = owningRoot is not null
+                ? owningRoot.GradleModel!.VersionCatalogFiles
+                : DiscoverLocalVersionCatalog(module.Path, files);
+            var catalogDiagnostics = new List<AnalysisDiagnostic>();
+            var catalog = ReadVersionCatalog(catalogFiles, catalogDiagnostics);
+
             var moduleBuildFile = module.ProjectFiles.FirstOrDefault(IsBuildFile)
                 ?? (module.ProjectFile is not null && IsBuildFile(module.ProjectFile)
                     ? module.ProjectFile
@@ -324,6 +328,20 @@ internal static class GradleBuildModelResolver
                 ]
             });
         }
+    }
+
+    private static IReadOnlyCollection<string> DiscoverLocalVersionCatalog(
+        string modulePath,
+        IReadOnlyCollection<string> files)
+    {
+        var catalogPath = Path.GetFullPath(Path.Combine(
+            modulePath,
+            "gradle",
+            "libs.versions.toml"));
+
+        return files.Any(file => PathsEqual(file, catalogPath))
+            ? [catalogPath]
+            : [];
     }
 
     private static VersionCatalog ReadVersionCatalog(

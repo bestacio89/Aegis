@@ -307,4 +307,75 @@ public sealed class RuleMetricScopeDiagnosticTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount", "AEG-DES-CMD001")]
+    [InlineData("ObserverPatternEvaluator", "AnalyzedComponents", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-OBS001")]
+    [InlineData("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-SING001")]
+    public void Candidate_rules_are_not_applicable_only_after_every_source_file_was_analyzed(
+        string producer,
+        string candidateMetric,
+        string unreadableMetric,
+        string analyzedMetric,
+        string discoveredMetric,
+        string ruleId)
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var completeSummary = new ArchitectureEvaluatorResult(
+            producer,
+            "PatternSummary")
+        {
+            Category = "DesignPatternSummary",
+            Metrics = new Dictionary<string, double>
+            {
+                [candidateMetric] = 0,
+                [unreadableMetric] = 0,
+                [analyzedMetric] = 12,
+                [discoveredMetric] = 12
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project",
+                ["AnalysisComplete"] = "true",
+                ["AnalysisStatus"] = "Completed"
+            }
+        };
+
+        var completeOutcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [completeSummary]);
+
+        Assert.Contains(ruleId, completeOutcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain(ruleId, completeOutcome.Stats.RulesNotEvaluated);
+
+        var incompleteSummary = new ArchitectureEvaluatorResult(
+            producer,
+            "PatternSummary")
+        {
+            Category = "DesignPatternSummary",
+            Metrics = new Dictionary<string, double>
+            {
+                [candidateMetric] = 0,
+                [unreadableMetric] = 1,
+                [analyzedMetric] = 11,
+                [discoveredMetric] = 12
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project",
+                ["AnalysisComplete"] = "false",
+                ["AnalysisStatus"] = "Incomplete"
+            }
+        };
+
+        var incompleteOutcome = engine.EvaluateDetailed(
+            new ProjectArchitectureContext(),
+            [incompleteSummary]);
+
+        Assert.DoesNotContain(ruleId, incompleteOutcome.Stats.RulesNotApplicable);
+        Assert.Contains(ruleId, incompleteOutcome.Stats.RulesNotEvaluated);
+    }
+
 }

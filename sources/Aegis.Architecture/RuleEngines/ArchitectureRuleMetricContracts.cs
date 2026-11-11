@@ -170,6 +170,57 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-FRONT-R11"] = FrontendScope.CrossFramework
             };
 
+    private static readonly IReadOnlyDictionary<string, Func<AegisArchitecturePolicy, bool>>
+        RulePolicyEnablementContracts =
+            new Dictionary<string, Func<AegisArchitecturePolicy, bool>>(
+                StringComparer.OrdinalIgnoreCase)
+            {
+                ["AEG-ARCH-R2"] = policy => policy.Architecture.EnforceLayerBoundaries,
+                ["AEG-ARCH-R3"] = policy => policy.Architecture.EnforceLayerBoundaries,
+                ["AEG-ARCH-R5"] = policy => policy.Architecture.EnforceLayerBoundaries,
+
+                ["AEG-BACK-R5"] = policy =>
+                    policy.Maintainability.MinMaintainabilityIndex > 0,
+
+                ["AEG-DES-BLD001"] = policy => policy.Architecture.DesignPatterns.EnforceBuilderPattern,
+                ["AEG-DES-BLD002"] = policy => policy.Architecture.DesignPatterns.EnforceBuilderPattern,
+                ["AEG-DES-CMD001"] = policy => policy.Architecture.DesignPatterns.EnforceCommandPattern,
+                ["AEG-DES-CMD002"] = policy => policy.Architecture.DesignPatterns.EnforceCommandPattern,
+                ["AEG-DES-DEC001"] = policy => policy.Architecture.DesignPatterns.EnforceDecoratorPattern,
+                ["AEG-DES-DEC002"] = policy => policy.Architecture.DesignPatterns.EnforceDecoratorPattern,
+                ["AEG-DES-FAC001"] = policy => policy.Architecture.DesignPatterns.EnforceFacadePattern,
+                ["AEG-DES-FAC002"] = policy => policy.Architecture.DesignPatterns.EnforceFacadePattern,
+                ["AEG-DES-MEDI001"] = policy => policy.Architecture.DesignPatterns.EnforceMediatorPattern,
+                ["AEG-DES-MEDI002"] = policy => policy.Architecture.DesignPatterns.EnforceMediatorPattern,
+                ["AEG-DES-OBS001"] = policy => policy.Architecture.DesignPatterns.EnforceObserverPattern,
+                ["AEG-DES-OBS002"] = policy => policy.Architecture.DesignPatterns.EnforceObserverPattern,
+                ["AEG-DES-REPO001"] = policy => policy.Architecture.DesignPatterns.EnforceRepositoryPattern,
+                ["AEG-DES-REPO002"] = policy => policy.Architecture.DesignPatterns.EnforceRepositoryPattern,
+                ["AEG-DES-SING001"] = policy => policy.Architecture.DesignPatterns.EnforceSingletonPattern,
+                ["AEG-DES-SING002"] = policy => policy.Architecture.DesignPatterns.EnforceSingletonPattern,
+                ["AEG-DES-STRAT001"] = policy => policy.Architecture.DesignPatterns.EnforceStrategyPattern,
+                ["AEG-DES-STRAT002"] = policy => policy.Architecture.DesignPatterns.EnforceStrategyPattern,
+
+                ["AEG-INF-R1"] = policy => policy.Configuration.Enabled,
+                ["AEG-INF-R2"] = policy => policy.Logging.Enabled,
+
+                ["AEG-NAM-R1"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R2"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R3"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R4"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R5"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R6"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R7"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R8"] = policy => policy.Naming.Enabled,
+                ["AEG-NAM-R9"] = policy => policy.Naming.Enabled,
+
+                ["AEG-PERF-R1"] = policy => policy.Performance.Enabled,
+                ["AEG-PERF-R2"] = policy => policy.Performance.Enabled,
+                ["AEG-PERF-R4"] = policy => policy.Performance.Enabled,
+
+                ["AEG-TXN-R1"] = policy => policy.Transaction.Enabled
+            };
+
     public static string? GetProducerContractDisposition(string ruleId)
     {
         if (RuleProducerContracts.ContainsKey(ruleId))
@@ -179,6 +230,29 @@ internal static class ArchitectureRuleMetricContracts
             return reason;
 
         return $"No producer-to-rule contract is registered for rule '{ruleId}'.";
+    }
+
+    public static bool TryGetPolicyApplicability(
+        string ruleId,
+        AegisArchitecturePolicy policy,
+        out string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ruleId);
+        ArgumentNullException.ThrowIfNull(policy);
+
+        reason = string.Empty;
+
+        if (!RulePolicyEnablementContracts.TryGetValue(ruleId, out var isEnabled)
+            || isEnabled(policy))
+        {
+            return true;
+        }
+
+        reason =
+            $"Rule '{ruleId}' is not applicable because its evaluator is disabled " +
+            "by the active policy.";
+
+        return false;
     }
 
     public static bool IsDeclaredProducer(string ruleId, string producerName)

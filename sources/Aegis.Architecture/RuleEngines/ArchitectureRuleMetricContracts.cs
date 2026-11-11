@@ -568,10 +568,13 @@ internal static class ArchitectureRuleMetricContracts
         // detected family independently; do not make every frontend ruleset
         // eligible merely because the repository contains multiple modules.
         // Individual facts are still checked against their own framework below.
+        var frontendDiscoveryComplete =
+            context.FrontendFrameworkDiscoveryComplete
+            && !context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
 
         if (detectedFamilies.Length == 0)
         {
-            if (!context.FrontendFrameworkDiscoveryComplete)
+            if (!frontendDiscoveryComplete)
                 return true;
 
             reason =
@@ -581,9 +584,8 @@ internal static class ArchitectureRuleMetricContracts
             return false;
         }
 
-        // R11 is the shared complexity rule for React and Razor files, which
-        // have no dedicated complexity rule in this ruleset. Angular and Blazor
-        // use their dedicated rules; per-file applicability prevents metric reuse.
+        // R11 is the shared complexity rule for React and Razor files. A
+        // negative family decision is safe only after complete discovery.
         if (targetScope == FrontendScope.CrossFramework)
         {
             if (detectedFamilies.Any(family =>
@@ -592,20 +594,14 @@ internal static class ArchitectureRuleMetricContracts
                 return true;
             }
 
-            var onlyDedicatedFamilies = detectedFamilies.All(family =>
-                family is FrontendScope.Angular or FrontendScope.Blazor);
+            if (!frontendDiscoveryComplete)
+                return true;
 
-            if (onlyDedicatedFamilies)
-            {
-                reason =
-                    $"Rule '{rule.Id}' is not applicable because the detected " +
-                    "frontend families have dedicated complexity rules; the " +
-                    "shared ComplexityScore metric would duplicate their checks.";
+            reason =
+                $"Rule '{rule.Id}' is not applicable because complete frontend " +
+                "discovery found no React or Razor files for the shared complexity rule.";
 
-                return false;
-            }
-
-            return true;
+            return false;
         }
 
         var targetFamily = targetScope switch
@@ -621,10 +617,12 @@ internal static class ArchitectureRuleMetricContracts
         if (detectedFamilies.Contains(targetFamily))
             return true;
 
+        if (!frontendDiscoveryComplete)
+            return true;
+
         reason =
             $"Rule '{rule.Id}' targets frontend family '{targetFamily}', " +
-            $"but the detected family/families are " +
-            $"[{string.Join(", ", detectedFamilies)}].";
+            $"but complete discovery found only [{string.Join(", ", detectedFamilies)}].";
 
         return false;
     }

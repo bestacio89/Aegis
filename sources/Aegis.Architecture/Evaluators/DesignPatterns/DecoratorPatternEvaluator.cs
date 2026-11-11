@@ -315,29 +315,23 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
             hasDecoratorSuffix
             && wrappedRole is not null;
 
+        // The decorator contract is the shared abstraction plus an actual
+        // wrapped-component delegation. Constructor injection is preferred,
+        // but property/setter injection is also valid and remains advisory.
         var structuralSignals = 0;
 
         if (hasAbstractionReference)
-        {
             structuralSignals++;
-        }
 
         if (hasWrappedComponent)
-        {
             structuralSignals++;
-        }
-
-        if (hasConstructorInjection)
-        {
-            structuralSignals++;
-        }
 
         var isDecoratorCandidate =
             hasDecoratorSuffix
-            || (structuralSignals >= 3 && hasWrappedComponent);
+            || (structuralSignals == 2 && hasWrappedComponent);
 
         var evidenceCount = structuralSignals;
-        var structuralScore = evidenceCount / 3.0 * 100.0;
+        var structuralScore = evidenceCount / 2.0 * 100.0;
 
         return new DecoratorAnalysis(
             IsDecoratorCandidate: isDecoratorCandidate,
@@ -530,6 +524,8 @@ public sealed class DecoratorPatternEvaluator : BaseArchitectureEvaluator, IScop
         result.Metadata["NamingConventionVerified"] =
             analysis.HasDecoratorSuffix.ToString();
         result.Metadata["StructuralAnalysisHeuristic"] = "true";
+        result.Metadata["ConstructorInjectionIsAdvisory"] =
+            "A decorator may receive its wrapped component through constructor, property, or setter injection.";
         result.Metadata["Layer"] = result.Layer ?? "Unclassified";
         result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["AnalysisComplete"] = bool.TrueString;

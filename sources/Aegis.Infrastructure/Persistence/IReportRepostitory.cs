@@ -9,6 +9,7 @@ public interface IReportRepository : IScopedDependency
 {
     Task<ReportEntity?> GetFullReportAsync(int id, CancellationToken token = default);
     Task<ReportEntity?> GetLatestAsync(CancellationToken token = default);
+    Task<ReportEntity?> GetPreviousForProjectAsync(string projectPath, int currentReportId, CancellationToken token = default);
     Task<List<ReportEntity>> GetAllReportsAsync(int? limit = null, CancellationToken token = default);
 
     // Session lifecycle

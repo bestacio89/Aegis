@@ -291,10 +291,10 @@ public sealed class ArchitecturalPerformanceEvaluator
         result.Metrics["ConcurrencyScore"] = score.Concurrency * 100;
         result.Metrics["AsyncMaturityScore"] = score.Async * 100;
         result.Metrics["IOMaturityScore"] = score.IO * 100;
-        result.Metrics["BlockingIOCount"] = blockingMatches.Count;
+        result.Metrics["BlockingIOCount"] = blockingMatches.Length;
         result.Metrics["PerformanceHealthIndex"] = score.Health;
-        result.Metrics["StringConcatenationAssignmentCount"] = stringConcatenationMatches.Length;
-        result.Metrics["LargeAllocationSignalCount"] = largeAllocationMatches.Length;
+        result.Metrics["StringConcatenationAssignmentCount"] = stringConcatenationMatches.Count;
+        result.Metrics["LargeAllocationSignalCount"] = largeAllocationMatches.Count;
         result.Metrics["LoopBodyLengthSignalCount"] = loopAnalysis.LongLoopBodyMatches.Count;
         result.Metrics["MaximumLoopNestingDepth"] = loopAnalysis.MaximumNestingDepth;
 
@@ -359,7 +359,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             asyncMatches,
             content,
             sanitized,
-            $"Async maturity {score.Async * 100:0.##}/100; configured blocking calls {blockingCallMatches.Count}; synchronous I/O operations {syncIoMatches.Length}.");
+            $"Async maturity {score.Async * 100:0.##}/100; configured blocking calls {blockingCallMatches.Count}; synchronous I/O operations {syncIoMatches.Count}.");
         AddMetricEvidence(
             result,
             evidence,
@@ -369,7 +369,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             sanitized,
             $"Algorithmic efficiency {score.Algorithmic * 100:0.##}/100; maximum loop nesting depth {loopAnalysis.MaximumNestingDepth} (policy maximum {_policy.MaxNestedLoopDepth}); " +
             $"loop bodies exceeding {_policy.MaxLoopBodyLength} lines: {loopAnalysis.LongLoopBodyMatches.Count}; " +
-            $"string concatenation signals in loops: {stringConcatenationMatches.Length}; large allocations in loops: {largeAllocationMatches.Length}.");
+            $"string concatenation signals in loops: {stringConcatenationMatches.Count}; large allocations in loops: {largeAllocationMatches.Count}.");
         AddMetricEvidence(
             result,
             evidence,
@@ -377,7 +377,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             concurrencyMatches,
             content,
             sanitized,
-            $"Concurrency score {score.Concurrency * 100:0.##}/100; blocking calls {blockingCallMatches.Count}; thread-creation signals {threadCreationMatches.Length}.");
+            $"Concurrency score {score.Concurrency * 100:0.##}/100; blocking calls {blockingCallMatches.Count}; thread-creation signals {threadCreationMatches.Count}.");
         AddMetricEvidence(
             result,
             evidence,
@@ -385,7 +385,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             syncIoMatches,
             content,
             sanitized,
-            $"I/O maturity {score.IO * 100:0.##}/100; synchronous I/O operations detected {syncIoMatches.Length}.");
+            $"I/O maturity {score.IO * 100:0.##}/100; synchronous I/O operations detected {syncIoMatches.Count}.");
         AddMetricEvidence(
             result,
             evidence,
@@ -393,7 +393,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             blockingMatches,
             content,
             sanitized,
-            $"Blocking I/O/blocking-operation count: {blockingMatches.Count}.");
+            $"Blocking I/O/blocking-operation count: {blockingMatches.Length}.");
         AddMetricEvidence(
             result,
             evidence,
@@ -401,7 +401,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             stringConcatenationMatches,
             content,
             sanitized,
-            $"String concatenation assignment signals: {stringConcatenationMatches.Length} (informational only).");
+            $"String concatenation assignment signals: {stringConcatenationMatches.Count} (informational only).");
         AddMetricEvidence(
             result,
             evidence,
@@ -409,7 +409,7 @@ public sealed class ArchitecturalPerformanceEvaluator
             largeAllocationMatches,
             content,
             sanitized,
-            $"Large collection allocation signals: {largeAllocationMatches.Length} (informational only).");
+            $"Large collection allocation signals: {largeAllocationMatches.Count} (informational only).");
         AddMetricEvidence(
             result,
             evidence,
@@ -471,6 +471,29 @@ public sealed class ArchitecturalPerformanceEvaluator
             lineNumber.ToString(
                 System.Globalization.CultureInfo.InvariantCulture);
         result.Metadata[$"CodeSnippet.{metricKey}"] = GetSourceLine(source, lineNumber);
+    }
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position && index < content.Length; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        return lineNumber > 0 && lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
     }
 
     private static IReadOnlyCollection<Match> FindSynchronousIOOperations(

@@ -311,6 +311,8 @@ public sealed class RuleMetricScopeDiagnosticTests
     [InlineData("CommandPatternEvaluator", "CommandCount", "UnreadableFileCount", "AnalyzedFileCount", "DiscoveredFileCount", "AEG-DES-CMD001")]
     [InlineData("ObserverPatternEvaluator", "AnalyzedComponents", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-OBS001")]
     [InlineData("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-SING001")]
+    [InlineData("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-STRAT001")]
+    [InlineData("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles", "AEG-DES-STRAT002")]
     public void Candidate_rules_are_not_applicable_only_after_every_source_file_was_analyzed(
         string producer,
         string candidateMetric,

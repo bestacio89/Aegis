@@ -302,6 +302,52 @@ public sealed class ProjectArchitectureContextDetectorTests
     }
 
     [Fact]
+    public void Detect_distinguishes_test_projects_from_testing_support_libraries()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var testingLibrary = Path.Combine(directory.Path, "sources", "Franz.Common.Testing");
+        var testProject = Path.Combine(directory.Path, "tests", "Franz.Common.Tests");
+        Directory.CreateDirectory(testingLibrary);
+        Directory.CreateDirectory(testProject);
+
+        File.WriteAllText(
+            Path.Combine(testingLibrary, "Franz.Common.Testing.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(
+            Path.Combine(testingLibrary, "UnitTest.cs"),
+            "public abstract class UnitTest { }");
+        File.WriteAllText(
+            Path.Combine(testProject, "Franz.Common.Tests.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(
+            Path.Combine(testProject, "EntityTests.cs"),
+            "public sealed class EntityTests { }");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+        var supportModule = Assert.Single(
+            context.Modules,
+            module => module.Name == "Franz.Common.Testing");
+        var testsModule = Assert.Single(
+            context.Modules,
+            module => module.Name == "Franz.Common.Tests");
+
+        Assert.False(supportModule.IsTestProject);
+        Assert.NotEqual("Test", supportModule.ProjectKind);
+        Assert.True(testsModule.IsTestProject);
+        Assert.Equal("Test", testsModule.ProjectKind);
+        Assert.Equal("Test", testsModule.Type);
+    }
+
+    [Fact]
     public void Detect_classifies_server_hosted_blazor_as_full_stack_not_backend_only()
     {
         using var directory = new TemporaryDirectory();

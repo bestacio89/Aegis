@@ -455,8 +455,17 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
         if (!_policy.RequireLogLevels)
             return 100;
 
-        var calls = LogLevelRx.Matches(code);
-        return calls.Count == 0 ? 50 : 100;
+        var loggingCalls = LoggingCallRx.Matches(code);
+        if (loggingCalls.Count == 0)
+            return 100;
+
+        var recognizedLevelCalls = LogLevelRx.Matches(code).Count;
+        if (recognizedLevelCalls == 0)
+            return 50;
+
+        return Math.Round(
+            100.0 * recognizedLevelCalls / loggingCalls.Count,
+            2);
     }
 
     private double EvaluateLoggingNoise(

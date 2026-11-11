@@ -71,7 +71,7 @@ public sealed class ConfigurationDocumentService
         ["EnforceSafeRequireUsage"] = "Checks Node.js module loading against the configured safe require/import convention.",
         ["EnforceLayerBoundaries"] = "Enables checks that dependencies follow the configured layer direction rules.",
         ["AllowedDependencies"] = "Maps each source layer to the layers it is allowed to depend on. An empty array means no outgoing layer dependencies are allowed.",
-        ["LayerHints"] = "Maps layer names to exact project-name and folder-path hints. A module matching multiple layer roles remains unclassified until the hints are made unambiguous.",
+        ["LayerHints"] = "Maps layer names to exact project-name and folder-path hints. A unique project-name hint overrides inferred module type; folder hints classify otherwise untyped modules. Multiple matching roles remain unclassified until the hints are made unambiguous.",
         ["EnforcementByLanguage"] = "Sets language-specific enforcement: Strict enforces rules, Advisory reports warnings, and Ignored skips evaluation.",
         ["MaxCyclomaticComplexity"] = "Maximum permitted cyclomatic complexity for a method before the evaluator reports a finding.",
         ["MaxLinesPerMethod"] = "Maximum permitted method length in lines.",

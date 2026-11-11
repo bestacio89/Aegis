@@ -13,4 +13,5 @@ public sealed record NamingDeclaration(
     bool IsPublic,
     bool IsStatic,
     bool IsConstant,
-    bool IsTestMethod = false);
+    bool IsTestMethod = false,
+    string Accessibility = "Unknown");

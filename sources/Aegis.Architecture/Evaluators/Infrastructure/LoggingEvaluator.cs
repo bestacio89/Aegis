@@ -418,6 +418,122 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
                 module.Framework);
     }
 
+    private double EvaluateStructuredLogging(
+        string content,
+        string code,
+        string language)
+    {
+        if (!_policy.RequireStructuredLogging)
+            return 100;
+
+        var calls = LoggingCallRx.Matches(code);
+        if (calls.Count == 0)
+            return 100;
+
+        var positiveCalls = 0;
+
+        foreach (Match call in calls)
+        {
+            var windowLength = Math.Min(500, content.Length - call.Index);
+            if (windowLength <= 0)
+                continue;
+
+            var window = content.Substring(call.Index, windowLength);
+            var hasTemplate = StructuredTemplateRx.IsMatch(window);
+            var hasPythonParameters = language == "Python"
+                && PythonParameterizedLoggingRx.IsMatch(window);
+
+            if (hasTemplate || hasPythonParameters)
+                positiveCalls++;
+        }
+
+        return Math.Round(100.0 * positiveCalls / calls.Count, 2);
+    }
+
+    private double EvaluateLogLevels(string code)
+    {
+        if (!_policy.RequireLogLevels)
+            return 100;
+
+        var calls = LogLevelRx.Matches(code);
+        return calls.Count == 0 ? 50 : 100;
+    }
+
+    private double EvaluateLoggingNoise(
+        string content,
+        string code,
+        string language)
+    {
+        if (!_policy.WarnInterpolatedStrings)
+            return 100;
+
+        var calls = LoggingCallRx.Matches(code);
+        if (calls.Count == 0)
+            return 100;
+
+        var interpolatedCalls = 0;
+
+        foreach (Match call in calls)
+        {
+            var windowLength = Math.Min(500, content.Length - call.Index);
+            if (windowLength <= 0)
+                continue;
+
+            var window = content.Substring(call.Index, windowLength);
+            var interpolated = InterpolatedStringRx.IsMatch(window);
+            var pythonPercentFormatting = language == "Python"
+                && PythonParameterizedLoggingRx.IsMatch(window);
+
+            if (interpolated && !pythonPercentFormatting)
+                interpolatedCalls++;
+        }
+
+        var ratio = (double)interpolatedCalls / calls.Count;
+        return Math.Round(Math.Clamp(100.0 * (1.0 - ratio), 0, 100), 2);
+    }
+
+    private static double ComputeIntegrity(
+        double structured,
+        double levels,
+        double noise)
+    {
+        return Math.Round(
+            structured * 0.50
+            + levels * 0.25
+            + noise * 0.25,
+            2);
+    }
+
+    private static int GetLineNumber(string content, int index)
+    {
+        if (index < 0 || index > content.Length)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        var lineNumber = 1;
+        for (var position = 0; position < index; position++)
+        {
+            if (content[position] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        if (lineNumber < 1)
+            throw new ArgumentOutOfRangeException(nameof(lineNumber));
+
+        using var reader = new StringReader(content);
+        for (var currentLine = 1; currentLine < lineNumber; currentLine++)
+        {
+            if (reader.ReadLine() is null)
+                return string.Empty;
+        }
+
+        return reader.ReadLine() ?? string.Empty;
+    }
+
     private sealed record ProjectIdentity(
         string Name,
         string Path,

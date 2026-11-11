@@ -106,39 +106,39 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
         SearchText = string.Empty;
         SelectedLayer = "All";
         SelectedGraphNode = null;
+        RefreshFilter();
     }
 
     [RelayCommand]
     private void SelectGraphNode(ArchitectureGraphNodeViewModel? node)
     {
         SelectedGraphNode = ReferenceEquals(SelectedGraphNode, node) ? null : node;
+        RefreshFilter();
     }
 
     private void RefreshFilter()
     {
-        var graphDependencies = Dependencies
+        var selectedNodeName = SelectedGraphNode?.Name;
+        var baseDependencies = Dependencies
             .Where(MatchesBaseFilter)
             .ToArray();
 
+        var graphDependencies = selectedNodeName is null
+            ? baseDependencies
+            : baseDependencies.Where(dependency =>
+                string.Equals(dependency.Source, selectedNodeName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(dependency.Target, selectedNodeName, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
         BuildGraph(graphDependencies);
 
-        if (SelectedGraphNode is not null)
+        if (selectedNodeName is not null)
         {
             SelectedGraphNode = GraphNodes.FirstOrDefault(node =>
-                string.Equals(node.Name, SelectedGraphNode.Name, StringComparison.OrdinalIgnoreCase));
+                string.Equals(node.Name, selectedNodeName, StringComparison.OrdinalIgnoreCase));
         }
 
-        FilteredDependencies = Dependencies.Count(MatchesFilter);
-    }
-
-    private bool MatchesFilter(ArchitectureDependencyContext dependency)
-    {
-        if (!MatchesBaseFilter(dependency))
-            return false;
-
-        return SelectedGraphNode is null
-            || string.Equals(dependency.Source, SelectedGraphNode.Name, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(dependency.Target, SelectedGraphNode.Name, StringComparison.OrdinalIgnoreCase);
+        FilteredDependencies = graphDependencies.Length;
     }
 
     private bool MatchesBaseFilter(ArchitectureDependencyContext dependency)

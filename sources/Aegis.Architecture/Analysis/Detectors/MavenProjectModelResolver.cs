@@ -236,9 +236,11 @@ internal static class MavenProjectModelResolver
                 var effectiveDependency = dependency with
                 {
                     Version = versionIsManaged ? managedDependency!.Version : dependency.Version,
-                    Scope = dependency.Scope.Length == 0
-                        ? managedDependency?.Scope ?? "compile"
-                        : dependency.Scope,
+                    Scope = !string.IsNullOrWhiteSpace(dependency.Scope)
+                        ? dependency.Scope
+                        : !string.IsNullOrWhiteSpace(managedDependency?.Scope)
+                            ? managedDependency.Scope
+                            : "compile",
                     IsVersionManaged = versionIsManaged
                 };
                 localDependencies[index] = effectiveDependency;

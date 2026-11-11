@@ -122,7 +122,6 @@ public sealed class MavenProjectModelTests
             Assert.Equal("5.12.2", junit.Version);
             Assert.True(junit.IsVersionManaged);
             Assert.Equal("test", junit.Scope);
-            Assert.True(junit.Scope.Equals("test", StringComparison.OrdinalIgnoreCase));
 
             var internalApi = Assert.Single(model.Dependencies, dependency =>
                 dependency.ArtifactId == "internal-api");

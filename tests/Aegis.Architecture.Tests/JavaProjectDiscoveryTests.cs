@@ -119,7 +119,9 @@ public sealed class JavaProjectDiscoveryTests
             Assert.Equal(ArchitectureBuildSystem.Unknown, context.BuildSystem);
             var module = Assert.Single(context.Modules);
             Assert.Equal(ArchitectureBuildSystem.Unknown, module.BuildSystem);
-            Assert.Equal("Unknown", module.ProjectKind);
+            // The aggregate build system is ambiguous, but the Maven POM still provides
+            // valid module packaging metadata independently of that aggregate.
+            Assert.Equal("JavaProject", module.ProjectKind);
         }
         finally
         {

@@ -100,8 +100,15 @@ public static class PluginRegistrationExtensions
             configuration.GetSection("Architecture"));
 
         services.AddOptions<AegisArchitecturePolicy>()
-            .Configure<ArchitecturePolicy>((policy, architecture) =>
+            .Configure(policy =>
             {
+                // Bind from the composed configuration rather than resolving
+                // ArchitecturePolicy as a concrete DI service. The latter is
+                // only registered as IOptions<ArchitecturePolicy> and would
+                // make options construction fail at runtime.
+                var architecture = new ArchitecturePolicy();
+                configuration.Bind(architecture);
+                configuration.GetSection("Architecture").Bind(architecture);
                 policy.Architecture = architecture;
             });
         services.Configure<RepositoryPolicy>(configuration.GetSection("Repository"));

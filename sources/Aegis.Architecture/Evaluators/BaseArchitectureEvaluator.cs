@@ -740,7 +740,7 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
         return result;
     }
 
-    private static bool IsSameOrDescendantPath(
+    protected static bool IsSameOrDescendantPath(
         string candidate,
         string parent)
     {

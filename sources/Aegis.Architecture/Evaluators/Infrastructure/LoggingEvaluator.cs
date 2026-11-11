@@ -252,7 +252,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
         result.ProjectName = identity.Name;
         result.Language = language;
         result.Framework = identity.Framework;
-        result.Layer = ResolveLayer(file);
+        result.Layer = ResolveLayerForFile(file);
         result.Metrics["LoggingCallCount"] = loggingCalls.Count;
         result.Metrics["StructuredLoggingScore"] = structured;
         result.Metrics["LogLevelComplianceScore"] = levels;

@@ -215,7 +215,9 @@ internal static class ArchitectureRuleMetricContracts
                     && policy.Architecture.DesignPatterns.DetectLeakingSubscriptions,
                 ["AEG-DES-OBS002"] = policy => policy.Architecture.DesignPatterns.EnforceObserverPattern,
                 ["AEG-DES-REPO001"] = policy => policy.Architecture.DesignPatterns.EnforceRepositoryPattern,
+                ["AEG-DES-REPO002"] = policy => policy.Architecture.DesignPatterns.EnforceRepositoryPattern,
                 ["AEG-DES-SING001"] = policy => policy.Architecture.DesignPatterns.EnforceSingletonPattern,
+                ["AEG-DES-SING002"] = policy => policy.Architecture.DesignPatterns.EnforceSingletonPattern,
                 ["AEG-DES-STRAT001"] = policy =>
                     policy.Architecture.DesignPatterns.EnforceStrategyPattern
                     && policy.Architecture.DesignPatterns.DetectConditionalStrategySwitch,

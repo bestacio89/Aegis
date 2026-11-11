@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using Aegis.Architecture.Analysis;
 using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
@@ -257,6 +256,21 @@ public sealed class DocumentationEvaluator :
                 module.ProjectKind,
                 module.Framework,
                 ownedFiles));
+        }
+
+        var unownedFiles = files
+            .Where(file => !modules.Any(module =>
+                IsSameOrDescendantPath(file, module.Path)))
+            .ToArray();
+
+        if (unownedFiles.Length > 0)
+        {
+            scopes.Add(new ProjectScope(
+                Context.ProjectName,
+                Path.GetFullPath(Context.RootPath),
+                "Unknown",
+                Context.Framework,
+                unownedFiles));
         }
 
         return scopes;

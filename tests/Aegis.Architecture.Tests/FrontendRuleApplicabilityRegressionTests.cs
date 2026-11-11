@@ -256,4 +256,47 @@ public sealed class FrontendRuleApplicabilityRegressionTests
         Assert.Equal("Components/Orders.razor", blazorEvaluations[0].Target);
     }
 
+    [Fact]
+    public void Frontend_rules_are_not_applicable_only_after_complete_framework_discovery()
+    {
+        var engine = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy());
+
+        var completeContext = new ProjectArchitectureContext
+        {
+            ProjectName = "BackendLibrary",
+            Language = "C#",
+            Framework = ".NET",
+            DetectedFrameworks = [".NET"],
+            FrontendFrameworkDiscoveryComplete = true,
+            FileCount = 120
+        };
+
+        var completeOutcome = engine.EvaluateDetailed(
+            completeContext,
+            []);
+
+        Assert.Contains("AEG-FRONT-R1", completeOutcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-FRONT-R11", completeOutcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-FRONT-R1", completeOutcome.Stats.RulesNotEvaluated);
+
+        var incompleteContext = new ProjectArchitectureContext
+        {
+            ProjectName = "UnknownFrontend",
+            Language = "C#",
+            Framework = ".NET",
+            DetectedFrameworks = [".NET"],
+            FrontendFrameworkDiscoveryComplete = false,
+            FileCount = 120
+        };
+
+        var incompleteOutcome = engine.EvaluateDetailed(
+            incompleteContext,
+            []);
+
+        Assert.DoesNotContain("AEG-FRONT-R1", incompleteOutcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-FRONT-R1", incompleteOutcome.Stats.RulesNotEvaluated);
+    }
+
 }

@@ -151,6 +151,8 @@ internal static class ModuleDetector
                 .ToList();
         }
 
+        MavenProjectModelResolver.Analyze(context, files);
+
         PopulateOwnedLanguages(context.Modules, files);
     }
 

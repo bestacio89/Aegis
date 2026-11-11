@@ -32,6 +32,9 @@ public sealed class ProjectModuleContext
     /// <summary>Framework observations attributed to this project module.</summary>
     public List<FrameworkEvidence> FrameworkEvidence { get; set; } = [];
 
+    /// <summary>Statically interpreted Maven model; null for non-Maven projects.</summary>
+    public MavenProjectModel? MavenModel { get; set; }
+
     public List<string> TargetFrameworks { get; set; } = [];
 
     public List<string> Languages { get; set; } = [];

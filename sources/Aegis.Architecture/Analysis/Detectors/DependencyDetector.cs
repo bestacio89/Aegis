@@ -240,42 +240,14 @@ internal static class DependencyDetector
 
 
     private static void AnalyzeJava(
-        ProjectArchitectureContext ctx,
+        ProjectArchitectureContext context,
         List<string> files,
         HashSet<string> dependencies)
     {
-        foreach (var file in files.Where(
-                     x => x.EndsWith(
-                         "pom.xml",
-                         StringComparison.OrdinalIgnoreCase)))
+        foreach (var evidence in context.DependencyEvidence.Where(dependency =>
+                     dependency.Ecosystem.Equals("Maven", StringComparison.OrdinalIgnoreCase)))
         {
-            try
-            {
-                var xml =
-                    File.ReadAllText(file);
-
-
-                foreach (Match match in Regex.Matches(
-                             xml,
-                             @"<artifactId>(.*?)</artifactId>"))
-                {
-                    if (match.Groups.Count <= 1)
-                        continue;
-
-
-                    var dependency =
-                        match.Groups[1].Value;
-
-
-                    dependencies.Add(dependency);
-
-
-                }
-            }
-            catch
-            {
-                // Ignore unreadable Maven files
-            }
+            dependencies.Add(evidence.Name);
         }
     }
 

@@ -54,10 +54,48 @@ public sealed class AnemicDomainModelEvaluator
     [
         "Entity",
         "Aggregate",
-        "Domain",
-        "Model",
-        "Root",
-        "ValueObject"
+        "AggregateRoot",
+        "ValueObject",
+        "DomainModel"
+    ];
+
+    private static readonly string[] ExcludedDomainTypeSuffixes =
+    [
+        "Dto",
+        "Request",
+        "Response",
+        "Options",
+        "Settings",
+        "Configuration",
+        "Context",
+        "Service",
+        "Handler",
+        "Repository",
+        "Factory",
+        "Builder",
+        "Mapper",
+        "Validator",
+        "Exception",
+        "Event",
+        "Policy",
+        "Rule",
+        "Specification"
+    ];
+
+    private static readonly string[] ExcludedDomainPathSegments =
+    [
+        "Events",
+        "Services",
+        "Exceptions",
+        "Dtos",
+        "DTOs",
+        "Contracts",
+        "Persistence",
+        "Infrastructure",
+        "Configurations",
+        "ReadModels",
+        "Policies",
+        "Specifications"
     ];
 
     private static readonly string[] DomainPathIndicators =
@@ -79,8 +117,7 @@ public sealed class AnemicDomainModelEvaluator
 
     public override string[] SupportedFrameworks =>
     [
-        "ASP.NET",
-        "Spring Boot"
+        "LanguageAgnostic"
     ];
 
     public AnemicDomainModelEvaluator(
@@ -182,8 +219,13 @@ public sealed class AnemicDomainModelEvaluator
                 token.ThrowIfCancellationRequested();
 
                 var typeName = typeMatch.Groups[1].Value;
+                var isStrongDomainType = IsDomainType(typeName);
 
-                if (!fileIsDomainCandidate && !IsDomainType(typeName))
+                if (IsExcludedDomainType(typeName)
+                    || IsAbstractTypeDeclaration(sanitizedContent, typeMatch.Index)
+                    || (!fileIsDomainCandidate && !isStrongDomainType)
+                    || (typeMatch.Value.StartsWith("record", StringComparison.Ordinal)
+                        && !isStrongDomainType))
                 {
                     continue;
                 }
@@ -245,6 +287,26 @@ public sealed class AnemicDomainModelEvaluator
                     stateMemberCount,
                     methodCount);
 
+                var language = DetectLanguage(file);
+                var framework = ResolveFrameworkForFile(file, projectPath, context);
+                var evidence = BuildTypeEvidence(
+                    content,
+                    sanitizedContent,
+                    typeName,
+                    typeMatch.Index,
+                    openingBrace + 1,
+                    typeBody,
+                    propertyCount,
+                    fieldCount,
+                    methodCount,
+                    constructorCount,
+                    behaviorRatio,
+                    behaviorScore);
+                var typeLine = GetLineNumber(sanitizedContent, typeMatch.Index);
+                var candidateReason = isStrongDomainType
+                    ? $"Type name '{typeName}' matches a recognized domain-model suffix."
+                    : $"Source file '{Path.GetRelativePath(projectPath, file)}' is under a domain/core model path.";
+
                 var result = CreateTypeResult(
                     file,
                     typeName,
@@ -253,7 +315,12 @@ public sealed class AnemicDomainModelEvaluator
                     methodCount,
                     constructorCount,
                     behaviorRatio,
-                    behaviorScore);
+                    behaviorScore,
+                    evidence,
+                    typeLine,
+                    language,
+                    framework,
+                    candidateReason);
 
                 results.Add(result);
                 candidateTypes++;
@@ -281,15 +348,19 @@ public sealed class AnemicDomainModelEvaluator
         int methodCount,
         int constructorCount,
         double behaviorRatio,
-        double behaviorScore)
+        double behaviorScore,
+        IReadOnlyCollection<string> evidence,
+        int typeLine,
+        string language,
+        string? framework,
+        string candidateReason)
     {
         var context = Context;
 
         var result = CreateResult(file, "DesignPattern");
 
-        result.ProjectName = context?.ProjectName;
-        result.Language = context?.Language;
-        result.Framework = context?.Framework;
+        result.Language = language;
+        result.Framework = framework;
         result.Layer = ResolveLayer(file);
         result.DetectionConfidence = context?.Confidence ?? 0;
         result.Category = "DesignPattern";
@@ -306,8 +377,8 @@ public sealed class AnemicDomainModelEvaluator
 
         result.Metadata["FilePath"] = file;
         result.Metadata["ClassName"] = typeName;
-        result.Metadata["Language"] = context?.Language ?? "Unknown";
-        result.Metadata["Framework"] = context?.Framework ?? "Unknown";
+        result.Metadata["Language"] = language;
+        result.Metadata["Framework"] = framework ?? "Unknown";
         result.Metadata["EvaluationScope"] = FileScope;
         result.Metadata["MeasurementMethod"] =
             "Lexical count of property declarations, field declarations, and method-like declarations.";
@@ -316,8 +387,89 @@ public sealed class AnemicDomainModelEvaluator
         result.Metadata["SemanticAnalysisPerformed"] = false.ToString();
         result.Metadata["InheritanceResolved"] = false.ToString();
         result.Metadata["MethodBehaviorClassified"] = false.ToString();
+        result.Metadata["DomainCandidateReason"] = candidateReason;
+        result.Metadata["Evidence.AnemicDomainModelIndex"] =
+            string.Join(Environment.NewLine, evidence);
+        result.Metadata["Evidence.DomainBehaviorScore"] =
+            string.Join(Environment.NewLine, evidence);
+        result.Metadata["EvidenceScope.AnemicDomainModelIndex"] = "FileMetrics";
+        result.Metadata["EvidenceScope.DomainBehaviorScore"] = "FileMetrics";
+        result.Metadata["EvidenceLine.AnemicDomainModelIndex"] =
+            typeLine.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        result.Metadata["EvidenceLine.DomainBehaviorScore"] =
+            typeLine.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        result.Metadata["CodeSnippet.AnemicDomainModelIndex"] =
+            GetSourceLine(evidence, 0);
+        result.Evidence = string.Join(Environment.NewLine, evidence);
+        result.LineNumber = typeLine;
 
         return result;
+    }
+
+    private static IReadOnlyCollection<string> BuildTypeEvidence(
+        string source,
+        string sanitizedSource,
+        string typeName,
+        int typePosition,
+        int typeBodyStart,
+        string typeBody,
+        int propertyCount,
+        int fieldCount,
+        int methodCount,
+        int constructorCount,
+        double behaviorRatio,
+        double behaviorScore)
+    {
+        var typeLine = GetLineNumber(sanitizedSource, typePosition);
+        var index = 1d - Math.Clamp(behaviorScore / 100d, 0d, 1d);
+        var evidence = new List<string>
+        {
+            $"Type '{typeName}' at line {typeLine}: {propertyCount} properties, {fieldCount} fields, {methodCount} methods, {constructorCount} constructors; behavior ratio {behaviorRatio:0.##}; domain behavior score {behaviorScore:0.##}; anemic-model index {index:0.##}."
+        };
+
+        var memberMatches = PropertyRegex.Matches(typeBody)
+            .Cast<Match>()
+            .Concat(FieldRegex.Matches(typeBody).Cast<Match>())
+            .Concat(MethodRegex.Matches(typeBody)
+                .Cast<Match>()
+                .Where(match => !match.Groups["name"].Value.Equals(
+                    typeName,
+                    StringComparison.Ordinal)))
+            .OrderBy(match => match.Index)
+            .Take(50);
+
+        foreach (var match in memberMatches)
+        {
+            var line = GetLineNumber(
+                sanitizedSource,
+                typeBodyStart + match.Index);
+            evidence.Add($"Line {line}: {GetSourceLine(source, line)}");
+        }
+
+        return evidence;
+    }
+
+    private static int GetLineNumber(string content, int position)
+    {
+        var lineNumber = 1;
+        for (var index = 0; index < position && index < content.Length; index++)
+        {
+            if (content[index] == '\n')
+                lineNumber++;
+        }
+
+        return lineNumber;
+    }
+
+    private static string GetSourceLine(string content, int lineNumber)
+    {
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        return lineNumber > 0 && lineNumber <= lines.Length
+            ? lines[lineNumber - 1].Trim()
+            : string.Empty;
     }
 
     private static int CountMatches(
@@ -389,6 +541,16 @@ public sealed class AnemicDomainModelEvaluator
     private static bool IsDomainCandidateFile(string file)
     {
         var normalized = file.Replace('\\', '/');
+        var segments = normalized.Split(
+            '/',
+            StringSplitOptions.RemoveEmptyEntries);
+
+        if (segments.Any(segment => ExcludedDomainPathSegments.Contains(
+                segment,
+                StringComparer.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
 
         return DomainPathIndicators.Any(indicator =>
             normalized.Contains(
@@ -396,12 +558,33 @@ public sealed class AnemicDomainModelEvaluator
                 StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IsDomainType(string typeName)
-    {
-        return DomainIndicators.Any(indicator =>
-            typeName.Contains(
+    private static bool IsDomainType(string typeName) =>
+        DomainIndicators.Any(indicator =>
+            typeName.EndsWith(
                 indicator,
                 StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsExcludedDomainType(string typeName) =>
+        ExcludedDomainTypeSuffixes.Any(suffix =>
+            typeName.EndsWith(
+                suffix,
+                StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsAbstractTypeDeclaration(
+        string content,
+        int declarationPosition)
+    {
+        var start = Math.Max(0, declarationPosition - 120);
+        var prefix = content[start..declarationPosition];
+        var lastBoundary = Math.Max(
+            prefix.LastIndexOf('}'),
+            prefix.LastIndexOf(';'));
+        var header = prefix[(lastBoundary + 1)..];
+
+        return Regex.IsMatch(
+            header,
+            @"\babstract\b",
+            RegexOptions.CultureInvariant);
     }
 
     private string? ResolveLayer(string file)

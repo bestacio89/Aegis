@@ -520,16 +520,6 @@ internal static class ModuleDetector
         {
             return "Test";
         }
-        if (name.EndsWith(".api", StringComparison.Ordinal)
-            || name.EndsWith("api", StringComparison.Ordinal))
-            return "Api";
-        if (name.Contains("application", StringComparison.Ordinal)
-            || name.EndsWith(".app", StringComparison.Ordinal))
-            return "Application";
-        if (name.Contains("domain", StringComparison.Ordinal)
-            || name.Contains("business", StringComparison.Ordinal)
-            || name.EndsWith(".core", StringComparison.Ordinal))
-            return "Domain";
         // Explicit contract packages take precedence over the technical family
         // names used by adapters such as Http.Contracts.
         if (name.Contains("contracts", StringComparison.Ordinal)
@@ -540,6 +530,16 @@ internal static class ModuleDetector
                 && !name.Contains(".http.", StringComparison.Ordinal)))
             return "Contracts";
 
+        if (name.EndsWith(".api", StringComparison.Ordinal)
+            || name.EndsWith("api", StringComparison.Ordinal))
+            return "Api";
+        if (name.Contains("application", StringComparison.Ordinal)
+            || name.EndsWith(".app", StringComparison.Ordinal))
+            return "Application";
+        if (name.Contains("domain", StringComparison.Ordinal)
+            || name.Contains("business", StringComparison.Ordinal)
+            || name.EndsWith(".core", StringComparison.Ordinal))
+            return "Domain";
         // Foundational runtime capabilities and platform adapters belong to
         // infrastructure even when their package names omit "Infrastructure".
         if (name.Contains("infrastructure", StringComparison.Ordinal)

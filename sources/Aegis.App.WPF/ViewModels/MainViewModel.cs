@@ -20,7 +20,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly AegisArchitectureAnalysisRunner _runner;
 
     private readonly ArchitectureOverviewViewModel _architectureOverview;
-    private readonly ArchitectureExplorerViewModel _architectureExplorer = new();
+    private readonly DependencyGraphViewModel _dependencyGraph = new();
     private readonly RelationshipLedgerViewModel _relationshipLedger = new();
     private readonly SectionDashboardViewModel _sectionDashboard;
     private readonly LayerDashboardViewModel _layerDashboard;
@@ -64,7 +64,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         _architectureWorkspace = new ArchitectureWorkspaceViewModel(
             _architectureOverview,
-            _architectureExplorer,
+            _dependencyGraph,
             _relationshipLedger,
             _sectionDashboard,
             _layerDashboard,
@@ -295,7 +295,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ProjectArchitectureContext context)
     {
         _architectureOverview.Update(report, context);
-        _architectureExplorer.Update(context);
+        _dependencyGraph.Update(context);
         _relationshipLedger.Update(context);
         _layerDashboard.Update(report);
         _sectionDashboard.Update(report);

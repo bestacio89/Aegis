@@ -392,26 +392,43 @@ internal static class GradleBuildModelResolver
         ProjectModuleContext module,
         GradleBuildModel model)
     {
-        foreach (var dependency in model.Dependencies.Where(dependency =>
-                     !string.IsNullOrWhiteSpace(dependency.Group)
-                     && !string.IsNullOrWhiteSpace(dependency.Artifact)))
+        foreach (var dependency in model.Dependencies)
         {
             var testOnly = IsTestConfiguration(dependency.Configuration);
+            var isProjectDependency = !string.IsNullOrWhiteSpace(dependency.ProjectPath);
+            var hasPackageCoordinates = !string.IsNullOrWhiteSpace(dependency.Group)
+                && !string.IsNullOrWhiteSpace(dependency.Artifact);
+
+            if (!isProjectDependency && !hasPackageCoordinates)
+                continue;
+
+            var name = isProjectDependency
+                ? $"project:{dependency.ProjectPath}"
+                : $"{dependency.Group}:{dependency.Artifact}";
+            var identity = isProjectDependency
+                ? $"gradle:project:{dependency.ProjectPath}:{dependency.Configuration}:{module.Path}"
+                : $"gradle:{dependency.Group}:{dependency.Artifact}:{dependency.Version}:{dependency.Configuration}:{module.Path}";
+
             context.DependencyEvidence.Add(new ArchitectureDependencyEvidence
             {
-                Id = $"gradle:{dependency.Group}:{dependency.Artifact}:{dependency.Version}:{dependency.Configuration}:{module.Path}",
-                Name = $"{dependency.Group}:{dependency.Artifact}",
+                Id = identity,
+                Name = name,
                 Ecosystem = "Gradle",
-                Kind = dependency.IsPlatform ? DependencyEvidenceKind.Platform : DependencyEvidenceKind.Package,
+                Kind = isProjectDependency
+                    ? DependencyEvidenceKind.Project
+                    : dependency.IsPlatform ? DependencyEvidenceKind.Platform : DependencyEvidenceKind.Package,
                 DeclaredVersion = dependency.Version,
                 ResolvedVersion = null,
                 Scope = dependency.Configuration,
                 SourceProjectPath = module.Path,
                 IsDirect = true,
                 IsTestOnly = testOnly,
-                ResolutionStatus = string.IsNullOrWhiteSpace(dependency.Version)
-                    ? DependencyResolutionStatus.PartiallyResolved
-                    : DependencyResolutionStatus.Declared,
+                IsEnforced = dependency.IsEnforcedPlatform,
+                ResolutionStatus = isProjectDependency
+                    ? DependencyResolutionStatus.Declared
+                    : string.IsNullOrWhiteSpace(dependency.Version)
+                        ? DependencyResolutionStatus.PartiallyResolved
+                        : DependencyResolutionStatus.Declared,
                 Provenance =
                 [
                     new SemanticEvidenceProvenance

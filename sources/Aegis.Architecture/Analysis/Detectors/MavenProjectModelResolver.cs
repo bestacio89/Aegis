@@ -929,6 +929,42 @@ internal static class MavenProjectModelResolver
         }
     }
 
+        foreach (var processor in model.AnnotationProcessorPaths)
+        {
+            if (string.IsNullOrWhiteSpace(processor.GroupId)
+                || string.IsNullOrWhiteSpace(processor.ArtifactId))
+                continue;
+
+            context.DependencyEvidence.Add(new ArchitectureDependencyEvidence
+            {
+                Id = $"maven-processor:{processor.GroupId}:{processor.ArtifactId}:{processor.Version}:{module.Path}",
+                Name = $"{processor.GroupId}:{processor.ArtifactId}",
+                Ecosystem = "Maven",
+                Kind = DependencyEvidenceKind.Package,
+                DeclaredVersion = processor.Version,
+                ResolvedVersion = null,
+                Scope = "annotationProcessor",
+                SourceProjectPath = module.Path,
+                IsDirect = !processor.IsInherited,
+                IsTestOnly = false,
+                ResolutionStatus = string.IsNullOrWhiteSpace(processor.Version)
+                    || PropertyReference.IsMatch(processor.Version)
+                    ? DependencyResolutionStatus.PartiallyResolved
+                    : DependencyResolutionStatus.Declared,
+                Provenance =
+                [
+                    new SemanticEvidenceProvenance
+                    {
+                        AnalyzerId = "aegis.maven-model",
+                        Source = SemanticEvidenceSource.BuildModel,
+                        FilePath = processor.SourceProjectFile,
+                        Confidence = 1.0
+                    }
+                ]
+            });
+        }
+    }
+
     private static void AddBuiltInProperties(
         IDictionary<string, string> properties,
         MavenProjectModel.Coordinates coordinates,

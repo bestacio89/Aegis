@@ -30,6 +30,9 @@ public sealed class ArchitectureDependencyEvidence
 
     public bool IsTestOnly { get; init; }
 
+    /// <summary>Whether a platform declaration enforces its dependency versions.</summary>
+    public bool IsEnforced { get; init; }
+
     public DependencyResolutionStatus ResolutionStatus { get; init; }
 
     public List<SemanticEvidenceProvenance> Provenance { get; init; } = [];

@@ -41,6 +41,9 @@ public sealed class ProjectModuleContext
     /// <summary>Statically interpreted Gradle build declarations for this project module.</summary>
     public GradleBuildModel? GradleBuildModel { get; set; }
 
+    /// <summary>Module-owned source roots with explicit production/test ownership and provenance.</summary>
+    public List<ProjectSourceRoot> SourceRoots { get; set; } = [];
+
     public List<string> TargetFrameworks { get; set; } = [];
 
     public List<string> Languages { get; set; } = [];

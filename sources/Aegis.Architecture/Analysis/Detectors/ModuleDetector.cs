@@ -88,6 +88,14 @@ internal static class ModuleDetector
                 module.ProjectKind = "Test";
                 module.IsLibrary = false;
             }
+            else if (string.Equals(
+                         module.Type,
+                         "TestSupport",
+                         StringComparison.OrdinalIgnoreCase))
+            {
+                module.IsTestSupport = true;
+                module.ProjectKind = "TestSupport";
+            }
 
             // Preserve a project-level aggregate when multiple concrete
             // technologies coexist. File-level evaluators resolve the concrete
@@ -488,6 +496,12 @@ internal static class ModuleDetector
         var pathName = Path.GetFileName(
             Path.TrimEndingDirectorySeparator(path)).ToLowerInvariant();
 
+        if (pathName.Contains("testsupport", StringComparison.Ordinal)
+            || pathName.EndsWith(".testing", StringComparison.Ordinal))
+        {
+            return "TestSupport";
+        }
+
         var pathType = DetectModuleTypeFromName(pathName);
         return pathType != "Unknown"
             ? pathType
@@ -512,11 +526,17 @@ internal static class ModuleDetector
             || name.EndsWith(".app", StringComparison.Ordinal))
             return "Application";
         if (name.Contains("domain", StringComparison.Ordinal)
+            || name.Contains("business", StringComparison.Ordinal)
             || name.EndsWith(".core", StringComparison.Ordinal))
             return "Domain";
-        // Explicit business-facing contracts take precedence over technical
-        // family names (for example, Http.Contracts remains a contract module).
-        if (name.Contains("contracts", StringComparison.Ordinal))
+        // Explicit contract packages take precedence over the technical family
+        // names used by adapters such as Http.Contracts.
+        if (name.Contains("contracts", StringComparison.Ordinal)
+            || name.Contains("annotations", StringComparison.Ordinal)
+            || (name.EndsWith(".headers", StringComparison.Ordinal)
+                && !name.Contains(".http.", StringComparison.Ordinal))
+            || (name.EndsWith(".errors", StringComparison.Ordinal)
+                && !name.Contains(".http.", StringComparison.Ordinal)))
             return "Contracts";
 
         // Foundational runtime capabilities and platform adapters belong to
@@ -528,13 +548,31 @@ internal static class ModuleDetector
             || name.Contains("messaging", StringComparison.Ordinal)
             || name.Contains("http", StringComparison.Ordinal)
             || name.Contains("refit", StringComparison.Ordinal)
-            || name.Contains("headers", StringComparison.Ordinal)
             || name.Contains("serialization", StringComparison.Ordinal)
             || name.Contains("serializer", StringComparison.Ordinal)
             || name.Contains("reflection", StringComparison.Ordinal)
             || name.Contains("dependencyinjection", StringComparison.Ordinal)
             || name.Contains("bootstrap", StringComparison.Ordinal)
             || name.Contains("hosting", StringComparison.Ordinal)
+            || name.Contains("entityframework", StringComparison.Ordinal)
+            || name.Contains("cosmos", StringComparison.Ordinal)
+            || name.Contains("mongodb", StringComparison.Ordinal)
+            || name.Contains("grpc", StringComparison.Ordinal)
+            || name.Contains("aras", StringComparison.Ordinal)
+            || name.Contains("mapping", StringComparison.Ordinal)
+            || name.Contains("io", StringComparison.Ordinal)
+            || name.Contains("opentelemetry", StringComparison.Ordinal)
+            || name.Contains("polly", StringComparison.Ordinal)
+            || name.Contains("kafka", StringComparison.Ordinal)
+            || name.Contains("rabbitmq", StringComparison.Ordinal)
+            || name.Contains("masstransit", StringComparison.Ordinal)
+            || name.Contains("sagas", StringComparison.Ordinal)
+            || name.Contains("azureevent", StringComparison.Ordinal)
+            || name.Contains("multitenancy", StringComparison.Ordinal)
+            || name.Contains("identity", StringComparison.Ordinal)
+            || name.Contains("sso", StringComparison.Ordinal)
+            || name.Contains("testing", StringComparison.Ordinal)
+            || name.Equals("franz.common", StringComparison.Ordinal)
             || name.Contains("caching", StringComparison.Ordinal)
             || name.Contains("cache", StringComparison.Ordinal)
             || name.Contains("logging", StringComparison.Ordinal)

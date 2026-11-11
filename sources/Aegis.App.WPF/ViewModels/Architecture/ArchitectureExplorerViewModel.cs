@@ -131,13 +131,10 @@ public sealed partial class ArchitectureExplorerViewModel : ObservableObject
         FilteredDependencies = Dependencies.Count(MatchesFilter);
     }
 
-    private bool MatchesFilter(object item)
+    private bool MatchesFilter(ArchitectureDependencyContext dependency)
     {
-        if (item is not ArchitectureDependencyContext dependency
-            || !MatchesBaseFilter(dependency))
-        {
+        if (!MatchesBaseFilter(dependency))
             return false;
-        }
 
         return SelectedGraphNode is null
             || string.Equals(dependency.Source, SelectedGraphNode.Name, StringComparison.OrdinalIgnoreCase)

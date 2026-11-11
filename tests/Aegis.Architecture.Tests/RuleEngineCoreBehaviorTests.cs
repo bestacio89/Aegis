@@ -354,6 +354,37 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
     [Fact]
+    public void EvaluateDetailed_marks_documentation_not_applicable_when_no_public_declarations_exist()
+    {
+        var fact = new ArchitectureEvaluatorResult(
+            "DocumentationEvaluator",
+            "InternalOnlyProject")
+        {
+            ProjectName = "InternalOnlyProject",
+            Metadata = new Dictionary<string, string>
+            {
+                ["EvaluationScope"] = "Project",
+                ["EvaluatorExecutionStatus"] = "NoApplicableDeclarations",
+                ["AnalysisComplete"] = "true",
+                ["StatusReason"] = "No eligible public declarations were discovered."
+            }
+        };
+
+        var outcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            new AegisArchitecturePolicy()).EvaluateDetailed(
+                new ProjectArchitectureContext { Language = "C#" },
+                [fact]);
+
+        Assert.Contains("AEG-ARCH-R11", outcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-ARCH-R11", outcome.Stats.RulesNotEvaluated);
+        Assert.Contains(
+            "no eligible public declarations",
+            outcome.Stats.NotApplicableReasons["AEG-ARCH-R11"],
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void EvaluateDetailed_excludes_frontend_rules_after_complete_discovery_finds_no_frontend_framework()
     {
         var policy = new AegisArchitecturePolicy();

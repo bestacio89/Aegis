@@ -138,7 +138,10 @@ public static class ProjectArchitectureContextDetector
         ArchitectureConfidenceEvaluator.Evaluate(
             ctx);
 
-
+        // Framework-specific rules may be classified as not applicable only
+        // after source discovery completed without coverage-affecting failures.
+        ctx.FrontendFrameworkDiscoveryComplete =
+            !ctx.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
 
         PopulateContextMetadata(
             ctx,

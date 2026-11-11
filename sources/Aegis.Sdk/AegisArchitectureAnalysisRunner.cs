@@ -1,6 +1,7 @@
 ﻿
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using Aegis.Architecture.Analysis;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Infrastructure.Data;
@@ -115,6 +116,17 @@ public sealed class AegisArchitectureAnalysisRunner
                 ? _configuredPolicy
                 : await LoadPolicyAsync(policyPath, token).ConfigureAwait(false);
 
+            if (!string.IsNullOrWhiteSpace(policyPath)
+                && !HaveEquivalentEvaluatorSettings(_configuredPolicy, policy))
+            {
+                throw new InvalidOperationException(
+                    "The explicit policy file differs from the evaluator configuration " +
+                    "loaded from the split policy documents. Evaluators are constructed " +
+                    "from the split configuration and cannot safely consume a separate " +
+                    "policy snapshot. Update the split policy documents under config/ or " +
+                    "run without an explicit --policy override. No analysis was executed.");
+            }
+
             token.ThrowIfCancellationRequested();
 
             _engine.ApplyPolicy(policy);
@@ -131,9 +143,9 @@ public sealed class AegisArchitectureAnalysisRunner
 
             if (!string.IsNullOrWhiteSpace(policyPath))
             {
-                _logger.LogWarning(
-                    "An explicit policy path overrides rule interpretation and context layer hints, but evaluator options remain bound to the registered split policy documents. " +
-                    "This can produce inconsistent analysis; use the split policy files for evaluator configuration.");
+                _logger.LogInformation(
+                    "Explicit policy file matches the active evaluator configuration; " +
+                    "the validated policy snapshot will be used for rule interpretation.");
             }
 
             Report(progress, 4, "Preparing", "Policy applied");
@@ -382,6 +394,69 @@ public sealed class AegisArchitectureAnalysisRunner
         return policy
             ?? throw new JsonException(
                 "The policy document deserialized to null.");
+    }
+
+    private static bool HaveEquivalentEvaluatorSettings(
+        AegisArchitecturePolicy configuredPolicy,
+        AegisArchitecturePolicy requestedPolicy)
+    {
+        ArgumentNullException.ThrowIfNull(configuredPolicy);
+        ArgumentNullException.ThrowIfNull(requestedPolicy);
+
+        // Metadata and rule thresholds are intentionally excluded: thresholds
+        // are consumed by RuleEngineCore, while the remaining groups configure
+        // evaluator instances that were constructed from the registered options.
+        var configuredSettings = JsonSerializer.SerializeToNode(
+            new
+            {
+                configuredPolicy.Architecture,
+                configuredPolicy.Repository,
+                configuredPolicy.Security,
+                configuredPolicy.Maintainability,
+                configuredPolicy.Dependency,
+                configuredPolicy.Naming,
+                configuredPolicy.Complexity,
+                configuredPolicy.Cohesion,
+                configuredPolicy.Coupling,
+                configuredPolicy.ApiConsistency,
+                configuredPolicy.ErrorHandling,
+                configuredPolicy.Frontend,
+                configuredPolicy.DependencyGraph,
+                configuredPolicy.Node,
+                configuredPolicy.CircularDependency,
+                configuredPolicy.Configuration,
+                configuredPolicy.Logging,
+                configuredPolicy.Transaction,
+                configuredPolicy.Performance
+            },
+            PolicyJsonOptions);
+
+        var requestedSettings = JsonSerializer.SerializeToNode(
+            new
+            {
+                requestedPolicy.Architecture,
+                requestedPolicy.Repository,
+                requestedPolicy.Security,
+                requestedPolicy.Maintainability,
+                requestedPolicy.Dependency,
+                requestedPolicy.Naming,
+                requestedPolicy.Complexity,
+                requestedPolicy.Cohesion,
+                requestedPolicy.Coupling,
+                requestedPolicy.ApiConsistency,
+                requestedPolicy.ErrorHandling,
+                requestedPolicy.Frontend,
+                requestedPolicy.DependencyGraph,
+                requestedPolicy.Node,
+                requestedPolicy.CircularDependency,
+                requestedPolicy.Configuration,
+                requestedPolicy.Logging,
+                requestedPolicy.Transaction,
+                requestedPolicy.Performance
+            },
+            PolicyJsonOptions);
+
+        return JsonNode.DeepEquals(configuredSettings, requestedSettings);
     }
 
     private static bool TryGetPropertyIgnoreCase(

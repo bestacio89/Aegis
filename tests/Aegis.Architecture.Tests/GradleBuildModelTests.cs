@@ -268,6 +268,50 @@ public sealed class GradleBuildModelTests
     }
 
     [Fact]
+    public void Detect_resolves_groovy_custom_source_sets_with_nested_java_blocks_and_file_notation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleGroovySourceSets_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle"), "rootProject.name = 'groovy-source-sets'");
+            File.WriteAllText(Path.Combine(root, "build.gradle"), """
+                sourceSets {
+                    integrationTest {
+                        java {
+                            srcDir file('src/integration/java')
+                        }
+                    }
+                    benchmark {
+                        java.srcDirs = ['src/benchmark/java']
+                    }
+                }
+                """);
+
+            WriteJavaSource(root, "src/integration/java/example/IntegrationTest.java");
+            WriteJavaSource(root, "src/benchmark/java/example/Benchmark.java");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.Contains(model.SourceSets, sourceSet =>
+                sourceSet.Name == "integrationTest" && sourceSet.IsTest);
+            Assert.Contains(model.SourceSets, sourceSet =>
+                sourceSet.Name == "benchmark" && !sourceSet.IsTest);
+            Assert.Contains(model.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(root, "src", "integration", "java")
+                && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Explicit
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test);
+            Assert.True(model.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_does_not_infer_dynamic_custom_source_set_directories()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisGradleDynamicSourceSet_{Guid.NewGuid():N}");

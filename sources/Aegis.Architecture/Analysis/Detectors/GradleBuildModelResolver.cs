@@ -550,7 +550,7 @@ internal static class GradleBuildModelResolver
     {
         var result = new List<GradleBuildModel.SourceSet>();
         var declaration = new Regex(
-            @"(?:create\s*\(\s*['""](?<created>[^'""]+)['""]\s*\)|(?<named>[A-Za-z][A-Za-z0-9_]*))\s*\{",
+            @"(?:create\s*\(\s*['""](?<created>[^'""]+)['""]\s*\)|(?:val\s+)?(?<kotlin>[A-Za-z][A-Za-z0-9_]*)\s+by\s+creating|(?<named>(?!java\b)[A-Za-z][A-Za-z0-9_]*))\s*\{",
             RegexOptions.CultureInvariant);
         var matches = declaration.Matches(sourceSetBlock);
 
@@ -558,17 +558,36 @@ internal static class GradleBuildModelResolver
         {
             var name = match.Groups["created"].Success
                 ? match.Groups["created"].Value
-                : match.Groups["named"].Value;
+                : match.Groups["kotlin"].Success
+                    ? match.Groups["kotlin"].Value
+                    : match.Groups["named"].Value;
             var opening = sourceSetBlock.IndexOf('{', match.Index);
             var body = ExtractBlockAt(sourceSetBlock, opening);
             if (body is null)
                 continue;
 
-            var directories = new HashSet<string>(PathComparer);
-            foreach (var line in body.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            var statements = new List<string>();
+            var javaBlockMatch = Regex.Match(body, @"\bjava\s*\{", RegexOptions.CultureInvariant);
+            if (javaBlockMatch.Success)
             {
-                if (!Regex.IsMatch(line, @"\bjava\s*\.\s*(?:srcDir|srcDirs|setSrcDirs)\b",
-                        RegexOptions.CultureInvariant))
+                var javaOpening = body.IndexOf('{', javaBlockMatch.Index);
+                var javaBody = ExtractBlockAt(body, javaOpening);
+                if (javaBody is not null)
+                    statements.AddRange(javaBody.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+            }
+
+            statements.AddRange(body.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Where(line => Regex.IsMatch(
+                    line, @"\bjava\s*\.\s*(?:srcDir|srcDirs|setSrcDirs)\b",
+                    RegexOptions.CultureInvariant)));
+
+            var directories = new HashSet<string>(PathComparer);
+            foreach (var line in statements)
+            {
+                var hasSourceDirectoryDeclaration = Regex.IsMatch(
+                    line, @"(?:\bjava\s*\.\s*)?(?:srcDir|srcDirs|setSrcDirs)\b",
+                    RegexOptions.CultureInvariant);
+                if (!hasSourceDirectoryDeclaration)
                     continue;
 
                 var quotedValues = Regex.Matches(line, @"['""](?<path>[^'""]*)['""]")
@@ -577,7 +596,7 @@ internal static class GradleBuildModelResolver
                     .ToArray();
                 var hasSupportedDeclaration = Regex.IsMatch(
                     line,
-                    @"\bjava\s*\.\s*(?:srcDir|srcDirs|setSrcDirs)\s*(?:\(|=|\+=|$)",
+                    @"(?:\bjava\s*\.\s*)?(?:srcDir|srcDirs|setSrcDirs)\s*(?:\(|=|\+=|\s+|$)",
                     RegexOptions.CultureInvariant);
 
                 if (!hasSupportedDeclaration || quotedValues.Length == 0)

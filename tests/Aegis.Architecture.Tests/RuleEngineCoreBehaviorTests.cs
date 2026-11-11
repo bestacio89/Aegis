@@ -203,6 +203,55 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
     [Fact]
+    public void EvaluateDetailed_excludes_frontend_rules_only_after_complete_discovery_proves_no_frontend()
+    {
+        var policy = new AegisArchitecturePolicy();
+        var completeContext = new ProjectArchitectureContext
+        {
+            Language = "C#",
+            Framework = ".NET 10",
+            DetectedFrameworks = [".NET 10"],
+            FrontendFrameworkDiscoveryComplete = true
+        };
+
+        var completeOutcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            policy).EvaluateDetailed(completeContext, []);
+
+        var frontendRuleIds = ArchitectureRuleRegistry.All
+            .Where(rule => rule.Id.StartsWith("AEG-FRONT-", StringComparison.OrdinalIgnoreCase))
+            .Select(rule => rule.Id)
+            .ToArray();
+
+        Assert.Equal(11, frontendRuleIds.Length);
+        Assert.All(
+            frontendRuleIds,
+            ruleId => Assert.Contains(ruleId, completeOutcome.Stats.RulesNotApplicable));
+        Assert.All(
+            frontendRuleIds,
+            ruleId => Assert.DoesNotContain(ruleId, completeOutcome.Stats.RulesNotEvaluated));
+
+        var incompleteContext = new ProjectArchitectureContext
+        {
+            Language = "C#",
+            Framework = ".NET 10",
+            DetectedFrameworks = [".NET 10"],
+            FrontendFrameworkDiscoveryComplete = false
+        };
+
+        var incompleteOutcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            policy).EvaluateDetailed(incompleteContext, []);
+
+        Assert.All(
+            frontendRuleIds,
+            ruleId => Assert.DoesNotContain(ruleId, incompleteOutcome.Stats.RulesNotApplicable));
+        Assert.All(
+            frontendRuleIds,
+            ruleId => Assert.Contains(ruleId, incompleteOutcome.Stats.RulesNotEvaluated));
+    }
+
+    [Fact]
     public void EvaluateDetailed_marks_policy_disabled_supported_rules_not_applicable()
     {
         var disabledPolicy = new AegisArchitecturePolicy();

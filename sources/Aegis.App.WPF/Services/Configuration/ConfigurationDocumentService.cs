@@ -503,8 +503,8 @@ public sealed class ConfigurationDocumentService
         while (current is not null)
         {
             var candidate = Path.Combine(current.FullName, "config");
-            if (File.Exists(Path.Combine(current.FullName, "Aegis.Wpf.csproj")) &&
-                PolicyDescriptors.All(descriptor => File.Exists(Path.Combine(candidate, descriptor.FileName))))
+            if (File.Exists(Path.Combine(current.FullName, "Aegis.Wpf.csproj"))
+                && File.Exists(Path.Combine(candidate, "architecture.policy.json")))
             {
                 return candidate;
             }
@@ -513,11 +513,6 @@ public sealed class ConfigurationDocumentService
         }
 
         var outputDirectory = Path.Combine(AppContext.BaseDirectory, "config");
-        if (PolicyDescriptors.All(descriptor => File.Exists(Path.Combine(outputDirectory, descriptor.FileName))))
-        {
-            return outputDirectory;
-        }
-
         return outputDirectory;
     }
 

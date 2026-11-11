@@ -121,9 +121,9 @@ internal static class GradleProjectModelResolver
             }
 
             var versionCatalog = Path.Combine(rootDirectory, "gradle", "libs.versions.toml");
-            var versionCatalogFiles = files.Any(file => PathsEqual(file, versionCatalog))
-                ? new List<string> { Path.GetFullPath(versionCatalog) }
-                : [];
+            var versionCatalogFiles = new List<string>();
+            if (files.Any(file => PathsEqual(file, versionCatalog)))
+                versionCatalogFiles.Add(Path.GetFullPath(versionCatalog));
 
             var model = new GradleProjectModel
             {

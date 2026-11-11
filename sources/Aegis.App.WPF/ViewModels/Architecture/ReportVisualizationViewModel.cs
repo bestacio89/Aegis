@@ -152,8 +152,8 @@ public sealed partial class ReportVisualizationViewModel
             SummaryItems.Add(
                 new(
                     "Rules evaluated",
-                    $"{report.RulesEvaluated} / {report.RulesRegistered}",
-                    "Rules that matched a measurement from this project, of those registered"));
+                    $"{report.RulesEvaluated} / {report.EvaluationStats.RulesApplicable + report.EvaluationStats.RulesUnsupported}",
+                    "Rules evaluated out of the in-scope rules; not-applicable and policy-disabled rules are excluded"));
 
 
             SummaryItems.Add(
@@ -167,19 +167,25 @@ public sealed partial class ReportVisualizationViewModel
                 new(
                     "Not applicable",
                     report.EvaluationStats.RulesNotApplicable.Count.ToString(),
-                    "Rules excluded by detected technology scope"));
+                    "Rules excluded by proven technology, architecture, or candidate scope"));
 
-            var unevaluatedInScope = Math.Max(
-                0,
-                report.EvaluationStats.RulesRegistered
-                - report.EvaluationStats.RulesEvaluated
-                - report.EvaluationStats.RulesNotApplicable.Count);
+            SummaryItems.Add(
+                new(
+                    "Disabled by policy",
+                    report.EvaluationStats.RulesDisabledByPolicy.ToString(),
+                    "Rules intentionally excluded by active policy configuration"));
+
+            SummaryItems.Add(
+                new(
+                    "Unsupported rules",
+                    report.EvaluationStats.RulesUnsupported.ToString(),
+                    "In-scope rules whose declared metric semantics do not yet have a safe producer"));
 
             SummaryItems.Add(
                 new(
                     "Missing measurements",
-                    unevaluatedInScope.ToString(),
-                    "In-scope rules without a matching metric contract"));
+                    report.EvaluationStats.RulesNotEvaluated.Count.ToString(),
+                    "Supported in-scope rules without the required evidence"));
 
             SummaryItems.Add(
                 new(
@@ -273,26 +279,36 @@ public sealed partial class ReportVisualizationViewModel
 
         if (stats is not null && stats.ChecksPerformed == 0)
         {
-            if (stats.RulesNotApplicable.Count == stats.RulesRegistered)
+            var inScopeRuleCount = stats.RulesApplicable + stats.RulesUnsupported;
+            if (inScopeRuleCount == 0)
             {
-                return "No architecture rules applied to the detected project technology. This is not a compliance verdict.";
+                return
+                    $"No architecture rules were applicable to this project. " +
+                    $"{stats.RulesNotApplicable.Count} not applicable; " +
+                    $"{stats.RulesDisabledByPolicy} disabled by policy. This is not a compliance verdict.";
             }
 
-            var missingMetrics = Math.Max(0, stats.RulesRegistered - stats.RulesNotApplicable.Count);
             return
-                "No rule could be evaluated: none of the measurements produced by this analysis matched a " +
-                $"rule in scope ({missingMetrics} in-scope rule(s), {stats.RulesNotApplicable.Count} not applicable). This is not a clean result.";
+                "No rule could be evaluated: no measurement satisfied an in-scope rule. " +
+                $"In scope: {inScopeRuleCount}; unsupported: {stats.RulesUnsupported}; " +
+                $"missing measurements: {stats.RulesNotEvaluated.Count}; " +
+                $"not applicable: {stats.RulesNotApplicable.Count}; " +
+                $"disabled by policy: {stats.RulesDisabledByPolicy}. This is not a clean result.";
         }
 
 
         var notApplicable = stats?.RulesNotApplicable.Count ?? 0;
-        var notEvaluated = stats is null
+        var notEvaluated = stats?.RulesNotEvaluated.Count ?? 0;
+        var disabled = stats?.RulesDisabledByPolicy ?? 0;
+        var unsupported = stats?.RulesUnsupported ?? 0;
+        var inScope = stats is null
             ? 0
-            : Math.Max(0, stats.RulesRegistered - stats.RulesEvaluated - notApplicable);
+            : stats.RulesApplicable + stats.RulesUnsupported;
 
         var coverage = stats is null
             ? string.Empty
-            : $" {notApplicable} rule(s) were not applicable; {notEvaluated} applicable rule(s) had no matching measurement.";
+            : $" {notApplicable} rule(s) were not applicable; {disabled} disabled by policy; " +
+              $"{unsupported} unsupported; {notEvaluated} supported in-scope rule(s) had no matching measurement.";
 
         var assessmentQualifier = stats is null || report.Metrics.AssessmentComplete
             ? string.Empty
@@ -304,7 +320,7 @@ public sealed partial class ReportVisualizationViewModel
             return stats is null
                 ? "Architecture evaluation completed successfully. No violations detected."
                 : $"Architecture evaluation completed. No violations across {stats.ChecksPerformed:N0} checks " +
-                  $"({stats.RulesEvaluated} of {stats.RulesRegistered} rules applied).{coverage}{assessmentQualifier}";
+                  $"({stats.RulesEvaluated} of {inScope} in-scope rules evaluated).{coverage}{assessmentQualifier}";
         }
 
 

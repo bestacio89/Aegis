@@ -354,6 +354,38 @@ public sealed class RuleEngineCoreBehaviorTests
     }
 
     [Fact]
+    public void EvaluateDetailed_excludes_frontend_rules_after_complete_discovery_finds_no_frontend_framework()
+    {
+        var policy = new AegisArchitecturePolicy();
+        policy.Frontend.Enabled = true;
+
+        var context = new ProjectArchitectureContext
+        {
+            Language = "C#",
+            FrontendFrameworkDiscoveryComplete = true
+        };
+
+        var outcome = new RuleEngineCore(
+            NullLogger<RuleEngineCore>.Instance,
+            policy).EvaluateDetailed(context, []);
+
+        var frontendRuleIds = Enumerable.Range(1, 11)
+            .Select(index => $"AEG-FRONT-R{index}")
+            .ToArray();
+
+        foreach (var ruleId in frontendRuleIds)
+        {
+            Assert.Contains(ruleId, outcome.Stats.RulesNotApplicable);
+            Assert.DoesNotContain(ruleId, outcome.Stats.RulesNotEvaluated);
+        }
+
+        Assert.Equal(frontendRuleIds.Length, outcome.Stats.RulesNotApplicable.Count);
+        Assert.DoesNotContain(
+            outcome.Stats.RulesApplicable,
+            ruleCount => ruleCount < 0);
+    }
+
+    [Fact]
     public void EvaluateDetailed_marks_strategy_rules_not_applicable_when_complete_analysis_finds_no_candidates()
     {
         var policy = new AegisArchitecturePolicy();

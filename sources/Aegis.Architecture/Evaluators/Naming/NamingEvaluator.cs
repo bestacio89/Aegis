@@ -353,8 +353,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
                         analysis,
                         convention,
                         fileContext.Framework,
-                        content,
-                        IsTestProjectFile(file)));
+                        content));
             }
             else
             {
@@ -391,8 +390,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
         NamingAnalysisResult analysis,
         INamingConventionPolicy convention,
         string? framework,
-        string source,
-        bool isTestProject)
+        string source)
     {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(convention);
@@ -503,7 +501,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
             .ToArray();
         var variableViolations = invalidVariableDeclarations.Length;
         var invalidFieldDeclarations = fieldDeclarations
-            .Where(declaration => !IsValidFieldName(declaration, convention, isTestProject))
+            .Where(declaration => !IsValidFieldName(declaration, convention))
             .ToArray();
         var fieldViolations = invalidFieldDeclarations.Length;
 
@@ -665,8 +663,7 @@ public sealed class NamingEvaluator : BaseArchitectureEvaluator, IScopedDependen
 
     private static bool IsValidFieldName(
         NamingDeclaration declaration,
-        INamingConventionPolicy convention,
-        bool isTestProject)
+        INamingConventionPolicy convention)
     {
         if (convention is UnityNamingConventionPolicy)
         {

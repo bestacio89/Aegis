@@ -428,11 +428,20 @@ public sealed class DocumentationEvaluator :
             if (isDocumented)
                 documented++;
 
+            var identifier = GetCSharpDeclarationIdentifier(declaration);
+            var evidencePosition = identifier.RawKind == 0
+                ? declaration.SpanStart
+                : identifier.SpanStart;
+            var declarationName = identifier.RawKind == 0
+                ? declaration.Kind().ToString()
+                : identifier.ValueText;
+
             evidence.Add(FormatDeclarationEvidence(
                 content,
                 relativePath,
-                declaration.SpanStart,
-                isDocumented));
+                evidencePosition,
+                isDocumented,
+                declarationName));
         }
 
         var diagnostics = syntaxTree.GetDiagnostics()
@@ -451,6 +460,30 @@ public sealed class DocumentationEvaluator :
             evidence,
             diagnostics.Length == 0,
             diagnostics);
+    }
+
+    private static SyntaxToken GetCSharpDeclarationIdentifier(SyntaxNode declaration)
+    {
+        return declaration switch
+        {
+            BaseTypeDeclarationSyntax type => type.Identifier,
+            DelegateDeclarationSyntax @delegate => @delegate.Identifier,
+            MethodDeclarationSyntax method => method.Identifier,
+            PropertyDeclarationSyntax property => property.Identifier,
+            IndexerDeclarationSyntax indexer => indexer.ThisKeyword,
+            EventDeclarationSyntax @event => @event.Identifier,
+            EventFieldDeclarationSyntax eventField =>
+                eventField.Declaration.Variables.FirstOrDefault()?.Identifier ?? default,
+            FieldDeclarationSyntax field =>
+                field.Declaration.Variables.FirstOrDefault()?.Identifier ?? default,
+            ConstructorDeclarationSyntax constructor => constructor.Identifier,
+            DestructorDeclarationSyntax destructor => destructor.Identifier,
+            OperatorDeclarationSyntax @operator => @operator.OperatorToken,
+            ConversionOperatorDeclarationSyntax conversion =>
+                conversion.ImplicitOrExplicitKeyword,
+            EnumMemberDeclarationSyntax enumMember => enumMember.Identifier,
+            _ => default
+        };
     }
 
     private static bool IsPublicCSharpDeclaration(
@@ -581,13 +614,17 @@ public sealed class DocumentationEvaluator :
         string content,
         string relativePath,
         int declarationIndex,
-        bool documented)
+        bool documented,
+        string? declarationName = null)
     {
         var lineNumber = GetLineNumber(content, declarationIndex);
         var line = GetSourceLine(content, declarationIndex);
+        var name = string.IsNullOrWhiteSpace(declarationName)
+            ? string.Empty
+            : $" {declarationName}:";
 
         return $"{relativePath}:{lineNumber}: " +
-            $"{(documented ? "documented" : "missing documentation")} — {line}";
+            $"{(documented ? "documented" : "missing documentation")}{name} {line}";
     }
 
     private static int GetLineNumber(string content, int position)

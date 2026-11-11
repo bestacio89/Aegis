@@ -9,6 +9,6 @@
     "IncludeDocCommentsInScore": true,
     "Factor": 1,
     "HealthImpactWeight": 0.5,
-    "CriticalThresshold": 50
+    "CriticalThreshold": 50
   }
 }

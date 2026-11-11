@@ -137,6 +137,9 @@ public sealed class RuleMetricScopeDiagnosticTests
         Assert.Equal(0, outcome.Stats.FactsWithMetricsAtWrongScope);
         Assert.Contains(
             "AEG-ARCH-R10",
+            outcome.Stats.UnsupportedRuleReasons.Keys);
+        Assert.DoesNotContain(
+            "AEG-ARCH-R10",
             outcome.Stats.RulesNotEvaluated);
     }
 
@@ -430,7 +433,15 @@ public sealed class RuleMetricScopeDiagnosticTests
             [incompleteSummary]);
 
         Assert.DoesNotContain(ruleId, incompleteOutcome.Stats.RulesNotApplicable);
-        Assert.Contains(ruleId, incompleteOutcome.Stats.RulesNotEvaluated);
+
+        if (incompleteOutcome.Stats.UnsupportedRuleReasons.ContainsKey(ruleId))
+        {
+            Assert.DoesNotContain(ruleId, incompleteOutcome.Stats.RulesNotEvaluated);
+        }
+        else
+        {
+            Assert.Contains(ruleId, incompleteOutcome.Stats.RulesNotEvaluated);
+        }
     }
 
     [Fact]

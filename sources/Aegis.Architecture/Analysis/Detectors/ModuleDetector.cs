@@ -532,9 +532,9 @@ internal static class ModuleDetector
         if (name.Contains("contracts", StringComparison.Ordinal)
             || name.Contains("annotations", StringComparison.Ordinal)
             || (name.EndsWith(".headers", StringComparison.Ordinal)
-                && !name.Contains(".http.", StringComparison.Ordinal))
+                && !name.Split('.').Contains("http", StringComparer.Ordinal))
             || (name.EndsWith(".errors", StringComparison.Ordinal)
-                && !name.Contains(".http.", StringComparison.Ordinal)))
+                && !name.Split('.').Contains("http", StringComparer.Ordinal)))
             return "Contracts";
 
         if (name.EndsWith(".api", StringComparison.Ordinal)

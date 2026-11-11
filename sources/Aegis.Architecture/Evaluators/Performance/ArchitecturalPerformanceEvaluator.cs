@@ -60,14 +60,6 @@ public sealed class ArchitecturalPerformanceEvaluator
 
 
 
-    private static readonly Regex NestedLoopRegex =
-        new(
-            @"\b(for|while|foreach)\b[\s\S]{0,300}\b(for|while|foreach)\b",
-            RegexOptions.IgnoreCase |
-            RegexOptions.Compiled);
-
-
-
     private static readonly Regex DotNetBlockingRegex =
         new(
             @"\b(?:Thread\.Sleep|Task\.WaitAll|Task\.WaitAny)\s*\(|\b[A-Za-z_][A-Za-z0-9_]*\.GetAwaiter\(\)\.GetResult\s*\(",
@@ -254,23 +246,16 @@ public sealed class ArchitecturalPerformanceEvaluator
     {
         var language = DetectLanguage(file);
         var sanitized = SourceCodeMasker.Mask(content);
-        var score = AnalyzePerformanceSignals(sanitized, language);
+        var loopAnalysis = AnalyzeLoopBodies(sanitized, language);
+        var score = AnalyzePerformanceSignals(sanitized, language, loopAnalysis);
         var blockingMatches = FindBlockingOperations(sanitized, language);
         var syncIoMatches = _policy.RequireAsyncForIOMethods
             ? FindSynchronousIOOperations(sanitized, language)
             : Array.Empty<Match>();
-        var nestedLoopMatches = NestedLoopRegex.Matches(sanitized)
-            .Cast<Match>()
-            .ToArray();
-        var threadCreationMatches = _policy.WarnThreadCreationInHotPaths
-            ? ThreadCreationRegex.Matches(sanitized).Cast<Match>().ToArray()
-            : Array.Empty<Match>();
-        var stringConcatenationMatches = _policy.DetectStringConcatenationInLoops
-            ? StringConcatenationRegex.Matches(sanitized).Cast<Match>().ToArray()
-            : Array.Empty<Match>();
-        var largeAllocationMatches = _policy.DetectLargeCollectionsInitialization
-            ? FindLargeAllocationMatches(sanitized)
-            : Array.Empty<Match>();
+        var nestedLoopMatches = loopAnalysis.NestedLoopMatches;
+        var threadCreationMatches = loopAnalysis.ThreadCreationMatches;
+        var stringConcatenationMatches = loopAnalysis.StringConcatenationMatches;
+        var largeAllocationMatches = loopAnalysis.LargeAllocationMatches;
 
         var framework = ResolveFrameworkForFile(file, projectPath, Context!);
         var result = CreateResult(file, "Performance");
@@ -293,6 +278,8 @@ public sealed class ArchitecturalPerformanceEvaluator
         result.Metrics["PerformanceHealthIndex"] = score.Health;
         result.Metrics["StringConcatenationAssignmentCount"] = stringConcatenationMatches.Length;
         result.Metrics["LargeAllocationSignalCount"] = largeAllocationMatches.Length;
+        result.Metrics["LoopBodyLengthSignalCount"] = loopAnalysis.LongLoopBodyMatches.Count;
+        result.Metrics["MaximumLoopNestingDepth"] = loopAnalysis.MaximumNestingDepth;
 
         result.Metadata["FileName"] = Path.GetFileName(file);
         result.Metadata["FilePath"] = file;
@@ -355,7 +342,9 @@ public sealed class ArchitecturalPerformanceEvaluator
             nestedLoopMatches,
             content,
             sanitized,
-            $"Algorithmic efficiency {score.Algorithmic * 100:0.##}/100; nested-loop patterns detected {nestedLoopMatches.Length}.");
+            $"Algorithmic efficiency {score.Algorithmic * 100:0.##}/100; maximum loop nesting depth {loopAnalysis.MaximumNestingDepth} (policy maximum {_policy.MaxNestedLoopDepth}); " +
+            $"loop bodies exceeding {_policy.MaxLoopBodyLength} lines: {loopAnalysis.LongLoopBodyMatches.Count}; " +
+            $"string concatenation signals in loops: {stringConcatenationMatches.Length}; large allocations in loops: {largeAllocationMatches.Length}.");
         AddMetricEvidence(
             result,
             evidence,
@@ -545,6 +534,222 @@ public sealed class ArchitecturalPerformanceEvaluator
             .ToArray();
     }
 
+    private LoopAnalysis AnalyzeLoopBodies(
+        string content,
+        string language)
+    {
+        var loopMatches = LoopRegex.Matches(content).Cast<Match>().ToArray();
+        var ranges = loopMatches
+            .Select(match => TryGetLoopBodyRange(content, match, language, out var range)
+                ? range
+                : null)
+            .Where(range => range is not null)
+            .Cast<LoopBodyRange>()
+            .ToArray();
+
+        int GetDepth(LoopBodyRange parent)
+        {
+            var children = ranges
+                .Where(candidate =>
+                    candidate.LoopMatch.Index > parent.LoopMatch.Index
+                    && candidate.Start >= parent.Start
+                    && candidate.End <= parent.End)
+                .ToArray();
+
+            return children.Length == 0
+                ? 1
+                : 1 + children.Max(GetDepth);
+        }
+
+        var maximumDepth = ranges.Length == 0
+            ? 0
+            : ranges.Max(GetDepth);
+
+        var nestedLoops = ranges
+            .Where(parent => ranges.Any(candidate =>
+                candidate.LoopMatch.Index > parent.LoopMatch.Index
+                && candidate.Start >= parent.Start
+                && candidate.End <= parent.End))
+            .Select(range => range.LoopMatch)
+            .ToArray();
+
+        var longBodies = ranges
+            .Where(range =>
+                GetLineNumber(content, range.End)
+                - GetLineNumber(content, range.Start)
+                > _policy.MaxLoopBodyLength)
+            .Select(range => range.LoopMatch)
+            .ToArray();
+
+        var stringConcatenations = _policy.DetectStringConcatenationInLoops
+            ? StringConcatenationRegex.Matches(content)
+                .Cast<Match>()
+                .Where(match => ranges.Any(range =>
+                    match.Index >= range.Start && match.Index < range.End))
+                .ToArray()
+            : Array.Empty<Match>();
+
+        var largeAllocations = _policy.DetectLargeCollectionsInitialization
+            ? FindLargeAllocationMatches(content)
+                .Where(match => ranges.Any(range =>
+                    match.Index >= range.Start && match.Index < range.End))
+                .ToArray()
+            : Array.Empty<Match>();
+
+        var threadCreations = _policy.WarnThreadCreationInHotPaths
+            ? ThreadCreationRegex.Matches(content)
+                .Cast<Match>()
+                .Where(match => ranges.Any(range =>
+                    match.Index >= range.Start && match.Index < range.End))
+                .ToArray()
+            : Array.Empty<Match>();
+
+        return new LoopAnalysis(
+            ranges.Length,
+            maximumDepth,
+            nestedLoops,
+            longBodies,
+            stringConcatenations,
+            largeAllocations,
+            threadCreations);
+    }
+
+    private static bool TryGetLoopBodyRange(
+        string content,
+        Match loopMatch,
+        string language,
+        out LoopBodyRange range)
+    {
+        range = null!;
+
+        if (language == "Python")
+        {
+            var colon = content.IndexOf(':', loopMatch.Index + loopMatch.Length);
+            if (colon < 0)
+                return false;
+
+            var headerStart = content.LastIndexOf('\n', loopMatch.Index);
+            headerStart = headerStart < 0 ? 0 : headerStart + 1;
+            var headerIndent = CountLeadingWhitespace(content, headerStart, loopMatch.Index);
+            var bodyStart = content.IndexOf('\n', colon);
+            if (bodyStart < 0)
+                return false;
+
+            bodyStart++;
+            var cursor = bodyStart;
+            while (cursor < content.Length)
+            {
+                var lineEnd = content.IndexOf('\n', cursor);
+                if (lineEnd < 0)
+                    lineEnd = content.Length;
+
+                var firstNonWhitespace = cursor;
+                while (firstNonWhitespace < lineEnd
+                    && char.IsWhiteSpace(content[firstNonWhitespace]))
+                {
+                    firstNonWhitespace++;
+                }
+
+                if (firstNonWhitespace < lineEnd)
+                {
+                    var indentation = CountLeadingWhitespace(content, cursor, firstNonWhitespace);
+                    if (indentation <= headerIndent)
+                        break;
+                }
+
+                cursor = lineEnd + 1;
+            }
+
+            range = new LoopBodyRange(loopMatch, bodyStart, cursor);
+            return cursor > bodyStart;
+        }
+
+        var openingParenthesis = content.IndexOf(
+            '(',
+            loopMatch.Index + loopMatch.Length);
+        if (openingParenthesis < 0)
+            return false;
+
+        var closingParenthesis = FindMatchingDelimiter(
+            content,
+            openingParenthesis,
+            '(',
+            ')');
+        if (closingParenthesis < 0)
+            return false;
+
+        var bodyStartIndex = closingParenthesis + 1;
+        while (bodyStartIndex < content.Length
+            && char.IsWhiteSpace(content[bodyStartIndex]))
+        {
+            bodyStartIndex++;
+        }
+
+        if (bodyStartIndex >= content.Length)
+            return false;
+
+        if (content[bodyStartIndex] == '{')
+        {
+            var closingBrace = FindMatchingDelimiter(
+                content,
+                bodyStartIndex,
+                '{',
+                '}');
+            if (closingBrace < 0)
+                return false;
+
+            range = new LoopBodyRange(
+                loopMatch,
+                bodyStartIndex + 1,
+                closingBrace);
+            return true;
+        }
+
+        var statementEnd = content.IndexOf(';', bodyStartIndex);
+        if (statementEnd < 0)
+            statementEnd = content.Length;
+
+        range = new LoopBodyRange(loopMatch, bodyStartIndex, statementEnd);
+        return statementEnd > bodyStartIndex;
+    }
+
+    private static int FindMatchingDelimiter(
+        string content,
+        int openingIndex,
+        char opening,
+        char closing)
+    {
+        var depth = 0;
+        for (var index = openingIndex; index < content.Length; index++)
+        {
+            if (content[index] == opening)
+                depth++;
+            else if (content[index] == closing && --depth == 0)
+                return index;
+        }
+
+        return -1;
+    }
+
+    private static int CountLeadingWhitespace(
+        string content,
+        int start,
+        int end)
+    {
+        var count = 0;
+        for (var index = start; index < end; index++)
+        {
+            if (content[index] == ' ')
+                count++;
+            else if (content[index] == '\t')
+                count += 4;
+            else
+                break;
+        }
+
+        return count;
+    }
+
     private IReadOnlyCollection<Match> FindLargeAllocationMatches(string content)
     {
         return LargeAllocationRegex.Matches(content)
@@ -598,22 +803,30 @@ public sealed class ArchitecturalPerformanceEvaluator
 
     private PerformanceScore AnalyzePerformanceSignals(
         string content,
-        string language)
+        string language,
+        LoopAnalysis loopAnalysis)
     {
         var algorithmic = 1d;
         var concurrency = 1d;
         var async = 1d;
         var io = 1d;
 
-        var hasLoop = LoopRegex.IsMatch(content);
-        var nestedLoopMatches = NestedLoopRegex.Matches(content);
         var blockingCalls = FindBlockingCallOperations(content, language);
         var synchronousIo = _policy.RequireAsyncForIOMethods
             ? FindSynchronousIOOperations(content, language)
             : Array.Empty<Match>();
 
-        if (nestedLoopMatches.Count > 0)
+        if (loopAnalysis.MaximumNestingDepth > _policy.MaxNestedLoopDepth)
             algorithmic -= 0.20;
+
+        if (loopAnalysis.LongLoopBodyMatches.Count > 0)
+            algorithmic -= 0.05;
+
+        if (loopAnalysis.StringConcatenationMatches.Count > 0)
+            algorithmic -= 0.05;
+
+        if (loopAnalysis.LargeAllocationMatches.Count > 0)
+            algorithmic -= 0.05;
 
         // A blocking call affects both responsiveness and concurrency health.
         if (blockingCalls.Count > 0)
@@ -622,11 +835,8 @@ public sealed class ArchitecturalPerformanceEvaluator
             async -= 0.25;
         }
 
-        if (_policy.WarnThreadCreationInHotPaths
-            && ThreadCreationRegex.IsMatch(content))
-        {
+        if (loopAnalysis.ThreadCreationMatches.Count > 0)
             concurrency -= 0.15;
-        }
 
         if (synchronousIo.Count > 0)
         {
@@ -637,7 +847,7 @@ public sealed class ArchitecturalPerformanceEvaluator
         // A loop alone does not imply an async requirement. Only lower maturity
         // when synchronous I/O occurs in a loop without an awaitable path.
         if (_policy.SuggestAsyncStreams
-            && hasLoop
+            && loopAnalysis.LoopCount > 0
             && synchronousIo.Count > 0
             && !AwaitRegex.IsMatch(content))
         {
@@ -926,6 +1136,20 @@ public sealed class ArchitecturalPerformanceEvaluator
     }
 
 
+
+    private sealed record LoopBodyRange(
+        Match LoopMatch,
+        int Start,
+        int End);
+
+    private sealed record LoopAnalysis(
+        int LoopCount,
+        int MaximumNestingDepth,
+        IReadOnlyCollection<Match> NestedLoopMatches,
+        IReadOnlyCollection<Match> LongLoopBodyMatches,
+        IReadOnlyCollection<Match> StringConcatenationMatches,
+        IReadOnlyCollection<Match> LargeAllocationMatches,
+        IReadOnlyCollection<Match> ThreadCreationMatches);
 
     private sealed class PerformanceScore
     {

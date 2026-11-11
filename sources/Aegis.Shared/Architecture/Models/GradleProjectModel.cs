@@ -20,7 +20,7 @@ public sealed class GradleProjectModel
 
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];
 
-    public bool IsComplete { get; init; }
+    public bool IsComplete { get; set; }
 
     public sealed record ProjectReference(
         string ProjectPath,
@@ -30,5 +30,8 @@ public sealed class GradleProjectModel
 
     public sealed record IncludedBuild(
         string BuildPath,
-        string Directory);
+        string Directory,
+        bool IsDiscovered,
+        string? SettingsFile,
+        string? RootProjectName);
 }

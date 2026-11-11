@@ -242,7 +242,7 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
             .Select(call =>
             {
                 var lineNumber = GetLineNumber(content, call.Index);
-                return $"{Path.GetFileName(file)}:{lineNumber}: {call.Value.Trim()} — {GetSourceLine(content, lineNumber)}";
+                return $"Line {lineNumber}: {call.Value.Trim()} — {GetSourceLine(content, lineNumber)}";
             })
             .ToArray();
 
@@ -290,8 +290,17 @@ public sealed class LoggingEvaluator : BaseArchitectureEvaluator
         var levels = Average(scope.FileResults, "LogLevelComplianceScore");
         var noise = Average(scope.FileResults, "LoggingNoiseScore");
         var evidence = scope.FileResults
-            .SelectMany(result => (result.Evidence ?? string.Empty)
-                .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries))
+            .SelectMany(result =>
+            {
+                var filePath = result.Metadata.GetValueOrDefault("FilePath");
+                var relativePath = string.IsNullOrWhiteSpace(filePath)
+                    ? result.Target
+                    : Path.GetRelativePath(scope.Identity.Path, filePath);
+
+                return (result.Evidence ?? string.Empty)
+                    .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(item => $"{relativePath}: {item}");
+            })
             .Take(100)
             .ToArray();
 

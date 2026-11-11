@@ -380,9 +380,12 @@ public sealed class RuleEngineCoreBehaviorTests
         }
 
         Assert.Equal(frontendRuleIds.Length, outcome.Stats.RulesNotApplicable.Count);
-        Assert.DoesNotContain(
-            outcome.Stats.RulesApplicable,
-            ruleCount => ruleCount < 0);
+        Assert.Equal(
+            outcome.Stats.RulesRegistered,
+            outcome.Stats.RulesApplicable
+                + outcome.Stats.RulesDisabledByPolicy
+                + outcome.Stats.RulesUnsupported
+                + outcome.Stats.RulesNotApplicable.Count);
     }
 
     [Fact]

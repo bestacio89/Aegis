@@ -39,9 +39,7 @@
    <Page Remove="Resources\**" />
  </ItemGroup>
   
- <ItemGroup>
-   <Content Remove="config\apiconsistency.policy.json" />
- </ItemGroup>
+ 
   
  <ItemGroup>
    <Content Include="appsettings.json">

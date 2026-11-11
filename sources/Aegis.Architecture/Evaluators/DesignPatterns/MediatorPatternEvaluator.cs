@@ -57,7 +57,7 @@ public sealed class MediatorPatternEvaluator
         RegexOptions.Multiline);
 
     private static readonly Regex MediatorImplementationRegex = new(
-        @"\bclass\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*Mediator)\b[^{}]*\{|\bclass\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*)\b[^{}]*:\s*[^{}]*\bI[A-Za-z0-9_$]*Mediator\b[^{}]*\{",
+        @"\bclass\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*Mediator)\b[^{}]*\{|\bclass\s+(?<name>[A-Za-z_$][A-Za-z0-9_$]*)\b[^{}]*(?::|implements)\s*[^{}]*\bI[A-Za-z0-9_$]*Mediator\b[^{}]*\{",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex MediatorHandlerContractRegex = new(

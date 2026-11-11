@@ -315,12 +315,8 @@ public sealed class BuilderPatternEvaluator
         result.Metrics["HasMutationSignals"] = hasMutationSignals ? 1 : 0;
         result.Metrics["HasReadonlySignals"] = hasReadonlySignals ? 1 : 0;
 
-        // Score only confidently identified builder candidates. Build() and
-        // fluent chaining are independently required signals; mutation without
-        // a fluent return is reported separately rather than treating every
-        // state mutation as a violation.
-        // Fluent chaining is a style choice, not a mandatory Builder pattern
-        // requirement. A named builder with a Build method is structurally valid.
+        // Build() is the structural requirement. Fluent chaining is optional
+        // and is retained as an informational signal only.
         result.Metrics["BuilderPatternComplianceIndex"] =
             hasBuildMethod ? 100d : 0d;
         result.Metrics["BuilderMutabilityViolationCount"] =

@@ -316,7 +316,7 @@ internal static class MavenProjectModelResolver
                     ResolveValue(Value(element, "groupId"), properties),
                     ResolveValue(Value(element, "artifactId"), properties),
                     ResolveValue(Value(element, "version"), properties),
-                    ResolveValue(Value(element, "scope"), properties) ?? (managed ? string.Empty : "compile"),
+                    ResolveValue(Value(element, "scope"), properties) ?? string.Empty,
                     ResolveValue(Value(element, "type"), properties) ?? "jar",
                     ResolveValue(Value(element, "classifier"), properties),
                     bool.TryParse(ResolveValue(Value(element, "optional"), properties), out var optional)

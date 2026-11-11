@@ -130,12 +130,8 @@ public sealed class RepositoryPatternEvaluator
         @"\basync[ \t]+def\b|\bawait\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private static readonly string[] PersistenceAndTransportIndicators =
+    private static readonly string[] ExternalTransportIndicators =
     [
-        "SqlConnection",
-        "DbContext",
-        "EntityManager",
-        "cursor.execute",
         "HttpClient",
         "axios",
         "fetch(",
@@ -437,7 +433,11 @@ public sealed class RepositoryPatternEvaluator
         result.Metadata["HasMatchingAbstraction"] = hasMatchingInterface.ToString();
         result.Metadata["HasAsyncSignal"] = hasAsyncSignal.ToString();
         result.Metadata["HasPersistenceOrTransportSignals"] = (leakMatches.Count > 0).ToString();
-        result.Metadata["PersistenceTransportIndicators"] = string.Join(", ", leakIndicators);
+        result.Metadata["ExternalTransportIndicators"] = string.Join(", ", leakIndicators);
+        result.Metadata["PersistenceTransportIndicators"] =
+            "Database access is expected inside repository implementations; this evaluator only reports external transport clients."; 
+        result.Metadata["AsyncSignalInterpretation"] =
+            "Informational only. Synchronous repository methods are not automatically non-compliant.";
         result.Metadata["NamingConventionSatisfied"] =
             metrics["NamingCompliance"] > 0 ? bool.TrueString : bool.FalseString;
         result.Metadata["ComplexityMeasure"] =
@@ -654,7 +654,7 @@ public sealed class RepositoryPatternEvaluator
     private static IReadOnlyCollection<LeakMatch> FindLeakMatches(string classBody)
     {
         var matches = new List<LeakMatch>();
-        foreach (var indicator in PersistenceAndTransportIndicators)
+        foreach (var indicator in ExternalTransportIndicators)
         {
             matches.AddRange(
                 Regex.Matches(
@@ -960,17 +960,15 @@ public sealed class RepositoryPatternEvaluator
 
     private static double ComputeCompliance(
         double interfaceAdherence,
-        double asyncSignal,
         double persistenceTransportSignal,
         double namingCompliance,
         double complexity)
     {
         var score =
-            interfaceAdherence * 0.25 +
-            asyncSignal * 0.15 +
+            interfaceAdherence * 0.30 +
             (1d - persistenceTransportSignal) * 0.35 +
-            namingCompliance * 0.10 +
-            (1d - complexity) * 0.15;
+            namingCompliance * 0.15 +
+            (1d - complexity) * 0.20;
 
         return Math.Round(score * 100d, 2);
     }

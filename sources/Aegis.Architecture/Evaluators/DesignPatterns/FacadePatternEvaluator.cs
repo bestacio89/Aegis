@@ -626,6 +626,11 @@ public sealed class FacadePatternEvaluator
         summary.Metadata[EvaluationScopeMetadataKey] = ProjectScope;
         summary.Metadata["SemanticAnalysisPerformed"] = "false";
         summary.Metadata["StructuralAnalysisHeuristic"] = "true";
+        var analysisComplete = unreadableFiles == 0 && analyzedFiles == discoveredFiles;
+        summary.Metadata["AnalysisComplete"] = analysisComplete.ToString();
+        summary.Metadata["AnalysisStatus"] = analysisComplete
+            ? "Completed"
+            : "CompletedWithDiagnostics";
 
         return summary;
     }

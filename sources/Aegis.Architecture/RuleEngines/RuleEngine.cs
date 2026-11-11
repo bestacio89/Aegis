@@ -422,7 +422,7 @@ public sealed class RuleEngine
             || string.Equals(status, "Partial", StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, "Incomplete", StringComparison.OrdinalIgnoreCase);
 
-        if (!hasPartialStatus && reportedCount == 0 && messages.Length == 0)
+        if (!hasPartialStatus && reportedCount == 0 && messages.Count == 0)
             return;
 
         foreach (var message in messages)
@@ -439,8 +439,8 @@ public sealed class RuleEngine
 
         // Some evaluators cap serialized detail to keep reports bounded. Preserve
         // the declared count as evidence so truncation cannot make coverage look clean.
-        var omittedCount = Math.Max(0, reportedCount - messages.Length);
-        if (omittedCount > 0 || (hasPartialStatus && messages.Length == 0 && reportedCount == 0))
+        var omittedCount = Math.Max(0, reportedCount - messages.Count);
+        if (omittedCount > 0 || (hasPartialStatus && messages.Count == 0 && reportedCount == 0))
         {
             diagnostics.Add(new AnalysisDiagnostic
             {
@@ -449,7 +449,7 @@ public sealed class RuleEngine
                     : "EvaluatorPartialAnalysis",
                 Component = evaluatorName,
                 Message = omittedCount > 0
-                    ? $"The evaluator reported {reportedCount} diagnostics but serialized only {messages.Length} detail message(s); {omittedCount} diagnostic detail(s) are unavailable."
+                    ? $"The evaluator reported {reportedCount} diagnostics but serialized only {messages.Count} detail message(s); {omittedCount} diagnostic detail(s) are unavailable."
                     : $"The evaluator reported analysis status '{status}' but did not provide diagnostic details or a diagnostic count.",
                 Target = result.Target,
                 AffectsCoverage = true

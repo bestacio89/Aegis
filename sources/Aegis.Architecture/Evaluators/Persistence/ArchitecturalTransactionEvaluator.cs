@@ -422,6 +422,17 @@ public sealed class ArchitecturalTransactionEvaluator
             // The project-level rule contract consumes this exact metric key.
             // Do not expose it when any discovered source file was unreadable.
             summary.Metrics["TransactionIntegrityIndex"] = integrity;
+
+            var fileScores = analyzedFileResults
+                .Select(result => result.Metrics["TransactionIntegrityIndex"])
+                .ToArray();
+
+            summary.Metadata["Evidence.TransactionIntegrityIndex"] =
+                $"Arithmetic mean of {analyzedCount} file-level transaction integrity measurements; " +
+                $"observed range {fileScores.Min():F2}–{fileScores.Max():F2}. " +
+                "Individual file measurements are emitted as separate evaluator facts.";
+            summary.Metadata["EvidenceScope.TransactionIntegrityIndex"] =
+                "ProjectAggregate";
         }
         else if (!analysisComplete)
         {

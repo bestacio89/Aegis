@@ -21,6 +21,10 @@ public sealed class ArchitectureEvaluatorBehaviorTests
             public class DocumentationFixture
             {
                 /// <summary>Documented operation.</summary>
+                // public void CommentedOutOperation() { }
+                private string _example = "public void StringLiteralOperation() { }";
+
+                [System.Obsolete]
                 public void DocumentedOperation() { }
 
                 public void UndocumentedOperation() { }

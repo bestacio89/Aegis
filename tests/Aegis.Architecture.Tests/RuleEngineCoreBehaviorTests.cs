@@ -214,10 +214,13 @@ public sealed class RuleEngineCoreBehaviorTests
                 new ProjectArchitectureContext { Language = "C#" },
                 []);
 
-        Assert.Contains("AEG-DES-STRAT001", disabledOutcome.Stats.RulesNotApplicable);
-        Assert.Contains("AEG-DES-STRAT002", disabledOutcome.Stats.RulesNotApplicable);
+        Assert.Contains("AEG-DES-STRAT001", disabledOutcome.Stats.DisabledByPolicyReasons.Keys);
+        Assert.Contains("AEG-DES-STRAT002", disabledOutcome.Stats.DisabledByPolicyReasons.Keys);
+        Assert.DoesNotContain("AEG-DES-STRAT001", disabledOutcome.Stats.RulesNotApplicable);
+        Assert.DoesNotContain("AEG-DES-STRAT002", disabledOutcome.Stats.RulesNotApplicable);
         Assert.DoesNotContain("AEG-DES-STRAT001", disabledOutcome.Stats.RulesNotEvaluated);
         Assert.DoesNotContain("AEG-DES-STRAT002", disabledOutcome.Stats.RulesNotEvaluated);
+        Assert.Equal(2, disabledOutcome.Stats.RulesDisabledByPolicy);
 
         var enabledPolicy = new AegisArchitecturePolicy();
         enabledPolicy.Architecture.DesignPatterns.EnforceStrategyPattern = true;
@@ -228,6 +231,8 @@ public sealed class RuleEngineCoreBehaviorTests
                 new ProjectArchitectureContext { Language = "C#" },
                 []);
 
+        Assert.DoesNotContain("AEG-DES-STRAT001", enabledOutcome.Stats.DisabledByPolicyReasons.Keys);
+        Assert.DoesNotContain("AEG-DES-STRAT002", enabledOutcome.Stats.DisabledByPolicyReasons.Keys);
         Assert.DoesNotContain("AEG-DES-STRAT001", enabledOutcome.Stats.RulesNotApplicable);
         Assert.DoesNotContain("AEG-DES-STRAT002", enabledOutcome.Stats.RulesNotApplicable);
         Assert.Contains("AEG-DES-STRAT001", enabledOutcome.Stats.RulesNotEvaluated);
@@ -270,6 +275,7 @@ public sealed class RuleEngineCoreBehaviorTests
         Assert.Contains("AEG-DES-STRAT002", outcome.Stats.RulesNotApplicable);
         Assert.DoesNotContain("AEG-DES-STRAT001", outcome.Stats.RulesNotEvaluated);
         Assert.DoesNotContain("AEG-DES-STRAT002", outcome.Stats.RulesNotEvaluated);
+        Assert.True(outcome.Stats.EvaluationCoverage <= 100);
     }
 
     [Fact]

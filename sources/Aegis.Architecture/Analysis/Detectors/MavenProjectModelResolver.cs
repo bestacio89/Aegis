@@ -122,7 +122,15 @@ internal static class MavenProjectModelResolver
 
             MavenProjectModel? parentModel = null;
             string? parentProjectFile = null;
-            var diagnostics = parentModel?.Diagnostics.ToList() ?? [];
+            var parentResolutionStatus = parentElement is null ? "NotDeclared" : "ExternalDeclared";
+            var diagnostics = new List<AnalysisDiagnostic>();
+            var localProperties = new Dictionary<string, string>(StringComparer.Ordinal);
+            var declaredProperties = Child(root, "properties");
+            if (declaredProperties is not null)
+            {
+                foreach (var property in declaredProperties.Elements())
+                    localProperties[property.Name.LocalName] = property.Value.Trim();
+            }
 
             if (parentElement is not null)
             {
@@ -133,31 +141,67 @@ internal static class MavenProjectModelResolver
 
                 if (relativePath.Length > 0)
                 {
-                    var parentPath = Path.GetFullPath(Path.Combine(
-                        Path.GetDirectoryName(fullPath)!,
-                        relativePath));
-
-                    if (Directory.Exists(parentPath))
-                        parentPath = Path.Combine(parentPath, "pom.xml");
-
-                    if (File.Exists(parentPath) && knownPomFiles.Contains(parentPath))
+                    string parentPath;
+                    try
                     {
-                        parentProjectFile = parentPath;
-                        parentModel = Resolve(parentPath, files, knownPomFiles, coordinateIndex, cache, visiting);
+                        parentPath = Path.GetFullPath(Path.Combine(
+                            Path.GetDirectoryName(fullPath)!,
+                            relativePath));
+                        if (Directory.Exists(parentPath))
+                            parentPath = Path.Combine(parentPath, "pom.xml");
+                    }
+                    catch (Exception exception) when (
+                        exception is ArgumentException or NotSupportedException or PathTooLongException)
+                    {
+                        parentPath = string.Empty;
+                        diagnostics.Add(Diagnostic(
+                            "MavenParentRelativePathInvalid",
+                            $"Parent relativePath '{relativePath}' is not a valid local path: {exception.Message}",
+                            fullPath));
+                    }
+
+                    if (parentPath.Length > 0 && File.Exists(parentPath) && knownPomFiles.Contains(parentPath))
+                    {
+                        var candidateParent = Resolve(
+                            parentPath, files, knownPomFiles, coordinateIndex, cache, visiting);
+                        var declaredGroup = ResolveValue(parentCoordinates?.GroupId, localProperties);
+                        var declaredArtifact = ResolveValue(parentCoordinates?.ArtifactId, localProperties);
+                        var declaredVersion = ResolveValue(parentCoordinates?.Version, localProperties);
+                        var coordinatesMatch =
+                            string.Equals(declaredGroup, candidateParent.ProjectCoordinates.GroupId, StringComparison.Ordinal)
+                            && string.Equals(declaredArtifact, candidateParent.ProjectCoordinates.ArtifactId, StringComparison.Ordinal)
+                            && string.Equals(declaredVersion, candidateParent.ProjectCoordinates.Version, StringComparison.Ordinal);
+
+                        if (coordinatesMatch)
+                        {
+                            parentProjectFile = parentPath;
+                            parentModel = candidateParent;
+                            parentResolutionStatus = candidateParent.IsComplete
+                                ? "ResolvedLocal"
+                                : "ResolvedLocalIncomplete";
+                        }
+                        else
+                        {
+                            parentResolutionStatus = "LocalCoordinatesMismatch";
+                            diagnostics.Add(Diagnostic(
+                                "MavenParentCoordinatesMismatch",
+                                $"The POM at relativePath '{relativePath}' does not match the declared parent coordinates '{parentCoordinates?.GroupId}:{parentCoordinates?.ArtifactId}:{parentCoordinates?.Version}'. It is not inherited; remote resolution is not attempted.",
+                                fullPath));
+                        }
                     }
                     else
                     {
                         diagnostics.Add(Diagnostic(
                             "MavenParentNotResolved",
-                            $"Parent POM '{relativePath}' was not found among the scanned repository manifests. Files outside the scanned project are not read.",
+                            $"Parent POM '{relativePath}' was not found among the scanned repository manifests. The declared external parent is retained, but files outside the scanned project are not read.",
                             fullPath));
                     }
-                } 
+                }
                 else
                 {
                     diagnostics.Add(Diagnostic(
                         "MavenParentNotResolved",
-                        "The parent relativePath is explicitly disabled and no remote parent resolution is attempted.",
+                        "The parent relativePath is explicitly disabled. The declared external parent is retained; remote resolution is not attempted.",
                         fullPath));
                 }
             }
@@ -168,12 +212,8 @@ internal static class MavenProjectModelResolver
             var properties = new Dictionary<string, string>(
                 parentModel?.EffectiveProperties ?? new Dictionary<string, string>(),
                 StringComparer.Ordinal);
-            var localProperties = Child(root, "properties");
-            if (localProperties is not null)
-            {
-                foreach (var property in localProperties.Elements())
-                    properties[property.Name.LocalName] = property.Value.Trim();
-            }
+            foreach (var property in localProperties)
+                properties[property.Key] = property.Value;
 
             var groupId = ResolveValue(Value(root, "groupId") ?? parentModel?.ProjectCoordinates.GroupId, properties);
             var artifactId = ResolveValue(Value(root, "artifactId"), properties);
@@ -211,6 +251,9 @@ internal static class MavenProjectModelResolver
                 knownPomFiles,
                 diagnostics);
 
+            var bomImports = parentModel?.BomImports
+                .Select(bomImport => bomImport with { IsInherited = true })
+                .ToList() ?? [];
             var managed = parentModel?.ManagedDependencies
                 .Select(dependency => dependency with { IsInherited = true })
                 .ToList() ?? [];
@@ -237,6 +280,11 @@ internal static class MavenProjectModelResolver
 
                 if (importedBom is null)
                 {
+                    bomImports.Add(new MavenProjectModel.BomImport(
+                        new MavenProjectModel.Coordinates(bom.GroupId, bom.ArtifactId, bom.Version),
+                        bom.SourceProjectFile,
+                        ambiguous ? "AmbiguousLocalCandidates" : "ExternalOrUnavailable",
+                        bom.IsInherited));
                     diagnostics.Add(Diagnostic(
                         ambiguous ? "MavenBomCoordinatesAmbiguous" : "MavenBomNotResolved",
                         ambiguous
@@ -245,6 +293,12 @@ internal static class MavenProjectModelResolver
                         fullPath));
                     continue;
                 }
+
+                bomImports.Add(new MavenProjectModel.BomImport(
+                    new MavenProjectModel.Coordinates(bom.GroupId, bom.ArtifactId, bom.Version),
+                    bom.SourceProjectFile,
+                    importedBom.IsComplete ? "ResolvedLocal" : "LocalModelIncomplete",
+                    bom.IsInherited));
 
                 if (!importedBom.IsComplete)
                 {
@@ -326,18 +380,13 @@ internal static class MavenProjectModelResolver
                 .ToList() ?? [];
             processorPaths.AddRange(ParseAnnotationProcessorPaths(root, properties, fullPath));
 
-            var profileIds = Child(root, "profiles")?
-                .Elements()
-                .Where(element => NameIs(element, "profile"))
-                .Select(element => Value(element, "id"))
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Select(value => value!)
-                .ToList() ?? [];
-            if (profileIds.Count > 0)
+            var profiles = ParseProfiles(root, fullPath, properties);
+            var profileIds = profiles.Select(profile => profile.Id).ToList();
+            if (profiles.Count > 0)
             {
                 diagnostics.Add(Diagnostic(
                     "MavenProfilesNotEvaluated",
-                    "Maven profiles are recorded but not activated; profile-specific dependencies and properties are excluded from the effective model.",
+                    "Profile activation is environment- and invocation-dependent. Profile properties, dependencies and plugins are retained as conditional evidence and are not merged into the unconditional model.",
                     fullPath));
             }
 
@@ -351,6 +400,9 @@ internal static class MavenProjectModelResolver
                     ? null
                     : new MavenProjectModel.Coordinates(parentGroup, parentArtifact, parentVersion),
                 ParentProjectFile = parentProjectFile,
+                ParentResolutionStatus = parentResolutionStatus,
+                BomImports = bomImports,
+                Profiles = profiles,
                 Packaging = packaging,
                 EffectiveProperties = properties,
                 DeclaredModules = declaredModules,
@@ -373,6 +425,59 @@ internal static class MavenProjectModelResolver
         {
             visiting.Remove(fullPath);
         }
+    }
+
+    private static List<MavenProjectModel.Profile> ParseProfiles(
+        XElement project,
+        string projectFile,
+        IReadOnlyDictionary<string, string> projectProperties)
+    {
+        return Child(project, "profiles")?
+            .Elements()
+            .Where(element => NameIs(element, "profile"))
+            .Select(profile =>
+            {
+                var profileProperties = new Dictionary<string, string>(
+                    projectProperties, StringComparer.Ordinal);
+                var propertiesElement = Child(profile, "properties");
+                if (propertiesElement is not null)
+                {
+                    foreach (var property in propertiesElement.Elements())
+                        profileProperties[property.Name.LocalName] = property.Value.Trim();
+                }
+
+                ResolveProperties(profileProperties);
+                var activation = Child(profile, "activation");
+                var os = Child(activation, "os");
+                var property = Child(activation, "property");
+                var file = Child(activation, "file");
+                return new MavenProjectModel.Profile(
+                    Value(profile, "id") ?? string.Empty,
+                    new MavenProjectModel.ProfileActivation(
+                        bool.TryParse(Value(activation, "activeByDefault"), out var activeByDefault)
+                            && activeByDefault,
+                        Value(activation, "jdk"),
+                        Value(os, "name"),
+                        Value(os, "family"),
+                        Value(os, "arch"),
+                        Value(os, "version"),
+                        Value(property, "name"),
+                        Value(property, "value"),
+                        Value(file, "exists"),
+                        Value(file, "missing")),
+                    profileProperties,
+                    ParseDependencies(
+                        Child(profile, "dependencies"), profileProperties,
+                        managed: false, inherited: false, sourceProjectFile: projectFile),
+                    ParseDependencies(
+                        Child(Child(profile, "dependencyManagement"), "dependencies"),
+                        profileProperties, managed: true, inherited: false,
+                        sourceProjectFile: projectFile),
+                    ParsePlugins(profile, profileProperties, inherited: false, managed: false),
+                    ParsePlugins(profile, profileProperties, inherited: false, managed: true));
+            })
+            .Where(profile => !string.IsNullOrWhiteSpace(profile.Id))
+            .ToList() ?? [];
     }
 
     private static List<string> ResolveReactorModuleFiles(

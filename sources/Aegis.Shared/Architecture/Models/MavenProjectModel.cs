@@ -13,6 +13,12 @@ public sealed class MavenProjectModel
 
     public Coordinates? ParentCoordinates { get; init; }
 
+    public string ParentResolutionStatus { get; init; } = "NotDeclared";
+
+    public List<BomImport> BomImports { get; init; } = [];
+
+    public List<Profile> Profiles { get; init; } = [];
+
     public string? ParentProjectFile { get; init; }
 
     public string Packaging { get; init; } = "jar";
@@ -46,6 +52,33 @@ public sealed class MavenProjectModel
         string? GroupId,
         string? ArtifactId,
         string? Version);
+
+    public sealed record BomImport(
+        Coordinates Coordinates,
+        string SourceProjectFile,
+        string ResolutionStatus,
+        bool IsInherited);
+
+    public sealed record Profile(
+        string Id,
+        ProfileActivation Activation,
+        Dictionary<string, string> Properties,
+        List<Dependency> Dependencies,
+        List<Dependency> ManagedDependencies,
+        List<Plugin> Plugins,
+        List<Plugin> ManagedPlugins);
+
+    public sealed record ProfileActivation(
+        bool IsActiveByDefault,
+        string? Jdk,
+        string? OsName,
+        string? OsFamily,
+        string? OsArch,
+        string? OsVersion,
+        string? PropertyName,
+        string? PropertyValue,
+        string? FileExists,
+        string? FileMissing);
 
     public sealed record Exclusion(
         string? GroupId,

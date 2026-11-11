@@ -98,7 +98,13 @@ internal static class ArchitectureRuleMetricContracts
                 ["AEG-DES-OBS001"] = ("ObserverPatternEvaluator", "AnalyzedComponents", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
                 ["AEG-DES-SING001"] = ("SingletonPatternEvaluator", "SingletonCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
                 ["AEG-DES-STRAT001"] = ("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
-                ["AEG-DES-STRAT002"] = ("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles")
+                ["AEG-DES-STRAT002"] = ("StrategyPatternEvaluator", "StrategyCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-FAC001"] = ("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-FAC002"] = ("FacadePatternEvaluator", "FacadeCandidateCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-FACR001"] = ("FactoryPatternEvaluator", "FactoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-FACR002"] = ("FactoryPatternEvaluator", "FactoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-MEDI001"] = ("MediatorPatternEvaluator", "MediatorImplementationCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles"),
+                ["AEG-DES-REPO001"] = ("RepositoryPatternEvaluator", "RepositoryCount", "UnreadableFiles", "AnalyzedFiles", "DiscoveredFiles")
             };
 
     private static readonly IReadOnlyDictionary<string, string>

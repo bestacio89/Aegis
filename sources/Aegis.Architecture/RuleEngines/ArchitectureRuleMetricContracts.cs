@@ -274,15 +274,20 @@ internal static class ArchitectureRuleMetricContracts
     public static bool TryGetNoCandidateDisposition(
         string ruleId,
         IReadOnlyCollection<ArchitectureEvaluatorResult> facts,
+        ProjectArchitectureContext context,
         out string reason)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ruleId);
         ArgumentNullException.ThrowIfNull(facts);
+        ArgumentNullException.ThrowIfNull(context);
 
         reason = string.Empty;
 
-        if (!CandidateApplicabilityContracts.TryGetValue(ruleId, out var contract))
+        if (!CandidateApplicabilityContracts.TryGetValue(ruleId, out var contract)
+            || context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
+        {
             return false;
+        }
 
         var summaries = facts
             .Where(fact =>
@@ -298,6 +303,26 @@ internal static class ArchitectureRuleMetricContracts
             .ToList();
 
         if (summaries.Count == 0)
+            return false;
+
+        // A zero-candidate summary is conclusive only when every discovered
+        // project scope produced one. Missing summaries may indicate an
+        // evaluator that did not run or a scope that failed before evidence
+        // collection; neither proves that the repository has no candidates.
+        var expectedScopeCount = context.Modules.Count > 0
+            ? context.Modules.Count
+            : 1;
+
+        if (summaries.Count != expectedScopeCount)
+            return false;
+
+        var summaryScopes = summaries
+            .Select(summary => summary.Target ?? summary.ProjectName ?? string.Empty)
+            .Where(scope => !string.IsNullOrWhiteSpace(scope))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        if (summaryScopes != summaries.Count)
             return false;
 
         var rule = ArchitectureRuleRegistry.All.FirstOrDefault(candidate =>

@@ -248,11 +248,16 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
             .OrderByDescending(module => module.Path.Length)
             .FirstOrDefault(module => IsSameOrDescendantPath(filePath, module.Path));
 
-        if (!string.IsNullOrWhiteSpace(owningModule?.Framework)
-            && owningModule.Framework != "Multi-Framework")
+        if (string.Equals(
+                owningModule?.Framework,
+                "Multi-Framework",
+                StringComparison.OrdinalIgnoreCase))
         {
-            return owningModule.Framework;
+            return "Multi-Framework";
         }
+
+        if (!string.IsNullOrWhiteSpace(owningModule?.Framework))
+            return owningModule.Framework;
 
         if (extension.Equals(".tsx", StringComparison.OrdinalIgnoreCase)
             || extension.Equals(".jsx", StringComparison.OrdinalIgnoreCase))

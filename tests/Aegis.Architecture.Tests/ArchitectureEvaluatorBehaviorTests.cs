@@ -134,7 +134,7 @@ public sealed class ArchitectureEvaluatorBehaviorTests
         Assert.Equal(1, finding.Metrics["ComplexityFinding"]);
         Assert.Equal("SourcePatternHeuristic", finding.Metadata["MeasurementMethod"]);
         Assert.False(string.IsNullOrWhiteSpace(finding.File));
-        Assert.True(finding.LineNumber > 0);
+        Assert.True(finding.LineNumber is > 0);
         Assert.Contains("HighComplexity", finding.Evidence);
         Assert.Contains("HighComplexity", finding.Metadata["CodeSnippet.EstimatedCyclomaticComplexity"]);
     }

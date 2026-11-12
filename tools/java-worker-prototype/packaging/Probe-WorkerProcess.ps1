@@ -1,20 +1,26 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)]
-    [string]$JavaExecutable,
-
-    [Parameter(Mandatory)]
-    [string]$Classpath,
-
-    [Parameter(Mandatory)]
-    [string]$ArtifactDirectory
+    [Parameter(Mandatory)][string]$JavaExecutable,
+    [Parameter(Mandatory)][string]$Classpath,
+    [Parameter(Mandatory)][string]$ArtifactDirectory
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-
 New-Item -ItemType Directory -Path $ArtifactDirectory -Force | Out-Null
 $script:measurements = [System.Collections.Generic.List[object]]::new()
+
+$projectDirectory = Join-Path $ArtifactDirectory 'analysis-workspace/project'
+$sourceRoot = Join-Path $projectDirectory 'src/main/java'
+$sourceDirectory = Join-Path $sourceRoot 'example'
+New-Item -ItemType Directory -Path $sourceDirectory -Force | Out-Null
+$sourceFile = Join-Path $sourceDirectory 'WorkerProbe.java'
+@'
+package example;
+public final class WorkerProbe {
+    public String execute() { return "jdt-ready"; }
+}
+'@ | Set-Content -LiteralPath $sourceFile -Encoding utf8
 
 function Start-WorkerProcess {
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -27,90 +33,53 @@ function Start-WorkerProcess {
     $startInfo.RedirectStandardInput = $true
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
-
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
-    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    if (-not $process.Start()) {
-        throw 'The private-runtime worker process could not be started.'
-    }
-    $stopwatch.Stop()
-    $stderrTask = $process.StandardError.ReadToEndAsync()
-
+    $timer = [System.Diagnostics.Stopwatch]::StartNew()
+    if (-not $process.Start()) { throw 'The private-runtime worker process could not be started.' }
+    $timer.Stop()
     return [pscustomobject]@{
         Process = $process
-        StandardErrorTask = $stderrTask
-        LaunchMillis = $stopwatch.ElapsedMilliseconds
+        StandardErrorTask = $process.StandardError.ReadToEndAsync()
+        LaunchMillis = $timer.ElapsedMilliseconds
     }
 }
 
 function Stop-WorkerProcess {
     param([Parameter(Mandatory)][System.Diagnostics.Process]$Process)
-
     if (-not $Process.HasExited) {
         $Process.Kill($true)
-        if (-not $Process.WaitForExit(5000)) {
-            throw 'The worker process tree did not terminate after forced termination.'
-        }
+        if (-not $Process.WaitForExit(5000)) { throw 'The worker process tree did not terminate.' }
     }
-}
-
-function Send-WorkerFrame {
-    param(
-        [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
-        [Parameter(Mandatory)][string]$Frame
-    )
-
-    $Process.StandardInput.WriteLine($Frame)
-    $Process.StandardInput.Flush()
 }
 
 function Send-WorkerRequest {
-    param(
-        [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
-        [Parameter(Mandatory)][hashtable]$Request
-    )
-
-    Send-WorkerFrame -Process $Process -Frame ($Request | ConvertTo-Json -Compress -Depth 16)
+    param([Parameter(Mandatory)][System.Diagnostics.Process]$Process,[Parameter(Mandatory)][hashtable]$Request)
+    $Process.StandardInput.WriteLine(($Request | ConvertTo-Json -Compress -Depth 16))
+    $Process.StandardInput.Flush()
 }
 
 function Read-WorkerResponse {
-    param(
-        [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
-        [int]$TimeoutMilliseconds = 5000
-    )
-
-    $readTask = $Process.StandardOutput.ReadLineAsync()
-    if (-not $readTask.Wait($TimeoutMilliseconds)) {
+    param([Parameter(Mandatory)][System.Diagnostics.Process]$Process,[int]$TimeoutMilliseconds = 5000)
+    $task = $Process.StandardOutput.ReadLineAsync()
+    if (-not $task.Wait($TimeoutMilliseconds)) {
         Stop-WorkerProcess -Process $Process
-        throw "The worker did not produce a protocol response within $TimeoutMilliseconds ms."
+        throw "The worker did not respond within $TimeoutMilliseconds ms."
     }
-
-    $line = $readTask.GetAwaiter().GetResult()
-    if ([string]::IsNullOrWhiteSpace($line)) {
-        throw 'The worker closed stdout without producing a protocol frame.'
-    }
-
+    $line = $task.GetAwaiter().GetResult()
+    if ([string]::IsNullOrWhiteSpace($line)) { throw 'The worker closed stdout without a protocol frame.' }
     return ConvertFrom-Json -InputObject $line -AsHashtable
 }
 
 function Assert-WorkerSuccess {
-    param(
-        [Parameter(Mandatory)][System.Collections.IDictionary]$Response,
-        [Parameter(Mandatory)][string]$RequestId
-    )
-
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Response,[Parameter(Mandatory)][string]$RequestId)
     if ($Response.status -ne 'ok' -or $Response.requestId -ne $RequestId) {
-        throw "Unexpected worker response for request '$RequestId': $($Response | ConvertTo-Json -Compress -Depth 8)"
+        throw "Unexpected response for '$RequestId': $($Response | ConvertTo-Json -Compress -Depth 8)"
     }
 }
 
 function Assert-WorkerError {
-    param(
-        [Parameter(Mandatory)][System.Collections.IDictionary]$Response,
-        [Parameter(Mandatory)][string]$Code
-    )
-
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Response,[Parameter(Mandatory)][string]$Code)
     if ($Response.status -ne 'error' -or $Response.error.code -ne $Code) {
         throw "Expected worker error '$Code': $($Response | ConvertTo-Json -Compress -Depth 8)"
     }
@@ -119,85 +88,84 @@ function Assert-WorkerError {
 $cleanWorker = $null
 $crashWorker = $null
 $restartWorker = $null
-
 try {
     $cleanWorker = Start-WorkerProcess
     $worker = $cleanWorker.Process
-
     $handshakeTimer = [System.Diagnostics.Stopwatch]::StartNew()
-    Send-WorkerRequest -Process $worker -Request @{
-        protocolVersion = 1
-        requestId = 'runtime-handshake'
-        operation = 'handshake'
-    }
-    $handshake = Read-WorkerResponse -Process $worker
+    Send-WorkerRequest $worker @{ protocolVersion = 1; requestId = 'runtime-handshake'; operation = 'handshake' }
+    $handshake = Read-WorkerResponse $worker
     $handshakeTimer.Stop()
-    Assert-WorkerSuccess -Response $handshake -RequestId 'runtime-handshake'
+    Assert-WorkerSuccess $handshake 'runtime-handshake'
     if ($handshake.result.protocolVersion -ne 1 -or $handshake.result.maxFrameBytes -ne 1048576) {
-        throw 'The worker handshake returned an unexpected protocol contract.'
+        throw 'Unexpected worker handshake contract.'
     }
 
-    Send-WorkerRequest -Process $worker -Request @{
+    Send-WorkerRequest $worker @{ protocolVersion = 1; requestId = 'runtime-capabilities'; operation = 'capabilities' }
+    $capabilities = Read-WorkerResponse $worker
+    Assert-WorkerSuccess $capabilities 'runtime-capabilities'
+    if ($capabilities.result.analysisAvailable -ne $true) {
+        throw 'The worker must advertise the attached Eclipse JDT semantic engine.'
+    }
+
+    $analysisTimer = [System.Diagnostics.Stopwatch]::StartNew()
+    Send-WorkerRequest $worker @{
         protocolVersion = 1
-        requestId = 'runtime-capabilities'
-        operation = 'capabilities'
+        requestId = 'runtime-analysis'
+        operation = 'analyze'
+        payload = @{
+            projectPath = $projectDirectory
+            sourceRoots = @($sourceRoot)
+            sourceFiles = @($sourceFile)
+            classpathEntries = @()
+            sourceLevel = '21'
+            includeTestCode = $false
+            includeGeneratedCode = $false
+        }
     }
-    $capabilities = Read-WorkerResponse -Process $worker
-    Assert-WorkerSuccess -Response $capabilities -RequestId 'runtime-capabilities'
-    if ($capabilities.result.analysisAvailable -ne $false) {
-        throw 'The protocol-only worker must not claim that a semantic engine is attached.'
+    $analysis = Read-WorkerResponse $worker 20000
+    $analysisTimer.Stop()
+    Assert-WorkerSuccess $analysis 'runtime-analysis'
+    if ($analysis.result.engineId -ne 'eclipse-jdt' -or $analysis.result.status -ne 2) {
+        throw "The worker did not return completed JDT analysis: $($analysis.result | ConvertTo-Json -Compress -Depth 8)"
     }
+    $probeSymbol = @($analysis.result.symbols | Where-Object { $_.qualifiedName -eq 'example.WorkerProbe' })
+    if ($probeSymbol.Count -ne 1) { throw 'The JDT worker did not return the expected type symbol.' }
 
-    Send-WorkerRequest -Process $worker -Request @{
-        protocolVersion = 1
-        requestId = 'runtime-ping'
-        operation = 'ping'
-    }
-    $ping = Read-WorkerResponse -Process $worker
-    Assert-WorkerSuccess -Response $ping -RequestId 'runtime-ping'
-    if ($ping.result.alive -ne $true) {
-        throw 'The worker liveness probe did not return alive=true.'
-    }
+    Send-WorkerRequest $worker @{ protocolVersion = 1; requestId = 'runtime-ping'; operation = 'ping' }
+    $ping = Read-WorkerResponse $worker
+    Assert-WorkerSuccess $ping 'runtime-ping'
+    if ($ping.result.alive -ne $true) { throw 'Worker liveness probe failed.' }
 
-    Send-WorkerFrame -Process $worker -Frame '{malformed-json'
-    $malformed = Read-WorkerResponse -Process $worker
-    Assert-WorkerError -Response $malformed -Code 'INVALID_JSON'
+    $worker.StandardInput.WriteLine('{malformed-json')
+    $malformed = Read-WorkerResponse $worker
+    Assert-WorkerError $malformed 'INVALID_JSON'
 
-    Send-WorkerFrame -Process $worker -Frame ('x' * 1048577)
-    $oversized = Read-WorkerResponse -Process $worker
-    Assert-WorkerError -Response $oversized -Code 'FRAME_TOO_LARGE'
+    $worker.StandardInput.WriteLine(('x' * 1048577))
+    $oversized = Read-WorkerResponse $worker
+    Assert-WorkerError $oversized 'FRAME_TOO_LARGE'
 
-    Send-WorkerRequest -Process $worker -Request @{
-        protocolVersion = 99
-        requestId = 'runtime-version-mismatch'
-        operation = 'ping'
-    }
-    $versionMismatch = Read-WorkerResponse -Process $worker
-    Assert-WorkerError -Response $versionMismatch -Code 'UNSUPPORTED_PROTOCOL_VERSION'
+    Send-WorkerRequest $worker @{ protocolVersion = 99; requestId = 'runtime-version-mismatch'; operation = 'ping' }
+    $versionMismatch = Read-WorkerResponse $worker
+    Assert-WorkerError $versionMismatch 'UNSUPPORTED_PROTOCOL_VERSION'
 
-    Send-WorkerRequest -Process $worker -Request @{
-        protocolVersion = 1
-        requestId = 'runtime-shutdown'
-        operation = 'shutdown'
-    }
-    $shutdown = Read-WorkerResponse -Process $worker
-    Assert-WorkerSuccess -Response $shutdown -RequestId 'runtime-shutdown'
-    if (-not $worker.WaitForExit(5000)) {
-        Stop-WorkerProcess -Process $worker
-        throw 'The worker did not exit after the graceful shutdown request.'
-    }
-    if ($worker.ExitCode -ne 0) {
-        throw "The worker exited with code $($worker.ExitCode) after graceful shutdown."
+    Send-WorkerRequest $worker @{ protocolVersion = 1; requestId = 'runtime-shutdown'; operation = 'shutdown' }
+    $shutdown = Read-WorkerResponse $worker
+    Assert-WorkerSuccess $shutdown 'runtime-shutdown'
+    if (-not $worker.WaitForExit(5000) -or $worker.ExitCode -ne 0) {
+        Stop-WorkerProcess $worker
+        throw 'Worker did not exit cleanly after shutdown.'
     }
     $cleanStderr = $cleanWorker.StandardErrorTask.GetAwaiter().GetResult()
-    if (-not [string]::IsNullOrWhiteSpace($cleanStderr)) {
-        throw "The worker wrote unexpected stderr output during protocol smoke tests: $cleanStderr"
-    }
+    if (-not [string]::IsNullOrWhiteSpace($cleanStderr)) { throw "Unexpected worker stderr: $cleanStderr" }
 
     $script:measurements.Add([ordered]@{
-        scenario = 'protocol-and-graceful-shutdown'
+        scenario = 'jdt-analysis-protocol-and-graceful-shutdown'
         launchMillis = $cleanWorker.LaunchMillis
         handshakeMillis = $handshakeTimer.ElapsedMilliseconds
+        analysisMillis = $analysisTimer.ElapsedMilliseconds
+        analyzedFiles = $analysis.result.analyzedFileCount
+        symbolCount = @($analysis.result.symbols).Count
+        relationshipCount = @($analysis.result.relationships).Count
         exitCode = $worker.ExitCode
         malformedJsonRejected = $true
         oversizedFrameRejected = $true
@@ -206,41 +174,24 @@ try {
     })
 
     $crashWorker = Start-WorkerProcess
-    Send-WorkerRequest -Process $crashWorker.Process -Request @{
-        protocolVersion = 1
-        requestId = 'crash-handshake'
-        operation = 'handshake'
-    }
-    $crashHandshake = Read-WorkerResponse -Process $crashWorker.Process
-    Assert-WorkerSuccess -Response $crashHandshake -RequestId 'crash-handshake'
-    Stop-WorkerProcess -Process $crashWorker.Process
-    if (-not $crashWorker.Process.HasExited) {
-        throw 'The forced worker termination did not complete.'
-    }
+    Send-WorkerRequest $crashWorker.Process @{ protocolVersion = 1; requestId = 'crash-handshake'; operation = 'handshake' }
+    $crashHandshake = Read-WorkerResponse $crashWorker.Process
+    Assert-WorkerSuccess $crashHandshake 'crash-handshake'
+    Stop-WorkerProcess $crashWorker.Process
     $null = $crashWorker.StandardErrorTask.GetAwaiter().GetResult()
 
     $restartWorker = Start-WorkerProcess
-    Send-WorkerRequest -Process $restartWorker.Process -Request @{
-        protocolVersion = 1
-        requestId = 'restart-handshake'
-        operation = 'handshake'
-    }
-    $restartHandshake = Read-WorkerResponse -Process $restartWorker.Process
-    Assert-WorkerSuccess -Response $restartHandshake -RequestId 'restart-handshake'
-    Send-WorkerRequest -Process $restartWorker.Process -Request @{
-        protocolVersion = 1
-        requestId = 'restart-shutdown'
-        operation = 'shutdown'
-    }
-    $restartShutdown = Read-WorkerResponse -Process $restartWorker.Process
-    Assert-WorkerSuccess -Response $restartShutdown -RequestId 'restart-shutdown'
+    Send-WorkerRequest $restartWorker.Process @{ protocolVersion = 1; requestId = 'restart-handshake'; operation = 'handshake' }
+    $restartHandshake = Read-WorkerResponse $restartWorker.Process
+    Assert-WorkerSuccess $restartHandshake 'restart-handshake'
+    Send-WorkerRequest $restartWorker.Process @{ protocolVersion = 1; requestId = 'restart-shutdown'; operation = 'shutdown' }
+    $restartShutdown = Read-WorkerResponse $restartWorker.Process
+    Assert-WorkerSuccess $restartShutdown 'restart-shutdown'
     if (-not $restartWorker.Process.WaitForExit(5000) -or $restartWorker.Process.ExitCode -ne 0) {
-        throw 'The replacement worker did not shut down cleanly after restart.'
+        throw 'Replacement worker did not shut down cleanly.'
     }
     $restartStderr = $restartWorker.StandardErrorTask.GetAwaiter().GetResult()
-    if (-not [string]::IsNullOrWhiteSpace($restartStderr)) {
-        throw "The replacement worker wrote unexpected stderr output: $restartStderr"
-    }
+    if (-not [string]::IsNullOrWhiteSpace($restartStderr)) { throw "Unexpected replacement worker stderr: $restartStderr" }
 
     $script:measurements.Add([ordered]@{
         scenario = 'forced-termination-and-restart'
@@ -251,10 +202,10 @@ try {
     })
 }
 finally {
-    foreach ($workerState in @($cleanWorker, $crashWorker, $restartWorker)) {
-        if ($null -ne $workerState -and $null -ne $workerState.Process) {
-            Stop-WorkerProcess -Process $workerState.Process
-            $workerState.Process.Dispose()
+    foreach ($state in @($cleanWorker, $crashWorker, $restartWorker)) {
+        if ($null -ne $state -and $null -ne $state.Process) {
+            Stop-WorkerProcess $state.Process
+            $state.Process.Dispose()
         }
     }
 }
@@ -264,7 +215,8 @@ $summary = [ordered]@{
     architecture = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
     protocolVersion = 1
     maxFrameBytes = 1048576
+    engine = 'eclipse-jdt'
+    engineVersion = '3.47.0'
     scenarios = @($script:measurements)
 }
-
 $summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $ArtifactDirectory 'worker-process-probe.json') -Encoding utf8

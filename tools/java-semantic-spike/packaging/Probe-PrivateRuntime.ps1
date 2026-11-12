@@ -73,9 +73,12 @@ $workerDependencyJarNames = @($workerDependencyJars | ForEach-Object { Split-Pat
 if ($workerDependencyJarNames -notcontains 'gson-2.13.2.jar') {
     throw "The isolated worker runtime closure does not contain Gson 2.13.2: $($workerDependencyJarNames -join ', ')."
 }
-$unexpectedParserJars = @($workerDependencyJarNames | Where-Object { $_ -match 'jdt|javaparser' })
+if (-not ($workerDependencyJarNames | Where-Object { $_ -match 'org\.eclipse\.jdt\.core-3\.47\.0\.jar' })) {
+    throw "The isolated worker runtime closure does not contain Eclipse JDT Core 3.47.0: $($workerDependencyJarNames -join ', ')."
+}
+$unexpectedParserJars = @($workerDependencyJarNames | Where-Object { $_ -match 'javaparser' })
 if ($unexpectedParserJars.Count -gt 0) {
-    throw "The isolated worker runtime closure must not contain parser candidate JARs: $($unexpectedParserJars -join ', ')."
+    throw "The production worker runtime must not contain the rejected JavaParser candidate: $($unexpectedParserJars -join ', ')."
 }
 
 $mavenClasspathArguments = @(

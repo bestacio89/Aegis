@@ -417,9 +417,8 @@ public final class SemanticFactBenchmark {
                 public boolean visit(SimpleType type) {
                     if (type.getName().getFullyQualifiedName().equals("MissingPort")) {
                         String identity = unit.imports().stream()
-                            .map(item -> (org.eclipse.jdt.core.dom.ImportDeclaration) item)
-                            .map(importDeclaration -> importDeclaration.getName()
-                                .getFullyQualifiedName())
+                            .map(item -> ((org.eclipse.jdt.core.dom.ImportDeclaration) item)
+                                .getName().getFullyQualifiedName())
                             .filter(name -> name.endsWith(".MissingPort"))
                             .findFirst()
                             .orElseGet(() -> {

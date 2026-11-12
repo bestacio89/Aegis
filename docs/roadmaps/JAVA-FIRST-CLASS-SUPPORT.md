@@ -1182,3 +1182,17 @@ All three mandatory workflows passed on implementation head `39a9596352c09bdcaf2
 - WPF build validation — run [43220024202](https://github.com/bestacio89/Aegis/actions/runs/43220024202), success.
 
 **Decision:** accept this bounded J2-A5.1 representative source-local semantic fact checkpoint. Broader representative diagnostics, controlled external dependency classpaths, JPMS module-path coverage, worker supervision/isolation and legal review remain open. J2-A remains in progress; J2-B remains blocked.
+
+
+## J2-A5.1 — Representative external API binding extension (2026-11-12)
+
+The representative semantic oracle is being extended from source-local facts to selected third-party API facts across the same pinned Spring, Quarkus and Micronaut projects.
+
+- Spring Petclinic adds JPA `@Entity` binding and an external Spring `Assert.notNull` method call.
+- Quarkus adds JAX-RS `@Path` and `@GET` annotation binding.
+- Micronaut starter AWS CDK adds a binding to the external AWS CDK `Function.Builder.create(Construct, String)` API.
+- Each project receives its own curated compile classpath from a synthetic, pinned Maven POM. Both candidate engines receive identical project-specific JAR inputs.
+
+The synthetic POMs resolve only the declared API dependencies needed by these facts. They do not load or execute the representative repositories' build scripts, Maven extensions, Gradle settings, plugins or annotation processors. The classpaths are explicitly **curated evaluation inputs**, not complete effective project dependency graphs and not J1 dependency-resolution output. Candidate-engine JARs are rejected if they appear in an analysis classpath.
+
+**Acceptance:** both engines must pass every source-local and external API fact in strict mode; the runner must verify each project's required API JARs and preserve project-specific classpath isolation. All three mandatory workflows must pass on the exact implementation head. This extension does not complete representative framework classpath resolution or J2-A. J2-B remains blocked.

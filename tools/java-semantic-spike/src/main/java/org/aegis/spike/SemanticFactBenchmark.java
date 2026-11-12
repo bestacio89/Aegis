@@ -19,6 +19,7 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.dom.AST;
@@ -35,6 +36,7 @@ import org.eclipse.jdt.core.dom.RequiresDirective;
 import org.eclipse.jdt.core.dom.SimpleType;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -60,16 +62,38 @@ public final class SemanticFactBenchmark {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 3 || args.length > 5) {
+        if (args.length < 3 || args.length > 6) {
             throw new IllegalArgumentException(
                 "Usage: SemanticFactBenchmark <jdt|javaparser> <source-root> <fact-corpus> "
-                    + "[--project-root] [--report-only]");
+                    + "[--project-root] [--report-only] [--classpath-file=<path>]");
         }
-        boolean projectRootMode = args.length >= 4 && args[3].equals("--project-root");
-        boolean reportOnly = java.util.Arrays.asList(args).contains("--report-only");
-        if ((args.length == 4 && !projectRootMode && !reportOnly)
-            || (args.length == 5 && (!projectRootMode || !reportOnly))) {
-            throw new IllegalArgumentException("Unsupported benchmark options.");
+        boolean projectRootMode = false;
+        boolean reportOnly = false;
+        Path classpathFile = null;
+        for (int index = 3; index < args.length; index++) {
+            String option = args[index];
+            if (option.equals("--project-root")) {
+                if (projectRootMode) {
+                    throw new IllegalArgumentException("The --project-root option must not be repeated.");
+                }
+                projectRootMode = true;
+            } else if (option.equals("--report-only")) {
+                if (reportOnly) {
+                    throw new IllegalArgumentException("The --report-only option must not be repeated.");
+                }
+                reportOnly = true;
+            } else if (option.startsWith("--classpath-file=")) {
+                if (classpathFile != null) {
+                    throw new IllegalArgumentException("The --classpath-file option must not be repeated.");
+                }
+                String value = option.substring("--classpath-file=".length());
+                if (value.isBlank()) {
+                    throw new IllegalArgumentException("The --classpath-file option requires a path.");
+                }
+                classpathFile = Path.of(value).toAbsolutePath().normalize();
+            } else {
+                throw new IllegalArgumentException("Unsupported benchmark option: " + option);
+            }
         }
 
         String engine = args[0].toLowerCase(Locale.ROOT);
@@ -85,9 +109,12 @@ public final class SemanticFactBenchmark {
             Map<String, Path> sources = projectRootMode
                 ? loadProjectSources(fixtureRoot, facts)
                 : materializeFactSources(fixtureRoot, facts, workspace);
+            List<Path> externalClasspath = classpathFile == null
+                ? List.of()
+                : readClasspath(classpathFile);
             Map<String, Observation> observations = engine.equals("jdt")
-                ? extractWithJdt(sources)
-                : extractWithJavaParser(sources);
+                ? extractWithJdt(sources, externalClasspath)
+                : extractWithJavaParser(sources, externalClasspath);
 
             List<String> failures = new ArrayList<>();
             for (Fact fact : facts) {
@@ -235,13 +262,18 @@ public final class SemanticFactBenchmark {
         return Map.copyOf(sources);
     }
 
-    private static Map<String, Observation> extractWithJavaParser(Map<String, Path> sources) {
+    private static Map<String, Observation> extractWithJavaParser(
+        Map<String, Path> sources,
+        List<Path> externalClasspath) throws IOException {
         ParserConfiguration sourceConfiguration = new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21);
         CombinedTypeSolver solver = new CombinedTypeSolver();
         solver.add(new ReflectionTypeSolver());
         for (Path root : discoverSourceRoots(sources.values())) {
             solver.add(new JavaParserTypeSolver(root.toFile(), sourceConfiguration));
+        }
+        for (Path classpathEntry : externalClasspath) {
+            solver.add(new JarTypeSolver(classpathEntry));
         }
 
         JavaParser parser = new JavaParser(new ParserConfiguration()
@@ -386,8 +418,9 @@ public final class SemanticFactBenchmark {
         }
     }
 
-    private static Map<String, Observation> extractWithJdt(Map<String, Path> sources)
-        throws IOException {
+    private static Map<String, Observation> extractWithJdt(
+        Map<String, Path> sources,
+        List<Path> externalClasspath) throws IOException {
         List<Path> sourceRoots = discoverSourceRoots(sources.values());
         String[] sourcePaths = sourceRoots.stream().map(Path::toString).toArray(String[]::new);
         String[] encodings = sourceRoots.stream().map(ignored -> "UTF-8").toArray(String[]::new);
@@ -402,7 +435,10 @@ public final class SemanticFactBenchmark {
             parser.setKind(ASTParser.K_COMPILATION_UNIT);
             parser.setSource(Files.readString(sourceFile).toCharArray());
             parser.setUnitName(resolveUnitName(sourceFile, sourceRoots));
-            parser.setEnvironment(new String[0], sourcePaths, encodings, true);
+            String[] classpathEntries = externalClasspath.stream()
+                .map(Path::toString)
+                .toArray(String[]::new);
+            parser.setEnvironment(classpathEntries, sourcePaths, encodings, true);
             parser.setResolveBindings(true);
             parser.setBindingsRecovery(false);
             parser.setStatementsRecovery(true);
@@ -536,6 +572,35 @@ public final class SemanticFactBenchmark {
             }
         }
         return observations;
+    }
+
+    private static List<Path> readClasspath(Path classpathFile) throws IOException {
+        if (!Files.isRegularFile(classpathFile)) {
+            throw new IllegalArgumentException("External classpath file does not exist: " + classpathFile);
+        }
+
+        String value = Files.readString(classpathFile).trim();
+        if (value.isEmpty()) {
+            throw new IllegalArgumentException("External classpath file is empty: " + classpathFile);
+        }
+
+        List<Path> entries = new ArrayList<>();
+        Set<Path> uniqueEntries = new HashSet<>();
+        for (String item : value.split(java.util.regex.Pattern.quote(File.pathSeparator), -1)) {
+            if (item.isBlank()) {
+                throw new IllegalArgumentException("External classpath contains an empty entry.");
+            }
+            Path entry = Path.of(item).toAbsolutePath().normalize().toRealPath();
+            if (!Files.isRegularFile(entry)
+                || !entry.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                throw new IllegalArgumentException("External classpath entry is not a JAR file: " + entry);
+            }
+            if (!uniqueEntries.add(entry)) {
+                throw new IllegalArgumentException("External classpath contains a duplicate JAR: " + entry);
+            }
+            entries.add(entry);
+        }
+        return List.copyOf(entries);
     }
 
     private static List<Path> discoverSourceRoots(Iterable<Path> sources) {

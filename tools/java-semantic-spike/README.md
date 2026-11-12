@@ -371,3 +371,16 @@ Run from the repository root after the pinned repositories have been checked out
 ```bash
 bash tools/java-semantic-spike/run-representative-semantic-facts.sh
 ```
+
+
+### Representative external API bindings
+
+The representative semantic-fact runner resolves a separate curated compile classpath for each pinned project from isolated synthetic Maven POMs. It does **not** invoke the checked-out projects' Maven or Gradle builds, settings, plugins or annotation processors.
+
+- Spring Petclinic: Spring Boot 4.1.0-managed JPA and validation starters, exercising `jakarta.persistence.Entity` and Spring's external `Assert.notNull` method.
+- Quarkus getting-started: Quarkus platform BOM 3.40.1.2 plus the declared `quarkus-rest` API, exercising JAX-RS `Path` and `GET` annotations.
+- Micronaut starter AWS CDK module: the pinned `aws-cdk-lib:2.243.0` API dependency, exercising `Function.Builder.create(Construct, String)` across the module-owned source roots.
+
+The classpath file is validated for non-empty, unique JAR entries and required API artifacts. Candidate parser JARs are explicitly forbidden from these analysis classpaths. JDT receives the JAR list through `ASTParser.setEnvironment`; JavaParser receives the same list through `JarTypeSolver`.
+
+These are curated external API classpaths selected to validate named semantic facts. They are not asserted to be complete effective classpaths for the checked-out projects, and they are not exported by the current J1 static model. The exact project build models remain authoritative for declarations; no project build is executed to obtain this evaluation input.

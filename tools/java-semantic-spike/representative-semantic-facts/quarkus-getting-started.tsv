@@ -1,2 +1,4 @@
 fact_id	kind	module	source_set	fixture_path	source_identity	target_identity	expectation
 RFACT-003	method-invocation	quarkus-getting-started	main	src/main/java/org/acme/getting/started/GreetingResource.java	org.acme.getting.started.GreetingResource#greeting(java.lang.String)	org.acme.getting.started.GreetingService#greeting(java.lang.String):java.lang.String	resolved
+RFACT-009	annotation	quarkus-getting-started	main	src/main/java/org/acme/getting/started/GreetingResource.java	org.acme.getting.started.GreetingResource	jakarta.ws.rs.Path	resolved
+RFACT-010	annotation	quarkus-getting-started	main	src/main/java/org/acme/getting/started/GreetingResource.java	org.acme.getting.started.GreetingResource#greeting(java.lang.String)	jakarta.ws.rs.GET	resolved

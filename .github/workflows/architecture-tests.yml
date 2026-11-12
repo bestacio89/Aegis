@@ -36,6 +36,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Package Eclipse JDT worker and private runtime
+        uses: ./.github/actions/package-java-worker
+
       - name: run all non-WPF test projects
         shell: pwsh
         run: |

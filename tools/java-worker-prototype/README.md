@@ -27,3 +27,13 @@ The response uses the numeric values of the shared Aegis contracts for symbol ki
     mvn --batch-mode --no-transfer-progress -f tools/java-worker-prototype/pom.xml verify
 
 The worker is backed by Eclipse JDT Core 3.47.0. The protocol and process supervisor remain separate concerns; this module does not claim to provide an OS sandbox or enforce host-level CPU/memory limits.
+
+## WPF and CLI deployment package
+
+Build the self-contained worker/runtime package before building or publishing either host:
+
+    pwsh tools/java-worker-prototype/packaging/Package-Worker.ps1
+
+The script verifies the worker, copies runtime dependencies, generates a CycloneDX SBOM and license index, derives required Java modules with jdeps, and creates a private Java 21 runtime with jlink. The WPF and CLI projects copy the resulting artifacts/java-worker-package/Java tree into their output and publish directories. The runtime is selected automatically when present; otherwise the host falls back to a system java executable.
+
+The generated third-party notice file is an inventory of declared license metadata. Upstream license-text/notice reconciliation and legal approval remain separate release requirements.

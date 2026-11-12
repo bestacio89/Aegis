@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.IOException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStreamReader;
@@ -135,8 +136,13 @@ final class WorkerServerTests {
         var requestWriter = new PipedOutputStream(workerInput);
         var responseInput = new PipedInputStream();
         var workerOutput = new PipedOutputStream(responseInput);
-        var serverTask = CompletableFuture.runAsync(() ->
-            new WorkerServer(largeResultHandler, 4096, 2, 512).serve(workerInput, workerOutput));
+        var serverTask = CompletableFuture.runAsync(() -> {
+            try {
+                new WorkerServer(largeResultHandler, 4096, 2, 512).serve(workerInput, workerOutput);
+            } catch (IOException exception) {
+                throw new IllegalStateException("The worker protocol server failed.", exception);
+            }
+        });
 
         JsonObject analysisResponse;
         try (var writer = new BufferedWriter(new OutputStreamWriter(requestWriter, StandardCharsets.UTF_8));

@@ -368,7 +368,7 @@ public final class SemanticFactBenchmark {
                         }
                     }
                 }
-                for (MethodReferenceExpr reference : unit.findAll(MethodReferenceExpr.class))
+                for (MethodReferenceExpr reference : unit.findAll(MethodReferenceExpr.class)) {
                     try {
                         ResolvedMethodDeclaration method = reference.resolve();
                         String identity = reference.getIdentifier().equals("new")

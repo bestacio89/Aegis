@@ -753,6 +753,8 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
 
             Assert.False(productionRequest.IncludeTestCode);
             Assert.True(testRequest.IncludeTestCode);
+            Assert.Empty(productionRequest.TestSourceRoots);
+            Assert.Equal(new[] { Path.GetFullPath(testRoot) }, testRequest.TestSourceRoots);
             Assert.Equal(new[] { Path.GetFullPath(productionRoot) }, productionRequest.SourceRoots);
             Assert.Equal(new[] { Path.GetFullPath(testRoot) }, testRequest.SourceRoots);
             Assert.DoesNotContain(Path.GetFullPath(testSupportRoot), productionRequest.ReferencedSourceRoots);

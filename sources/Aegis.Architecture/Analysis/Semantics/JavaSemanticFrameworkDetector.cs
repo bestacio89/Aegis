@@ -261,6 +261,47 @@ internal static class JavaSemanticFrameworkDetector
         if (groupId.StartsWith("org.eclipse.microprofile", StringComparison.OrdinalIgnoreCase))
             return ("MicroProfile", FrameworkEvidenceKind.Runtime);
 
+        // Messaging clients and protocol stacks are explicit architecture evidence.
+        if (groupId.Equals("org.apache.kafka", StringComparison.OrdinalIgnoreCase)
+            && artifactId.StartsWith("kafka-", StringComparison.OrdinalIgnoreCase))
+            return ("Apache Kafka", FrameworkEvidenceKind.Messaging);
+        if (groupId.Equals("com.rabbitmq", StringComparison.OrdinalIgnoreCase)
+            && artifactId.Equals("amqp-client", StringComparison.OrdinalIgnoreCase))
+            return ("RabbitMQ", FrameworkEvidenceKind.Messaging);
+        if (groupId.Equals("io.grpc", StringComparison.OrdinalIgnoreCase)
+            && artifactId.StartsWith("grpc-", StringComparison.OrdinalIgnoreCase))
+            return ("gRPC", FrameworkEvidenceKind.Messaging);
+        if (groupId.Equals("com.google.protobuf", StringComparison.OrdinalIgnoreCase)
+            && artifactId.StartsWith("protobuf-", StringComparison.OrdinalIgnoreCase))
+            return ("Protocol Buffers", FrameworkEvidenceKind.Serialization);
+
+        // Common application integration libraries.
+        if (groupId.Equals("org.mapstruct", StringComparison.OrdinalIgnoreCase)
+            && artifactId.Equals("mapstruct", StringComparison.OrdinalIgnoreCase))
+            return ("MapStruct", FrameworkEvidenceKind.Application);
+        if (groupId.Equals("org.projectlombok", StringComparison.OrdinalIgnoreCase)
+            && artifactId.Equals("lombok", StringComparison.OrdinalIgnoreCase))
+            return ("Lombok", FrameworkEvidenceKind.BuildPlugin);
+        if ((groupId.Equals("com.fasterxml.jackson.core", StringComparison.OrdinalIgnoreCase)
+                || groupId.Equals("com.fasterxml.jackson.datatype", StringComparison.OrdinalIgnoreCase))
+            && artifactId.StartsWith("jackson-", StringComparison.OrdinalIgnoreCase))
+            return ("Jackson", FrameworkEvidenceKind.Serialization);
+        if (groupId.Equals("io.swagger.core.v3", StringComparison.OrdinalIgnoreCase)
+            || groupId.Equals("org.springdoc", StringComparison.OrdinalIgnoreCase)
+            || groupId.Equals("org.openapitools", StringComparison.OrdinalIgnoreCase))
+            return ("OpenAPI", FrameworkEvidenceKind.Web);
+
+        // Schema migration tools and JPA providers affect persistence architecture.
+        if (groupId.Equals("org.flywaydb", StringComparison.OrdinalIgnoreCase)
+            && artifactId.StartsWith("flyway-", StringComparison.OrdinalIgnoreCase))
+            return ("Flyway", FrameworkEvidenceKind.Persistence);
+        if (groupId.Equals("org.liquibase", StringComparison.OrdinalIgnoreCase)
+            && artifactId.Equals("liquibase-core", StringComparison.OrdinalIgnoreCase))
+            return ("Liquibase", FrameworkEvidenceKind.Persistence);
+        if (groupId.Equals("org.eclipse.persistence", StringComparison.OrdinalIgnoreCase)
+            && artifactId.Equals("eclipselink", StringComparison.OrdinalIgnoreCase))
+            return ("EclipseLink", FrameworkEvidenceKind.Persistence);
+
         return null;
     }
 

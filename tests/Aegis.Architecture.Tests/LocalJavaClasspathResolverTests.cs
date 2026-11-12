@@ -68,7 +68,7 @@ public sealed class LocalJavaClasspathResolverTests
                 }
             };
 
-            var result = resolver.Resolve(module, includeTestCode: true);
+            var result = resolver.Resolve(module, [module], includeTestCode: true);
 
             Assert.Empty(result.Entries);
             Assert.Equal("org.example:missing-api:4.5.6", Assert.Single(result.UnresolvedDependencies));

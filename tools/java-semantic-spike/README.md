@@ -141,3 +141,10 @@ The normalized diagnostic taxonomy is defined independently of either engine in 
 - `infrastructure-failure`: analysis could not be performed because an input or engine operation failed.
 
 The diagnostic corpus validator checks stable IDs, category/severity consistency, source-level values, safe fixture paths, fixture existence and complete category coverage. It validates the diagnostic test contract; it does not yet claim that either engine has normalized its native diagnostics. Engine-specific extraction and mapping are the next J2-A5.1 implementation slice.
+
+
+### Diagnostic extraction
+
+The `SemanticDiagnosticBenchmark` runs each diagnostic scenario through the selected engine and emits JSON Lines with the expected and observed normalized category, candidate status, native diagnostic code, native message, source line where available and severity.
+
+JDT is evaluated in strict mode against the seven expected scenarios. JavaParser runs in report-only mode: absence of compiler type-check and deprecation-warning diagnostics is recorded as a capability gap, not misrepresented as a successful compiler diagnostic. Other mismatches remain visible in the artifact. The incomplete-environment versus unresolved-symbol distinction is grounded in the explicit fixture/dependency trigger, while the engine must still produce evidence of an unresolved binding or native diagnostic.

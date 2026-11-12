@@ -47,6 +47,21 @@ jobs:
           mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-validation \
             -Dexec.args="tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-diagnostics.tsv"
 
+      - name: Compare Eclipse JDT normalized diagnostics
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-benchmark \\
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-diagnostics.tsv" \\
+            | tee artifacts/jdt-semantic-diagnostics.jsonl
+
+      - name: Compare JavaParser normalized diagnostics
+        if: always()
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-benchmark \\
+            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-diagnostics.tsv --report-only" \\
+            | tee artifacts/javaparser-semantic-diagnostics.jsonl
+
       - name: Compare Eclipse JDT semantic facts
         run: |
           set -o pipefail

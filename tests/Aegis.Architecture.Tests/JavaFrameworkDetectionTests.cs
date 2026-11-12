@@ -207,26 +207,29 @@ public sealed class JavaFrameworkDetectionTests
             var context = ProjectArchitectureContextDetector.Detect(root);
 
             var module = Assert.Single(context.Modules);
-            var expectedVersions = new Dictionary<string, string>
+            var expectedVersions = new Dictionary<string, string[]>
             {
-                ["JUnit 4"] = "4.13.2",
-                ["JUnit 5"] = "5.12.2",
-                ["TestNG"] = "7.10.2",
-                ["Mockito"] = "5.15.2",
-                ["AssertJ"] = "3.27.3",
-                ["Testcontainers"] = "1.20.4",
-                ["Maven Surefire"] = "3.5.2",
-                ["Maven Failsafe"] = "3.5.2"
+                ["JUnit 4"] = ["4.13.2"],
+                ["JUnit 5"] = ["5.12.2", "1.12.2"],
+                ["TestNG"] = ["7.10.2"],
+                ["Mockito"] = ["5.15.2"],
+                ["AssertJ"] = ["3.27.3"],
+                ["Testcontainers"] = ["1.20.4"],
+                ["Maven Surefire"] = ["3.5.2"],
+                ["Maven Failsafe"] = ["3.5.2"]
             };
 
-            foreach (var (name, version) in expectedVersions)
+            foreach (var (name, versions) in expectedVersions)
             {
-                var evidence = Assert.Single(module.FrameworkEvidence.Where(item => item.Name == name));
-                Assert.Equal(FrameworkEvidenceKind.Testing, evidence.Kind);
-                Assert.Equal(version, evidence.Version);
-                Assert.True(evidence.IsTestOnly);
-                Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(evidence.Provenance).Source);
-                Assert.Contains(context.FrameworkEvidence, item => item.Id == evidence.Id);
+                foreach (var version in versions)
+                {
+                    var evidence = Assert.Single(module.FrameworkEvidence.Where(item =>
+                        item.Name == name && item.Version == version));
+                    Assert.Equal(FrameworkEvidenceKind.Testing, evidence.Kind);
+                    Assert.True(evidence.IsTestOnly);
+                    Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(evidence.Provenance).Source);
+                    Assert.Contains(context.FrameworkEvidence, item => item.Id == evidence.Id);
+                }
             }
 
             Assert.DoesNotContain(module.FrameworkEvidence.Where(item =>

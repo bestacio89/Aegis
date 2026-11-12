@@ -121,9 +121,8 @@ public final class RepresentativeProjectBenchmark {
         for (Path sourceFile : sourceFiles) {
             try {
                 var parseResult = parser.parse(sourceFile);
-                metrics.syntaxErrors += (int) parseResult.getProblems().stream()
-                    .filter(problem -> problem.isError())
-                    .count();
+                // JavaParser ParseResult problems are parser errors; the API exposes no severity field.
+                metrics.syntaxErrors += parseResult.getProblems().size();
                 if (parseResult.getResult().isEmpty()) {
                     metrics.parseFailures++;
                     continue;

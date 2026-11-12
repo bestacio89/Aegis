@@ -401,3 +401,22 @@ bash tools/java-semantic-spike/run-representative-project-matrix.sh
 ```
 
 A report is accepted only when every discovered file parses without syntax errors, the output declares the expected environment and classpath-entry count, and the shared type-reference metric contract remains `outermost-reference-type-nodes-v1`. Resolution percentages are comparative observations, not semantic correctness gates; the separate source-scoped semantic fact oracle remains the correctness gate.
+
+
+### Observed representative-project results (2026-11-12)
+
+The eighteen-report matrix passed on [workflow run 43237842802](https://github.com/bestacio89/Aegis/actions/runs/43237842802); the JSONL reports and classpath snapshots are retained in [artifact 13952309452](https://github.com/bestacio89/Aegis/actions/runs/43237842802/artifacts/13952309452).
+
+| Project | Main / test files | Curated main JARs | JDT method calls | JavaParser method calls |
+|---|---:|---:|---:|---:|
+| Spring Petclinic | 30 / 20 | 50 | 206/230 | 206/230 |
+| Quarkus getting-started | 2 / 2 | 109 | 1/1 | 1/1 |
+| Micronaut starter AWS CDK | 3 / 2 | 12 | 16/16 | 9/16 |
+
+Both candidates parsed all 35 main and 24 test source files without parse failures or syntax errors. The external classpath is supplied only to main-source runs; test-source metrics remain JDK-only and must not be interpreted as complete test dependency resolution.
+
+The representative semantic fact oracle contains eleven facts: JDT passed 11/11; JavaParser passed 10/11. The single JavaParser mismatch is RFACT-011, the AWS CDK `Function.Builder.create(Construct, String)` binding. The native diagnostic reports `UnsolvedSymbolException: Unsolved symbol : Named`; JDT resolves the expected method. CI asserts this exact known gap and retains the diagnostic instead of treating it as a pass.
+
+The external classpath raised Spring Petclinic method-call resolution from 118/230 (JDT) and 115/230 (JavaParser) to 206/230 for both. Quarkus remained 1/1 for both. Micronaut reached 16/16 for JDT, while JavaParser remained at 9/16. Both candidates resolved all measured type references in the Micronaut curated-classpath run. Spring's type-reference denominators differ by one between AST models, so these aggregate values are descriptive, not a claim of identical AST inventories.
+
+The curated classpaths are explicit evaluation inputs, not complete project dependency graphs. No representative project build scripts, wrappers, plugins or annotation processors are executed. The `elapsedMillis` values are single-run observations and are not performance results.

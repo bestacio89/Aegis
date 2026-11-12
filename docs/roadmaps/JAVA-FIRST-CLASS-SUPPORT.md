@@ -1186,13 +1186,47 @@ All three mandatory workflows passed on implementation head `39a9596352c09bdcaf2
 
 ## J2-A5.1 — Representative external API binding extension (2026-11-12)
 
-The representative semantic oracle is being extended from source-local facts to selected third-party API facts across the same pinned Spring, Quarkus and Micronaut projects.
+**Status: accepted as bounded external API semantic evidence; candidate equivalence is not established.**
 
-- Spring Petclinic adds JPA `@Entity` binding and an external Spring `Assert.notNull` method call.
-- Quarkus adds JAX-RS `@Path` and `@GET` annotation binding.
-- Micronaut starter AWS CDK adds a binding to the external AWS CDK `Function.Builder.create(Construct, String)` API.
-- Each project receives its own curated compile classpath from a synthetic, pinned Maven POM. Both candidate engines receive identical project-specific JAR inputs.
+The representative semantic oracle now contains eleven facts across three pinned real projects. Both candidates receive the same curated, project-specific compile classpath. No checked-out Maven/Gradle build, wrapper, settings file, plugin, build script or annotation processor is executed.
 
-The synthetic POMs resolve only the declared API dependencies needed by these facts. They do not load or execute the representative repositories' build scripts, Maven extensions, Gradle settings, plugins or annotation processors. The classpaths are explicitly **curated evaluation inputs**, not complete effective project dependency graphs and not J1 dependency-resolution output. Candidate-engine JARs are rejected if they appear in an analysis classpath.
+| Project | Facts | Eclipse JDT | JavaParser | Coverage |
+|---|---:|---:|---:|---|
+| Spring Petclinic | 5 | 5/5 | 5/5 | Inheritance, source-scoped invocation, negative non-invocation, JPA `@Entity`, Spring `Assert.notNull` |
+| Quarkus getting-started | 3 | 3/3 | 3/3 | Intra-project invocation, JAX-RS `@Path` and `@GET` |
+| Micronaut starter AWS CDK | 3 | 3/3 | 2/3 | Cross-source inheritance, constructor invocation, AWS CDK `Function.Builder.create` |
+| **Total** | **11** | **11/11** | **10/11** | One explicitly retained JavaParser API-binding gap |
 
-**Acceptance:** both engines must pass every source-local and external API fact in strict mode; the runner must verify each project's required API JARs and preserve project-specific classpath isolation. All three mandatory workflows must pass on the exact implementation head. This extension does not complete representative framework classpath resolution or J2-A. J2-B remains blocked.
+JavaParser's only representative-oracle mismatch is **RFACT-011**: it does not resolve `software.amazon.awscdk.services.lambda.Function.Builder#create(software.constructs.Construct, java.lang.String)`. Its native resolution log records `UnsolvedSymbolException: Unsolved symbol : Named` while resolving the chained builder calls. Eclipse JDT resolves the expected method identity. The runner uses report-only mode for this one known JavaParser scenario, then asserts that RFACT-011 is the sole failed fact, every other fact passes, and the native diagnostic is retained. This is not a JavaParser pass and is not hidden by the successful workflow result.
+
+The synthetic POMs are curated evaluation manifests, not complete effective project dependency graphs or J1 resolver output. Candidate-engine JAR leakage is rejected. The negative Spring fact remains a strict guard against treating a method's mere existence as proof that a designated source method invokes it.
+
+**Decision:** accept the bounded eleven-fact representative external API checkpoint with the JavaParser AWS CDK limitation recorded. JDT remains the provisional correctness-first candidate; no final engine is selected and no production parser dependency is introduced.
+
+
+## J2-A5.1 — Representative-project parser and classpath matrix (2026-11-12)
+
+**Status: accepted as bounded parser/classpath evaluation evidence.**
+
+The matrix emits eighteen validated JSONL reports: twelve source-roots-plus-JDK runs (main and test source sets for both candidates across three projects) and six additional main-source runs using curated external classpaths (both candidates across the same three projects).
+
+| Project | Main files | Test files | Curated main JARs | JDT main method calls | JavaParser main method calls | Type-reference observations |
+|---|---:|---:|---:|---:|---:|---|
+| Spring Petclinic | 30 | 20 | 50 | 206/230 | 206/230 | JDT 270/295; JavaParser 271/296 |
+| Quarkus getting-started | 2 | 2 | 109 | 1/1 | 1/1 | Both 6/6 |
+| Micronaut starter AWS CDK | 3 | 2 | 12 | 16/16 | 9/16 | Both 46/46 |
+
+Both engines parsed all **35 main-source files** and **24 test-source files** with zero parse failures and zero syntax errors. The main-source curated classpaths are identical between candidates per project. The Spring method-call result is 206/230 for both engines; Quarkus is 1/1 for both. Micronaut exposes the AWS CDK method-resolution gap: JDT resolves 16/16 method calls, while JavaParser resolves 9/16. Both resolve all measured type references in the curated-classpath run. The Spring type-reference denominators differ by one between the AST models; these counts remain engine observations, not a claim that the ASTs expose identical node inventories.
+
+**Environment boundary:** the external classpath is deliberately limited to curated main-source API dependencies. Test-source reports remain source-roots-plus-JDK-only; unresolved test-framework and third-party test calls therefore reflect the deliberately incomplete environment and are not treated as candidate correctness failures. The matrix does not prove complete project dependency resolution, full framework compilation or production Maven/Gradle model fidelity. Each `elapsedMillis` value is a single observation and is not a performance comparison.
+
+The eighteen reports, per-project classpath snapshots, semantic facts and native JavaParser resolution log are retained in [Java semantic workflow run 43237842802](https://github.com/bestacio89/Aegis/actions/runs/43237842802), artifact [13952309452](https://github.com/bestacio89/Aegis/actions/runs/43237842802/artifacts/13952309452).
+
+All three mandatory workflows passed on implementation head `d0ffd81488b671f1fc2d94a4beac7d31c227b366`:
+- Java semantic engine spike — [run 43237842802](https://github.com/bestacio89/Aegis/actions/runs/43237842802).
+- Non-WPF quality gates — [run 43237842814](https://github.com/bestacio89/Aegis/actions/runs/43237842814).
+- WPF build validation — [run 43237842719](https://github.com/bestacio89/Aegis/actions/runs/43237842719).
+
+**Acceptance boundary:** this accepts the bounded three-project parsing/classpath matrix and eleven-fact external API comparison only. Additional enterprise multi-module, generated-code, legacy and richer framework repositories; representative diagnostic coverage; JPMS module-path resolution; workload scaling; worker supervision/isolation; full licensing and legal review; and the final engine recommendation remain open. J2-A remains in progress and J2-B remains blocked.
+
+

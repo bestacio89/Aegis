@@ -893,3 +893,21 @@ Each row records a stable fact ID, category, module, source set, fixture path, s
 A standalone validator checks schema, stable-ID uniqueness, supported fact categories, required identities, valid source-set values, fixture containment/existence and required category coverage. It does not claim that either engine has extracted or resolved the facts.
 
 **Acceptance boundary:** J2-A3 is accepted only when the corpus validator passes in CI and the oracle contract is reviewed. Equivalent JDT/JavaParser extraction and per-fact identity comparison are the separate J2-A4 checkpoint. Full J2-A and J2-B remain blocked.
+
+
+# J2-A3 — Engine-neutral semantic fact oracle — 2026-11-12
+
+**Status: accepted (bounded corpus/contract checkpoint).** This accepts the oracle definition and integrity gate only. It does not claim that either engine extracts the facts, and it does not complete J2-A or authorize J2-B.
+
+The stable-ID corpus contains 11 facts across 11 required categories: type declaration, inheritance, generic supertype, annotation, constructor invocation, method invocation, overload selection, method reference, JPMS requires, JPMS exports and unresolved type. Each fact binds a source identity to an expected target identity and resolution state, with module/source-set and fixture provenance.
+
+The corpus validator passed. It enforces the eight-column TSV contract, stable unique JFACT-NNN IDs, required category coverage, non-empty identities, supported source sets and fixture path containment/existence.
+
+### J2-A3 CI evidence
+
+All mandatory workflows passed on implementation head 3549fdc25161102d50a23d7542aff495e4ce5e33:
+- Java semantic engine spike — run 43180514181, success; includes the corpus validator and both J2-A1/J2-A2 engine visibility gates.
+- Non-WPF quality gates — run 43180514116, success.
+- WPF build validation — run 43180514089, success.
+
+**Decision:** J2-A3 accepted. J2-A4 now owns equivalent JDT/JavaParser extraction and per-fact target-identity comparison. Full J2-A remains in progress; J2-B remains blocked.

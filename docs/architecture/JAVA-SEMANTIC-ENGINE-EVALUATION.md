@@ -168,3 +168,21 @@ Every row identifies the owning module and source set, the fixture source, a sou
 SemanticFactCorpusValidator validates the tab-separated contract, stable and unique fact IDs, required categories, identity fields, source-set values, fixture path containment and fixture existence. This validates the oracle itself; it does not run semantic extraction and must not be interpreted as a JDT/JavaParser result.
 
 **Acceptance boundary:** J2-A3 requires the corpus validator to pass in CI and the contract to be reviewed. J2-A4 will implement equivalent extraction of these same fact IDs and compare target identities and resolution outcomes per fact. Full J2-A remains in progress; J2-B remains blocked.
+
+
+## J2-A3 — Engine-neutral semantic fact oracle — accepted
+
+**Checkpoint result:** accepted on 2026-11-12. This accepts the stable corpus and its integrity gate only. It does not claim that either candidate extracts the facts or that the engines are semantically equivalent.
+
+The oracle contains 11 stable fact IDs across 11 categories: type declarations, inheritance, generic supertype substitution, annotations, constructor invocations, method invocations, overload selection, method references, JPMS requires/exports and an intentionally unresolved type. Every row includes module/source-set ownership, fixture provenance, source identity, expected target identity and expected resolution state.
+
+The standalone validator passed all schema and fixture-integrity checks: eight TSV columns, unique JFACT-NNN IDs, complete required category coverage, non-empty identities, valid source sets, and contained existing fixture paths.
+
+### J2-A3 CI evidence
+
+All mandatory workflows passed on implementation head 3549fdc25161102d50a23d7542aff495e4ce5e33:
+- Java semantic engine spike — run 43180514181, success.
+- Non-WPF quality gates — run 43180514116, success.
+- WPF build validation — run 43180514089, success.
+
+**Decision:** J2-A3 accepted. J2-A4 must implement equivalent JDT and JavaParser fact extraction and compare each stable fact ID's target identity and resolution state. Full J2-A remains open; J2-B remains blocked.

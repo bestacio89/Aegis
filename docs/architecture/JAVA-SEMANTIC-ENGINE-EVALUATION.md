@@ -317,4 +317,22 @@ The CI protocol performs two warm-ups and seven measured processes per candidate
 
 This is deliberately not a hard timing gate. The bounded fixture corpus, current runner environment and seven samples are useful comparative evidence, not a production-scale performance claim. The prior post-run heap snapshot remains descriptive only and is not treated as peak memory. The harness fails explicitly outside Linux rather than substituting a non-equivalent memory metric.
 
-**Acceptance remains pending:** inspect the repeated measurements and verify both candidates execute the identical workload successfully. Follow with larger representative repositories and workload scaling before making a production performance recommendation. No production parser dependency is introduced by this checkpoint.
+### Measured bounded-corpus result — JDT batch path (2026-11-12)
+
+The first per-file JDT timing baseline is superseded. The accepted comparison uses JDT's batch ASTParser API and the same 42 source files, source roots, optional external JARs, JDK and fixed JVM settings for both candidates.
+
+**Environment:** Temurin JDK 21.0.13, Linux amd64, 4 reported processors, two warm-ups and seven measured trials per candidate/mode, `-Xms64m -Xmx1g -XX:+UseG1GC`. All 42 files were parsed in every measured trial; every child exited with code 0 and no intentionally unresolved type was resolved.
+
+| Mode | Candidate | Analysis median / p95 | Process median / p95 | Peak RSS median / p95 |
+|---|---|---:|---:|---:|
+| Source-only | Eclipse JDT | 593 / 624 ms | 1,005 / 1,022 ms | 149.7 / 153.4 MiB |
+| Source-only | JavaParser | 369 / 380 ms | 770 / 799 ms | 117.2 / 119.0 MiB |
+| External classpath | Eclipse JDT | 643 / 679 ms | 1,047 / 1,090 ms | 143.8 / 154.0 MiB |
+| External classpath | JavaParser | 386 / 407 ms | 815 / 833 ms | 120.5 / 121.1 MiB |
+
+Analysis time excludes process startup; process time includes JVM startup and shutdown. Peak RSS is process-level Linux VmHWM, not Java heap occupancy. With seven samples, nearest-rank p95 is the maximum observed sample. The candidates' diagnostic counts and aggregate binding-attempt counts are not directly comparable because their diagnostic and AST node models differ.
+
+**Interpretation:** On this bounded fixture, JavaParser is approximately 1.6–1.7x faster in analysis, with approximately 1.2–1.3x lower process time and 1.2–1.3x lower peak RSS. JDT batch parsing materially improves its previous per-file baseline, but a performance disadvantage remains. This is a material counterweight in the engine decision, not a reason to disregard JDT's stronger bounded semantic/diagnostic coverage (17/17 facts and 7/7 diagnostics versus JavaParser's 14/17 and 5/7). The 42-file corpus and one CI runner are insufficient to establish production-scale performance or a final engine winner.
+
+**Decision:** Accept J2-A5.2 as a bounded, repeatable measurement checkpoint. Retain JDT as the provisional correctness-first candidate, with the measured performance and memory gap explicitly recorded. Representative repositories, workload scaling and the J2-A5.3 operational/legal review remain necessary before final engine approval. No production parser dependency is introduced.
+

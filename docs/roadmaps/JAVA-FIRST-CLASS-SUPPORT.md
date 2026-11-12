@@ -1055,4 +1055,13 @@ The CI protocol uses two warm-up processes and seven measured processes per engi
 
 The harness rejects non-Linux execution rather than substituting heap occupancy for process RSS. CI timing remains observational; no flaky wall-clock threshold is introduced.
 
-**Acceptance remains pending:** run the protocol on the PR head, inspect all candidate/mode trial records and confirm comparable successful workloads. Seven samples on the bounded fixture corpus are not a production-scale performance conclusion. Larger representative repositories and workload scaling remain necessary. J2-A5.2 is implementation-complete but not yet accepted; J2-A5.3 and final J2-A approval remain outstanding. J2-B remains blocked.
+**J2-A5.2 bounded checkpoint: accepted (2026-11-12).** The JDT batch-path benchmark and JavaParser shared-solver benchmark ran on identical inputs under Temurin JDK 21.0.13/Linux amd64 with two warm-ups and seven measured trials per candidate/mode. All 42/42 files parsed in every trial; all child processes exited successfully and preserved intentionally unresolved symbols.
+
+| Mode | Candidate | Analysis median / p95 | Process median / p95 | Peak RSS median / p95 |
+|---|---|---:|---:|---:|
+| Source-only | Eclipse JDT | 593 / 624 ms | 1,005 / 1,022 ms | 149.7 / 153.4 MiB |
+| Source-only | JavaParser | 369 / 380 ms | 770 / 799 ms | 117.2 / 119.0 MiB |
+| External classpath | Eclipse JDT | 643 / 679 ms | 1,047 / 1,090 ms | 143.8 / 154.0 MiB |
+| External classpath | JavaParser | 386 / 407 ms | 815 / 833 ms | 120.5 / 121.1 MiB |
+
+JavaParser is approximately 1.6–1.7x faster in analysis and uses approximately 1.2–1.3x less process time/peak RSS on this bounded corpus. The earlier JDT per-file timing baseline is superseded by the fairer documented JDT batch ASTParser path. The measured gap remains a material counterweight, while JDT retains stronger bounded semantic/diagnostic coverage (17/17 facts and 7/7 diagnostics versus JavaParser's 14/17 and 5/7). These 42-file, single-runner measurements do not establish production-scale performance or a final engine winner. J2-A5.2 is accepted as a repeatable bounded measurement checkpoint; J2-A5.1 broader corpus validation and J2-A5.3 operational/legal review remain open. J2-B remains blocked; no production parser dependency is introduced.

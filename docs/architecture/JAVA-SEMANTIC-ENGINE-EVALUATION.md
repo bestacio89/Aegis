@@ -387,51 +387,16 @@ The 42-file cold-process measurements show roughly 1.0 s median process time and
 
 
 
-### CycloneDX inventory snapshot (2026-11-12)
+### Candidate-specific CycloneDX inventory snapshot (2026-11-12)
 
-The generated combined candidate SBOM contains 29 components and reports license metadata for all 29. The current declared license inventory is:
+The combined CycloneDX 1.6 SBOM contains 29 third-party components. Traversing its dependency graph from each parser root yields two disjoint pinned closures, with license metadata present for every component:
 
-- 15 EPL-2.0 components, comprising JDT Core/ECJ and its Eclipse platform dependency closure.
-- 10 Apache-2.0-only components.
-- 2 components declaring Apache-2.0 and LGPL-2.1-or-later (JNA and JNA Platform).
-- 1 component declaring Apache-2.0, LGPL-2.1-only and MPL-1.1 (Javassist).
-- 1 MIT component (Checker Framework annotations).
+| Candidate closure | Components | Declared license inventory |
+|---|---:|---|
+| Eclipse JDT Core 3.47.0 | 19 | 15 EPL-2.0; 2 Apache-2.0-only; 2 Apache-2.0 / LGPL-2.1-or-later |
+| JavaParser 3.28.2 + Symbol Solver | 10 | 6 Apache-2.0-only; 2 Apache-2.0 / GNU LGPL (version unspecified in CycloneDX metadata); 1 Apache-2.0 / LGPL-2.1-only / MPL-1.1; 1 MIT |
 
-This is a combined candidate dependency closure; the SBOM preserves dependency edges and package URLs. License metadata is not a legal determination, and multi-license expressions require explicit selection and notice review. The JDT EPL-2.0 distribution obligations and Aegis's proprietary distribution model still require legal approval. The SBOM and OSV report are uploaded as CI artifacts; a clean scan would not replace a complete license/security review.
+The JavaParser closure includes Guava 33.8.0-jre. CI now generates separate candidate-only CycloneDX files from isolated Maven POMs, verifies both roots, expected closure counts and complete license metadata, and retains the combined SBOM. The combined OSV scan continues to cover the union of both closures.
 
+CycloneDX license metadata is not legal approval. The exact LGPL version for the JavaParser artifacts and multi-license selections for JNA/JNA Platform and Javassist require upstream notice/terms verification. EPL-2.0 redistribution obligations for JDT also require legal approval. The full package/version/license breakdown is recorded in [the J2-A5.3 dependency-closure review](https://github.com/bestacio89/Aegis/pull/26#issuecomment-6821186231). The 2026-11-12 OSV scan returned zero findings, which is a point-in-time database result rather than a security guarantee.
 
-## Windows private-runtime packaging probe
-
-The Java semantic workflow includes a cross-platform J2-A5.3 packaging probe on Windows and Linux. It compiles the spike, resolves the combined runtime JAR closure, derives the JDK module closure with `jdeps`, creates a minimized Java 21 runtime with `jlink`, and assembles a runnable package containing the runtime image, candidate JARs and harness classes.
-
-The probe then executes the JDT and JavaParser semantic-fact and diagnostic benchmarks from that private runtime. It uploads the runtime image, dependency JARs, module list, smoke-test JSONL and a size summary. The estimated worker-package size includes the Java runtime, both candidate dependency closures and harness classes; it excludes the Aegis WPF host, launcher, notices and installer overhead. Because both candidates are included, it is an upper-bound evaluation package rather than a final candidate-specific distribution.
-
-This is a deployment feasibility probe, not production integration. Acceptance still requires reviewing the Windows artifact and size, confirming the runtime module closure and startup behaviour, and completing worker lifecycle/isolation and legal review.
-
-
-### Windows private-runtime result (2026-11-12)
-
-The Windows packaging probe completed successfully using Temurin JDK 21.0.13. `jdeps` identified nine root modules; the resulting `jlink` runtime contains 14 modules after transitive closure:
-
-`java.base, java.compiler, java.desktop, java.instrument, java.logging, java.management, jdk.attach, jdk.jdi, jdk.unsupported`.
-
-| Package component | Size |
-|---|---:|
-| Minimized Java runtime image | 48.41 MiB |
-| 29 candidate dependency JARs | 20.69 MiB |
-| Compiled spike classes | 0.17 MiB |
-| **Estimated combined evaluation package** | **69.27 MiB** |
-
-The private runtime successfully executed the semantic-fact and normalized-diagnostic probes on Windows:
-
-| Candidate | Semantic facts | Normalized diagnostics |
-|---|---:|---:|
-| Eclipse JDT | 17/17 | 7/7 |
-| JavaParser + Symbol Solver | 14/17 (3 known gaps) | 5/7 (2 known capability gaps) |
-
-The package contains both candidates and is therefore an upper-bound evaluation bundle. It excludes the Aegis WPF host, launcher, notices, installer overhead and worker protocol. This proves that a minimized private Java runtime can execute both candidate engines on the Windows target; it does not prove worker supervision, cancellation, crash recovery, sandboxing or final distribution readiness.
-
-The complete runtime image, 29 JARs, module list, four smoke-test outputs and size summary are retained in [the Windows packaging artifact](https://github.com/bestacio89/Aegis/actions/runs/43201770009/artifacts/13935597122).
-
-
-The packaging job runs the same private-runtime probe on Windows and Linux. Each OS artifact records the requested JDK module roots, actual modules present in the linked runtime, runtime launch time, per-candidate semantic/diagnostic process durations and the package-size breakdown. These remain descriptive measurements of the combined evaluation bundle; they are not production worker capacity or startup guarantees.

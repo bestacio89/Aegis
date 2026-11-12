@@ -312,3 +312,13 @@ The complete runtime image, 29 JARs, module list, four smoke-test outputs and si
 
 
 The packaging job runs the same private-runtime probe on Windows and Linux. Each OS artifact records the requested JDK module roots, actual modules present in the linked runtime, runtime launch time, per-candidate semantic/diagnostic process durations and the package-size breakdown. These remain descriptive measurements of the combined evaluation bundle; they are not production worker capacity or startup guarantees.
+
+
+## Candidate-specific dependency SBOMs
+
+The Java semantic workflow retains the combined CycloneDX 1.6 SBOM and generates isolated candidate inventories from:
+
+- `candidate-sboms/jdt/pom.xml` — Eclipse JDT Core 3.47.0 and its transitive closure (19 components).
+- `candidate-sboms/javaparser/pom.xml` — JavaParser Symbol Solver 3.28.2 and its transitive closure (10 components), with Guava managed to 33.8.0-jre.
+
+Both child POMs inherit pinned versions from `candidate-sboms/pom.xml`; neither includes the other candidate. CI verifies the candidate root, expected component count and non-empty license metadata. The combined 29-component SBOM remains the union inventory and is the input to the OSV scan. Legal interpretation and redistribution approval remain separate review gates.

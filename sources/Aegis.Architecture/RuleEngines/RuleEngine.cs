@@ -620,7 +620,7 @@ public sealed class RuleEngine
             evaluator.SupportedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase));
     }
 
-    private static bool HasRequiredSemanticCapabilities(
+    private bool HasRequiredSemanticCapabilities(
         IEvaluator evaluator,
         ProjectArchitectureContext context,
         string evaluationPath,

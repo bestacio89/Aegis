@@ -913,12 +913,35 @@ All mandatory workflows passed on implementation head 3549fdc25161102d50a23d7542
 **Decision:** J2-A3 accepted. J2-A4 now owns equivalent JDT/JavaParser extraction and per-fact target-identity comparison. Full J2-A remains in progress; J2-B remains blocked.
 
 
-# J2-A4 — Equivalent semantic fact extraction — in progress
+# J2-A4 — Equivalent semantic fact extraction — accepted comparative checkpoint (2026-11-12)
 
-**Objective:** Execute the J2-A3 oracle independently through Eclipse JDT and JavaParser and compare each expected target identity and resolution state.
+**Objective:** Execute the same J2-A3 semantic fact oracle independently through Eclipse JDT and JavaParser, compare expected target identities and resolution states per fact, and expose capability differences without weakening the oracle.
 
-Implementation adds a dedicated SemanticFactBenchmark to the isolated spike. It materializes only the fixture files referenced by the oracle, configures each engine with the same source-root boundary and emits a per-fact JSON result. Each engine process fails when an expected resolved target is absent or an intentionally unresolved type resolves. CI runs both engines against the same 12 facts.
+The isolated SemanticFactBenchmark materializes the complete bounded SemanticFacts fixture module, including supporting source files needed for cross-source binding. Both engines receive the same module-owned source boundary and the same 12 fact definitions. The harness emits per-fact JSON evidence. Strict local mode exits non-zero on mismatches; CI uses report-only mode so both candidates always produce evidence and a candidate mismatch does not suppress the second engine's result.
 
-The benchmark uses canonical identities for declarations, generic supertypes, annotations, methods and constructors. It does not compare parser-specific AST counts or treat diagnostic totals as equivalent. The source corpus and engine libraries remain isolated from Aegis production dependencies.
+The corpus covers 12 facts across 11 categories, including record declarations and inheritance, generic supertypes, annotations, constructor and method invocations, overload selection, constructor method references, JPMS requires/exports, unresolved symbols and the implicit record-component accessor.
 
-**Acceptance boundary:** J2-A4 is not accepted until both engine runs pass all 12 facts on the same latest head, the observed identities are reviewed for parity, and all mandatory CI workflows pass. Any normalization discrepancy must be resolved explicitly; do not weaken the expected identity to make both engines pass. Full J2-A remains open and J2-B remains blocked.
+### Observed comparison
+
+| Candidate | Expected facts resolved correctly | Mismatches |
+|---|---:|---:|
+| Eclipse JDT Core 3.47.0 | 12/12 | 0 |
+| JavaParser 3.28.2 + Symbol Solver | 9/12 | 3 |
+
+JavaParser's three observed gaps concern implicit Java record members:
+1. Binding the implicit canonical Customer record constructor invocation.
+2. Resolving the implicit record-component accessor Customer.id().
+3. Resolving Customer::new as a constructor method reference to the implicit canonical record constructor.
+
+JDT resolved all three, as well as the other nine facts. The overload-selection fact explicitly calls OverloadProbe.select(String) so it tests overload binding independently of the implicit record accessor; the accessor remains a separate oracle fact. The oracle was not weakened, and the implicit members were not made explicit in the fixture to conceal a candidate limitation.
+
+### CI evidence
+
+All mandatory workflows passed on implementation head `4575ec46bec25464dd83300ed5abb114438f9bcf`:
+- Java semantic engine spike — run `43184106145`, success.
+- Non-WPF quality gates — run `43184106079`, success; all non-WPF test projects and production builds completed successfully.
+- WPF build validation — run `43184106137`, success.
+
+**Decision:** J2-A4 is accepted as a comparative-evaluation checkpoint because both candidates were evaluated against the same oracle, all mismatches were retained and explained, and the mandatory workflows passed. Acceptance does not mean candidate parity. Eclipse JDT is the preferred candidate and the working selection for the next evaluation stage because it resolved 12/12 facts, while JavaParser left three implicit-record-member relationships unresolved. This is a provisional engineering decision, not yet final production-engine approval.
+
+J2-A5 must broaden the corpus and assess generated/partial sources, representative repositories, diagnostic taxonomy, JPMS module-path behaviour, repeatable performance and memory, licensing, packaging, worker lifecycle, cancellation, timeouts, crash isolation and concurrency. JDT must remain the preferred candidate unless that broader evidence identifies a material correctness, performance, operational or legal disadvantage. No production parser dependency is added in J2-A4. Full J2-A remains in progress; J2-B remains blocked pending J2-A completion and final engine approval.

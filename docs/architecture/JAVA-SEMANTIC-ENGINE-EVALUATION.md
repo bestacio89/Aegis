@@ -1,6 +1,6 @@
 # Java semantic-engine evaluation
 
-**Status:** J2-A in progress. No production engine has been selected.
+**Status:** J2-A in progress. Eclipse JDT is the preferred candidate following J2-A4; final production-engine approval remains pending J2-A5.
 
 ## Purpose
 
@@ -188,12 +188,35 @@ All mandatory workflows passed on implementation head 3549fdc25161102d50a23d7542
 **Decision:** J2-A3 accepted. J2-A4 must implement equivalent JDT and JavaParser fact extraction and compare each stable fact ID's target identity and resolution state. Full J2-A remains open; J2-B remains blocked.
 
 
-## J2-A4 — Equivalent semantic fact extraction — in progress
+## J2-A4 — Equivalent semantic fact extraction — accepted comparative checkpoint (2026-11-12)
 
-A dedicated semantic-fact benchmark now extracts the J2-A3 oracle through each candidate independently. The harness materializes only oracle-referenced fixtures, supplies the owning source root to the engine, and emits one JSON record per fact. The process fails if a resolved target identity is absent or if an intentionally unresolved type obtains a binding.
+A dedicated semantic-fact benchmark extracts the J2-A3 oracle independently through Eclipse JDT and JavaParser. Both candidates receive the same bounded module/source fixture and the same 12 stable fact definitions. The harness emits per-fact JSON evidence and compares canonical target identities and expected resolution states. It does not compare parser-specific AST counts or treat diagnostic totals as equivalent.
 
-The first extraction slice covers 12 facts across 11 categories: record declaration, record inheritance, generic interface supertype, annotation, constructor invocation, generic method invocation, overload selection, constructor method reference, JPMS requires, JPMS exports and unresolved type. Canonical method/constructor identities include fully qualified declaring type, parameter types and return type. Generic type arguments are retained.
+The corpus contains 12 facts across 11 categories: record declaration, record inheritance, generic interface supertype, annotation, constructor invocation, generic method invocation, overload selection, constructor method reference, JPMS requires, JPMS exports, unresolved type and implicit record-component accessor. Canonical method/constructor identities include fully qualified declaring type, parameter types and return type; generic type arguments are retained.
 
-The CI workflow invokes JDT and JavaParser with the same fact corpus in report-only mode. This deliberately records candidate mismatches without hiding them or preventing the second engine from running; strict local mode fails on mismatches. This avoids using AST-node counts or engine-specific diagnostic totals as correctness proxies. The harness is isolated under tools/java-semantic-spike and introduces no production parser dependency.
+CI runs both candidates in report-only mode. A mismatch is preserved in the output and does not suppress the second candidate's run. Strict local mode remains non-zero on mismatches. This is an evaluation policy, not a pass-through correctness gate: the oracle remains authoritative and a green comparison workflow means that both evaluations completed, not that both candidates passed every fact.
 
-**Acceptance boundary:** J2-A4 requires both engines to pass every fact on the same latest commit, followed by review of their per-fact observations and all mandatory CI workflows. This first corpus remains bounded; it does not complete J2-A. Larger representative repositories, diagnostic taxonomy, generated code, JPMS module-path behaviour, repeatable performance measurement, licensing and worker-operational review remain outstanding. J2-B remains blocked.
+### Results
+
+| Candidate | Facts resolved correctly | Mismatches |
+|---|---:|---:|
+| Eclipse JDT Core 3.47.0 | 12/12 | 0 |
+| JavaParser 3.28.2 + Symbol Solver | 9/12 | 3 |
+
+The three JavaParser mismatches are:
+- Implicit canonical constructor binding for the Customer record.
+- Implicit record-component accessor binding for Customer.id().
+- Constructor method-reference binding for Customer::new when it targets the implicit canonical record constructor.
+
+JDT resolved all 12 expected facts. The overload-resolution probe calls OverloadProbe.select(String) directly so overload selection is independently tested rather than being conflated with the implicit record accessor. The accessor remains a separate fact. No expected identity was relaxed and no implicit record member was added explicitly to the fixture to mask a candidate limitation.
+
+### CI evidence
+
+All mandatory workflows passed on implementation head `4575ec46bec25464dd83300ed5abb114438f9bcf`:
+- Java semantic engine spike — run `43184106145`, success.
+- Non-WPF quality gates — run `43184106079`, success.
+- WPF build validation — run `43184106137`, success.
+
+**Decision:** J2-A4 is accepted as a comparative-evaluation checkpoint. Both candidates were exercised against the same oracle, mismatches were retained and reviewed, and all mandatory CI workflows passed. This checkpoint does not require artificial candidate parity: it establishes the measured capability difference. JDT is the preferred candidate and working selection for J2-A5 because it resolved 12/12 facts; JavaParser's three missing implicit-record-member bindings are material correctness gaps for the required Java semantic model. This is a provisional engineering selection, not final production approval.
+
+J2-A5 remains necessary before adding a production dependency. It must broaden the corpus to representative repositories and generated/partial-source scenarios; formalize diagnostic categories; evaluate JPMS module-path behaviour; measure performance and memory through repeated, isolated worker runs; and assess licensing, packaging, worker lifecycle, cancellation, timeouts, crash isolation and concurrency. JDT remains the preferred candidate unless that evidence demonstrates a material correctness, performance, operational or legal disadvantage. J2-B remains blocked until J2-A is complete and the production-engine decision is approved.

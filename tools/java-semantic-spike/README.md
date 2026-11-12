@@ -157,3 +157,37 @@ The diagnostic benchmark does not copy an expected category into an observation.
 The corpus carries a qualified symbol and declared artifact only for symbol-resolution scenarios. The incomplete-environment classification requires all of the following: a native unresolved-symbol diagnostic, a matching symbol in the fixture's import/source, and explicit declared-artifact evidence whose JAR was deliberately omitted from the analysis environment. An ordinary unresolved symbol has no declared-artifact evidence. This distinction depends on the project model as well as compiler output; neither engine can infer a missing declared dependency from an isolated unresolved name alone.
 
 JavaParser's lack of compiler type-check and deprecation-warning diagnostics remains a reported capability gap. Report-only mode preserves those results without treating the absence of diagnostics as a pass. Strict JDT mode compares both normalized category and severity.
+
+
+## J2-A5.2 — Repeatable performance and memory evaluation
+
+The performance harness launches each candidate in a fresh JVM with the same fixed heap settings and the same compiled harness/runtime classpath. It evaluates both source-only and controlled-external-classpath modes. The candidate order alternates per trial to reduce systematic order bias.
+
+The default CI protocol uses two warm-up processes per candidate/mode followed by seven measured processes. Warm-ups are excluded from the summary. Each measured process records:
+
+- engine, analysis mode and trial number;
+- analysis duration reported by the child benchmark;
+- end-to-end child-process duration, including JVM startup and shutdown;
+- peak resident set size sampled from Linux /proc VmHWM while the child is alive;
+- source/parsed file counts, diagnostics, resolution attempts and successful bindings;
+- exit status and intentionally-unresolved-symbol guard outcome (a failed child aborts the benchmark).
+
+The JSON Lines report contains environment metadata (JDK, OS, architecture, processor count, JVM heap/GC arguments), per-trial observations and per-engine/mode summaries with sample count, median and nearest-rank p95 for analysis time, process time and peak RSS. The process-time metric must not be confused with analysis-only duration. RSS is process-level memory, not Java heap occupancy; the older post-run heap snapshot remains descriptive and is not used as a peak-memory measure.
+
+Run from the repository root on Linux with JDK 21+ and Maven:
+
+```bash
+mvn --batch-mode --no-transfer-progress -f tools/java-semantic-spike/pom.xml \
+  org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+  -DincludeScope=runtime -Dmdep.outputFile=/tmp/aegis-spike-runtime-classpath.txt
+
+mvn --batch-mode --no-transfer-progress -f tools/java-semantic-spike/classpath-pom.xml \
+  org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+  -DincludeScope=test -Dmdep.outputFile=/tmp/aegis-external-classpath.txt
+
+mvn --batch-mode --no-transfer-progress -f tools/java-semantic-spike/pom.xml compile \
+  exec:java@semantic-performance-benchmark \
+  -Dexec.args="tests/Aegis.Architecture.Tests/Fixtures/Java /tmp/aegis-external-classpath.txt /tmp/aegis-spike-runtime-classpath.txt 2 7 /tmp/aegis-performance.jsonl"
+```
+
+Peak RSS currently uses Linux /proc VmHWM, so the measurement harness explicitly rejects non-Linux environments rather than silently substituting an incomparable heap estimate. CI results are evidence, not timing thresholds: no unstable wall-clock gate is introduced. The compared workload remains the existing bounded fixture corpus; representative real repositories and module-aware semantic fact workloads are still required before a production performance conclusion.

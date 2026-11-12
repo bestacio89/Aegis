@@ -307,3 +307,14 @@ The infrastructure scenario is a controlled missing-input read failure. The corp
 - Java semantic engine spike — run 43191794838, success.
 - Non-WPF quality gates — run 43191794907, success.
 - WPF build validation — run 43191794884, success.
+
+
+## J2-A5.2 — Repeatable performance and memory protocol
+
+The next performance comparison uses isolated child JVMs rather than the Maven plugin's in-process classloader. Each candidate receives identical fixture roots, identical optional external JARs, the same harness/runtime classpath and fixed JVM settings. Source-only and controlled-external-classpath modes are measured independently. Candidate order alternates across trials.
+
+The CI protocol performs two warm-ups and seven measured processes per candidate and mode. It records analysis duration separately from end-to-end process duration (which includes JVM startup/shutdown), and samples process peak RSS from Linux /proc VmHWM while each child is alive. Reports include per-trial JSON Lines and per-engine/mode sample count, median and nearest-rank p95 for both duration measures and peak RSS. Environment metadata and file/binding counts accompany the measurements.
+
+This is deliberately not a hard timing gate. The bounded fixture corpus, current runner environment and seven samples are useful comparative evidence, not a production-scale performance claim. The prior post-run heap snapshot remains descriptive only and is not treated as peak memory. The harness fails explicitly outside Linux rather than substituting a non-equivalent memory metric.
+
+**Acceptance remains pending:** inspect the repeated measurements and verify both candidates execute the identical workload successfully. Follow with larger representative repositories and workload scaling before making a production performance recommendation. No production parser dependency is introduced by this checkpoint.

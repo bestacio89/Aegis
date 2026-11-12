@@ -90,6 +90,15 @@
               <mainClass>org.aegis.spike.SemanticDiagnosticBenchmark</mainClass>
             </configuration>
           </execution>
+          <execution>
+            <id>semantic-performance-benchmark</id>
+            <goals>
+              <goal>java</goal>
+            </goals>
+            <configuration>
+              <mainClass>org.aegis.spike.SemanticPerformanceBenchmark</mainClass>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
     </plugins>

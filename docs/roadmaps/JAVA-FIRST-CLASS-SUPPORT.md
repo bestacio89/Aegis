@@ -1043,3 +1043,16 @@ The infrastructure scenario is a controlled missing-input read failure. The corp
 - Java semantic engine spike — run 43191794838, success.
 - Non-WPF quality gates — run 43191794907, success.
 - WPF build validation — run 43191794884, success.
+
+
+
+
+### J2-A5.2 — Repeatable performance and memory protocol implemented (2026-11-12)
+
+The isolated performance harness launches each candidate in a fresh JVM with identical fixed heap/GC arguments, the same harness/runtime classpath and identical fixture inputs. It runs source-only and controlled-external-classpath modes separately and alternates candidate order between trials.
+
+The CI protocol uses two warm-up processes and seven measured processes per engine/mode. Warm-ups are excluded from summary statistics. Per-trial JSONL captures analysis duration, process duration including JVM startup/shutdown, peak resident set size sampled from Linux /proc VmHWM, source/parsed file counts, diagnostics, resolution attempts, resolved bindings and the unresolved-symbol guard. Environment metadata records JDK, OS, architecture, processor count and JVM arguments. Summaries report sample count, median and nearest-rank p95 for analysis time, process time and peak RSS.
+
+The harness rejects non-Linux execution rather than substituting heap occupancy for process RSS. CI timing remains observational; no flaky wall-clock threshold is introduced.
+
+**Acceptance remains pending:** run the protocol on the PR head, inspect all candidate/mode trial records and confirm comparable successful workloads. Seven samples on the bounded fixture corpus are not a production-scale performance conclusion. Larger representative repositories and workload scaling remain necessary. J2-A5.2 is implementation-complete but not yet accepted; J2-A5.3 and final J2-A approval remain outstanding. J2-B remains blocked.

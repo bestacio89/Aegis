@@ -151,6 +151,21 @@ jobs:
             -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/module-visibility.properties artifacts/classpaths" \
             | tee artifacts/javaparser-module-visibility.jsonl
 
+      - name: Resolve semantic spike runtime classpath
+        run: |
+          mvn --batch-mode --no-transfer-progress \
+            -f tools/java-semantic-spike/pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=runtime \
+            -Dmdep.outputFile="${{ github.workspace }}/artifacts/spike-runtime-classpath.txt"
+
+      - name: Run repeatable isolated performance and memory comparison
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-performance-benchmark \
+            -Dexec.args="tests/Aegis.Architecture.Tests/Fixtures/Java artifacts/external-classpath.txt artifacts/spike-runtime-classpath.txt 2 7 artifacts/performance.jsonl" \
+            | tee artifacts/performance-console.jsonl
+
       - name: Upload comparison results
         if: always()
         uses: actions/upload-artifact@v4

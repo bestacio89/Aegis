@@ -74,7 +74,7 @@ A single run with an approximate post-run heap snapshot is not a reliable benchm
 
 J2-A requires module-aware visibility correctness, the same semantic fact oracle across candidates, explicit diagnostic taxonomy, representative corpus coverage, repeatable performance measurements, legal/operational review, and an evidence-backed production recommendation.
 
-**Current decision:** no production engine selected. J2-B remains blocked.
+**Current decision:** Eclipse JDT is the provisional preferred candidate after J2-A4. Final production-engine approval is pending J2-A5; J2-B remains blocked.
 
 
 ## J2-A1 — Module-scoped project and source-set visibility — accepted
@@ -220,3 +220,37 @@ All mandatory workflows passed on implementation head `4575ec46bec25464dd83300ed
 **Decision:** J2-A4 is accepted as a comparative-evaluation checkpoint. Both candidates were exercised against the same oracle, mismatches were retained and reviewed, and all mandatory CI workflows passed. This checkpoint does not require artificial candidate parity: it establishes the measured capability difference. JDT is the preferred candidate and working selection for J2-A5 because it resolved 12/12 facts; JavaParser's three missing implicit-record-member bindings are material correctness gaps for the required Java semantic model. This is a provisional engineering selection, not final production approval.
 
 J2-A5 remains necessary before adding a production dependency. It must broaden the corpus to representative repositories and generated/partial-source scenarios; formalize diagnostic categories; evaluate JPMS module-path behaviour; measure performance and memory through repeated, isolated worker runs; and assess licensing, packaging, worker lifecycle, cancellation, timeouts, crash isolation and concurrency. JDT remains the preferred candidate unless that evidence demonstrates a material correctness, performance, operational or legal disadvantage. J2-B remains blocked until J2-A is complete and the production-engine decision is approved.
+
+
+## J2-A5 — Broader evaluation plan — in progress (2026-11-12)
+
+J2-A4 established a bounded correctness advantage for JDT (12/12) over JavaParser (9/12), including three material implicit-record-member binding gaps in JavaParser. JDT is therefore the preferred candidate entering J2-A5, but the result is not sufficient for production approval.
+
+### J2-A5.1 — Representative corpus and diagnostic taxonomy
+
+The next corpus expansion must include generated-source output, incomplete/partial source, malformed syntax, genuinely unresolved symbols, and incomplete dependency environments. It must also exercise additional semantic binding cases: sealed hierarchies, nested and generic types, wildcard bounds, lambdas/method references, default interface methods and overloaded generic calls.
+
+The normalized diagnostic model must distinguish:
+- syntax errors;
+- compiler errors;
+- unresolved symbols;
+- unsupported constructs;
+- incomplete analysis environments;
+- infrastructure failures;
+- warnings, retained separately from errors.
+
+Every normalized diagnostic must retain engine-native category/code, message and source location where available. A failed binding must not automatically be classified as an unresolved symbol: incomplete classpaths, unsupported syntax, recovery behaviour and infrastructure failures are distinct causes. Ordinary analysis must not execute build scripts or annotation processors; generated source is supplied as fixture input with explicit provenance.
+
+### J2-A5.2 — Repeatable performance and memory
+
+Use independent JVM processes, explicit warm-up, repeated measured trials, startup/analysis separation, median and p95 reporting, and process-boundary peak resident memory. Store machine-readable per-trial results and environment metadata. Avoid unstable timing thresholds in mandatory CI.
+
+### J2-A5.3 — Operational, deployment and legal review
+
+Assess dependency closure, licensing/redistribution obligations, packaging, supported JDK, in-process versus worker-process execution, protocol versioning, lifecycle, cancellation, deadlines, crash isolation, concurrency and resource limits. The worker model remains an architectural option until evidence supports it.
+
+### J2-A5.4 — Candidate recommendation
+
+Consolidate semantic correctness, diagnostic quality, repeatable performance, peak memory, deployment/operational complexity and legal obligations. JDT remains the preferred candidate unless evidence demonstrates a material disadvantage. Final production approval requires this review; J2-B remains blocked.
+
+**Current checkpoint:** J2-A5.1 is the immediate implementation target. No production parser dependency is to be added during J2-A5.

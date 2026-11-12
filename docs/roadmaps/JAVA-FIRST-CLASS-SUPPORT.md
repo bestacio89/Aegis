@@ -945,3 +945,46 @@ All mandatory workflows passed on implementation head `4575ec46bec25464dd83300ed
 **Decision:** J2-A4 is accepted as a comparative-evaluation checkpoint because both candidates were evaluated against the same oracle, all mismatches were retained and explained, and the mandatory workflows passed. Acceptance does not mean candidate parity. Eclipse JDT is the preferred candidate and the working selection for the next evaluation stage because it resolved 12/12 facts, while JavaParser left three implicit-record-member relationships unresolved. This is a provisional engineering decision, not yet final production-engine approval.
 
 J2-A5 must broaden the corpus and assess generated/partial sources, representative repositories, diagnostic taxonomy, JPMS module-path behaviour, repeatable performance and memory, licensing, packaging, worker lifecycle, cancellation, timeouts, crash isolation and concurrency. JDT must remain the preferred candidate unless that broader evidence identifies a material correctness, performance, operational or legal disadvantage. No production parser dependency is added in J2-A4. Full J2-A remains in progress; J2-B remains blocked pending J2-A completion and final engine approval.
+
+
+# J2-A5 — Broader semantic-engine evaluation — in progress (2026-11-12)
+
+**Objective:** Determine whether Eclipse JDT remains the most correct, efficient and operationally viable semantic engine under representative Java project conditions. JDT is the provisional preferred candidate after J2-A4; this phase must test that preference rather than assume it.
+
+### J2-A5.1 — Representative corpus and diagnostic taxonomy
+
+- Expand the semantic corpus beyond the current single-module fixture.
+- Cover checked-in generated-source output without executing annotation processors; incomplete and partially available source; malformed syntax; unresolved symbols; and incomplete dependency environments.
+- Add semantic cases for sealed hierarchies, nested and generic types, wildcard bounds, lambdas and method references, default interface methods, and overloaded generic calls where those cases exercise distinct binding behaviour.
+- Define normalized diagnostic categories: syntax error, compiler error, unresolved symbol, unsupported construct, incomplete analysis environment, and infrastructure failure. Preserve warnings separately from errors and retain engine-native code/message/location as provenance.
+- Distinguish a missing binding caused by a genuinely absent symbol from one caused by an incomplete classpath, unsupported construct, parser recovery or engine failure.
+- Keep stable fact IDs and expected target identities. Do not weaken the oracle to improve candidate scores.
+
+**Acceptance:** Both candidates are exercised against the same expanded oracle where their capabilities permit; JDT's expected semantic facts and diagnostic classification are explicitly asserted. Candidate-specific limitations remain reported rather than suppressed. Fixture build scripts and annotation processors are never executed.
+
+### J2-A5.2 — Repeatable performance and memory
+
+- Execute each candidate in independent JVM processes.
+- Separate process startup from analysis duration.
+- Use explicit warm-up and repeated measured trials.
+- Report sample count, median and p95, source/file/fact counts, runtime/JDK/environment, exit status and failures.
+- Measure peak resident memory at the process boundary; post-run heap snapshots are not peak-memory measurements.
+- Keep performance results descriptive and reproducible. Do not introduce unstable wall-clock CI thresholds.
+
+**Acceptance:** The benchmark produces machine-readable per-trial data and a reproducible summary for both candidates under identical inputs and resource limits.
+
+### J2-A5.3 — Operational, deployment and legal review
+
+Assess JDT dependency closure and licensing, packaging, JVM worker lifecycle, protocol/versioning, cancellation, deadlines, crash isolation, concurrency, resource limits and deployment footprint. Compare in-process and worker-process boundaries using evidence. Do not assume that a JVM worker is mandatory or that embedding the engine is operationally safe.
+
+Ordinary analysis must not execute arbitrary Maven/Gradle scripts, plugins or annotation processors. Any generated-source analysis must consume explicitly supplied or safely discovered generated files and retain provenance.
+
+**Acceptance:** A documented operational decision identifies the chosen process boundary, supported runtime, dependency/licensing obligations, failure semantics and resource controls.
+
+### J2-A5.4 — Candidate recommendation
+
+Consolidate correctness, diagnostic quality, performance, memory, operational complexity and licensing evidence. JDT remains the preferred candidate unless the broader evidence demonstrates a material correctness, performance, operational or legal disadvantage.
+
+**Acceptance:** An evidence-backed recommendation is reviewed and recorded. Final production-engine approval is separate from the provisional preference. No production parser dependency is introduced before this decision.
+
+**Current decision:** J2-A4 accepted as a comparative checkpoint. J2-A5 in progress, starting with J2-A5.1. Full J2-A remains open; J2-B remains blocked.

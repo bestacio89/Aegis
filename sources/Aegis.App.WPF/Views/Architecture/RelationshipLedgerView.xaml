@@ -178,13 +178,15 @@
                     ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}"
                     RowStyle="{StaticResource Grid.LedgerRow}">
                     <DataGrid.Columns>
+                        <DataGridTextColumn Header="Level" Binding="{Binding RelationshipLevel}" Width="135" />
                         <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
-                        <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="125" />
-                        <DataGridTextColumn Header="Direction / type" Binding="{Binding DependencyType}" Width="125" />
+                        <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="110" />
+                        <DataGridTextColumn Header="Direction / type" Binding="{Binding DependencyType}" Width="155" />
+                        <DataGridTextColumn Header="Relations" Binding="{Binding RelationshipCount}" Width="75" />
                         <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" Width="90" />
-                        <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="125" />
+                        <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="110" />
                         <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="*" />
-                        <DataGridTextColumn Header="Evidence file" Binding="{Binding File}" Width="1.4*" />
+                        <DataGridTextColumn Header="Evidence file(s)" Binding="{Binding File}" Width="1.4*" />
                     </DataGrid.Columns>
                     </DataGrid>
                     <Border Background="{StaticResource Brush.PanelElevated}" Padding="24"
@@ -226,8 +228,10 @@
                         <StackPanel>
                             <TextBlock Text="RELATIONSHIP DETAILS" Style="{StaticResource Text.Eyebrow}"
                                        Foreground="{StaticResource Brush.AccentStructural}" />
+                            <TextBlock Text="{Binding SelectedDependency.RelationshipLevel, TargetNullValue='Relationship level'}"
+                                       Foreground="{StaticResource Brush.TextMuted}" FontSize="11" Margin="0,5,0,0" />
                             <TextBlock Text="{Binding SelectedDependency.Source, TargetNullValue='Select a relationship'}"
-                                       FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,5,0,0" />
+                                       FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,3,0,0" />
                             <TextBlock Text="{Binding SelectedDependency.Target, StringFormat='→  {0}', TargetNullValue='Select a row in the ledger'}"
                                        Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
                                        TextWrapping="Wrap" Margin="0,4,0,0" />
@@ -235,6 +239,9 @@
                     </Border>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="16,4,16,16">
+                            <TextBlock Text="RELATIONSHIP COUNT" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.RelationshipCount, TargetNullValue='Not supplied'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
                             <TextBlock Text="SOURCE LAYER" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.SourceLayer, TargetNullValue='Not classified'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" TextWrapping="Wrap" />
@@ -260,7 +267,7 @@
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12"
                                        TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
                             <TextBlock
-                                Text="The ledger preserves the detector's individual records. It does not aggregate repeated source-target pairs or infer architectural intent."
+                                Text="Build-module dependencies and compiler-resolved component relationships are shown as distinct evidence levels. Component rows aggregate repeated semantic relationships and retain their count and source files."
                                 Foreground="{StaticResource Brush.TextMuted}" FontSize="11"
                                 TextWrapping="Wrap" Margin="0,16,0,0" />
                         </StackPanel>

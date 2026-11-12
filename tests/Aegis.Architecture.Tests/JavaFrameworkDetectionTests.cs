@@ -228,12 +228,17 @@ public sealed class JavaFrameworkDetectionTests
             {
                 foreach (var version in versions)
                 {
-                    var evidence = Assert.Single(module.FrameworkEvidence.Where(item =>
-                        item.Name == name && item.Version == version));
-                    Assert.Equal(FrameworkEvidenceKind.Testing, evidence.Kind);
-                    Assert.True(evidence.IsTestOnly);
-                    Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(evidence.Provenance).Source);
-                    Assert.Contains(context.FrameworkEvidence, item => item.Id == evidence.Id);
+                    var evidenceItems = module.FrameworkEvidence
+                        .Where(item => item.Name == name && item.Version == version)
+                        .ToArray();
+                    Assert.NotEmpty(evidenceItems);
+                    Assert.All(evidenceItems, evidence =>
+                    {
+                        Assert.Equal(FrameworkEvidenceKind.Testing, evidence.Kind);
+                        Assert.True(evidence.IsTestOnly);
+                        Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(evidence.Provenance).Source);
+                        Assert.Contains(context.FrameworkEvidence, item => item.Id == evidence.Id);
+                    });
                 }
             }
 

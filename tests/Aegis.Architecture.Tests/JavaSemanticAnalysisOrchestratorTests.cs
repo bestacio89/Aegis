@@ -274,7 +274,25 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
                             false,
                             [],
                             pomFile,
+                            false),
+                        new MavenProjectModel.Dependency(
+                            "org.testcontainers",
+                            "junit-jupiter",
+                            "1.20.1",
+                            "test",
+                            "jar",
+                            null,
+                            false,
+                            false,
+                            false,
+                            [],
+                            pomFile,
                             false)
+                    ],
+                    Plugins =
+                    [
+                        new MavenProjectModel.Plugin("org.apache.maven.plugins", "maven-surefire-plugin", "3.2.5", false),
+                        new MavenProjectModel.Plugin("org.apache.maven.plugins", "maven-failsafe-plugin", "3.2.5", false)
                     ]
                 },
                 SourceRoots =
@@ -299,12 +317,124 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
 
             await orchestrator.AnalyzeAsync(context);
 
-            var evidence = Assert.Single(module.FrameworkEvidence);
-            Assert.Equal("JUnit 5", evidence.Name);
-            Assert.Equal("5.10.2", evidence.Version);
-            Assert.Equal(FrameworkEvidenceKind.Testing, evidence.Kind);
-            Assert.True(evidence.IsTestOnly);
-            Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(evidence.Provenance).Source);
+            var junit = Assert.Single(module.FrameworkEvidence.Where(evidence => evidence.Name == "JUnit 5"));
+            Assert.Equal("5.10.2", junit.Version);
+            Assert.Equal(FrameworkEvidenceKind.Testing, junit.Kind);
+            Assert.True(junit.IsTestOnly);
+            Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(junit.Provenance).Source);
+            Assert.Contains(module.FrameworkEvidence, evidence =>
+                evidence.Name == "Testcontainers" && evidence.Version == "1.20.1" && evidence.IsTestOnly);
+            Assert.Contains(module.FrameworkEvidence, evidence =>
+                evidence.Name == "Maven Surefire" && evidence.Version == "3.2.5" && evidence.IsTestOnly);
+            Assert.Contains(module.FrameworkEvidence, evidence =>
+                evidence.Name == "Maven Failsafe" && evidence.Version == "3.2.5" && evidence.IsTestOnly);
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Adds_gradle_test_framework_fixture_and_integration_source_set_evidence()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var mainRoot = Path.Combine(repository, "src", "main", "java");
+        var testRoot = Path.Combine(repository, "src", "test", "java");
+        var integrationRoot = Path.Combine(repository, "src", "integrationTest", "java");
+        Directory.CreateDirectory(mainRoot);
+        Directory.CreateDirectory(testRoot);
+        Directory.CreateDirectory(integrationRoot);
+        var buildFile = Path.Combine(repository, "build.gradle.kts");
+        await File.WriteAllTextAsync(buildFile, "plugins { java }");
+        await File.WriteAllTextAsync(Path.Combine(mainRoot, "Service.java"), "package sample; public class Service {}");
+        await File.WriteAllTextAsync(Path.Combine(testRoot, "ServiceTests.java"), "package sample; public class ServiceTests {}");
+        await File.WriteAllTextAsync(Path.Combine(integrationRoot, "ServiceIntegrationTests.java"), "package sample; public class ServiceIntegrationTests {}");
+
+        try
+        {
+            var module = new ProjectModuleContext
+            {
+                Name = "gradle-service",
+                Path = repository,
+                BuildSystem = ArchitectureBuildSystem.Gradle,
+                Languages = ["Java"],
+                GradleBuildModel = new GradleBuildModel
+                {
+                    BuildFile = buildFile,
+                    Dialect = "Kotlin",
+                    Dependencies =
+                    [
+                        new GradleBuildModel.Dependency(
+                            "testImplementation", "org.junit.jupiter", "junit-jupiter", "5.10.2",
+                            null, null, false, false, false, "testImplementation(...)"),
+                        new GradleBuildModel.Dependency(
+                            "testImplementation", "org.testcontainers", "junit-jupiter", "1.20.1",
+                            null, null, false, false, false, "testImplementation(...)")
+                    ],
+                    Plugins =
+                    [
+                        new GradleBuildModel.Plugin("java-test-fixtures", null, true)
+                    ],
+                    SourceSets =
+                    [
+                        new GradleBuildModel.SourceSet("main", [mainRoot], false),
+                        new GradleBuildModel.SourceSet("test", [testRoot], true),
+                        new GradleBuildModel.SourceSet("integrationTest", [integrationRoot], true)
+                    ]
+                },
+                SourceRoots =
+                [
+                    new ProjectSourceRoot
+                    {
+                        Directory = mainRoot,
+                        Ownership = ProjectSourceRootOwnership.Production,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    },
+                    new ProjectSourceRoot
+                    {
+                        Directory = testRoot,
+                        Ownership = ProjectSourceRootOwnership.Test,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    },
+                    new ProjectSourceRoot
+                    {
+                        Directory = integrationRoot,
+                        Ownership = ProjectSourceRootOwnership.Test,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    }
+                ]
+            };
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "gradle-service",
+                RootPath = repository,
+                Language = "Java",
+                Framework = "Java SE",
+                Modules = [module]
+            };
+            var orchestrator = new JavaSemanticAnalysisOrchestrator(
+                [new RecordingJavaAdapter()],
+                new EmptyClasspathResolver(),
+                NullLogger<JavaSemanticAnalysisOrchestrator>.Instance);
+
+            await orchestrator.AnalyzeAsync(context);
+
+            var evidenceNames = module.FrameworkEvidence.Select(evidence => evidence.Name).ToHashSet(StringComparer.Ordinal);
+            Assert.Contains("JUnit 5", evidenceNames);
+            Assert.Contains("Testcontainers", evidenceNames);
+            Assert.Contains("Gradle Test Fixtures", evidenceNames);
+            Assert.Contains("Gradle Test", evidenceNames);
+            Assert.Contains("Integration Testing", evidenceNames);
+            Assert.All(module.FrameworkEvidence, evidence =>
+            {
+                Assert.Equal(FrameworkEvidenceKind.Testing, evidence.Kind);
+                Assert.True(evidence.IsTestOnly);
+                Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(evidence.Provenance).Source);
+            });
         }
         finally
         {

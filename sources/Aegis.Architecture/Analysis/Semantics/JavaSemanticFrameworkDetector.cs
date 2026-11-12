@@ -131,6 +131,23 @@ internal static class JavaSemanticFrameworkDetector
                             || module.IsTestProject
                             || module.IsTestSupport);
                 }
+
+                foreach (var plugin in maven.Plugins)
+                {
+                    var framework = ClassifyMavenTestPlugin(plugin.GroupId, plugin.ArtifactId);
+                    if (framework is null)
+                        continue;
+
+                    AddBuildEvidence(
+                        context,
+                        module,
+                        framework,
+                        plugin.Version,
+                        $"{plugin.GroupId}:{plugin.ArtifactId}",
+                        maven.ProjectFile,
+                        "maven-static-model",
+                        true);
+                }
             }
 
             if (module.GradleBuildModel is { } gradle)
@@ -153,6 +170,37 @@ internal static class JavaSemanticFrameworkDetector
                             || module.IsTestProject
                             || module.IsTestSupport);
                 }
+
+                foreach (var plugin in gradle.Plugins.Where(plugin => plugin.IsApplied))
+                {
+                    var framework = ClassifyGradleTestPlugin(plugin.Id);
+                    if (framework is null)
+                        continue;
+
+                    AddBuildEvidence(
+                        context,
+                        module,
+                        framework,
+                        plugin.Version,
+                        plugin.Id,
+                        gradle.BuildFile,
+                        "gradle-static-model",
+                        true);
+                }
+
+                foreach (var sourceSet in gradle.SourceSets.Where(sourceSet => sourceSet.IsTest))
+                {
+                    var framework = ClassifyGradleTestSourceSet(sourceSet.Name);
+                    AddBuildEvidence(
+                        context,
+                        module,
+                        framework,
+                        null,
+                        $"sourceSet:{sourceSet.Name}",
+                        gradle.BuildFile,
+                        "gradle-static-model",
+                        true);
+                }
             }
         }
     }
@@ -170,6 +218,8 @@ internal static class JavaSemanticFrameworkDetector
             return "TestNG";
         if (groupId == "org.mockito" && artifactId.StartsWith("mockito-", StringComparison.Ordinal))
             return "Mockito";
+        if (groupId == "org.testcontainers")
+            return "Testcontainers";
         if (groupId == "org.assertj" && artifactId.StartsWith("assertj-", StringComparison.Ordinal))
             return "AssertJ";
         if (groupId == "org.springframework.boot" && artifactId == "spring-boot-starter-test")
@@ -180,6 +230,51 @@ internal static class JavaSemanticFrameworkDetector
             return "Micronaut Test";
 
         return null;
+    }
+
+    private static string? ClassifyMavenTestPlugin(string? groupId, string? artifactId)
+    {
+        if (!string.IsNullOrWhiteSpace(groupId)
+            && !groupId.Equals("org.apache.maven.plugins", StringComparison.Ordinal))
+            return null;
+
+        return artifactId switch
+        {
+            "maven-surefire-plugin" => "Maven Surefire",
+            "maven-failsafe-plugin" => "Maven Failsafe",
+            _ => null
+        };
+    }
+
+    private static string? ClassifyGradleTestPlugin(string pluginId) =>
+        pluginId switch
+        {
+            "java-test-fixtures" or "org.gradle.java-test-fixtures" => "Gradle Test Fixtures",
+            "org.gradle.test-retry" => "Gradle Test Retry",
+            _ => null
+        };
+
+    private static string ClassifyGradleTestSourceSet(string sourceSetName)
+    {
+        var normalized = sourceSetName
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal)
+            .ToLowerInvariant();
+
+        if (normalized.Contains("fixture", StringComparison.Ordinal))
+            return "Test Fixtures";
+        if (normalized.Contains("integration", StringComparison.Ordinal))
+            return "Integration Testing";
+        if (normalized.Contains("component", StringComparison.Ordinal))
+            return "Component Testing";
+        if (normalized.Contains("functional", StringComparison.Ordinal))
+            return "Functional Testing";
+        if (normalized.Contains("acceptance", StringComparison.Ordinal))
+            return "Acceptance Testing";
+        if (normalized is "test" or "unittest")
+            return "Gradle Test";
+
+        return "Gradle Test Source Set";
     }
 
     private static void AddBuildEvidence(

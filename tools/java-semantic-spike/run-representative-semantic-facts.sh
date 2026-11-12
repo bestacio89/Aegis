@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-manifest="tools/java-semantic-spike/representative-projects.tsv"
-facts_directory="tools/java-semantic-spike/representative-semantic-facts"
-classpath_directory="artifacts/representative-projects/classpaths"
-results_directory="artifacts/representative-projects/facts"
+repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repository_root"
+
+manifest="$repository_root/tools/java-semantic-spike/representative-projects.tsv"
+facts_directory="$repository_root/tools/java-semantic-spike/representative-semantic-facts"
+classpath_directory="$repository_root/artifacts/representative-projects/classpaths"
+results_directory="$repository_root/artifacts/representative-projects/facts"
 
 rm -rf "$classpath_directory" "$results_directory"
 mkdir -p "$classpath_directory" "$results_directory"

@@ -22,6 +22,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
     private IReadOnlyList<GraphRelation> _activeRelations = [];
     private IReadOnlyList<GraphNode> _activeNodes = [];
     private bool _refreshingProjection;
+    private bool _hasUserSelectedProjection;
 
     public DependencyGraphViewModel()
     {
@@ -65,7 +66,10 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(GroupingLabel));
         if (!_refreshingProjection)
+        {
+            _hasUserSelectedProjection = true;
             RefreshProjection();
+        }
     }
 
     partial void OnSelectedLayerChanged(string value) => RefreshFilter();
@@ -94,6 +98,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             .ToArray() ?? [];
 
         SelectedGraphNode = null;
+        _hasUserSelectedProjection = false;
         Dependencies = new ObservableCollection<ArchitectureDependencyContext>(dependencies);
         OnPropertyChanged(nameof(Dependencies));
 
@@ -126,11 +131,17 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     ? ["Architectural components", "Build modules"]
                     : ["Build modules"];
 
-            if (!GraphProjectionOptions.Contains(GraphProjection, StringComparer.OrdinalIgnoreCase))
-            {
-                GraphProjection = componentDependencies.Length > 0 && buildDependencies.Length == 0
+            var preferredProjection = buildDependencies.Length > 0
+                ? "Build modules"
+                : componentNodes.Count > 0
                     ? "Architectural components"
                     : "Build modules";
+
+            if (!GraphProjectionOptions.Contains(GraphProjection, StringComparer.OrdinalIgnoreCase)
+                || (!_hasUserSelectedProjection
+                    && !string.Equals(GraphProjection, preferredProjection, StringComparison.OrdinalIgnoreCase)))
+            {
+                GraphProjection = preferredProjection;
             }
 
             _activeNodes = GraphProjection == "Architectural components"

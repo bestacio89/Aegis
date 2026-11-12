@@ -442,6 +442,125 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
         }
     }
 
+
+    [Fact]
+    public async Task Uses_separate_production_and_test_classpaths_for_owned_source_roots()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var servicePath = Path.Combine(repository, "service");
+        var testSupportPath = Path.Combine(repository, "test-support");
+        var productionRoot = Path.Combine(servicePath, "src", "main", "java");
+        var testRoot = Path.Combine(servicePath, "src", "test", "java");
+        var testSupportRoot = Path.Combine(testSupportPath, "src", "test", "java");
+        Directory.CreateDirectory(productionRoot);
+        Directory.CreateDirectory(testRoot);
+        Directory.CreateDirectory(testSupportRoot);
+
+        var productionFile = Path.Combine(productionRoot, "Service.java");
+        var testFile = Path.Combine(testRoot, "ServiceTests.java");
+        await File.WriteAllTextAsync(productionFile, "package sample; public class Service {}");
+        await File.WriteAllTextAsync(testFile, "package sample; public class ServiceTests {}");
+
+        try
+        {
+            var service = new ProjectModuleContext
+            {
+                Name = "service",
+                Path = servicePath,
+                Languages = ["Java"],
+                SourceRoots =
+                [
+                    new ProjectSourceRoot
+                    {
+                        Directory = productionRoot,
+                        Ownership = ProjectSourceRootOwnership.Production,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    },
+                    new ProjectSourceRoot
+                    {
+                        Directory = testRoot,
+                        Ownership = ProjectSourceRootOwnership.Test,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    }
+                ]
+            };
+            var testSupport = new ProjectModuleContext
+            {
+                Name = "test-support",
+                Path = testSupportPath,
+                IsTestSupport = true,
+                SourceRoots =
+                [
+                    new ProjectSourceRoot
+                    {
+                        Directory = testSupportRoot,
+                        Ownership = ProjectSourceRootOwnership.Test,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    }
+                ]
+            };
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "service",
+                RootPath = repository,
+                Language = "Java",
+                Modules = [service, testSupport],
+                Dependencies =
+                [
+                    new ArchitectureDependencyContext
+                    {
+                        Source = "service",
+                        SourceProjectPath = servicePath,
+                        Target = "test-support",
+                        TargetProjectPath = testSupportPath,
+                        DependencyType = "MavenProjectDependency",
+                        Scope = "Test"
+                    }
+                ]
+            };
+            var adapter = new RecordingJavaAdapter();
+            var classpathResolver = new RecordingClasspathResolver();
+            var orchestrator = new JavaSemanticAnalysisOrchestrator(
+                [adapter],
+                classpathResolver,
+                NullLogger<JavaSemanticAnalysisOrchestrator>.Instance);
+
+            await orchestrator.AnalyzeAsync(context);
+
+            var serviceRequests = adapter.Requests
+                .Where(request => Path.GetFullPath(request.ProjectPath) == Path.GetFullPath(servicePath))
+                .ToArray();
+            Assert.Equal(2, serviceRequests.Length);
+
+            var productionRequest = Assert.Single(serviceRequests.Where(request =>
+                request.SourceFiles.Contains(productionFile)));
+            var testRequest = Assert.Single(serviceRequests.Where(request =>
+                request.SourceFiles.Contains(testFile)));
+
+            Assert.False(productionRequest.IncludeTestCode);
+            Assert.True(testRequest.IncludeTestCode);
+            Assert.Equal([Path.GetFullPath(productionRoot)], productionRequest.SourceRoots);
+            Assert.Equal([Path.GetFullPath(testRoot)], testRequest.SourceRoots);
+            Assert.DoesNotContain(Path.GetFullPath(testSupportRoot), productionRequest.ReferencedSourceRoots);
+            Assert.Contains(Path.GetFullPath(testSupportRoot), testRequest.ReferencedSourceRoots);
+            Assert.Contains("production-classpath.jar", productionRequest.ClasspathEntries);
+            Assert.Contains("test-classpath.jar", testRequest.ClasspathEntries);
+            Assert.Contains(classpathResolver.Calls, call =>
+                Path.GetFullPath(call.ProjectPath) == Path.GetFullPath(servicePath)
+                && !call.IncludeTestCode);
+            Assert.Contains(classpathResolver.Calls, call =>
+                Path.GetFullPath(call.ProjectPath) == Path.GetFullPath(servicePath)
+                && call.IncludeTestCode);
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
     private static ProjectModuleContext CreateModule(string name, string path, string sourceRoot) =>
         new()
         {
@@ -639,6 +758,25 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
                 ]
             };
             return ValueTask.FromResult(run);
+        }
+    }
+
+
+    private sealed class RecordingClasspathResolver : IJavaClasspathResolver
+    {
+        public List<(string ProjectPath, bool IncludeTestCode)> Calls { get; } = [];
+
+        public JavaClasspathResolution Resolve(
+            ProjectModuleContext module,
+            IReadOnlyCollection<ProjectModuleContext> projectModules,
+            bool includeTestCode)
+        {
+            Calls.Add((module.Path, includeTestCode));
+            return new JavaClasspathResolution(
+                [includeTestCode ? "test-classpath.jar" : "production-classpath.jar"],
+                [],
+                true,
+                true);
         }
     }
 

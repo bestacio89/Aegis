@@ -322,3 +322,14 @@ The Java semantic workflow retains the combined CycloneDX 1.6 SBOM and generates
 - `candidate-sboms/javaparser/pom.xml` — JavaParser Symbol Solver 3.28.2 and its transitive closure (10 components), with Guava managed to 33.8.0-jre.
 
 Both child POMs inherit pinned versions from `candidate-sboms/pom.xml`; neither includes the other candidate. CI verifies the candidate root, expected component count and non-empty license metadata. The combined 29-component SBOM remains the union inventory and is the input to the OSV scan. Legal interpretation and redistribution approval remain separate review gates.
+
+
+### Worker process probe result (2026-11-12)
+
+The worker-specific protocol test suite passed 7/7 tests. The Windows and Linux private-runtime packaging jobs both launched the protocol-only worker from the minimized Java 21 runtime and passed handshake, capabilities, ping, malformed/oversized-frame, protocol-version, graceful-shutdown and forced-termination/restart checks. The worker runtime closure is kept separate from JDT and JavaParser.
+
+- [Windows private-runtime artifact](https://github.com/bestacio89/Aegis/actions/runs/43207732837/artifacts/13939951010)
+- [Linux private-runtime artifact](https://github.com/bestacio89/Aegis/actions/runs/43207732837/artifacts/13939681044)
+- [Java comparison, worker SBOM and OSV artifact](https://github.com/bestacio89/Aegis/actions/runs/43207732837/artifacts/13940141303)
+
+This is a protocol/process feasibility result. The worker still advertises no semantic engine and does not provide a .NET supervisor or OS sandbox.

@@ -60,3 +60,10 @@ The process-level probe verifies:
 - Forced process-tree termination followed by a successful replacement worker handshake and shutdown.
 
 The probe records per-platform launch/handshake timings and the worker package size. It is operational feasibility evidence, not a .NET supervisor implementation or an OS sandbox. It does not prove analysis-request deadlines, native-code termination, CPU/memory enforcement, filesystem/network restrictions, or cross-workspace cache isolation.
+
+
+## Recorded CI result (2026-11-12)
+
+The seven protocol tests passed. The worker was also launched from the minimized private Java 21 runtime on Windows and Linux; both process probes passed handshake, capabilities, ping, malformed/oversized-frame handling, protocol-version rejection, graceful shutdown, forced termination and replacement-worker startup.
+
+The worker remains protocol-only and reports no attached semantic engine. See the [Windows artifact](https://github.com/bestacio89/Aegis/actions/runs/43207732837/artifacts/13939951010), [Linux artifact](https://github.com/bestacio89/Aegis/actions/runs/43207732837/artifacts/13939681044), and [Java comparison/SBOM artifact](https://github.com/bestacio89/Aegis/actions/runs/43207732837/artifacts/13940141303).

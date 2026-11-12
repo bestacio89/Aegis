@@ -1127,3 +1127,29 @@ The JavaParser closure includes Guava 33.8.0-jre. CI now generates separate cand
 
 CycloneDX license metadata is not legal approval. The exact LGPL version for the JavaParser artifacts and multi-license selections for JNA/JNA Platform and Javassist require upstream notice/terms verification. EPL-2.0 redistribution obligations for JDT also require legal approval. The full package/version/license breakdown is recorded in [the J2-A5.3 dependency-closure review](https://github.com/bestacio89/Aegis/pull/26#issuecomment-6821186231). The 2026-11-12 OSV scan returned zero findings, which is a point-in-time database result rather than a security guarantee.
 
+
+
+### J2-A5.3 worker protocol and private-runtime process result (2026-11-12)
+
+**Implementation commit:** `58ccdfa997d22221bf9992795402915bf15a1954`.
+
+The isolated worker protocol prototype passed all seven Maven/JUnit tests. The tests cover handshake and ping correlation, pre-handshake rejection, malformed JSON recovery, oversized-frame draining, duplicate request IDs, honest unavailable-engine reporting, and cancellation with a terminal response for the cancelled request.
+
+The worker-specific CycloneDX inventory was generated and scanned with OSV-Scanner 2.7.1 successfully. The worker dependency closure is resolved independently and CI asserts the Gson 2.13.2 root and excludes JDT/JavaParser candidate JARs from the worker package.
+
+The Windows and Linux private-runtime jobs both launched the worker from the minimized Java 21 runtime and passed the process-level probe:
+
+- Handshake, protocol-version negotiation, capabilities and ping.
+- Malformed JSON and oversized-frame rejection while keeping the session usable.
+- Unsupported protocol-version rejection.
+- Graceful shutdown with exit code zero.
+- Forced process-tree termination followed by a successful replacement-worker handshake and graceful shutdown.
+
+Artifacts: [Windows private-runtime process probe](https://github.com/bestacio89/Aegis/actions/runs/43207732837/artifacts/13939951010), [Linux private-runtime process probe](https://github.com/bestacio89/Aegis/actions/runs/43207732837/artifacts/13939681044), and [Java comparison, worker SBOM and OSV reports](https://github.com/bestacio89/Aegis/actions/runs/43207732837/artifacts/13940141303).
+
+All three mandatory workflows passed on the exact implementation head:
+- Java semantic engine spike — [run 43207732837](https://github.com/bestacio89/Aegis/actions/runs/43207732837).
+- Non-WPF quality gates — [run 43207732860](https://github.com/bestacio89/Aegis/actions/runs/43207732860).
+- WPF build validation — [run 43207732997](https://github.com/bestacio89/Aegis/actions/runs/43207732997).
+
+**Acceptance boundary:** This accepts the bounded protocol and private-runtime process-feasibility sub-checkpoint only. The executable reports `analysisAvailable=false`; neither JDT nor JavaParser is attached. This does not implement the .NET/WPF supervisor, host-enforced analysis deadlines, CPU/memory limits, OS sandboxing, workspace isolation, runtime patch/upgrade/rollback, or legal approval. J2-A5.3 remains in progress; J2-A5.4 candidate recommendation and J2-B production integration remain blocked.

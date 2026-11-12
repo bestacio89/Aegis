@@ -36,6 +36,27 @@ internal static class JavaSemanticComponentDependencyDetector
             .Where(group => group.Count() == 1)
             .ToDictionary(group => group.Key, group => group.Single(), PathComparer);
 
+        // The orchestrator supports a single implicit Java module when project
+        // discovery has no build-module records. Preserve that semantic graph
+        // instead of dropping every package because the module inventory is empty.
+        if (context.Modules.Count == 0)
+        {
+            foreach (var run in context.SemanticAnalysisRuns.Where(IsUsableJavaRun))
+            {
+                var modulePath = NormalizePath(run.ProjectPath);
+                if (modulesByPath.ContainsKey(modulePath))
+                    continue;
+
+                var moduleName = Path.GetFileName(modulePath);
+                modulesByPath.Add(modulePath, new ProjectModuleContext
+                {
+                    Name = string.IsNullOrWhiteSpace(moduleName) ? context.ProjectName : moduleName,
+                    Path = modulePath,
+                    Languages = ["Java"]
+                });
+            }
+        }
+
         var symbolComponents = context.SemanticAnalysisRuns
             .Where(IsUsableJavaRun)
             .SelectMany(run =>

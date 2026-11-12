@@ -212,7 +212,9 @@ public sealed class DependencyGraphEvaluator
         var javaRuns = context.SemanticAnalysisRuns
             .Where(run => run.Language.Equals("Java", StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        var analysisComplete = javaRuns.Length > 0 && javaRuns.All(run => run.IsComplete);
+        var analysisComplete = javaRuns.Length > 0
+            && javaRuns.All(run => run.IsComplete)
+            && !context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
         result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
 
         if (nodes.Length > 1 && (distinctEdges > 0 || analysisComplete))

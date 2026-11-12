@@ -151,6 +151,9 @@ jobs:
       - name: Run pinned representative project matrix
         run: bash tools/java-semantic-spike/run-representative-project-matrix.sh
 
+      - name: Compare representative-project semantic facts
+        run: bash tools/java-semantic-spike/run-representative-semantic-facts.sh
+
       - name: Compare Eclipse JDT normalized diagnostics
         run: |
           set -o pipefail

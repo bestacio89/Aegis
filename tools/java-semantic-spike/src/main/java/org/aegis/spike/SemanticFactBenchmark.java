@@ -59,13 +59,16 @@ public final class SemanticFactBenchmark {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 3 || args.length > 4) {
+        if (args.length < 3 || args.length > 5) {
             throw new IllegalArgumentException(
-                "Usage: SemanticFactBenchmark <jdt|javaparser> <fixture-root> <fact-corpus> [--report-only]");
+                "Usage: SemanticFactBenchmark <jdt|javaparser> <source-root> <fact-corpus> "
+                    + "[--project-root] [--report-only]");
         }
-        boolean reportOnly = args.length == 4 && args[3].equals("--report-only");
-        if (args.length == 4 && !reportOnly) {
-            throw new IllegalArgumentException("Unsupported option: " + args[3]);
+        boolean projectRootMode = args.length >= 4 && args[3].equals("--project-root");
+        boolean reportOnly = java.util.Arrays.asList(args).contains("--report-only");
+        if ((args.length == 4 && !projectRootMode && !reportOnly)
+            || (args.length == 5 && (!projectRootMode || !reportOnly))) {
+            throw new IllegalArgumentException("Unsupported benchmark options.");
         }
 
         String engine = args[0].toLowerCase(Locale.ROOT);
@@ -78,7 +81,9 @@ public final class SemanticFactBenchmark {
         List<Fact> facts = readFacts(corpus);
         Path workspace = Files.createTempDirectory("aegis-semantic-facts-");
         try {
-            Map<String, Path> sources = materializeFactSources(fixtureRoot, facts, workspace);
+            Map<String, Path> sources = projectRootMode
+                ? loadProjectSources(fixtureRoot, facts)
+                : materializeFactSources(fixtureRoot, facts, workspace);
             Map<String, Observation> observations = engine.equals("jdt")
                 ? extractWithJdt(sources)
                 : extractWithJavaParser(sources);
@@ -98,7 +103,8 @@ public final class SemanticFactBenchmark {
                         .sorted()
                         .reduce((left, right) -> left + "," + right)
                         .orElse("<none>");
-                    failures.add(fact.factId() + " expected " + fact.targetIdentity()
+                    failures.add(fact.factId() + " from " + fact.sourceIdentity()
+                        + " expected " + fact.targetIdentity()
                         + " (" + fact.expectation() + ") but observed "
                         + observation.identity() + " (" + observation.resolution()
                         + "); candidates=" + candidates);
@@ -149,6 +155,14 @@ public final class SemanticFactBenchmark {
             if (fields.length != 8) {
                 throw new IllegalStateException("Invalid fact row at line " + (index + 1));
             }
+            if (fields[0].isBlank() || fields[1].isBlank() || fields[4].isBlank()
+                || fields[5].isBlank() || fields[6].isBlank() || fields[7].isBlank()) {
+                throw new IllegalStateException("Fact fields must not be blank at line " + (index + 1));
+            }
+            if (facts.stream().anyMatch(existing -> existing.factId().equals(fields[0]))) {
+                throw new IllegalStateException("Duplicate semantic fact ID at line " + (index + 1)
+                    + ": " + fields[0]);
+            }
             facts.add(new Fact(
                 fields[0], fields[1], fields[4], fields[5], fields[6], fields[7]));
         }
@@ -156,6 +170,27 @@ public final class SemanticFactBenchmark {
             throw new IllegalStateException("Semantic fact corpus is empty.");
         }
         return List.copyOf(facts);
+    }
+
+    private static Map<String, Path> loadProjectSources(
+        Path projectRoot,
+        List<Fact> facts) throws IOException {
+        Path normalizedRoot = projectRoot.toRealPath();
+        Map<String, Path> sources = new HashMap<>();
+        for (Fact fact : facts) {
+            Path relative = Path.of(fact.fixturePath()).normalize();
+            if (relative.isAbsolute() || relative.startsWith("..")) {
+                throw new IllegalStateException("Representative fact path escapes its project: "
+                    + fact.fixturePath());
+            }
+            Path realSource = normalizedRoot.resolve(relative).toRealPath();
+            if (!realSource.startsWith(normalizedRoot) || !Files.isRegularFile(realSource)) {
+                throw new IllegalStateException("Representative fact source is missing or escapes its project: "
+                    + fact.fixturePath());
+            }
+            sources.put(fact.fixturePath(), realSource);
+        }
+        return Map.copyOf(sources);
     }
 
     private static Map<String, Path> materializeFactSources(
@@ -241,6 +276,10 @@ public final class SemanticFactBenchmark {
                     if (declaration.isInterface()) {
                         for (ClassOrInterfaceType type : declaration.getExtendedTypes()) {
                             observeType(observations, fixture, "generic-supertype", type);
+                        }
+                    } else {
+                        for (ClassOrInterfaceType type : declaration.getExtendedTypes()) {
+                            observeType(observations, fixture, "inheritance", type);
                         }
                     }
                 }
@@ -382,6 +421,9 @@ public final class SemanticFactBenchmark {
                             observeJdtType(observations, fixture, "generic-supertype",
                                 (org.eclipse.jdt.core.dom.Type) item);
                         }
+                    } else if (declaration.getSuperclassType() != null) {
+                        observeJdtType(observations, fixture, "inheritance",
+                            declaration.getSuperclassType());
                     }
                     return true;
                 }

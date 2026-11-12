@@ -1,0 +1,3 @@
+fact_id	kind	module	source_set	fixture_path	source_identity	target_identity	expectation
+RFACT-004	inheritance	micronaut-starter-aws-cdk	main	starter-core/src/main/java/io/micronaut/starter/application/Project.java	io.micronaut.starter.application.Project	io.micronaut.starter.application.ProjectIdentifier	resolved
+RFACT-005	constructor-invocation	micronaut-starter-aws-cdk	main	starter-core/src/main/java/io/micronaut/starter/application/Project.java	io.micronaut.starter.application.Project#withClassName(java.lang.String)	io.micronaut.starter.application.Project#<init>(java.lang.String,java.lang.String,java.lang.String,java.lang.String,java.lang.String,java.lang.String):void	resolved

@@ -301,7 +301,7 @@ public final class SemanticEngineBenchmark {
         parser.createASTs(
             compilationUnitPaths,
             encodings,
-            null,
+            new String[0],
             new FileASTRequestor() {
                 @Override
                 public void acceptAST(

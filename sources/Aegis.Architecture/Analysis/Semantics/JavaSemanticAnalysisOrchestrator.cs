@@ -82,12 +82,12 @@ public sealed class JavaSemanticAnalysisOrchestrator
                 continue;
             }
 
-            var productionRoots = module.IsTestProject || module.IsTestSupport
+            IReadOnlyCollection<ProjectSourceRoot> productionRoots = module.IsTestProject || module.IsTestSupport
                 ? Array.Empty<ProjectSourceRoot>()
                 : sourceRoots
                     .Where(root => root.Ownership != ProjectSourceRootOwnership.Test)
                     .ToArray();
-            var testRoots = module.IsTestProject || module.IsTestSupport
+            IReadOnlyCollection<ProjectSourceRoot> testRoots = module.IsTestProject || module.IsTestSupport
                 ? sourceRoots
                 : sourceRoots
                     .Where(root => root.Ownership == ProjectSourceRootOwnership.Test)

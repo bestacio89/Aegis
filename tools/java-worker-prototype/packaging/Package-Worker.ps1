@@ -48,7 +48,7 @@ try {
     & mvn --batch-mode --no-transfer-progress -f $pomPath org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath "-Dmdep.includeScope=runtime" "-Dmdep.outputFile=$classpathFile"
     if ($LASTEXITCODE -ne 0) { throw "Building the Java worker dependency classpath failed with exit code $LASTEXITCODE." }
 
-    & mvn --batch-mode --no-transfer-progress -f $pomPath org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeBom -DoutputFormat=json -Dcyclonedx.skipAttach=true
+    & mvn --batch-mode --no-transfer-progress -f $pomPath org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeBom "-DoutputFormat=json" "-Dcyclonedx.skipAttach=true"
     if ($LASTEXITCODE -ne 0) { throw "Generating the Java worker SBOM failed with exit code $LASTEXITCODE." }
 
     Copy-Item -Path (Join-Path $targetDirectory "classes/*") -Destination $classesDirectory -Recurse -Force

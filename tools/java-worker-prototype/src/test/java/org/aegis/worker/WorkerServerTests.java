@@ -6,8 +6,12 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -126,15 +130,73 @@ final class WorkerServerTests {
                 return result;
             }
         };
-        var output = new ByteArrayOutputStream();
-        new WorkerServer(largeResultHandler, 4096, 2, 512).serve(
-            new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)), output);
+        var responseWritten = new CountDownLatch(2);
+        var output = new SignallingOutputStream(responseWritten);
+        var inputStream = new GatedInputStream(
+            input.getBytes(StandardCharsets.UTF_8),
+            responseWritten);
+        new WorkerServer(largeResultHandler, 4096, 2, 512).serve(inputStream, output);
         List<JsonObject> responses = output.toString(StandardCharsets.UTF_8).lines()
             .map(line -> GSON.fromJson(line, JsonObject.class))
             .toList();
 
+        JsonObject analysis = responses.stream()
+            .filter(response -> response.get("requestId").getAsString().equals("analysis-1"))
+            .findFirst()
+            .orElseThrow();
         assertEquals("RESPONSE_TOO_LARGE",
-            responses.get(1).getAsJsonObject("error").get("code").getAsString());
+            analysis.getAsJsonObject("error").get("code").getAsString());
+    }
+
+    private static final class GatedInputStream extends ByteArrayInputStream {
+        private final CountDownLatch responsesWritten;
+
+        private GatedInputStream(byte[] input, CountDownLatch responsesWritten) {
+            super(input);
+            this.responsesWritten = responsesWritten;
+        }
+
+        @Override
+        public synchronized int read(byte[] buffer, int offset, int length) {
+            if (pos >= count) {
+                awaitResponses();
+                return -1;
+            }
+            return super.read(buffer, offset, length);
+        }
+
+        @Override
+        public synchronized int read() {
+            if (pos >= count) {
+                awaitResponses();
+                return -1;
+            }
+            return super.read();
+        }
+
+        private void awaitResponses() {
+            try {
+                if (!responsesWritten.await(5, TimeUnit.SECONDS))
+                    throw new IllegalStateException("The worker did not write both responses before input closed.");
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("The worker response wait was interrupted.", exception);
+            }
+        }
+    }
+
+    private static final class SignallingOutputStream extends ByteArrayOutputStream {
+        private final CountDownLatch responsesWritten;
+
+        private SignallingOutputStream(CountDownLatch responsesWritten) {
+            this.responsesWritten = responsesWritten;
+        }
+
+        @Override
+        public synchronized void write(byte[] bytes, int offset, int length) {
+            super.write(bytes, offset, length);
+            responsesWritten.countDown();
+        }
     }
 
     private static List<JsonObject> execute(String input, int maxFrameBytes) throws Exception {

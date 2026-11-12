@@ -416,17 +416,12 @@ public final class SemanticFactBenchmark {
                 @Override
                 public boolean visit(SimpleType type) {
                     if (type.getName().getFullyQualifiedName().equals("MissingPort")) {
-                        String identity = unit.imports().stream()
-                            .map(item -> ((org.eclipse.jdt.core.dom.ImportDeclaration) item)
-                                .getName().getFullyQualifiedName())
-                            .filter(name -> name.endsWith(".MissingPort"))
-                            .findFirst()
-                            .orElseGet(() -> {
-                                String packageName = unit.getPackage() == null
-                                    ? "" : unit.getPackage().getName().getFullyQualifiedName();
-                                return packageName.isEmpty()
-                                    ? "MissingPort" : packageName + ".MissingPort";
-                            });
+                        String packageName = unit.getPackage() == null
+                            ? "" : unit.getPackage().getName().getFullyQualifiedName();
+                        String fallbackIdentity = packageName.isEmpty()
+                            ? "MissingPort" : packageName + ".MissingPort";
+                        String identity = findImportedTypeName(
+                            unit, "MissingPort", fallbackIdentity);
                         ITypeBinding binding = type.resolveBinding();
                         put(observations, fixture, "unresolved-type",
                             binding == null ? identity : binding.getQualifiedName(),
@@ -474,6 +469,21 @@ public final class SemanticFactBenchmark {
             .max(Comparator.comparingInt(Path::getNameCount))
             .map(root -> root.relativize(sourceFile).toString().replace('\\', '/'))
             .orElseGet(() -> sourceFile.getFileName().toString());
+    }
+
+    private static String findImportedTypeName(
+        org.eclipse.jdt.core.dom.CompilationUnit unit,
+        String simpleName,
+        String fallbackIdentity) {
+        for (Object item : unit.imports()) {
+            org.eclipse.jdt.core.dom.ImportDeclaration importDeclaration =
+                (org.eclipse.jdt.core.dom.ImportDeclaration) item;
+            String importedName = importDeclaration.getName().getFullyQualifiedName();
+            if (importedName.endsWith("." + simpleName)) {
+                return importedName;
+            }
+        }
+        return fallbackIdentity;
     }
 
     private static void observeJdtAnnotation(

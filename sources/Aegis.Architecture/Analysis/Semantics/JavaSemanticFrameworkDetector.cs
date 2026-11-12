@@ -88,6 +88,7 @@ internal static class JavaSemanticFrameworkDetector
             }
         }
 
+        AnalyzeDeclaredFrameworkDependencies(context);
         AnalyzeBuildTestFrameworks(context);
 
         if (string.Equals(context.Language, "Java", StringComparison.OrdinalIgnoreCase)
@@ -105,6 +106,149 @@ internal static class JavaSemanticFrameworkDetector
                 _ => "Multi-Framework"
             };
         }
+    }
+
+    private static void AnalyzeDeclaredFrameworkDependencies(ProjectArchitectureContext context)
+    {
+        foreach (var dependency in context.DependencyEvidence.Where(dependency =>
+                     dependency.Ecosystem is "Maven" or "Gradle"
+                     && dependency.Kind == DependencyEvidenceKind.Package
+                     && !dependency.IsTestOnly
+                     && !string.IsNullOrWhiteSpace(dependency.Name)))
+        {
+            var separator = dependency.Name.IndexOf(':');
+            if (separator <= 0 || separator == dependency.Name.Length - 1)
+                continue;
+
+            var classification = ClassifyDependency(
+                dependency.Name[..separator],
+                dependency.Name[(separator + 1)..]);
+            if (classification is null)
+                continue;
+
+            var module = context.Modules.FirstOrDefault(candidate =>
+                PathsEqual(candidate.Path, dependency.SourceProjectPath));
+            if (module is null)
+                continue;
+
+            var (framework, kind) = classification.Value;
+            var evidenceKey = string.Join("|", dependency.Id, framework, kind);
+            var evidence = new FrameworkEvidence
+            {
+                Id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(evidenceKey))).ToLowerInvariant(),
+                Name = framework,
+                Version = dependency.ResolvedVersion ?? dependency.DeclaredVersion,
+                Kind = kind,
+                ProjectPath = Path.GetFullPath(module.Path),
+                IsTestOnly = module.IsTestProject || module.IsTestSupport,
+                Provenance = dependency.Provenance.Select(item => new SemanticEvidenceProvenance
+                {
+                    AnalyzerId = item.AnalyzerId,
+                    Source = item.Source,
+                    FilePath = item.FilePath,
+                    StartLine = item.StartLine,
+                    StartColumn = item.StartColumn,
+                    Confidence = item.Confidence
+                }).ToList()
+            };
+
+            if (module.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
+                module.FrameworkEvidence.Add(evidence);
+            if (context.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
+                context.FrameworkEvidence.Add(evidence);
+
+            AddDistinct(module.Frameworks, framework);
+            AddDistinct(context.DetectedFrameworks, framework);
+        }
+
+        foreach (var module in context.Modules.Where(module =>
+                     string.Equals(module.Framework, "Java SE", StringComparison.OrdinalIgnoreCase)))
+        {
+            module.Framework = module.Frameworks
+                .Where(IsJavaFramework)
+                .OrderBy(GetFrameworkPriority)
+                .ThenBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault() ?? module.Framework;
+        }
+    }
+
+    private static (string Name, FrameworkEvidenceKind Kind)? ClassifyDependency(
+        string groupId,
+        string artifactId)
+    {
+        if (groupId.Equals("org.springframework.boot", StringComparison.OrdinalIgnoreCase)
+            && artifactId.StartsWith("spring-boot", StringComparison.OrdinalIgnoreCase))
+            return ("Spring Boot", FrameworkEvidenceKind.Application);
+
+        if (groupId.Equals("org.springframework.data", StringComparison.OrdinalIgnoreCase))
+            return ("Spring Data", FrameworkEvidenceKind.Persistence);
+
+        if (groupId.Equals("org.springframework.kafka", StringComparison.OrdinalIgnoreCase)
+            || groupId.Equals("org.springframework.amqp", StringComparison.OrdinalIgnoreCase))
+            return ("Spring Framework", FrameworkEvidenceKind.Messaging);
+
+        if (groupId.Equals("org.springframework", StringComparison.OrdinalIgnoreCase))
+        {
+            if (artifactId.StartsWith("spring-web", StringComparison.OrdinalIgnoreCase))
+                return ("Spring Framework", FrameworkEvidenceKind.Web);
+            if (artifactId.Equals("spring-tx", StringComparison.OrdinalIgnoreCase))
+                return ("Spring Framework", FrameworkEvidenceKind.Persistence);
+            if (artifactId.StartsWith("spring-", StringComparison.OrdinalIgnoreCase))
+                return ("Spring Framework", FrameworkEvidenceKind.Application);
+        }
+
+        if (groupId.Equals("io.quarkus", StringComparison.OrdinalIgnoreCase))
+        {
+            if (artifactId.Contains("resteasy", StringComparison.OrdinalIgnoreCase)
+                || artifactId.Contains("rest", StringComparison.OrdinalIgnoreCase)
+                || artifactId.Contains("vertx-http", StringComparison.OrdinalIgnoreCase))
+                return ("Quarkus", FrameworkEvidenceKind.Web);
+            if (artifactId.Contains("hibernate-orm", StringComparison.OrdinalIgnoreCase))
+                return ("Quarkus", FrameworkEvidenceKind.Persistence);
+            if (artifactId.Contains("kafka", StringComparison.OrdinalIgnoreCase)
+                || artifactId.Contains("amqp", StringComparison.OrdinalIgnoreCase))
+                return ("Quarkus", FrameworkEvidenceKind.Messaging);
+            return ("Quarkus", FrameworkEvidenceKind.Application);
+        }
+
+        if (groupId.StartsWith("io.micronaut", StringComparison.OrdinalIgnoreCase))
+        {
+            if (artifactId.Contains("data", StringComparison.OrdinalIgnoreCase))
+                return ("Micronaut Data", FrameworkEvidenceKind.Persistence);
+            if (artifactId.Contains("http", StringComparison.OrdinalIgnoreCase))
+                return ("Micronaut", FrameworkEvidenceKind.Web);
+            if (artifactId.Contains("kafka", StringComparison.OrdinalIgnoreCase)
+                || artifactId.Contains("rabbitmq", StringComparison.OrdinalIgnoreCase))
+                return ("Micronaut", FrameworkEvidenceKind.Messaging);
+            return ("Micronaut", FrameworkEvidenceKind.Application);
+        }
+
+        if (groupId.StartsWith("org.hibernate", StringComparison.OrdinalIgnoreCase)
+            && artifactId.StartsWith("hibernate-", StringComparison.OrdinalIgnoreCase))
+            return ("Hibernate", FrameworkEvidenceKind.Persistence);
+
+        if (groupId.StartsWith("jakarta.ws.rs", StringComparison.OrdinalIgnoreCase))
+            return ("Jakarta EE", FrameworkEvidenceKind.Web);
+        if (groupId.StartsWith("jakarta.persistence", StringComparison.OrdinalIgnoreCase)
+            || groupId.StartsWith("jakarta.transaction", StringComparison.OrdinalIgnoreCase))
+            return ("Jakarta EE", FrameworkEvidenceKind.Persistence);
+        if (groupId.StartsWith("jakarta.enterprise", StringComparison.OrdinalIgnoreCase)
+            || groupId.StartsWith("jakarta.inject", StringComparison.OrdinalIgnoreCase))
+            return ("Jakarta EE", FrameworkEvidenceKind.Application);
+
+        if (groupId.StartsWith("javax.ws.rs", StringComparison.OrdinalIgnoreCase))
+            return ("Java EE", FrameworkEvidenceKind.Web);
+        if (groupId.StartsWith("javax.persistence", StringComparison.OrdinalIgnoreCase)
+            || groupId.StartsWith("javax.transaction", StringComparison.OrdinalIgnoreCase))
+            return ("Java EE", FrameworkEvidenceKind.Persistence);
+        if (groupId.StartsWith("javax.enterprise", StringComparison.OrdinalIgnoreCase)
+            || groupId.StartsWith("javax.inject", StringComparison.OrdinalIgnoreCase))
+            return ("Java EE", FrameworkEvidenceKind.Application);
+
+        if (groupId.StartsWith("org.eclipse.microprofile", StringComparison.OrdinalIgnoreCase))
+            return ("MicroProfile", FrameworkEvidenceKind.Runtime);
+
+        return null;
     }
 
     private static void AnalyzeBuildTestFrameworks(ProjectArchitectureContext context)

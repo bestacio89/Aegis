@@ -102,7 +102,7 @@ internal static class ModuleRoleDetector
 
             if (isJvmModule && hasJvmBackendFramework)
             {
-                if (module.Type.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(module.Type, "Unknown", StringComparison.OrdinalIgnoreCase))
                 {
                     module.Type = module.ProjectKind.Equals("WebApplication", StringComparison.OrdinalIgnoreCase)
                         ? "Api"

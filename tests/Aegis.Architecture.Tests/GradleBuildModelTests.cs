@@ -521,4 +521,46 @@ public sealed class GradleBuildModelTests
         }
     }
 
+    [Fact]
+    public void Detect_extracts_literal_custom_test_task_registrations_without_executing_gradle()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleTestTasks_{Guid.NewGuid():N}");
+        var integrationRoot = Path.Combine(root, "src", "integrationTest", "java");
+        var componentRoot = Path.Combine(root, "src", "componentTest", "java");
+        Directory.CreateDirectory(integrationRoot);
+        Directory.CreateDirectory(componentRoot);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"), "rootProject.name = \"test-tasks\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins { id("java") }
+                sourceSets {
+                    create("integrationTest") { java.srcDir("src/integrationTest/java") }
+                    create("componentTest") { java.srcDir("src/componentTest/java") }
+                }
+                tasks.register<Test>("integrationTest") { description = "Integration tests" }
+                tasks.register("componentTest", Test::class)
+                task acceptanceTest(type: Test)
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.Equal(3, model.TestTasks.Count);
+            Assert.Contains(model.TestTasks, task =>
+                task.Name == "integrationTest" && task.TaskType == "Test" && task.SourceSetName == "integrationTest");
+            Assert.Contains(model.TestTasks, task =>
+                task.Name == "componentTest" && task.TaskType == "Test" && task.SourceSetName == "componentTest");
+            Assert.Contains(model.TestTasks, task =>
+                task.Name == "acceptanceTest" && task.TaskType == "Test" && task.SourceSetName is null);
+            Assert.All(model.TestTasks, task => Assert.False(string.IsNullOrWhiteSpace(task.Declaration)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+
 }

@@ -16,6 +16,9 @@ public sealed class GradleBuildModel
 
     public List<SourceSet> SourceSets { get; init; } = [];
 
+    /// <summary>Literal custom Gradle Test task registrations; dynamic task configuration is not evaluated.</summary>
+    public List<TestTask> TestTasks { get; init; } = [];
+
     public List<ProjectSourceRoot> SourceRoots { get; init; } = [];
 
     public string? JavaToolchainVersion { get; init; }
@@ -43,4 +46,10 @@ public sealed class GradleBuildModel
         List<string> JavaSourceDirectories,
         bool IsTest,
         List<string>? ExplicitJavaSourceDirectories = null);
+
+    public sealed record TestTask(
+        string Name,
+        string TaskType,
+        string? SourceSetName,
+        string Declaration);
 }

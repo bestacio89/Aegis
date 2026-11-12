@@ -396,6 +396,20 @@ internal static class JavaSemanticFrameworkDetector
                         "gradle-static-model",
                         true);
                 }
+
+                foreach (var testTask in gradle.TestTasks)
+                {
+                    var framework = ClassifyGradleTestTask(testTask.Name);
+                    AddBuildEvidence(
+                        context,
+                        module,
+                        framework,
+                        null,
+                        $"task:{testTask.Name}",
+                        gradle.BuildFile,
+                        "gradle-static-model",
+                        true);
+                }
             }
         }
     }
@@ -465,6 +479,25 @@ internal static class JavaSemanticFrameworkDetector
             "org.gradle.test-retry" => "Gradle Test Retry",
             _ => null
         };
+
+    private static string ClassifyGradleTestTask(string taskName)
+    {
+        var normalized = taskName
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal)
+            .ToLowerInvariant();
+
+        if (normalized.Contains("integration", StringComparison.Ordinal))
+            return "Integration Testing";
+        if (normalized.Contains("component", StringComparison.Ordinal))
+            return "Component Testing";
+        if (normalized.Contains("functional", StringComparison.Ordinal))
+            return "Functional Testing";
+        if (normalized.Contains("acceptance", StringComparison.Ordinal))
+            return "Acceptance Testing";
+
+        return "Gradle Test Task";
+    }
 
     private static string ClassifyGradleTestSourceSet(string sourceSetName)
     {

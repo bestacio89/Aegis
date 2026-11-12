@@ -291,4 +291,42 @@ public sealed class JavaFrameworkDetectionTests
             new(Array.Empty<string>(), Array.Empty<string>(), false, true);
     }
 
+    [Fact]
+    public async Task Detect_projects_custom_gradle_test_tasks_as_test_only_framework_evidence()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleTaskEvidence_{Guid.NewGuid():N}");
+        var source = Path.Combine(root, "src", "main", "java", "example", "Service.java");
+        Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"), "rootProject.name = \"test-task-evidence\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins { id("java") }
+                tasks.register<Test>("integrationTest")
+                tasks.register("componentTest", Test::class)
+                """);
+            File.WriteAllText(source, "package example; public final class Service { }");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            await CreateOrchestrator().AnalyzeAsync(context);
+
+            var module = Assert.Single(context.Modules);
+            Assert.Contains(module.FrameworkEvidence, evidence =>
+                evidence.Name == "Integration Testing"
+                && evidence.Kind == FrameworkEvidenceKind.Testing
+                && evidence.IsTestOnly
+                && evidence.Provenance.Single().Source == SemanticEvidenceSource.BuildModel);
+            Assert.Contains(module.FrameworkEvidence, evidence =>
+                evidence.Name == "Component Testing"
+                && evidence.Kind == FrameworkEvidenceKind.Testing
+                && evidence.IsTestOnly
+                && evidence.Provenance.Single().Source == SemanticEvidenceSource.BuildModel);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+
 }

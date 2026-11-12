@@ -42,6 +42,18 @@ internal static class GradleBuildModelResolver
         @"JavaLanguageVersion\.of\s*\(\s*(?<version>[0-9]+)\s*\)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex GenericTestTaskRegistration = new(
+        @"\btasks\s*\.\s*(?:register|named|create)\s*<\s*(?:org\.gradle\.api\.tasks\.testing\.)?Test\s*>\s*\(\s*['""](?<name>[^'""]+)['""]",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex ExplicitTestTaskRegistration = new(
+        @"\btasks\s*\.\s*(?:register|named|create)\s*\(\s*['""](?<name>[^'""]+)['""]\s*,\s*(?:org\.gradle\.api\.tasks\.testing\.)?Test(?:::class)?\s*\)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex GroovyTestTaskRegistration = new(
+        @"\btask\s+(?<name>[A-Za-z][A-Za-z0-9_]*)\s*\(\s*type\s*:\s*(?:org\.gradle\.api\.tasks\.testing\.)?Test\s*\)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex CatalogAssignment = new(
         @"^\s*(?<alias>[A-Za-z0-9_.-]+)\s*=\s*(?<value>.+?)\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -131,6 +143,7 @@ internal static class GradleBuildModelResolver
                     buildFile));
             }
 
+            var testTasks = ParseTestTasks(source, sourceSets);
             var sourceRoots = DiscoverSourceRoots(module.Path, files, sourceSets, buildFile, diagnostics);
 
             var model = new GradleBuildModel
@@ -142,6 +155,7 @@ internal static class GradleBuildModelResolver
                 Plugins = plugins,
                 Dependencies = dependencies,
                 SourceSets = sourceSets,
+                TestTasks = testTasks,
                 SourceRoots = sourceRoots,
                 JavaToolchainVersion = toolchain,
                 Diagnostics = diagnostics,
@@ -728,6 +742,43 @@ internal static class GradleBuildModelResolver
 
         var preferred = Regex.Match(value, @"prefer\s*=\s*['""](?<version>[^'""]+)['""]");
         return preferred.Success ? preferred.Groups["version"].Value : null;
+    }
+
+    private static List<GradleBuildModel.TestTask> ParseTestTasks(
+        string source,
+        IReadOnlyCollection<GradleBuildModel.SourceSet> sourceSets)
+    {
+        var result = new Dictionary<string, GradleBuildModel.TestTask>(StringComparer.OrdinalIgnoreCase);
+        var registrations = new[]
+        {
+            GenericTestTaskRegistration,
+            ExplicitTestTaskRegistration,
+            GroovyTestTaskRegistration
+        };
+
+        foreach (var registration in registrations)
+        {
+            foreach (Match match in registration.Matches(source))
+            {
+                var name = match.Groups["name"].Success
+                    ? match.Groups["name"].Value.Trim()
+                    : string.Empty;
+                if (name.Length == 0 || result.ContainsKey(name))
+                    continue;
+
+                var sourceSetName = sourceSets.FirstOrDefault(sourceSet =>
+                    sourceSet.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Name;
+                result.Add(name, new GradleBuildModel.TestTask(
+                    name,
+                    "Test",
+                    sourceSetName,
+                    match.Value.Trim()));
+            }
+        }
+
+        return result.Values
+            .OrderBy(task => task.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static List<GradleBuildModel.SourceSet> ParseExplicitSourceSets(

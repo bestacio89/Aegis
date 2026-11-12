@@ -384,3 +384,20 @@ The representative semantic-fact runner resolves a separate curated compile clas
 The classpath file is validated for non-empty, unique JAR entries and required API artifacts. Candidate parser JARs are explicitly forbidden from these analysis classpaths. JDT receives the JAR list through `ASTParser.setEnvironment`; JavaParser receives the same list through `JarTypeSolver`.
 
 These are curated external API classpaths selected to validate named semantic facts. They are not asserted to be complete effective classpaths for the checked-out projects, and they are not exported by the current J1 static model. The exact project build models remain authoritative for declarations; no project build is executed to obtain this evaluation input.
+
+
+## Representative-project external API resolution matrix
+
+The pinned real-project matrix preserves the original twelve source-roots-plus-JDK runs (main and test source sets, both candidates) and adds three external-classpath main-source runs per candidate: one for each representative project.
+
+The external classpaths are resolved from the isolated, project-specific synthetic Maven POMs under `representative-classpaths/`. The dependency plugin resolves only the declared curated API dependencies; no checked-out Maven/Gradle project build, wrapper, settings file, plugin, build script or annotation processor is executed. Both candidates receive the exact same validated JAR list for a given project. Candidate-engine JAR leakage is rejected by the benchmark itself and by the runner.
+
+The added mode reports `source-roots+jdk+curated-external-classpath` and the exact JAR-entry count. It is deliberately not labelled a complete project classpath: it is a controlled API-resolution extension for the main source set. Test-source metrics remain source-roots-plus-JDK-only until project-specific test dependency closures are modelled. The original source-only results remain available as a baseline; do not compare aggregate resolution percentages across different environments as if they represented the same analysis boundary.
+
+Run the matrix from the repository root:
+
+```bash
+bash tools/java-semantic-spike/run-representative-project-matrix.sh
+```
+
+A report is accepted only when every discovered file parses without syntax errors, the output declares the expected environment and classpath-entry count, and the shared type-reference metric contract remains `outermost-reference-type-nodes-v1`. Resolution percentages are comparative observations, not semantic correctness gates; the separate source-scoped semantic fact oracle remains the correctness gate.

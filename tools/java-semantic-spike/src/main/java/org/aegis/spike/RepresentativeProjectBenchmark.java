@@ -13,6 +13,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import org.eclipse.jdt.core.JavaCore;
@@ -37,20 +38,21 @@ import java.util.stream.Stream;
 
 /**
  * Measures parser robustness and source-local binding coverage against pinned,
- * representative Java projects. The benchmark intentionally uses source roots
- * and the running JDK only; unresolved external dependencies are not treated as
- * candidate correctness failures.
+ * representative Java projects. Source-roots-plus-JDK remains the baseline;
+ * an optional curated external classpath measures framework API resolution
+ * without executing the representative project's build.
  */
 public final class RepresentativeProjectBenchmark {
     private RepresentativeProjectBenchmark() {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 7 || args.length > 8) {
+        if (args.length < 7 || args.length > 9) {
             throw new IllegalArgumentException(
                 "Usage: RepresentativeProjectBenchmark <jdt|javaparser> <project-id> "
                     + "<main|test> <source-level> <project-root> "
-                    + "<resolution-roots-csv> <parse-roots-csv> [--report-only]");
+                    + "<resolution-roots-csv> <parse-roots-csv> "
+                    + "[--classpath-file=<path>] [--report-only]");
         }
 
         String engine = args[0].toLowerCase(Locale.ROOT);
@@ -63,9 +65,27 @@ public final class RepresentativeProjectBenchmark {
             throw new IllegalArgumentException("Source set must be main or test.");
         }
         int sourceLevel = Integer.parseInt(args[3]);
-        boolean reportOnly = args.length == 8 && args[7].equals("--report-only");
-        if (args.length == 8 && !reportOnly) {
-            throw new IllegalArgumentException("Unsupported option: " + args[7]);
+        boolean reportOnly = false;
+        Path classpathFile = null;
+        for (int index = 7; index < args.length; index++) {
+            String option = args[index];
+            if (option.equals("--report-only")) {
+                if (reportOnly) {
+                    throw new IllegalArgumentException("--report-only must not be repeated.");
+                }
+                reportOnly = true;
+            } else if (option.startsWith("--classpath-file=")) {
+                if (classpathFile != null) {
+                    throw new IllegalArgumentException("--classpath-file must not be repeated.");
+                }
+                String value = option.substring("--classpath-file=".length());
+                if (value.isBlank()) {
+                    throw new IllegalArgumentException("--classpath-file requires a path.");
+                }
+                classpathFile = Path.of(value).toAbsolutePath().normalize();
+            } else {
+                throw new IllegalArgumentException("Unsupported option: " + option);
+            }
         }
 
         Path projectRoot = Path.of(args[4]).toAbsolutePath().normalize();
@@ -78,6 +98,11 @@ public final class RepresentativeProjectBenchmark {
             throw new IllegalStateException("Every parsed source root must be present in the resolution roots.");
         }
 
+        List<Path> externalClasspath = classpathFile == null
+            ? List.of()
+            : ClasspathSnapshot.read(classpathFile);
+        ClasspathSnapshot.rejectCandidateEngines(externalClasspath);
+
         List<Path> sourceFiles = discoverSourceFiles(projectRoot, parseRoots);
         if (sourceFiles.isEmpty()) {
             throw new IllegalStateException("No Java source files were discovered for " + projectId + "/" + sourceSet);
@@ -85,12 +110,16 @@ public final class RepresentativeProjectBenchmark {
 
         long startedAt = System.nanoTime();
         Metrics metrics = engine.equals("jdt")
-            ? analyzeWithJdt(sourceFiles, resolutionRoots, sourceLevel)
-            : analyzeWithJavaParser(sourceFiles, resolutionRoots, sourceLevel);
+            ? analyzeWithJdt(sourceFiles, resolutionRoots, externalClasspath, sourceLevel)
+            : analyzeWithJavaParser(sourceFiles, resolutionRoots, externalClasspath, sourceLevel);
         metrics.filesDiscovered = sourceFiles.size();
         metrics.elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000;
 
-        printResult(engine, projectId, sourceSet, sourceLevel, metrics);
+        String environment = externalClasspath.isEmpty()
+            ? "source-roots+jdk-only"
+            : "source-roots+jdk+curated-external-classpath";
+        printResult(engine, projectId, sourceSet, sourceLevel,
+            environment, externalClasspath.size(), metrics);
         if (!reportOnly && (metrics.parseFailures > 0 || metrics.syntaxErrors > 0)) {
             throw new IllegalStateException(
                 engine + " failed to parse " + metrics.parseFailures + " of "
@@ -103,7 +132,8 @@ public final class RepresentativeProjectBenchmark {
     private static Metrics analyzeWithJavaParser(
         List<Path> sourceFiles,
         List<Path> resolutionRoots,
-        int sourceLevel) {
+        List<Path> externalClasspath,
+        int sourceLevel) throws IOException {
 
         ParserConfiguration sourceConfiguration = new ParserConfiguration()
             .setLanguageLevel(javaParserLanguageLevel(sourceLevel));
@@ -111,6 +141,9 @@ public final class RepresentativeProjectBenchmark {
         typeSolver.add(new ReflectionTypeSolver());
         for (Path sourceRoot : resolutionRoots) {
             typeSolver.add(new JavaParserTypeSolver(sourceRoot.toFile(), sourceConfiguration));
+        }
+        for (Path classpathEntry : externalClasspath) {
+            typeSolver.add(new JarTypeSolver(classpathEntry));
         }
         ParserConfiguration parserConfiguration = new ParserConfiguration()
             .setLanguageLevel(javaParserLanguageLevel(sourceLevel))
@@ -169,10 +202,12 @@ public final class RepresentativeProjectBenchmark {
     private static Metrics analyzeWithJdt(
         List<Path> sourceFiles,
         List<Path> resolutionRoots,
+        List<Path> externalClasspath,
         int sourceLevel) throws IOException {
 
         String[] sourcePaths = resolutionRoots.stream().map(Path::toString).toArray(String[]::new);
         String[] encodings = resolutionRoots.stream().map(ignored -> "UTF-8").toArray(String[]::new);
+        String[] classpathPaths = externalClasspath.stream().map(Path::toString).toArray(String[]::new);
         var compilerOptions = JavaCore.getOptions();
         JavaCore.setComplianceOptions(jdtLanguageLevel(sourceLevel), compilerOptions);
         Metrics metrics = new Metrics();
@@ -182,7 +217,7 @@ public final class RepresentativeProjectBenchmark {
             parser.setKind(ASTParser.K_COMPILATION_UNIT);
             parser.setSource(Files.readString(sourceFile).toCharArray());
             parser.setUnitName(resolveUnitName(sourceFile, resolutionRoots));
-            parser.setEnvironment(new String[0], sourcePaths, encodings, true);
+            parser.setEnvironment(classpathPaths, sourcePaths, encodings, true);
             parser.setResolveBindings(true);
             parser.setBindingsRecovery(false);
             parser.setStatementsRecovery(true);
@@ -352,12 +387,14 @@ public final class RepresentativeProjectBenchmark {
         String projectId,
         String sourceSet,
         int sourceLevel,
+        String environment,
+        int externalClasspathEntries,
         Metrics metrics) {
 
         System.out.printf(
             Locale.ROOT,
             "{\"engine\":\"%s\",\"project\":\"%s\",\"sourceSet\":\"%s\","
-                + "\"sourceLevel\":%d,\"environment\":\"source-roots+jdk-only\","
+                + "\"sourceLevel\":%d,\"environment\":\"%s\",\"externalClasspathEntries\":%d,"
                 + "\"filesDiscovered\":%d,\"filesParsed\":%d,\"parseFailures\":%d,"
                 + "\"syntaxErrors\":%d,\"typeDeclarations\":%d,\"methodDeclarations\":%d,"
                 + "\"methodCalls\":%d,\"resolvedMethodCalls\":%d,\"unresolvedMethodCalls\":%d,"
@@ -369,6 +406,8 @@ public final class RepresentativeProjectBenchmark {
             jsonEscape(projectId),
             jsonEscape(sourceSet),
             sourceLevel,
+            jsonEscape(environment),
+            externalClasspathEntries,
             metrics.filesDiscovered,
             metrics.filesParsed,
             metrics.parseFailures,

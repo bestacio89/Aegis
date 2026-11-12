@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repository_root"
+
 manifest="tools/java-semantic-spike/representative-projects.tsv"
-results_directory="artifacts/representative-projects/results"
-mkdir -p "$results_directory"
+results_directory="$repository_root/artifacts/representative-projects/results"
+classpath_directory="$repository_root/artifacts/representative-projects/classpaths"
+mkdir -p "$results_directory" "$classpath_directory"
 
 count_java_files() {
   local roots="$1"
@@ -23,18 +27,32 @@ run_benchmark() {
   local source_level="$3"
   local resolution_roots="$4"
   local parse_roots="$5"
-  local output="$results_directory/${project_id}-${source_set}-${engine}.jsonl"
+  local classpath_file="$6"
+  local mode="source-only"
+  local options=""
+  local expected_environment="source-roots+jdk-only"
+  local expected_classpath_entries=0
+
+  if [[ -n "$classpath_file" ]]; then
+    mode="curated-classpath"
+    options="--classpath-file=$classpath_file"
+    expected_environment="source-roots+jdk+curated-external-classpath"
+    expected_classpath_entries="$(tr ':' '\\n' < "$classpath_file" | wc -l | tr -d ' ')"
+  fi
+
+  local output="$results_directory/$project_id-$source_set-$mode-$engine.jsonl"
 
   mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@representative-project-benchmark \
-    -Dexec.args="$engine $project_id $source_set $source_level $project_root $resolution_roots $parse_roots" \
+    -Dexec.args="$engine $project_id $source_set $source_level $project_root $resolution_roots $parse_roots $options" \
     | tee "$output"
 
-  jq -e '
+  jq -e --arg environment "$expected_environment" --argjson classpathEntries "$expected_classpath_entries" '
     .filesDiscovered > 0
     and .filesParsed == .filesDiscovered
     and .parseFailures == 0
     and .syntaxErrors == 0
-    and .environment == "source-roots+jdk-only"
+    and .environment == $environment
+    and .externalClasspathEntries == $classpathEntries
     and .typeReferenceMetric == "outermost-reference-type-nodes-v1"
   ' "$output" > /dev/null
 }
@@ -83,16 +101,57 @@ while IFS=$'\t' read -r \
     }
   done
 
+  classpath_pom="$repository_root/tools/java-semantic-spike/representative-classpaths/$project_id/pom.xml"
+  classpath_file="$classpath_directory/$project_id.txt"
+  if [[ ! -f "$classpath_pom" ]]; then
+    echo "Representative curated classpath POM is missing for $project_id" >&2
+    exit 1
+  fi
+
+  mvn --batch-mode --no-transfer-progress --quiet \
+    -f "$classpath_pom" \
+    org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+    -DincludeScope=compile \
+    -Dmdep.outputFile="$classpath_file"
+
+  if [[ ! -s "$classpath_file" ]]; then
+    echo "Resolved representative compile classpath is empty for $project_id" >&2
+    exit 1
+  fi
+  if grep -Eiq 'org\\.eclipse\\.jdt\\.core|javaparser-(core|symbol-solver-core)' "$classpath_file"; then
+    echo "Candidate engine dependency leaked into the $project_id analysis classpath" >&2
+    exit 1
+  fi
+
+  case "$project_id" in
+    spring-petclinic)
+      grep -Eq 'jakarta.persistence-api-[^/]+\\.jar' "$classpath_file"
+      grep -Eq 'spring-core-[^/]+\\.jar' "$classpath_file"
+      ;;
+    quarkus-getting-started)
+      grep -Eq 'jakarta.ws.rs-api-[^/]+\\.jar' "$classpath_file"
+      ;;
+    micronaut-starter-aws-cdk)
+      grep -Fq 'aws-cdk-lib-2.243.0.jar' "$classpath_file"
+      grep -Eq 'constructs-[^/]+\\.jar' "$classpath_file"
+      ;;
+    *)
+      echo "No representative classpath contract is defined for $project_id" >&2
+      exit 1
+      ;;
+  esac
+
   for engine in jdt javaparser; do
-    run_benchmark "$engine" main "$source_level" "$main_resolution_roots" "$main_parse_roots"
-    run_benchmark "$engine" test "$source_level" "$test_resolution_roots" "$test_parse_roots"
+    run_benchmark "$engine" main "$source_level" "$main_resolution_roots" "$main_parse_roots" ""
+    run_benchmark "$engine" test "$source_level" "$test_resolution_roots" "$test_parse_roots" ""
+    run_benchmark "$engine" main "$source_level" "$main_resolution_roots" "$main_parse_roots" "$classpath_file"
   done
 
-  echo "Representative project passed: $project_id ($license; $build_models; $actual_main_count main/$actual_test_count test Java files)"
+  echo "Representative project passed: $project_id ($license; $build_models; $actual_main_count main/$actual_test_count test Java files; source-only and curated main classpath)"
 done < <(tail -n +2 "$manifest")
 
 report_count="$(find "$results_directory" -maxdepth 1 -type f -name '*.jsonl' | wc -l | tr -d ' ')"
-if [[ "$report_count" -ne 12 ]]; then
-  echo "Expected 12 representative-project reports, found $report_count" >&2
+if [[ "$report_count" -ne 18 ]]; then
+  echo "Expected 18 representative-project reports, found $report_count" >&2
   exit 1
 fi

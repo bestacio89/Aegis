@@ -36,7 +36,6 @@ import org.eclipse.jdt.core.dom.RequiresDirective;
 import org.eclipse.jdt.core.dom.SimpleType;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -117,7 +116,7 @@ public final class SemanticFactBenchmark {
                 : materializeFactSources(fixtureRoot, facts, workspace);
             List<Path> externalClasspath = classpathFile == null
                 ? List.of()
-                : readClasspath(classpathFile);
+                : ClasspathSnapshot.read(classpathFile);
             Map<String, Observation> observations = engine.equals("jdt")
                 ? extractWithJdt(sources, externalClasspath)
                 : extractWithJavaParser(sources, externalClasspath, debugResolution);
@@ -587,35 +586,6 @@ public final class SemanticFactBenchmark {
             }
         }
         return observations;
-    }
-
-    private static List<Path> readClasspath(Path classpathFile) throws IOException {
-        if (!Files.isRegularFile(classpathFile)) {
-            throw new IllegalArgumentException("External classpath file does not exist: " + classpathFile);
-        }
-
-        String value = Files.readString(classpathFile).trim();
-        if (value.isEmpty()) {
-            throw new IllegalArgumentException("External classpath file is empty: " + classpathFile);
-        }
-
-        List<Path> entries = new ArrayList<>();
-        Set<Path> uniqueEntries = new HashSet<>();
-        for (String item : value.split(java.util.regex.Pattern.quote(File.pathSeparator), -1)) {
-            if (item.isBlank()) {
-                throw new IllegalArgumentException("External classpath contains an empty entry.");
-            }
-            Path entry = Path.of(item).toAbsolutePath().normalize().toRealPath();
-            if (!Files.isRegularFile(entry)
-                || !entry.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar")) {
-                throw new IllegalArgumentException("External classpath entry is not a JAR file: " + entry);
-            }
-            if (!uniqueEntries.add(entry)) {
-                throw new IllegalArgumentException("External classpath contains a duplicate JAR: " + entry);
-            }
-            entries.add(entry);
-        }
-        return List.copyOf(entries);
     }
 
     private static List<Path> discoverSourceRoots(Iterable<Path> sources) {

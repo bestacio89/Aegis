@@ -1022,3 +1022,24 @@ All mandatory workflows passed on head `5c91f92f2d7f104e3b955944c5deebb4a0f10df7
 The first diagnostic comparison implementation was reviewed and found to contain a classification tautology: expected categories were reused when constructing observed results. The correction now derives categories from native engine evidence and explicit scenario context, and validates category plus severity. The unresolved-symbol and incomplete-environment cases carry separate qualified-symbol and declared-artifact evidence; the latter is classified only when the unresolved diagnostic matches the imported symbol and the declared artifact is explicitly known to be omitted.
 
 Acceptance remains pending strict JDT comparison, report-only JavaParser comparison, inspection of native diagnostic IDs/messages and all three mandatory CI workflows on the corrected head. A green corpus-schema validator alone is not diagnostic-normalization evidence.
+
+
+### J2-A5.1 diagnostic normalization — measured result (2026-11-12)
+
+The corrected benchmark derives observed categories from native engine diagnostics/resolution failures plus explicit project-model evidence. It compares normalized category and severity; expected categories are not copied into observations.
+
+| Candidate | Diagnostic scenarios matched | Capability gaps |
+|---|---:|---|
+| Eclipse JDT Core 3.47.0 | 7/7 | None in this bounded corpus |
+| JavaParser 3.28.2 + Symbol Solver | 5/7 | Compiler/type-check diagnostics and deprecation warnings are not provided by its parser/symbol-solver API |
+
+Both candidates distinguish an ordinary unresolved symbol from a declared dependency omitted from the analysis classpath. JDT reports the omitted Spring dependency at the import declaration (ImportNotFound); normalization correlates that native evidence with the qualified imported symbol and declared-artifact metadata. Both candidates also report the Java 21 record-pattern construct as unsupported at configured source level 17. JavaParser's absent compiler-error and warning diagnostics are retained as explicit capability gaps in report-only mode, not counted as successful matches.
+
+The infrastructure scenario is a controlled missing-input read failure. The corpus validator checks scenario integrity; the benchmark independently exercises engine observations. Native problem codes/messages and source-line evidence are retained in the per-case output.
+
+**Sub-checkpoint decision:** Accept diagnostic normalization for the current bounded corpus. JDT has complete coverage (7/7); JavaParser has two known capability gaps (5/7). This adds evidence in favour of JDT, but does not by itself constitute production approval. J2-A5.1 remains open for broader diagnostic cases and representative project validation; J2-A5.2 performance/memory and J2-A5.3 operational/legal review remain outstanding. J2-B remains blocked.
+
+**CI evidence on corrected implementation head** 139ec582689f90d8303ac35ebb754bd14ccff578:
+- Java semantic engine spike — run 43191794838, success.
+- Non-WPF quality gates — run 43191794907, success.
+- WPF build validation — run 43191794884, success.

@@ -177,8 +177,8 @@ internal static class JavaSemanticComponentDependencyDetector
 
             foreach (var relationship in run.Relationships.Where(relationship =>
                          ComponentRelationshipKinds.Contains(relationship.Kind)
-                         && relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
-                             or SemanticResolutionStatus.PartiallyResolved
+                         && (relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
+                             or SemanticResolutionStatus.PartiallyResolved)
                          && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)))
             {
                 if (!runSymbols.TryGetValue(relationship.SourceSymbolId, out var sourceSymbol)
@@ -224,8 +224,8 @@ internal static class JavaSemanticComponentDependencyDetector
                 || !string.IsNullOrWhiteSpace(symbol.ContainerName))));
         var candidateRelationshipCount = javaRuns.Sum(run => run.Relationships.Count(relationship =>
             ComponentRelationshipKinds.Contains(relationship.Kind)
-            && relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
-                or SemanticResolutionStatus.PartiallyResolved
+            && (relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
+                or SemanticResolutionStatus.PartiallyResolved)
             && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)));
 
         AegisDiagnostics.Report(

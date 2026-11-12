@@ -321,14 +321,16 @@ This is deliberately not a hard timing gate. The bounded fixture corpus, current
 
 The first per-file JDT timing baseline is superseded. The accepted comparison uses JDT's batch ASTParser API and the same 42 source files, source roots, optional external JARs, JDK and fixed JVM settings for both candidates.
 
+The authoritative per-trial source is the `performance.jsonl` file in [Java semantic engine workflow run 43199349380](https://github.com/bestacio89/Aegis/actions/runs/43199349380), on commit `67fc751b2929a3185f3f29d9ef4d3c8b34e95f39`.
+
 **Environment:** Temurin JDK 21.0.13, Linux amd64, 4 reported processors, two warm-ups and seven measured trials per candidate/mode, `-Xms64m -Xmx1g -XX:+UseG1GC`. All 42 files were parsed in every measured trial; every child exited with code 0 and no intentionally unresolved type was resolved.
 
 | Mode | Candidate | Analysis median / p95 | Process median / p95 | Peak RSS median / p95 |
 |---|---|---:|---:|---:|
-| Source-only | Eclipse JDT | 810 / 845 ms | 1,318 / 1,372 ms | 152.7 / 155.1 MiB |
-| Source-only | JavaParser | 469 / 491 ms | 973 / 1,009 ms | 117.4 / 117.9 MiB |
-| External classpath | Eclipse JDT | 828 / 869 ms | 1,341 / 1,412 ms | 147.3 / 155.5 MiB |
-| External classpath | JavaParser | 489 / 493 ms | 1,051 / 1,063 ms | 119.1 / 120.8 MiB |
+| Source-only | Eclipse JDT | 505 / 517 ms | 830 / 855 ms | 154.5 / 155.0 MiB |
+| Source-only | JavaParser | 297 / 327 ms | 640 / 661 ms | 115.6 / 118.5 MiB |
+| External classpath | Eclipse JDT | 558 / 566 ms | 932 / 948 ms | 148.7 / 154.8 MiB |
+| External classpath | JavaParser | 337 / 347 ms | 747 / 752 ms | 120.3 / 121.4 MiB |
 
 Analysis time excludes process startup; process time includes JVM startup and shutdown. Peak RSS is process-level Linux VmHWM, not Java heap occupancy. With seven samples, nearest-rank p95 is the maximum observed sample. The candidates' diagnostic counts and aggregate binding-attempt counts are not directly comparable because their diagnostic and AST node models differ.
 

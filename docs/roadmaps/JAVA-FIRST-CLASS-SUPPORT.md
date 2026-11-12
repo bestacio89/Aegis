@@ -1059,10 +1059,10 @@ The harness rejects non-Linux execution rather than substituting heap occupancy 
 
 | Mode | Candidate | Analysis median / p95 | Process median / p95 | Peak RSS median / p95 |
 |---|---|---:|---:|---:|
-| Source-only | Eclipse JDT | 810 / 845 ms | 1,318 / 1,372 ms | 152.7 / 155.1 MiB |
-| Source-only | JavaParser | 469 / 491 ms | 973 / 1,009 ms | 117.4 / 117.9 MiB |
-| External classpath | Eclipse JDT | 828 / 869 ms | 1,341 / 1,412 ms | 147.3 / 155.5 MiB |
-| External classpath | JavaParser | 489 / 493 ms | 1,051 / 1,063 ms | 119.1 / 120.8 MiB |
+| Source-only | Eclipse JDT | 505 / 517 ms | 830 / 855 ms | 154.5 / 155.0 MiB |
+| Source-only | JavaParser | 297 / 327 ms | 640 / 661 ms | 115.6 / 118.5 MiB |
+| External classpath | Eclipse JDT | 558 / 566 ms | 932 / 948 ms | 148.7 / 154.8 MiB |
+| External classpath | JavaParser | 337 / 347 ms | 747 / 752 ms | 120.3 / 121.4 MiB |
 
 JavaParser is approximately 1.6–1.7x faster in analysis and uses approximately 1.2–1.3x less process time/peak RSS on this bounded corpus. The earlier JDT per-file timing baseline is superseded by the fairer documented JDT batch ASTParser path. The measured gap remains a material counterweight, while JDT retains stronger bounded semantic/diagnostic coverage (17/17 facts and 7/7 diagnostics versus JavaParser's 14/17 and 5/7). These 42-file, single-runner measurements do not establish production-scale performance or a final engine winner. J2-A5.2 is accepted as a repeatable bounded measurement checkpoint; J2-A5.1 broader corpus validation and J2-A5.3 operational/legal review remain open. J2-B remains blocked; no production parser dependency is introduced.
 

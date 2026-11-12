@@ -383,7 +383,7 @@ The 42-file cold-process measurements show roughly 1.0 s median process time and
 5. Confirm no build scripts, plugins or annotation processors are executed and that file/network access is restricted as designed.
 6. Obtain legal review of redistribution obligations before any production binary ships with either engine.
 
-**Status:** J2-A5.3 is in progress and not accepted. The Guava version override is implemented; the complete SBOM/license audit, security scan, Windows packaging prototype, worker lifecycle tests and legal approval remain open. JDT remains the provisional correctness-first candidate, with its measured performance/memory disadvantage recorded. J2-A remains open and J2-B remains blocked.
+**Status:** J2-A5.3 is in progress and not accepted. The Guava 33.8.0 override, combined CycloneDX inventory, zero-finding OSV snapshot and Windows jlink packaging feasibility probe are complete. Full license/notice review, ongoing vulnerability governance, WPF host integration, runtime patch/upgrade/rollback, worker lifecycle/isolation tests and legal approval remain open. JDT remains the provisional correctness-first candidate, with its measured performance/memory disadvantage recorded. J2-A remains open and J2-B remains blocked.
 
 
 
@@ -407,3 +407,28 @@ The Java semantic workflow includes a Windows-only J2-A5.3 packaging probe. It c
 The probe then executes the JDT and JavaParser semantic-fact and diagnostic benchmarks from that private runtime. It uploads the runtime image, dependency JARs, module list, smoke-test JSONL and a size summary. The estimated worker-package size includes the Java runtime, both candidate dependency closures and harness classes; it excludes the Aegis WPF host, launcher, notices and installer overhead. Because both candidates are included, it is an upper-bound evaluation package rather than a final candidate-specific distribution.
 
 This is a deployment feasibility probe, not production integration. Acceptance still requires reviewing the Windows artifact and size, confirming the runtime module closure and startup behaviour, and completing worker lifecycle/isolation and legal review.
+
+
+### Windows private-runtime result (2026-11-12)
+
+The Windows packaging probe completed successfully using Temurin JDK 21.0.13. `jdeps` derived a nine-module closure:
+
+`java.base, java.compiler, java.desktop, java.instrument, java.logging, java.management, jdk.attach, jdk.jdi, jdk.unsupported`.
+
+| Package component | Size |
+|---|---:|
+| Minimized Java runtime image | 48.41 MiB |
+| 29 candidate dependency JARs | 20.69 MiB |
+| Compiled spike classes | 0.17 MiB |
+| **Estimated combined evaluation package** | **69.27 MiB** |
+
+The private runtime successfully executed the semantic-fact and normalized-diagnostic probes on Windows:
+
+| Candidate | Semantic facts | Normalized diagnostics |
+|---|---:|---:|
+| Eclipse JDT | 17/17 | 7/7 |
+| JavaParser + Symbol Solver | 14/17 (3 known gaps) | 5/7 (2 known capability gaps) |
+
+The package contains both candidates and is therefore an upper-bound evaluation bundle. It excludes the Aegis WPF host, launcher, notices, installer overhead and worker protocol. This proves that a minimized private Java runtime can execute both candidate engines on the Windows target; it does not prove worker supervision, cancellation, crash recovery, sandboxing or final distribution readiness.
+
+The complete runtime image, 29 JARs, module list, four smoke-test outputs and size summary are retained in [the Windows packaging artifact](https://github.com/bestacio89/Aegis/actions/runs/43201079603/artifacts/13935027808).

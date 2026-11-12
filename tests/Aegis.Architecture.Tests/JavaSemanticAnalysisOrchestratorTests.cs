@@ -233,6 +233,127 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
     }
 
     [Fact]
+    public async Task Adds_versioned_production_framework_evidence_from_maven_and_gradle_coordinates()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var sourceRoot = Path.Combine(repository, "src", "main", "java");
+        Directory.CreateDirectory(sourceRoot);
+        var sourceFile = Path.Combine(sourceRoot, "Service.java");
+        var pomFile = Path.Combine(repository, "pom.xml");
+        await File.WriteAllTextAsync(sourceFile, "package sample; public class Service {}");
+        await File.WriteAllTextAsync(pomFile, "<project />");
+
+        try
+        {
+            var module = new ProjectModuleContext
+            {
+                Name = "service",
+                Path = repository,
+                Languages = ["Java"],
+                Framework = "Java SE",
+                SourceRoots =
+                [
+                    new ProjectSourceRoot
+                    {
+                        Directory = sourceRoot,
+                        Ownership = ProjectSourceRootOwnership.Production,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    }
+                ]
+            };
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "service",
+                RootPath = repository,
+                Language = "Java",
+                Framework = "Java SE",
+                Modules = [module],
+                DependencyEvidence =
+                [
+                    CreateFrameworkDependency(
+                        "spring-boot",
+                        "org.springframework.boot:spring-boot-starter-web",
+                        "Maven",
+                        "3.4.1",
+                        repository,
+                        pomFile),
+                    CreateFrameworkDependency(
+                        "hibernate",
+                        "org.hibernate.orm:hibernate-core",
+                        "Gradle",
+                        "6.6.8.Final",
+                        repository,
+                        Path.Combine(repository, "build.gradle.kts")),
+                    CreateFrameworkDependency(
+                        "test-only-spring",
+                        "org.springframework.boot:spring-boot-starter-web",
+                        "Maven",
+                        "3.5.0",
+                        repository,
+                        pomFile,
+                        isTestOnly: true)
+                ]
+            };
+            var orchestrator = new JavaSemanticAnalysisOrchestrator(
+                [new RecordingJavaAdapter()],
+                new EmptyClasspathResolver(),
+                NullLogger<JavaSemanticAnalysisOrchestrator>.Instance);
+
+            await orchestrator.AnalyzeAsync(context);
+
+            var spring = Assert.Single(module.FrameworkEvidence.Where(evidence => evidence.Name == "Spring Boot"));
+            Assert.Equal("3.4.1", spring.Version);
+            Assert.Equal(FrameworkEvidenceKind.Application, spring.Kind);
+            Assert.False(spring.IsTestOnly);
+            Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(spring.Provenance).Source);
+            Assert.Equal(pomFile, spring.Provenance[0].FilePath);
+
+            var hibernate = Assert.Single(module.FrameworkEvidence.Where(evidence => evidence.Name == "Hibernate"));
+            Assert.Equal("6.6.8.Final", hibernate.Version);
+            Assert.Equal(FrameworkEvidenceKind.Persistence, hibernate.Kind);
+            Assert.False(hibernate.IsTestOnly);
+            Assert.Equal("Spring Boot", module.Framework);
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
+    private static ArchitectureDependencyEvidence CreateFrameworkDependency(
+        string id,
+        string name,
+        string ecosystem,
+        string version,
+        string projectPath,
+        string buildFile,
+        bool isTestOnly = false) =>
+        new()
+        {
+            Id = id,
+            Name = name,
+            Ecosystem = ecosystem,
+            Kind = DependencyEvidenceKind.Package,
+            DeclaredVersion = version,
+            Scope = isTestOnly ? "test" : "compile",
+            SourceProjectPath = projectPath,
+            IsDirect = true,
+            IsTestOnly = isTestOnly,
+            ResolutionStatus = DependencyResolutionStatus.Declared,
+            Provenance =
+            [
+                new SemanticEvidenceProvenance
+                {
+                    AnalyzerId = ecosystem == "Maven" ? "aegis.maven-model" : "aegis.gradle-build-model",
+                    Source = SemanticEvidenceSource.BuildModel,
+                    FilePath = buildFile,
+                    Confidence = 1.0
+                }
+            ]
+        };
+
+    [Fact]
     public async Task Adds_test_framework_evidence_from_declared_maven_test_dependencies()
     {
         var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));

@@ -153,23 +153,37 @@ public final class SemanticFactBenchmark {
         Path fixtureRoot,
         List<Fact> facts,
         Path workspace) throws IOException {
+        Path moduleFixtureRoot = fixtureRoot.resolve("SemanticFacts").normalize();
+        if (!moduleFixtureRoot.startsWith(fixtureRoot)
+            || !Files.isDirectory(moduleFixtureRoot)) {
+            throw new IllegalStateException("SemanticFacts fixture module is missing.");
+        }
+
         Map<String, Path> sources = new HashMap<>();
-        for (Fact fact : facts) {
-            Path fixture = fixtureRoot.resolve(fact.fixturePath()).normalize();
-            if (!fixture.startsWith(fixtureRoot) || !Files.isRegularFile(fixture)) {
-                throw new IllegalStateException("Missing or invalid fixture: " + fact.fixturePath());
-            }
-            Path destination = workspace.resolve(fact.fixturePath()).normalize();
-            if (!destination.startsWith(workspace)) {
-                throw new IllegalStateException("Fixture escapes temporary workspace.");
-            }
-            Files.createDirectories(destination.getParent());
-            Path javaFile = destination.resolveSibling(
-                destination.getFileName().toString().replaceFirst("\\.fixture$", ""));
-            if (!Files.exists(javaFile)) {
+        try (Stream<Path> fixtures = Files.walk(moduleFixtureRoot)) {
+            for (Path fixture : fixtures
+                .filter(Files::isRegularFile)
+                .filter(file -> file.getFileName().toString().endsWith(".java.fixture"))
+                .sorted()
+                .toList()) {
+                Path relative = fixtureRoot.relativize(fixture);
+                Path destination = workspace.resolve(relative).normalize();
+                if (!destination.startsWith(workspace)) {
+                    throw new IllegalStateException("Fixture escapes temporary workspace.");
+                }
+                Files.createDirectories(destination.getParent());
+                Path javaFile = destination.resolveSibling(
+                    destination.getFileName().toString().replaceFirst("\\.fixture$", ""));
                 Files.copy(fixture, javaFile);
+                sources.put(relative.toString().replace('\\', '/'), javaFile);
             }
-            sources.put(fact.fixturePath(), javaFile);
+        }
+
+        for (Fact fact : facts) {
+            if (!sources.containsKey(fact.fixturePath())) {
+                throw new IllegalStateException("Oracle references a missing fixture: "
+                    + fact.fixturePath());
+            }
         }
         return Map.copyOf(sources);
     }
@@ -255,11 +269,14 @@ public final class SemanticFactBenchmark {
                     if (!type.getNameAsString().equals("MissingPort")) {
                         continue;
                     }
-                    String packageName = unit.getPackageDeclaration()
-                        .map(declaration -> declaration.getNameAsString()).orElse("");
-                    String identity = packageName.isEmpty()
-                        ? type.getNameAsString()
-                        : packageName + "." + type.getNameAsString();
+                    String identity = unit.getImports().stream()
+                        .map(importDeclaration -> importDeclaration.getNameAsString())
+                        .filter(name -> name.endsWith("." + type.getNameAsString()))
+                        .findFirst()
+                        .orElseGet(() -> unit.getPackageDeclaration()
+                            .map(declaration -> declaration.getNameAsString() + "."
+                                + type.getNameAsString())
+                            .orElse(type.getNameAsString()));
                     try {
                         type.resolve();
                         put(observations, fixture, "unresolved-type", identity, "resolved");
@@ -399,10 +416,18 @@ public final class SemanticFactBenchmark {
                 @Override
                 public boolean visit(SimpleType type) {
                     if (type.getName().getFullyQualifiedName().equals("MissingPort")) {
-                        String packageName = unit.getPackage() == null
-                            ? "" : unit.getPackage().getName().getFullyQualifiedName();
-                        String identity = packageName.isEmpty()
-                            ? "MissingPort" : packageName + ".MissingPort";
+                        String identity = unit.imports().stream()
+                            .map(item -> (org.eclipse.jdt.core.dom.ImportDeclaration) item)
+                            .map(importDeclaration -> importDeclaration.getName()
+                                .getFullyQualifiedName())
+                            .filter(name -> name.endsWith(".MissingPort"))
+                            .findFirst()
+                            .orElseGet(() -> {
+                                String packageName = unit.getPackage() == null
+                                    ? "" : unit.getPackage().getName().getFullyQualifiedName();
+                                return packageName.isEmpty()
+                                    ? "MissingPort" : packageName + ".MissingPort";
+                            });
                         ITypeBinding binding = type.resolveBinding();
                         put(observations, fixture, "unresolved-type",
                             binding == null ? identity : binding.getQualifiedName(),

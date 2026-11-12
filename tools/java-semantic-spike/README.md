@@ -213,3 +213,50 @@ Analysis time excludes process startup; process time includes JVM startup and sh
 **Interpretation:** On this bounded fixture, JavaParser is approximately 1.6–1.7x faster in analysis, with approximately 1.2–1.3x lower process time and 1.2–1.3x lower peak RSS. JDT batch parsing materially improves its previous per-file baseline, but a performance disadvantage remains. This is a material counterweight in the engine decision, not a reason to disregard JDT's stronger bounded semantic/diagnostic coverage (17/17 facts and 7/7 diagnostics versus JavaParser's 14/17 and 5/7). The 42-file corpus and one CI runner are insufficient to establish production-scale performance or a final engine winner.
 
 **Decision:** Accept J2-A5.2 as a bounded, repeatable measurement checkpoint. Retain JDT as the provisional correctness-first candidate, with the measured performance and memory gap explicitly recorded. Representative repositories, workload scaling and the J2-A5.3 operational/legal review remain necessary before final engine approval. No production parser dependency is introduced.
+
+
+## J2-A5.3 — Preliminary operational, security and licensing review (not accepted)
+
+This is an evidence register and set of acceptance gates, not legal advice or a production deployment decision.
+
+### Dependency and license evidence
+
+| Candidate | Declared license | Relevant dependency footprint | Review position |
+|---|---|---|---|
+| Eclipse JDT Core 3.47.0 | EPL-2.0 | Required Eclipse core resources/runtime/filesystem/text plus ECJ; optional Eclipse team core. The complete transitive closure is larger and must be inventoried. | Technically viable, but distribution notices/source-availability obligations and the full transitive license set require legal review. |
+| JavaParser 3.28.2 + Symbol Solver | Dual Apache-2.0 or LGPL-3.0 | JavaParser core, Guava, Checker Framework annotations and Javassist, plus their transitive dependencies. | The Apache-2.0 option is the preferred licensing route for evaluation, subject to confirming all included components and notices. |
+
+Aegis is distributed under its own proprietary license. That fact does not by itself establish incompatibility with either library, nor does placing a library in a separate process eliminate license obligations. Before distribution, generate and review a complete SBOM/license inventory, preserve required notices, identify the selected JavaParser license option, and obtain legal approval for the JDT EPL-2.0 distribution model. The EPL requires, among other things, preserving its license and providing a reasonable source-code availability statement when the program is distributed. No legal conclusion is made by this engineering review.
+
+### Security finding and mitigation
+
+JavaParser 3.28.2's published dependency metadata selects Guava 33.6.0-jre. Google advisory GHSA-xxph-c9ww-hj94 / CVE-2026-102554 affects Guava through 33.7.1; the issue is uncontrolled allocation during native Java deserialization of selected Guava collections. The fix is present in 33.7.2 and later.
+
+The current spike now manages Guava to 33.8.0-jre and CI asserts the resolved dependency-tree version. The advisory's attack path requires untrusted Java object deserialization; the parser workload does not intentionally deserialize project-controlled Java objects. That narrows the direct reachability assessment but is not a reason to ship a known-affected dependency. A full transitive vulnerability scan remains required for both candidate closures and every future version update.
+
+### Runtime and packaging
+
+- The evaluation is built and executed with Temurin JDK 21.0.13. Production must define and support an explicit Java runtime baseline; the host must not silently depend on whichever system Java happens to be installed.
+- Preferred packaging direction for a desktop deployment is an application-managed, minimized Java runtime image (for example, a jlink-generated runtime) alongside a versioned worker distribution. This is a proposal, not an accepted packaging decision. It creates an explicit responsibility to patch and redistribute the private runtime.
+- JDT's Eclipse platform dependencies create a larger runtime closure than JavaParser's core/symbol-solver closure. Exact archive size, module closure, native/platform requirements and license notices have not yet been measured.
+- Validate packaging on the actual Windows WPF target as well as Linux CI. Verify path handling, runtime discovery, upgrade/rollback and offline operation.
+
+### Worker lifecycle and isolation proposal
+
+Do not embed a JVM inside the .NET WPF process for the first production integration. Keep the Java engine behind the language-neutral adapter and use a supervised, out-of-process worker. The process boundary protects the .NET host from JVM crashes, but it is not by itself a security sandbox.
+
+The proposed contract is versioned JSON Lines over standard input/output (no listening TCP port): protocol handshake, request IDs, deterministic structured responses, bounded payloads, structured diagnostics, cancellation and graceful shutdown. Reserve stdout for protocol frames and send logs to stderr. The .NET supervisor should enforce a bounded worker pool, per-request deadlines, memory/CPU limits, process-tree termination, crash restart and worker recycling. Apply workspace/classpath allowlists and an OS-restricted identity; do not execute Maven/Gradle scripts, plugins or annotation processors. Avoid cross-project or cross-tenant cache leakage.
+
+The 42-file cold-process measurements show roughly 1.0 s median process time and 150 MiB median peak RSS for JDT, versus roughly 0.8 s and 120 MiB for JavaParser. These are not production capacity figures, but they argue against launching an unbounded JVM per source file or per request. A bounded long-lived worker pool is the leading operational hypothesis; its cache reset, memory growth and concurrency behaviour still need testing.
+
+### J2-A5.3 acceptance gates
+
+1. Produce an SBOM and full transitive license inventory for both exact candidate closures; verify notices and selected license terms.
+2. Run a current vulnerability scan against direct and transitive dependencies; fail CI on unapproved high/critical findings and document reachability exceptions.
+3. Prototype a private Java runtime/worker package on Windows and Linux, recording artifact size, startup, runtime patch process and upgrade/rollback behaviour.
+4. Exercise worker handshake, malformed requests, cancellation, timeouts, process crash/restart, memory exhaustion, bounded concurrency and cross-project isolation.
+5. Confirm no build scripts, plugins or annotation processors are executed and that file/network access is restricted as designed.
+6. Obtain legal review of redistribution obligations before any production binary ships with either engine.
+
+**Status:** J2-A5.3 is in progress and not accepted. The Guava version override is implemented; the complete SBOM/license audit, security scan, Windows packaging prototype, worker lifecycle tests and legal approval remain open. JDT remains the provisional correctness-first candidate, with its measured performance/memory disadvantage recorded. J2-A remains open and J2-B remains blocked.
+

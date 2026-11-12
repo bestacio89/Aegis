@@ -37,6 +37,15 @@ jobs:
       - name: Prepare result directory
         run: mkdir -p artifacts/classpaths
 
+      - name: Verify patched Guava dependency resolution
+        run: |
+          mvn --batch-mode --no-transfer-progress \
+            -f tools/java-semantic-spike/pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:tree \
+            -Dincludes=com.google.guava:guava \
+            | tee artifacts/guava-dependency-tree.txt
+          grep -F 'com.google.guava:guava:jar:33.8.0-jre' artifacts/guava-dependency-tree.txt
+
       - name: Validate engine-neutral semantic fact oracle
         run: |
           mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-validation \

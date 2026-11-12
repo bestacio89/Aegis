@@ -4,7 +4,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.NoSuchFileException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -156,7 +155,7 @@ public final class SemanticPerformanceBenchmark {
 
         long peakResidentBytes = 0;
         while (process.isAlive()) {
-            peakResidentBytes = Math.max(peakResidentBytes, readPeakResidentBytes(pid));
+            peakResidentBytes = Math.max(peakResidentBytes, readPeakResidentBytes(process));
             Thread.sleep(10);
         }
         int exitCode = process.waitFor();
@@ -207,21 +206,30 @@ public final class SemanticPerformanceBenchmark {
         return (path.isAbsolute() ? path : repositoryRoot.resolve(path)).normalize();
     }
 
-    private static long readPeakResidentBytes(long pid) throws IOException {
-        Path status = Path.of("/proc", Long.toString(pid), "status");
-        if (!Files.isRegularFile(status)) {
+    private static long readPeakResidentBytes(Process process) throws IOException {
+        if (!process.isAlive()) {
             return 0;
         }
-        try (var lines = Files.lines(status)) {
-            return lines.filter(line -> line.startsWith("VmHWM:"))
-                .findFirst()
-                .map(line -> {
-                    String[] fields = line.trim().split("\\s+");
-                    return Long.parseLong(fields[1]) * 1024;
-                })
-                .orElse(0L);
-        } catch (NoSuchFileException processExitedDuringSample) {
-            return 0;
+
+        Path status = Path.of("/proc", Long.toString(process.pid()), "status");
+        try {
+            if (!Files.isRegularFile(status)) {
+                return 0;
+            }
+            try (var lines = Files.lines(status)) {
+                return lines.filter(line -> line.startsWith("VmHWM:"))
+                    .findFirst()
+                    .map(line -> {
+                        String[] fields = line.trim().split("\\s+");
+                        return Long.parseLong(fields[1]) * 1024;
+                    })
+                    .orElse(0L);
+            }
+        } catch (IOException samplingFailure) {
+            if (!process.isAlive()) {
+                return 0;
+            }
+            throw samplingFailure;
         }
     }
 

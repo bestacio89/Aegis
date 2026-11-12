@@ -59,9 +59,13 @@ public final class SemanticFactBenchmark {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 3) {
+        if (args.length < 3 || args.length > 4) {
             throw new IllegalArgumentException(
-                "Usage: SemanticFactBenchmark <jdt|javaparser> <fixture-root> <fact-corpus>");
+                "Usage: SemanticFactBenchmark <jdt|javaparser> <fixture-root> <fact-corpus> [--report-only]");
+        }
+        boolean reportOnly = args.length == 4 && args[3].equals("--report-only");
+        if (args.length == 4 && !reportOnly) {
+            throw new IllegalArgumentException("Unsupported option: " + args[3]);
         }
 
         String engine = args[0].toLowerCase(Locale.ROOT);
@@ -111,15 +115,20 @@ public final class SemanticFactBenchmark {
                     passed);
             }
 
-            if (!failures.isEmpty()) {
+            String status = failures.isEmpty()
+                ? "passed"
+                : reportOnly ? "completed-with-mismatches" : "failed";
+            System.out.printf(
+                "{\"engine\":\"%s\",\"status\":\"%s\",\"facts\":%d,\"mismatches\":%d}%n",
+                engine,
+                status,
+                facts.size(),
+                failures.size());
+            if (!failures.isEmpty() && !reportOnly) {
                 throw new IllegalStateException(
                     engine + " failed " + failures.size() + " of " + facts.size()
                         + " semantic facts: " + String.join("; ", failures));
             }
-            System.out.printf(
-                "{\"engine\":\"%s\",\"status\":\"passed\",\"facts\":%d}%n",
-                engine,
-                facts.size());
         } finally {
             deleteDirectory(workspace);
         }

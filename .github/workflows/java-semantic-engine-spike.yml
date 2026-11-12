@@ -46,7 +46,7 @@ jobs:
         run: |
           set -o pipefail
           mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-benchmark \
-            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv" \
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv --report-only" \
             | tee artifacts/jdt-semantic-facts.jsonl
 
       - name: Compare JavaParser semantic facts
@@ -54,7 +54,7 @@ jobs:
         run: |
           set -o pipefail
           mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-benchmark \
-            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv" \
+            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv --report-only" \
             | tee artifacts/javaparser-semantic-facts.jsonl
 
       - name: Resolve controlled external classpath

@@ -111,7 +111,7 @@ The next checkpoint implements equivalent extraction from both ASTs against this
 
 ## J2-A4 — Per-fact semantic extraction
 
-The semantic fact benchmark runs JDT and JavaParser independently against the same semantic-facts.tsv oracle. Each engine must resolve the expected target identity in the fixture that owns the fact; unresolved facts must remain unresolved. Output is one JSON record per fact plus a process-level pass/fail record. A mismatch fails the workflow.
+The semantic fact benchmark runs JDT and JavaParser independently against the same semantic-facts.tsv oracle. Each engine is checked against the expected target identity in the fixture that owns the fact; unresolved facts must remain unresolved. Output is one JSON record per fact plus a process-level summary. CI uses --report-only so a candidate's semantic gaps remain visible in the artifact without preventing the other engine from running. Strict local mode (omit --report-only) exits non-zero on any mismatch.
 
 Run from the repository root:
 
@@ -123,4 +123,4 @@ mvn -B -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-benc
   -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv"
 ```
 
-The first extraction slice covers the 11 current oracle categories. It is intentionally an evaluation harness, not a production adapter. Passing this corpus is necessary but not sufficient for full J2-A: larger repositories, diagnostic taxonomy, generated code, JPMS module-path cases, repeatable performance measurements, licensing and worker-operational review remain required.
+The first extraction slice covers the 12 current oracle facts across 11 categories. It is intentionally an evaluation harness, not a production adapter. Passing this corpus is necessary but not sufficient for full J2-A: larger repositories, diagnostic taxonomy, generated code, JPMS module-path cases, repeatable performance measurements, licensing and worker-operational review remain required.

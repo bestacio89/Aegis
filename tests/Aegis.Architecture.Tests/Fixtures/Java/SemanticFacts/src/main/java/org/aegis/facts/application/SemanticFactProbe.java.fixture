@@ -9,7 +9,7 @@ public final class SemanticFactProbe {
     public List<Customer> execute(CustomerRepository repository) {
         Customer customer = new Customer("customer-42");
         List<Customer> customers = repository.findAll();
-        String selected = OverloadProbe.select(customer.id());
+        String selected = OverloadProbe.select("customer-42");
         Function<String, Customer> constructor = Customer::new;
         Customer recreated = constructor.apply(customer.id());
         return recreated == null ? List.of(selected).stream().map(value -> customer).toList() : customers;

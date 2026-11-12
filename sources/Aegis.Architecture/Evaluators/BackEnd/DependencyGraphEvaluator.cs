@@ -199,8 +199,6 @@ public sealed class DependencyGraphEvaluator
         result.DetectionConfidence = context.Confidence;
 
         result.Metrics["TotalRelations"] = observedEdges.Sum(relation => relation.RelationshipCount);
-        result.Metrics["TotalComponents"] = nodes.Length;
-        result.Metrics["DistinctComponentDependencyCount"] = distinctEdges;
         result.Metrics["AverageDependencies"] = outgoingCounts.Length == 0
             ? 0
             : outgoingCounts.Average();

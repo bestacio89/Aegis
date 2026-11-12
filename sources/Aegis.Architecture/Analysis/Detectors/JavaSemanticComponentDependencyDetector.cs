@@ -94,7 +94,9 @@ internal static class JavaSemanticComponentDependencyDetector
                 return new ArchitectureComponentContext
                 {
                     Id = first.ComponentId,
-                    Name = first.PackageName,
+                    Name = first.PackageName == "<default>"
+                        ? first.PackageName
+                        : first.PackageName[(first.PackageName.LastIndexOf('.') + 1)..],
                     QualifiedName = first.PackageName,
                     Language = first.Language,
                     ComponentKind = "Package",

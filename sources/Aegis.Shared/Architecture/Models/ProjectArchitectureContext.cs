@@ -165,7 +165,7 @@ public sealed class ProjectArchitectureContext
     public IReadOnlyList<ArchitectureComponentContext> ProductionComponents =>
         ArchitectureComponents.Where(component => component.ProductionSymbolCount > 0).ToArray();
 
-    /// <summary>Components containing test-only declarations.</summary>
+    /// <summary>Components containing test declarations.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyList<ArchitectureComponentContext> TestComponents =>
         ArchitectureComponents.Where(component => component.TestSymbolCount > 0).ToArray();

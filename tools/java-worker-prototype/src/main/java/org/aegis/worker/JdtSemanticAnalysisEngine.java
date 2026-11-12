@@ -440,24 +440,51 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         private void addTypeRelationship(String sourceId, ITypeBinding target, String unresolved,
                                          int kind, ASTNode node, Path file, boolean test) {
             if (sourceId == null) return;
-            String targetId = target == null ? null : bindingId(target.getTypeDeclaration());
-            if (target != null) addExternalTypeIfNeeded(target, file, node, test);
-            addRelationship(sourceId, targetId, unresolved, kind, target == null ? PROTOCOL_UNRESOLVED : PROTOCOL_RESOLVED,
-                node, file, test);
+            ITypeBinding declaration = target == null ? null : target.getTypeDeclaration();
+            boolean resolved = target != null
+                && !target.isRecovered()
+                && declaration != null
+                && !declaration.isRecovered();
+            String targetId = resolved ? bindingId(declaration) : null;
+            if (resolved) addExternalTypeIfNeeded(declaration, file, node, test);
+            addRelationship(
+                sourceId,
+                targetId,
+                resolved ? null : unresolvedTarget(target, unresolved),
+                kind,
+                resolved ? PROTOCOL_RESOLVED : PROTOCOL_UNRESOLVED,
+                node,
+                file,
+                test);
         }
 
         private void addCall(String sourceId, IMethodBinding target, String unresolved,
                              ASTNode node, Path file, boolean test, boolean constructor) {
             if (sourceId == null) return;
-            if (target == null) {
-                addRelationship(sourceId, null, unresolved, PROTOCOL_REL_CALLS, PROTOCOL_UNRESOLVED, node, file, test);
+            IMethodBinding declaration = target == null ? null : target.getMethodDeclaration();
+            ITypeBinding declaringClass = declaration == null ? null : declaration.getDeclaringClass();
+            boolean resolved = target != null
+                && !target.isRecovered()
+                && declaration != null
+                && !declaration.isRecovered()
+                && (declaringClass == null || !declaringClass.isRecovered());
+            if (!resolved) {
+                addRelationship(
+                    sourceId,
+                    null,
+                    unresolvedTarget(target, unresolved),
+                    PROTOCOL_REL_CALLS,
+                    PROTOCOL_UNRESOLVED,
+                    node,
+                    file,
+                    test);
                 return;
             }
-            IMethodBinding declaration = target.getMethodDeclaration();
+
             String targetId = bindingId(declaration);
-            if (declaration.getDeclaringClass() != null) {
-                addExternalTypeIfNeeded(declaration.getDeclaringClass(), file, node, test);
-                if (!declaration.getDeclaringClass().isFromSource()) {
+            if (declaringClass != null) {
+                addExternalTypeIfNeeded(declaringClass, file, node, test);
+                if (!declaringClass.isFromSource()) {
                     addSymbol(targetId, declaration.isConstructor() ? "<init>" : declaration.getName(),
                         methodIdentity(declaration),
                         declaration.isConstructor() ? PROTOCOL_SYMBOL_CONSTRUCTOR : PROTOCOL_SYMBOL_METHOD,
@@ -471,16 +498,28 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         private void addAnnotation(String sourceId, ITypeBinding target, String unresolved,
                                    ASTNode node, Path file, boolean test) {
             if (sourceId == null) return;
-            if (target != null) addExternalTypeIfNeeded(target, file, node, test);
-            addRelationship(sourceId, target == null ? null : bindingId(target.getTypeDeclaration()),
-                unresolved, PROTOCOL_REL_USES_ANNOTATION,
-                target == null ? PROTOCOL_UNRESOLVED : PROTOCOL_RESOLVED, node, file, test);
+            ITypeBinding declaration = target == null ? null : target.getTypeDeclaration();
+            boolean resolved = target != null
+                && !target.isRecovered()
+                && declaration != null
+                && !declaration.isRecovered();
+            String targetId = resolved ? bindingId(declaration) : null;
+            if (resolved) addExternalTypeIfNeeded(declaration, file, node, test);
+            addRelationship(
+                sourceId,
+                targetId,
+                resolved ? null : unresolvedTarget(target, unresolved),
+                PROTOCOL_REL_USES_ANNOTATION,
+                resolved ? PROTOCOL_RESOLVED : PROTOCOL_UNRESOLVED,
+                node,
+                file,
+                test);
         }
 
         private void addExternalTypeIfNeeded(ITypeBinding binding, Path file, ASTNode node, boolean test) {
             ITypeBinding declaration = binding.getTypeDeclaration();
             String id = bindingId(declaration);
-            if (declaration.isFromSource() || symbols.containsKey(id)) return;
+            if (declaration.isRecovered() || declaration.isFromSource() || symbols.containsKey(id)) return;
             addSymbol(id, declaration.getName(), declaration.getQualifiedName(),
                 declaration.isAnnotation() ? PROTOCOL_SYMBOL_ANNOTATION :
                     declaration.isEnum() ? PROTOCOL_SYMBOL_ENUM :
@@ -488,6 +527,21 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                     declaration.isRecord() ? PROTOCOL_SYMBOL_RECORD : PROTOCOL_SYMBOL_CLASS,
                 org.eclipse.jdt.core.dom.Modifier.isPublic(declaration.getModifiers()),
                 false, file, node, test, false);
+        }
+
+        private static String unresolvedTarget(ITypeBinding target, String fallback) {
+            String qualifiedName = target == null ? null : target.getQualifiedName();
+            return qualifiedName == null || qualifiedName.isBlank() ? fallback : qualifiedName;
+        }
+
+        private static String unresolvedTarget(IMethodBinding target, String fallback) {
+            if (target == null) return fallback;
+            ITypeBinding declaringClass = target.getDeclaringClass();
+            String qualifiedType = declaringClass == null ? null : declaringClass.getQualifiedName();
+            String methodName = target.getName();
+            return qualifiedType == null || qualifiedType.isBlank() || methodName == null || methodName.isBlank()
+                ? fallback
+                : qualifiedType + "." + methodName;
         }
 
         private void addSymbol(String id, String name, String qualified, int kind, boolean isPublic,

@@ -145,6 +145,13 @@ final class JdtSemanticAnalysisEngineTests {
             item.getAsJsonObject().get("severity").getAsString().equals("Error")
                 && item.getAsJsonObject().get("affectsCoverage").getAsBoolean()));
 
+        assertTrue(unresolvedResult.getAsJsonArray("relationships").asList().stream().anyMatch(item ->
+            item.getAsJsonObject().get("kind").getAsInt() == 5
+                && item.getAsJsonObject().get("resolutionStatus").getAsInt() == 3));
+        assertTrue(unresolvedResult.getAsJsonArray("relationships").asList().stream().anyMatch(item ->
+            item.getAsJsonObject().get("kind").getAsInt() == 4
+                && item.getAsJsonObject().get("resolutionStatus").getAsInt() == 3));
+
         JsonObject resolvedPayload = unresolvedPayload.deepCopy();
         resolvedPayload.add("referencedSourceRoots", paths(apiSourceRoot));
         JsonObject resolvedResult = new JdtSemanticAnalysisEngine().analyze(resolvedPayload);

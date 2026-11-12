@@ -3,15 +3,21 @@ package org.aegis.facts.application;
 import java.util.List;
 import java.util.function.Function;
 import org.aegis.facts.domain.Customer;
+import org.aegis.facts.generated.GeneratedCustomer;
 
 @Deprecated
 public final class SemanticFactProbe {
     public List<Customer> execute(CustomerRepository repository) {
         Customer customer = new Customer("customer-42");
+        GeneratedCustomer generated = new GeneratedCustomer("generated-42");
         List<Customer> customers = repository.findAll();
+        boolean supportsPaging = repository.supportsPaging();
         String selected = OverloadProbe.select("customer-42");
+        Customer genericSelected = OverloadProbe.select(customer, Customer.class);
         Function<String, Customer> constructor = Customer::new;
         Customer recreated = constructor.apply(customer.id());
-        return recreated == null ? List.of(selected).stream().map(value -> customer).toList() : customers;
+        return recreated == null || generated == null || genericSelected == null || !supportsPaging
+            ? List.of(selected).stream().map(value -> customer).toList()
+            : customers;
     }
 }

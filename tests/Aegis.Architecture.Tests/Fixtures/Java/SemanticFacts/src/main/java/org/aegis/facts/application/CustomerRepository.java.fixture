@@ -3,4 +3,6 @@ package org.aegis.facts.application;
 import org.aegis.facts.domain.Customer;
 
 public interface CustomerRepository extends GenericRepository<Customer> {
+    record PageToken(String value) {
+    }
 }

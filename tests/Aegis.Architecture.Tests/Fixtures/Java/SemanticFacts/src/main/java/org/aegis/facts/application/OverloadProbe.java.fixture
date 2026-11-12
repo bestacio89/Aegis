@@ -11,4 +11,8 @@ public final class OverloadProbe {
     public static String select(Integer value) {
         return value.toString();
     }
+
+    public static <T> T select(T value, Class<T> type) {
+        return type.cast(value);
+    }
 }

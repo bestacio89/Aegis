@@ -202,3 +202,33 @@ jobs:
           name: java-semantic-engine-spike
           path: artifacts/
           if-no-files-found: warn
+
+  probe-windows-private-runtime:
+    name: Probe minimized Java runtime packaging on Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify Maven
+        run: mvn --version
+
+      - name: Build and exercise private Java runtime package
+        shell: pwsh
+        run: ./tools/java-semantic-spike/packaging/Probe-WindowsRuntime.ps1
+
+      - name: Upload Windows runtime packaging evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-semantic-windows-runtime-probe
+          path: artifacts/windows-runtime-probe/
+          if-no-files-found: warn
+          retention-days: 7

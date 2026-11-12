@@ -398,3 +398,12 @@ The generated combined candidate SBOM contains 29 components and reports license
 - 1 MIT component (Checker Framework annotations).
 
 This is a combined candidate dependency closure; the SBOM preserves dependency edges and package URLs. License metadata is not a legal determination, and multi-license expressions require explicit selection and notice review. The JDT EPL-2.0 distribution obligations and Aegis's proprietary distribution model still require legal approval. The SBOM and OSV report are uploaded as CI artifacts; a clean scan would not replace a complete license/security review.
+
+
+## Windows private-runtime packaging probe
+
+The Java semantic workflow includes a Windows-only J2-A5.3 packaging probe. It compiles the spike, resolves the combined runtime JAR closure, derives the JDK module closure with `jdeps`, creates a minimized Java 21 runtime with `jlink`, and assembles a runnable package containing the runtime image, candidate JARs and harness classes.
+
+The probe then executes the JDT and JavaParser semantic-fact and diagnostic benchmarks from that private runtime. It uploads the runtime image, dependency JARs, module list, smoke-test JSONL and a size summary. The estimated worker-package size includes the Java runtime, both candidate dependency closures and harness classes; it excludes the Aegis WPF host, launcher, notices and installer overhead. Because both candidates are included, it is an upper-bound evaluation package rather than a final candidate-specific distribution.
+
+This is a deployment feasibility probe, not production integration. Acceptance still requires reviewing the Windows artifact and size, confirming the runtime module closure and startup behaviour, and completing worker lifecycle/isolation and legal review.

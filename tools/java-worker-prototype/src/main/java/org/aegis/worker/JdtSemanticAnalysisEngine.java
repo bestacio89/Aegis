@@ -49,7 +49,15 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
     public JsonObject analyze(JsonObject payload) throws Exception {
         Objects.requireNonNull(payload, "payload");
         Path projectRoot = requiredPath(payload, "projectPath").toRealPath();
+        String workspaceRootValue = optionalString(payload, "workspaceRoot", null);
+        Path workspaceRoot = workspaceRootValue == null || workspaceRootValue.isBlank()
+            ? projectRoot
+            : Path.of(workspaceRootValue).toAbsolutePath().normalize().toRealPath();
+        if (!projectRoot.startsWith(workspaceRoot)) {
+            throw new IllegalArgumentException("The declared project module is outside the workspace boundary.");
+        }
         List<Path> sourceRoots = readPaths(payload, "sourceRoots", true);
+        List<Path> referencedSourceRoots = readPaths(payload, "referencedSourceRoots", true);
         List<Path> sourceFiles = readSourceFiles(payload);
         List<Path> classpath = readPaths(payload, "classpathEntries", false);
 
@@ -69,6 +77,16 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                     throw new IllegalArgumentException("A declared source root cannot be resolved: " + path, exception);
                 }
             }).toList();
+        List<Path> environmentSourceRoots = new ArrayList<>(realSourceRoots);
+        for (Path root : referencedSourceRoots) {
+            Path realRoot = root.toRealPath();
+            if (!realRoot.startsWith(workspaceRoot) || !Files.isDirectory(realRoot)) {
+                throw new IllegalArgumentException("A referenced source root is outside the workspace boundary.");
+            }
+            if (!environmentSourceRoots.contains(realRoot)) {
+                environmentSourceRoots.add(realRoot);
+            }
+        }
         for (Path source : sourceFiles) {
             Path realSource = source.toRealPath();
             if (!Files.isRegularFile(realSource)
@@ -91,7 +109,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             return emptyResult(projectRoot, sourceFiles.size());
         }
 
-        String[] sourcePaths = sourceRoots.stream()
+        String[] sourcePaths = environmentSourceRoots.stream()
             .map(path -> path.toAbsolutePath().normalize().toString())
             .toArray(String[]::new);
         String[] encodings = Arrays.stream(sourcePaths).map(ignored -> "UTF-8").toArray(String[]::new);

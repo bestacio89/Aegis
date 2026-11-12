@@ -11,6 +11,9 @@ public sealed class SemanticAnalysisRequest
 
     public string ProjectPath { get; init; } = string.Empty;
 
+    /// <summary>Repository boundary used to validate explicitly referenced project source roots.</summary>
+    public string WorkspaceRoot { get; init; } = string.Empty;
+
     public string ModuleName { get; init; } = string.Empty;
 
     public string BuildSystem { get; init; } = string.Empty;
@@ -18,6 +21,9 @@ public sealed class SemanticAnalysisRequest
     public IReadOnlyList<string> SourceFiles { get; init; } = Array.Empty<string>();
 
     public IReadOnlyList<string> SourceRoots { get; init; } = Array.Empty<string>();
+
+    /// <summary>Source roots from explicitly declared project dependencies, used for compiler binding resolution only.</summary>
+    public IReadOnlyList<string> ReferencedSourceRoots { get; init; } = Array.Empty<string>();
 
     public IReadOnlyList<string> TestSourceRoots { get; init; } = Array.Empty<string>();
 

@@ -104,11 +104,19 @@ public sealed class JavaSemanticAnalysisAdapter : ISemanticAnalysisAdapter
 
     private static string CreateClasspathDiagnostic(SemanticAnalysisRequest request)
     {
-        var missing = request.UnresolvedClasspathDependencies.Count;
-        var missingSummary = missing == 0
-            ? "No direct artifact was missing from the local cache."
-            : $"{missing} direct artifact(s) were not found in the local cache: {string.Join(", ", request.UnresolvedClasspathDependencies.Take(10))}.";
-        return $"The module declares dependencies, but its complete resolved module classpath is unavailable. {missingSummary} Direct cached artifacts are used where available; project-module source references and transitive dependency closure have not been resolved, so some bindings remain incomplete.";
+        var unresolvedArtifacts = request.UnresolvedClasspathDependencies
+            .Where(dependency => !dependency.StartsWith("project:", StringComparison.Ordinal))
+            .ToArray();
+        var unresolvedProjects = request.UnresolvedClasspathDependencies
+            .Where(dependency => dependency.StartsWith("project:", StringComparison.Ordinal))
+            .ToArray();
+        var artifactSummary = unresolvedArtifacts.Length == 0
+            ? "No direct external artifact was missing from the local cache."
+            : $"{unresolvedArtifacts.Length} direct external artifact(s) were not found in the local cache: {string.Join(", ", unresolvedArtifacts.Take(10))}.";
+        var projectSummary = unresolvedProjects.Length == 0
+            ? "No unresolved project-module reference was reported."
+            : $"{unresolvedProjects.Length} project-module reference(s) remain incomplete as classpath evidence; declared in-workspace Java source roots are supplied for binding-only visibility where available, but compiled outputs and non-source project artifacts are not inferred.";
+        return $"The module declares dependencies, but its complete resolved module classpath is unavailable. {artifactSummary} {projectSummary} Transitive external artifact closure remains unresolved.";
     }
 
     private SemanticAnalysisRun CreateUnavailableRun(

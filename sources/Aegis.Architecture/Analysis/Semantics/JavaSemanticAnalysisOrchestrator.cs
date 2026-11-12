@@ -1,3 +1,4 @@
+using Aegis.Architecture.Analysis.Detectors;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Microsoft.Extensions.Logging;
@@ -79,10 +80,12 @@ public sealed class JavaSemanticAnalysisOrchestrator
             {
                 Language = "Java",
                 ProjectPath = Path.GetFullPath(module.Path),
+                WorkspaceRoot = Path.GetFullPath(context.RootPath),
                 ModuleName = module.Name,
                 BuildSystem = module.BuildSystem.ToString(),
                 SourceFiles = sourceFiles,
                 SourceRoots = sourceRoots.Select(root => root.Directory).ToArray(),
+                ReferencedSourceRoots = ResolveReferencedSourceRoots(module, context),
                 TestSourceRoots = sourceRoots
                     .Where(root => root.Ownership == ProjectSourceRootOwnership.Test)
                     .Select(root => root.Directory)
@@ -119,6 +122,7 @@ public sealed class JavaSemanticAnalysisOrchestrator
         }
 
         JavaSemanticFrameworkDetector.Analyze(context);
+        JavaSemanticDependencyDetector.Analyze(context);
     }
 
     private static bool IsJavaModule(
@@ -137,6 +141,70 @@ public sealed class JavaSemanticAnalysisOrchestrator
         // An aggregator with child modules must not recursively absorb their
         // sources just because repository-level language detection saw Java.
         return hasOwnedJavaRoots || (hasJavaLanguage && !ownsNestedModules);
+    }
+
+    private static IReadOnlyList<string> ResolveReferencedSourceRoots(
+        ProjectModuleContext module,
+        ProjectArchitectureContext context)
+    {
+        var includeTestDependencies = module.IsTestProject || module.IsTestSupport;
+        var modulePath = Path.GetFullPath(module.Path);
+        var pending = new Stack<string>(
+            context.Dependencies
+                .Where(dependency => !string.IsNullOrWhiteSpace(dependency.SourceProjectPath)
+                    && PathsEqual(dependency.SourceProjectPath, modulePath))
+                .Where(dependency =>
+                    dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase)
+                    || (includeTestDependencies
+                        && dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase)))
+                .Select(dependency => dependency.TargetProjectPath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(PathComparer)
+                .OrderByDescending(path => path, PathComparer));
+        var visitedModules = new HashSet<string>(PathComparer);
+        var sourceRoots = new HashSet<string>(PathComparer);
+
+        while (pending.TryPop(out var targetPath))
+        {
+            var normalizedTargetPath = Path.GetFullPath(targetPath);
+            if (!visitedModules.Add(normalizedTargetPath))
+                continue;
+
+            var targetModules = context.Modules
+                .Where(candidate => PathsEqual(candidate.Path, normalizedTargetPath))
+                .Take(2)
+                .ToArray();
+            if (targetModules.Length != 1)
+                continue;
+
+            var targetModule = targetModules[0];
+            var workspaceRoot = Path.GetFullPath(context.RootPath);
+            foreach (var sourceRoot in ResolveSourceRoots(targetModule).Where(root =>
+                         root.ContainsJavaSources
+                         && IsSameOrDescendantPath(Path.GetFullPath(root.Directory), workspaceRoot)
+                         && (root.Ownership == ProjectSourceRootOwnership.Production
+                             || (includeTestDependencies && root.Ownership == ProjectSourceRootOwnership.Test))))
+            {
+                sourceRoots.Add(Path.GetFullPath(sourceRoot.Directory));
+            }
+
+            foreach (var dependency in context.Dependencies.Where(dependency =>
+                         !string.IsNullOrWhiteSpace(dependency.SourceProjectPath)
+                         && PathsEqual(dependency.SourceProjectPath, targetModule.Path)))
+            {
+                if (!dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase)
+                    && !(includeTestDependencies
+                        && dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                if (!string.IsNullOrWhiteSpace(dependency.TargetProjectPath))
+                    pending.Push(dependency.TargetProjectPath);
+            }
+        }
+
+        return sourceRoots
+            .OrderBy(path => path, PathComparer)
+            .ToArray();
     }
 
     private static List<ProjectSourceRoot> ResolveSourceRoots(ProjectModuleContext module)
@@ -306,6 +374,11 @@ public sealed class JavaSemanticAnalysisOrchestrator
                 && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                 && !relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal));
     }
+
+    private static bool PathsEqual(string left, string right) =>
+        PathComparer.Equals(
+            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
 
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;

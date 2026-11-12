@@ -68,7 +68,9 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
                     var payload = new
                     {
                         projectPath = request.ProjectPath,
+                        workspaceRoot = request.WorkspaceRoot,
                         sourceRoots = request.SourceRoots,
+                        referencedSourceRoots = request.ReferencedSourceRoots,
                         testSourceRoots = request.TestSourceRoots,
                         generatedSourceRoots = request.GeneratedSourceRoots,
                         sourceManifestPath,

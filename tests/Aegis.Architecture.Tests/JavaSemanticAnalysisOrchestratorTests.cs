@@ -63,6 +63,117 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
     }
 
     [Fact]
+    public async Task Supplies_only_declared_production_project_source_roots_to_jdt_and_projects_resolved_cross_module_edges()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var consumerPath = Path.Combine(repository, "consumer");
+        var apiPath = Path.Combine(repository, "api");
+        var commonPath = Path.Combine(repository, "common");
+        var testSupportPath = Path.Combine(repository, "test-support");
+        var consumerRoot = Path.Combine(consumerPath, "src", "main", "java");
+        var apiRoot = Path.Combine(apiPath, "src", "main", "java");
+        var commonRoot = Path.Combine(commonPath, "src", "main", "java");
+        var testSupportRoot = Path.Combine(testSupportPath, "src", "test", "java");
+        Directory.CreateDirectory(consumerRoot);
+        Directory.CreateDirectory(apiRoot);
+        Directory.CreateDirectory(commonRoot);
+        Directory.CreateDirectory(testSupportRoot);
+        var consumerFile = Path.Combine(consumerRoot, "Consumer.java");
+        var apiFile = Path.Combine(apiRoot, "PublicApi.java");
+        var commonFile = Path.Combine(commonRoot, "CommonType.java");
+        var testSupportFile = Path.Combine(testSupportRoot, "TestSupport.java");
+        await File.WriteAllTextAsync(consumerFile, "package consumer; public class Consumer {}");
+        await File.WriteAllTextAsync(apiFile, "package api; public class PublicApi {}");
+        await File.WriteAllTextAsync(commonFile, "package common; public class CommonType {}");
+        await File.WriteAllTextAsync(testSupportFile, "package support; public class TestSupport {}");
+
+        try
+        {
+            var consumer = CreateModule("consumer", consumerPath, consumerRoot);
+            var api = CreateModule("api", apiPath, apiRoot);
+            var common = CreateModule("common", commonPath, commonRoot);
+            var testSupport = new ProjectModuleContext
+            {
+                Name = "test-support",
+                Path = testSupportPath,
+                Languages = ["Java"],
+                IsTestSupport = true,
+                SourceRoots =
+                [
+                    new ProjectSourceRoot
+                    {
+                        Directory = testSupportRoot,
+                        Ownership = ProjectSourceRootOwnership.Test,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    }
+                ]
+            };
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "multi-module",
+                RootPath = repository,
+                Language = "Java",
+                Modules = [consumer, api, common, testSupport],
+                Dependencies =
+                [
+                    new ArchitectureDependencyContext
+                    {
+                        Source = "consumer",
+                        SourceProjectPath = consumerPath,
+                        Target = "api",
+                        TargetProjectPath = apiPath,
+                        DependencyType = "MavenProjectDependency",
+                        Scope = "Production"
+                    },
+                    new ArchitectureDependencyContext
+                    {
+                        Source = "api",
+                        SourceProjectPath = apiPath,
+                        Target = "common",
+                        TargetProjectPath = commonPath,
+                        DependencyType = "MavenProjectDependency",
+                        Scope = "Production"
+                    },
+                    new ArchitectureDependencyContext
+                    {
+                        Source = "consumer",
+                        SourceProjectPath = consumerPath,
+                        Target = "test-support",
+                        TargetProjectPath = testSupportPath,
+                        DependencyType = "MavenProjectDependency",
+                        Scope = "Test"
+                    }
+                ]
+            };
+            var adapter = new SemanticGraphJavaAdapter(consumerFile);
+            var orchestrator = new JavaSemanticAnalysisOrchestrator(
+                [adapter],
+                new EmptyClasspathResolver(),
+                NullLogger<JavaSemanticAnalysisOrchestrator>.Instance);
+
+            await orchestrator.AnalyzeAsync(context);
+
+            var consumerRequest = Assert.Single(adapter.Requests.Where(request => request.ModuleName == "consumer"));
+            Assert.Contains(Path.GetFullPath(apiRoot), consumerRequest.ReferencedSourceRoots);
+            Assert.Contains(Path.GetFullPath(commonRoot), consumerRequest.ReferencedSourceRoots);
+            Assert.Equal(2, consumerRequest.ReferencedSourceRoots.Count);
+            Assert.DoesNotContain(Path.GetFullPath(testSupportRoot), consumerRequest.ReferencedSourceRoots);
+
+            var semanticDependency = Assert.Single(context.Dependencies.Where(dependency =>
+                dependency.DependencyType == "JavaSemanticDependency"));
+            Assert.Equal(Path.GetFullPath(consumerPath), semanticDependency.SourceProjectPath);
+            Assert.Equal(Path.GetFullPath(apiPath), semanticDependency.TargetProjectPath);
+            Assert.Equal("Production", semanticDependency.Scope);
+            Assert.Equal(consumerFile, semanticDependency.File);
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Adds_compiler_confirmed_framework_annotation_evidence()
     {
         var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -245,6 +356,92 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
                 Status = SemanticAnalysisStatus.Completed,
                 AnalyzedFileCount = request.SourceFiles.Count
             });
+        }
+    }
+
+    private sealed class SemanticGraphJavaAdapter : ISemanticAnalysisAdapter
+    {
+        private readonly string _consumerFile;
+
+        public SemanticGraphJavaAdapter(string consumerFile)
+        {
+            _consumerFile = consumerFile;
+        }
+
+        public List<SemanticAnalysisRequest> Requests { get; } = [];
+
+        public string AdapterId => "eclipse-jdt";
+        public string Language => "Java";
+        public IReadOnlyCollection<string> SupportedCapabilities => ["symbols", "relationships"];
+
+        public bool CanAnalyze(SemanticAnalysisRequest request) => true;
+
+        public ValueTask<SemanticAnalysisRun> AnalyzeAsync(
+            SemanticAnalysisRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            var isApi = request.ModuleName == "api";
+            var isConsumer = request.ModuleName == "consumer";
+            var run = new SemanticAnalysisRun
+            {
+                RunId = Guid.NewGuid().ToString("N"),
+                Language = "Java",
+                EngineId = AdapterId,
+                ProjectPath = request.ProjectPath,
+                Status = SemanticAnalysisStatus.Completed,
+                AnalyzedFileCount = request.SourceFiles.Count,
+                Symbols = isApi
+                    ?
+                    [
+                        new SemanticSymbol
+                        {
+                            Id = "api-public-type",
+                            Name = "PublicApi",
+                            QualifiedName = "api.PublicApi",
+                            ProjectPath = request.ProjectPath,
+                            Language = "Java",
+                            Origin = SemanticSymbolOrigin.Source
+                        }
+                    ]
+                    :
+                    [
+                        new SemanticSymbol
+                        {
+                            Id = request.ModuleName + "-type",
+                            Name = request.ModuleName,
+                            QualifiedName = request.ModuleName + ".Consumer",
+                            ProjectPath = request.ProjectPath,
+                            Language = "Java",
+                            Origin = SemanticSymbolOrigin.Source
+                        }
+                    ],
+                Relationships = !isConsumer
+                    ? []
+                    :
+                    [
+                        new SemanticRelationship
+                        {
+                            Id = "consumer-uses-api",
+                            SourceSymbolId = request.ModuleName + "-type",
+                            TargetSymbolId = "api-public-type",
+                            Kind = SemanticRelationshipKind.References,
+                            ResolutionStatus = SemanticResolutionStatus.Resolved,
+                            Provenance =
+                            [
+                                new SemanticEvidenceProvenance
+                                {
+                                    Source = SemanticEvidenceSource.Compiler,
+                                    FilePath = _consumerFile,
+                                    StartLine = 1,
+                                    StartColumn = 1,
+                                    Confidence = 1.0
+                                }
+                            ]
+                        }
+                    ]
+            };
+            return ValueTask.FromResult(run);
         }
     }
 

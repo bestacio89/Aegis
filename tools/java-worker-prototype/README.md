@@ -7,7 +7,9 @@ The worker provides compiler-binding Java analysis through Eclipse JDT Core 3.47
 ```json
 {
   "projectPath": "/workspace/service",
+  "workspaceRoot": "/workspace",
   "sourceRoots": ["/workspace/service/src/main/java"],
+  "referencedSourceRoots": ["/workspace/api/src/main/java"],
   "sourceFiles": ["/workspace/service/src/main/java/example/Service.java"],
   "classpathEntries": ["/workspace/.m2/repository/example/api.jar"],
   "sourceLevel": "21",
@@ -16,7 +18,7 @@ The worker provides compiler-binding Java analysis through Eclipse JDT Core 3.47
 }
 ```
 
-All source files must belong to a declared source root, and source roots must remain inside the declared module path. Classpath entries are explicit inputs; the worker never invokes a build tool, plugin, annotation processor or project code.
+All analyzed source files must belong to a module-owned source root, and those roots must remain inside the declared module path. Referenced source roots are binding-only inputs from the transitive closure of explicitly declared project dependencies; they must remain inside the workspace boundary and are never added to the analyzed-file inventory. The .NET host excludes test-scoped project dependencies from the referenced-source-root set for production modules; test source-set ownership remains explicit in the analysis request. Classpath entries are explicit inputs; the worker never invokes a build tool, plugin, annotation processor or project code.
 
 ## Result
 

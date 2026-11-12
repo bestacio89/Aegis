@@ -142,10 +142,14 @@ public sealed class JavaSemanticAnalysisOrchestrator
             SourceFiles = sourceFiles,
             SourceRoots = sourceRoots.Select(root => root.Directory).ToArray(),
             ReferencedSourceRoots = ResolveReferencedSourceRoots(module, context, includeTestDependencies),
-            TestSourceRoots = sourceRoots
-                .Where(root => root.Ownership == ProjectSourceRootOwnership.Test)
-                .Select(root => root.Directory)
-                .ToArray(),
+            TestSourceRoots = includeTestCode
+                ? (module.IsTestProject || module.IsTestSupport
+                    ? sourceRoots.Select(root => root.Directory).ToArray()
+                    : sourceRoots
+                        .Where(root => root.Ownership == ProjectSourceRootOwnership.Test)
+                        .Select(root => root.Directory)
+                        .ToArray())
+                : Array.Empty<string>(),
             GeneratedSourceRoots = sourceRoots
                 .Where(root => root.IsGenerated)
                 .Select(root => root.Directory)

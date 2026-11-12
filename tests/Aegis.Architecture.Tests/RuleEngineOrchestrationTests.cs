@@ -302,6 +302,122 @@ public sealed class RuleEngineOrchestrationTests
                 new ProjectArchitectureContext()));
     }
 
+    [Fact]
+    public async Task RunAsync_skips_evaluator_when_required_semantic_capabilities_are_missing()
+    {
+        using var directory = new TemporaryDirectory();
+        var invoked = false;
+        var evaluator = new FixtureEvaluator(
+            "SemanticEvaluator",
+            (_, _) =>
+            {
+                invoked = true;
+                return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>([]);
+            },
+            supportedLanguages: ["C#"],
+            requiredSemanticCapabilities: ["relationships"]);
+
+        var report = await CreateEngine([evaluator]).RunAsync(
+            directory.Path,
+            new ProjectArchitectureContext
+            {
+                ProjectName = "SemanticProject",
+                RootPath = directory.Path,
+                Language = "C#",
+                SemanticAnalysisRuns =
+                [
+                    new SemanticAnalysisRun
+                    {
+                        Language = "C#",
+                        ProjectPath = directory.Path,
+                        Status = Aegis.Shared.Architecture.Enums.SemanticAnalysisStatus.Completed,
+                        Capabilities = ["symbols"]
+                    }
+                ]
+            });
+
+        Assert.False(invoked);
+        var diagnostic = Assert.Single(report.Diagnostics, item =>
+            item.Code == "EvaluatorSemanticCapabilitiesUnavailable");
+        Assert.Equal("SemanticEvaluator", diagnostic.Component);
+        Assert.Contains("relationships", diagnostic.Message);
+        Assert.True(diagnostic.AffectsCoverage);
+    }
+
+    [Fact]
+    public async Task RunAsync_executes_evaluator_when_all_required_semantic_capabilities_are_available()
+    {
+        using var directory = new TemporaryDirectory();
+        var invoked = false;
+        var evaluator = new FixtureEvaluator(
+            "SemanticEvaluator",
+            (_, _) =>
+            {
+                invoked = true;
+                return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>([]);
+            },
+            supportedLanguages: ["C#"],
+            requiredSemanticCapabilities: ["symbols", "relationships"]);
+
+        var report = await CreateEngine([evaluator]).RunAsync(
+            directory.Path,
+            new ProjectArchitectureContext
+            {
+                ProjectName = "SemanticProject",
+                RootPath = directory.Path,
+                Language = "C#",
+                SemanticAnalysisRuns =
+                [
+                    new SemanticAnalysisRun
+                    {
+                        Language = "C#",
+                        ProjectPath = directory.Path,
+                        Status = Aegis.Shared.Architecture.Enums.SemanticAnalysisStatus.Completed,
+                        Capabilities = ["symbols", "relationships"]
+                    }
+                ]
+            });
+
+        Assert.True(invoked);
+        Assert.DoesNotContain(report.Diagnostics, item =>
+            item.Code == "EvaluatorSemanticCapabilitiesUnavailable");
+    }
+
+    [Fact]
+    public async Task RunAsync_matches_evaluator_language_against_all_languages_owned_by_a_module()
+    {
+        using var directory = new TemporaryDirectory();
+        var invoked = false;
+        var evaluator = new FixtureEvaluator(
+            "JavaOnlyEvaluator",
+            (_, _) =>
+            {
+                invoked = true;
+                return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>([]);
+            },
+            supportedLanguages: ["Java"]);
+
+        await CreateEngine([evaluator]).RunAsync(
+            directory.Path,
+            new ProjectArchitectureContext
+            {
+                ProjectName = "MixedProject",
+                RootPath = directory.Path,
+                Language = "C#",
+                Modules =
+                [
+                    new ProjectModuleContext
+                    {
+                        Name = "MixedProject",
+                        Path = directory.Path,
+                        Languages = ["C#", "Java"]
+                    }
+                ]
+            });
+
+        Assert.True(invoked);
+    }
+
     private static RuleEngine CreateEngine(IEnumerable<IEvaluator> evaluators)
     {
         var weighting = new RuleWeightingEngine(
@@ -331,17 +447,20 @@ public sealed class RuleEngineOrchestrationTests
             Func<string, ProjectArchitectureContext,
                 Task<IEnumerable<ArchitectureEvaluatorResult>>> evaluate,
             string[]? supportedLanguages = null,
-            string[]? supportedFrameworks = null)
+            string[]? supportedFrameworks = null,
+            string[]? requiredSemanticCapabilities = null)
         {
             Name = name;
             _evaluate = evaluate;
             SupportedLanguages = supportedLanguages ?? ["*"];
             SupportedFrameworks = supportedFrameworks ?? ["*"];
+            RequiredSemanticCapabilities = requiredSemanticCapabilities ?? [];
         }
 
         public string Name { get; }
         public string[] SupportedLanguages { get; }
         public string[] SupportedFrameworks { get; }
+        public IReadOnlyCollection<string> RequiredSemanticCapabilities { get; }
         public bool IsEnabled { get; set; } = true;
         public double WeightFactor { get; set; } = 1.0;
 

@@ -51,6 +51,8 @@ public abstract class BaseArchitectureEvaluator : IEvaluator, IScopedDependency
 
     public virtual string[] SupportedFrameworks { get; } = ["*"];
 
+    public virtual IReadOnlyCollection<string> RequiredSemanticCapabilities { get; } = Array.Empty<string>();
+
     public bool IsEnabled { get; set; } = true;
 
     public double WeightFactor { get; set; } = 1.0;

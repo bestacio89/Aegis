@@ -127,9 +127,15 @@ public sealed class RuleEngine
             if (repositoryWide)
             {
                 if (SupportsContext(evaluator, context))
-                    executions.Add((evaluator, projectPath, context));
+                {
+                    if (HasRequiredSemanticCapabilities(evaluator, context, projectPath, diagnostics))
+                        executions.Add((evaluator, projectPath, context));
+                }
                 else
+                {
                     LogUnsupported(evaluator, context);
+                }
+
                 continue;
             }
 
@@ -140,7 +146,8 @@ public sealed class RuleEngine
                     continue;
 
                 matchedScope = true;
-                executions.Add((evaluator, scope.Path, scope.Context));
+                if (HasRequiredSemanticCapabilities(evaluator, scope.Context, scope.Path, diagnostics))
+                    executions.Add((evaluator, scope.Path, scope.Context));
             }
 
             if (!matchedScope)
@@ -582,7 +589,7 @@ public sealed class RuleEngine
         IEvaluator evaluator,
         ProjectArchitectureContext context)
     {
-        if (!SupportsLanguage(evaluator, context.Language))
+        if (!SupportsLanguage(evaluator, context))
         {
             return false;
         }
@@ -604,15 +611,138 @@ public sealed class RuleEngine
 
     private static bool SupportsLanguage(
         IEvaluator evaluator,
-        string language)
+        ProjectArchitectureContext context)
     {
-        return evaluator.SupportedLanguages.Contains(
-                   "*",
-                   StringComparer.OrdinalIgnoreCase)
-               ||
-               evaluator.SupportedLanguages.Contains(
-                   language,
-                   StringComparer.OrdinalIgnoreCase);
+        if (evaluator.SupportedLanguages.Contains("*", StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        return GetLanguagesForScope(context, context.RootPath).Any(language =>
+            evaluator.SupportedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static bool HasRequiredSemanticCapabilities(
+        IEvaluator evaluator,
+        ProjectArchitectureContext context,
+        string evaluationPath,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        var required = evaluator.RequiredSemanticCapabilities
+            .Where(capability => !string.IsNullOrWhiteSpace(capability))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (required.Length == 0)
+            return true;
+
+        var matchingModules = context.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .Where(module => PathsEqual(module.Path, evaluationPath)
+                || (!context.Modules.Any(candidate => PathsEqual(candidate.Path, evaluationPath))
+                    && IsSameOrDescendantPath(module.Path, evaluationPath)))
+            .ToArray();
+
+        var scopes = matchingModules.Length == 0
+            ? new[] { (Path: evaluationPath, Languages: GetLanguagesForScope(context, evaluationPath)) }
+            : matchingModules.Select(module => (
+                Path: module.Path,
+                Languages: (IReadOnlyCollection<string>)(module.Languages.Count == 0
+                    ? GetLanguagesForScope(context, evaluationPath).ToArray()
+                    : module.Languages.ToArray()))).ToArray();
+
+        var missingByScope = new List<string>();
+        foreach (var scope in scopes)
+        {
+            var languages = scope.Languages
+                .Where(language => evaluator.SupportedLanguages.Contains("*", StringComparer.OrdinalIgnoreCase)
+                    || evaluator.SupportedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            foreach (var language in languages)
+            {
+                var available = context.SemanticAnalysisRuns
+                    .Where(run => PathsEqual(run.ProjectPath, scope.Path))
+                    .Where(run => run.Language.Equals(language, StringComparison.OrdinalIgnoreCase))
+                    .Where(run => run.Status is Aegis.Shared.Architecture.Enums.SemanticAnalysisStatus.Completed
+                        or Aegis.Shared.Architecture.Enums.SemanticAnalysisStatus.PartiallyCompleted)
+                    .SelectMany(run => run.Capabilities)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var missing = required.Where(capability => !available.Contains(capability)).ToArray();
+                if (missing.Length > 0)
+                    missingByScope.Add($"{language} ({Path.GetFileName(scope.Path)}): {string.Join(", ", missing)}");
+            }
+        }
+
+        if (missingByScope.Count == 0)
+            return true;
+
+        diagnostics.Add(new AnalysisDiagnostic
+        {
+            Code = "EvaluatorSemanticCapabilitiesUnavailable",
+            Component = evaluator.Name,
+            Message = $"Evaluator '{evaluator.Name}' was not executed because required semantic evidence is unavailable: {string.Join("; ", missingByScope)}.",
+            Target = evaluationPath,
+            AffectsCoverage = true
+        });
+
+        _logger.LogWarning(
+            "Evaluator {Evaluator} was not executed for {ProjectPath}; required semantic capabilities are unavailable: {MissingCapabilities}.",
+            evaluator.Name,
+            evaluationPath,
+            string.Join("; ", missingByScope));
+
+        return false;
+    }
+
+    private static IReadOnlyCollection<string> GetLanguagesForScope(
+        ProjectArchitectureContext context,
+        string scopePath)
+    {
+        var module = context.Modules.FirstOrDefault(candidate =>
+            !string.IsNullOrWhiteSpace(candidate.Path)
+            && PathsEqual(candidate.Path, scopePath));
+
+        var languages = module?.Languages
+            .Where(language => !string.IsNullOrWhiteSpace(language))
+            .ToList() ?? [];
+
+        if (!string.IsNullOrWhiteSpace(context.Language)
+            && !context.Language.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
+            && !languages.Contains(context.Language, StringComparer.OrdinalIgnoreCase))
+        {
+            languages.Add(context.Language);
+        }
+
+        return languages;
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        return string.Equals(
+            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            comparison);
+    }
+
+    private static bool IsSameOrDescendantPath(string candidate, string parent)
+    {
+        var normalizedCandidate = Path.GetFullPath(candidate);
+        var normalizedParent = Path.GetFullPath(parent)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        return string.Equals(
+                normalizedCandidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                normalizedParent,
+                comparison)
+            || normalizedCandidate.StartsWith(normalizedParent + Path.DirectorySeparatorChar, comparison);
     }
 
     private static bool SupportsFramework(

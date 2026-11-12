@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.NoSuchFileException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -219,6 +220,8 @@ public final class SemanticPerformanceBenchmark {
                     return Long.parseLong(fields[1]) * 1024;
                 })
                 .orElse(0L);
+        } catch (NoSuchFileException processExitedDuringSample) {
+            return 0;
         }
     }
 

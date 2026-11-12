@@ -68,13 +68,6 @@ public sealed class JavaSemanticAnalysisOrchestrator
             if (sourceRoots.Count == 0)
                 continue;
 
-            var sourceFiles = EnumerateJavaFiles(
-                module.Path,
-                sourceRoots,
-                context.DiscoveryDiagnostics);
-            if (sourceFiles.Count == 0)
-                continue;
-
             // Unknown source ownership cannot be split safely. Preserve the
             // established combined analysis until discovery can classify it.
             if (sourceRoots.Any(root => root.Ownership == ProjectSourceRootOwnership.Unknown))

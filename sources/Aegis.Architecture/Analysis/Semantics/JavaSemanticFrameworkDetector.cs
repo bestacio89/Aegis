@@ -261,47 +261,6 @@ internal static class JavaSemanticFrameworkDetector
         if (groupId.StartsWith("org.eclipse.microprofile", StringComparison.OrdinalIgnoreCase))
             return ("MicroProfile", FrameworkEvidenceKind.Runtime);
 
-        // Messaging clients and protocol stacks are explicit architecture evidence.
-        if (groupId.Equals("org.apache.kafka", StringComparison.OrdinalIgnoreCase)
-            && artifactId.StartsWith("kafka-", StringComparison.OrdinalIgnoreCase))
-            return ("Apache Kafka", FrameworkEvidenceKind.Messaging);
-        if (groupId.Equals("com.rabbitmq", StringComparison.OrdinalIgnoreCase)
-            && artifactId.Equals("amqp-client", StringComparison.OrdinalIgnoreCase))
-            return ("RabbitMQ", FrameworkEvidenceKind.Messaging);
-        if (groupId.Equals("io.grpc", StringComparison.OrdinalIgnoreCase)
-            && artifactId.StartsWith("grpc-", StringComparison.OrdinalIgnoreCase))
-            return ("gRPC", FrameworkEvidenceKind.Messaging);
-        if (groupId.Equals("com.google.protobuf", StringComparison.OrdinalIgnoreCase)
-            && artifactId.StartsWith("protobuf-", StringComparison.OrdinalIgnoreCase))
-            return ("Protocol Buffers", FrameworkEvidenceKind.Serialization);
-
-        // Common application integration libraries.
-        if (groupId.Equals("org.mapstruct", StringComparison.OrdinalIgnoreCase)
-            && artifactId.Equals("mapstruct", StringComparison.OrdinalIgnoreCase))
-            return ("MapStruct", FrameworkEvidenceKind.Application);
-        if (groupId.Equals("org.projectlombok", StringComparison.OrdinalIgnoreCase)
-            && artifactId.Equals("lombok", StringComparison.OrdinalIgnoreCase))
-            return ("Lombok", FrameworkEvidenceKind.BuildPlugin);
-        if ((groupId.Equals("com.fasterxml.jackson.core", StringComparison.OrdinalIgnoreCase)
-                || groupId.Equals("com.fasterxml.jackson.datatype", StringComparison.OrdinalIgnoreCase))
-            && artifactId.StartsWith("jackson-", StringComparison.OrdinalIgnoreCase))
-            return ("Jackson", FrameworkEvidenceKind.Serialization);
-        if (groupId.Equals("io.swagger.core.v3", StringComparison.OrdinalIgnoreCase)
-            || groupId.Equals("org.springdoc", StringComparison.OrdinalIgnoreCase)
-            || groupId.Equals("org.openapitools", StringComparison.OrdinalIgnoreCase))
-            return ("OpenAPI", FrameworkEvidenceKind.Web);
-
-        // Schema migration tools and JPA providers affect persistence architecture.
-        if (groupId.Equals("org.flywaydb", StringComparison.OrdinalIgnoreCase)
-            && artifactId.StartsWith("flyway-", StringComparison.OrdinalIgnoreCase))
-            return ("Flyway", FrameworkEvidenceKind.Persistence);
-        if (groupId.Equals("org.liquibase", StringComparison.OrdinalIgnoreCase)
-            && artifactId.Equals("liquibase-core", StringComparison.OrdinalIgnoreCase))
-            return ("Liquibase", FrameworkEvidenceKind.Persistence);
-        if (groupId.Equals("org.eclipse.persistence", StringComparison.OrdinalIgnoreCase)
-            && artifactId.Equals("eclipselink", StringComparison.OrdinalIgnoreCase))
-            return ("EclipseLink", FrameworkEvidenceKind.Persistence);
-
         return null;
     }
 
@@ -364,7 +323,7 @@ internal static class JavaSemanticFrameworkDetector
                         $"{dependency.Group}:{dependency.Artifact}",
                         gradle.BuildFile,
                         "gradle-static-model",
-                        IsTestConfiguration(dependency.Configuration)
+                        dependency.Configuration.Contains("test", StringComparison.OrdinalIgnoreCase)
                             || module.IsTestProject
                             || module.IsTestSupport);
                 }
@@ -408,44 +367,27 @@ internal static class JavaSemanticFrameworkDetector
         if (string.IsNullOrWhiteSpace(groupId) || string.IsNullOrWhiteSpace(artifactId))
             return null;
 
-        if (groupId.Equals("org.junit.jupiter", StringComparison.OrdinalIgnoreCase)
-            && artifactId.StartsWith("junit-jupiter", StringComparison.OrdinalIgnoreCase))
+        if (groupId == "org.junit.jupiter" && artifactId.StartsWith("junit-jupiter", StringComparison.Ordinal))
             return "JUnit 5";
-        if (groupId.Equals("org.junit.platform", StringComparison.OrdinalIgnoreCase)
-            && artifactId.StartsWith("junit-platform-", StringComparison.OrdinalIgnoreCase))
-            return "JUnit 5";
-        if (groupId.Equals("org.junit.vintage", StringComparison.OrdinalIgnoreCase)
-            && artifactId.Equals("junit-vintage-engine", StringComparison.OrdinalIgnoreCase))
-            return "JUnit 5";
-        if (groupId.Equals("junit", StringComparison.OrdinalIgnoreCase)
-            && artifactId.Equals("junit", StringComparison.OrdinalIgnoreCase))
+        if (groupId == "junit" && artifactId == "junit")
             return "JUnit 4";
-        if (groupId.Equals("org.testng", StringComparison.OrdinalIgnoreCase)
-            && artifactId.Equals("testng", StringComparison.OrdinalIgnoreCase))
+        if (groupId == "org.testng" && artifactId == "testng")
             return "TestNG";
-        if (groupId.Equals("org.mockito", StringComparison.OrdinalIgnoreCase)
-            && artifactId.StartsWith("mockito-", StringComparison.OrdinalIgnoreCase))
+        if (groupId == "org.mockito" && artifactId.StartsWith("mockito-", StringComparison.Ordinal))
             return "Mockito";
-        if (groupId.Equals("org.testcontainers", StringComparison.OrdinalIgnoreCase))
+        if (groupId == "org.testcontainers")
             return "Testcontainers";
-        if (groupId.Equals("org.assertj", StringComparison.OrdinalIgnoreCase)
-            && artifactId.StartsWith("assertj-", StringComparison.OrdinalIgnoreCase))
+        if (groupId == "org.assertj" && artifactId.StartsWith("assertj-", StringComparison.Ordinal))
             return "AssertJ";
-        if (groupId.Equals("org.springframework.boot", StringComparison.OrdinalIgnoreCase)
-            && artifactId.Equals("spring-boot-starter-test", StringComparison.OrdinalIgnoreCase))
+        if (groupId == "org.springframework.boot" && artifactId == "spring-boot-starter-test")
             return "Spring Boot Test";
-        if (groupId.Equals("io.quarkus", StringComparison.OrdinalIgnoreCase)
-            && artifactId.StartsWith("quarkus-junit", StringComparison.OrdinalIgnoreCase))
+        if (groupId == "io.quarkus" && artifactId.StartsWith("quarkus-junit", StringComparison.Ordinal))
             return "Quarkus Test";
-        if (groupId.Equals("io.micronaut.test", StringComparison.OrdinalIgnoreCase))
+        if (groupId == "io.micronaut.test")
             return "Micronaut Test";
 
         return null;
     }
-
-    private static bool IsTestConfiguration(string configuration) =>
-        configuration.Contains("test", StringComparison.OrdinalIgnoreCase)
-        || configuration.Equals("integrationTest", StringComparison.OrdinalIgnoreCase);
 
     private static string? ClassifyMavenTestPlugin(string? groupId, string? artifactId)
     {
@@ -453,12 +395,12 @@ internal static class JavaSemanticFrameworkDetector
             && !groupId.Equals("org.apache.maven.plugins", StringComparison.Ordinal))
             return null;
 
-        if (string.Equals(artifactId, "maven-surefire-plugin", StringComparison.OrdinalIgnoreCase))
-            return "Maven Surefire";
-        if (string.Equals(artifactId, "maven-failsafe-plugin", StringComparison.OrdinalIgnoreCase))
-            return "Maven Failsafe";
-
-        return null;
+        return artifactId switch
+        {
+            "maven-surefire-plugin" => "Maven Surefire",
+            "maven-failsafe-plugin" => "Maven Failsafe",
+            _ => null
+        };
     }
 
     private static string? ClassifyGradleTestPlugin(string pluginId) =>
@@ -534,9 +476,7 @@ internal static class JavaSemanticFrameworkDetector
 
     private static (string Name, FrameworkEvidenceKind Kind)? Classify(string qualifiedName)
     {
-        if (qualifiedName.StartsWith("org.junit.jupiter.api.", StringComparison.Ordinal)
-            || qualifiedName.StartsWith("org.junit.platform.", StringComparison.Ordinal)
-            || qualifiedName.StartsWith("org.junit.vintage.", StringComparison.Ordinal))
+        if (qualifiedName.StartsWith("org.junit.jupiter.api.", StringComparison.Ordinal))
             return ("JUnit 5", FrameworkEvidenceKind.Testing);
         if (qualifiedName.StartsWith("org.junit.", StringComparison.Ordinal))
             return ("JUnit 4", FrameworkEvidenceKind.Testing);
@@ -544,8 +484,6 @@ internal static class JavaSemanticFrameworkDetector
             return ("TestNG", FrameworkEvidenceKind.Testing);
         if (qualifiedName.StartsWith("org.mockito.", StringComparison.Ordinal))
             return ("Mockito", FrameworkEvidenceKind.Testing);
-        if (qualifiedName.StartsWith("org.testcontainers.", StringComparison.Ordinal))
-            return ("Testcontainers", FrameworkEvidenceKind.Testing);
         if (qualifiedName.StartsWith("org.springframework.boot.test.", StringComparison.Ordinal))
             return ("Spring Boot Test", FrameworkEvidenceKind.Testing);
         if (qualifiedName.StartsWith("io.quarkus.test.", StringComparison.Ordinal))

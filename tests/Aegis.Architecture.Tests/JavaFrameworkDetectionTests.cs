@@ -1,4 +1,5 @@
 using Aegis.Architecture.Analysis;
+using Aegis.Shared.Architecture.Enums;
 using Xunit;
 
 namespace Aegis.Architecture.Tests;

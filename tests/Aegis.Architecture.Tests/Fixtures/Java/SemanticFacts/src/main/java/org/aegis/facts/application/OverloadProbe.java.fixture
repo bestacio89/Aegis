@@ -1,0 +1,14 @@
+package org.aegis.facts.application;
+
+public final class OverloadProbe {
+    private OverloadProbe() {
+    }
+
+    public static String select(String value) {
+        return value;
+    }
+
+    public static String select(Integer value) {
+        return value.toString();
+    }
+}

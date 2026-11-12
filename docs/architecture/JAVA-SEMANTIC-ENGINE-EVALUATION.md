@@ -144,3 +144,27 @@ All mandatory workflows passed on implementation head 3f1824e80d760b5f636466dab8
 The classpath snapshots are controlled Maven fixture inputs, not J1-generated resolved artifacts and not evidence of a general Aegis dependency resolver. Gradle variant selection, complete Maven/Gradle scope semantics, arbitrary transitive/exclusion behaviour, JPMS module paths and production artifact resolution remain open. The one conflict fixture verifies the resolved output of Maven for a pinned case; it does not implement general conflict mediation.
 
 **Decision:** J2-A2 accepted. Continue J2-A with an engine-neutral semantic fact oracle and equivalent extraction coverage. Full J2-A remains in progress; J2-B remains blocked.
+
+
+## J2-A3 — Engine-neutral semantic fact oracle — in progress
+
+The next evaluation input is a stable fact corpus, independent of either candidate engine's AST model. It is checked in at tools/java-semantic-spike/semantic-facts.tsv, with source fixtures under tests/Aegis.Architecture.Tests/Fixtures/Java/SemanticFacts/.
+
+The initial corpus contains 11 stable IDs across 11 categories:
+- type declaration;
+- inheritance;
+- generic supertype substitution;
+- annotation;
+- constructor invocation;
+- method invocation;
+- overload selection;
+- method reference;
+- JPMS requires;
+- JPMS exports;
+- intentionally unresolved type.
+
+Every row identifies the owning module and source set, the fixture source, a source identity, the expected target identity and whether the target must resolve. Type identities use fully qualified names. Member identities use owner#member(parameter-types):return-type; constructors use <init>. Generic source-level identities preserve their type arguments. For unresolved facts, the expected qualified symbol remains explicit while the expected binding state is unresolved.
+
+SemanticFactCorpusValidator validates the tab-separated contract, stable and unique fact IDs, required categories, identity fields, source-set values, fixture path containment and fixture existence. This validates the oracle itself; it does not run semantic extraction and must not be interpreted as a JDT/JavaParser result.
+
+**Acceptance boundary:** J2-A3 requires the corpus validator to pass in CI and the contract to be reviewed. J2-A4 will implement equivalent extraction of these same fact IDs and compare target identities and resolution outcomes per fact. Full J2-A remains in progress; J2-B remains blocked.

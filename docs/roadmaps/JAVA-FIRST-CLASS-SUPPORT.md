@@ -880,3 +880,16 @@ All three mandatory workflows passed on implementation head 3f1824e80d760b5f6364
 This is controlled Maven-fixture evidence only. It does not implement dependency resolution in Aegis, export resolved artifacts from J1, establish Gradle variant selection, model every Maven scope or Gradle configuration, prove arbitrary transitive/exclusion semantics, or cover JPMS module-path visibility. Conflict mediation is verified for one pinned fixture, not implemented as a general resolver.
 
 **Decision:** J2-A2 accepted. Continue J2-A with an engine-neutral semantic fact oracle and equivalent extraction coverage. Full J2-A remains in progress; J2-B remains blocked.
+
+
+# J2-A3 — Engine-neutral semantic fact oracle — in progress
+
+The next bounded checkpoint defines stable semantic fact identities before either parser-specific extractor is implemented. The corpus is stored in tools/java-semantic-spike/semantic-facts.tsv and uses fixture sources under SemanticFacts/.
+
+The initial oracle covers 11 fact IDs and 11 categories: type declaration, inheritance, generic supertype substitution, annotation, constructor invocation, method invocation, overload selection, method reference, module requires, module exports and an intentionally unresolved type.
+
+Each row records a stable fact ID, category, module, source set, fixture path, source identity, expected target identity and expected resolution state. Type identities are fully qualified. Member identities use owner#member(parameter-types):return-type; constructors use <init>. Generic source-level identities retain their type arguments. An unresolved fact names the expected qualified symbol and explicitly expects no binding.
+
+A standalone validator checks schema, stable-ID uniqueness, supported fact categories, required identities, valid source-set values, fixture containment/existence and required category coverage. It does not claim that either engine has extracted or resolved the facts.
+
+**Acceptance boundary:** J2-A3 is accepted only when the corpus validator passes in CI and the oracle contract is reviewed. Equivalent JDT/JavaParser extraction and per-fact identity comparison are the separate J2-A4 checkpoint. Full J2-A and J2-B remain blocked.

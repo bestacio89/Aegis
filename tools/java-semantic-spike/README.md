@@ -98,3 +98,12 @@ JDT receives the module's compile/test JAR entries through `ASTParser.setEnviron
 ### Limits
 
 This checkpoint validates module-owned, resolved Maven fixture classpaths and the visibility behaviour of the two candidate engines. It does not implement dependency resolution in Aegis, export resolved artifacts from J1, establish Gradle variant selection, model every Maven scope or Gradle configuration, or prove full transitive/exclusion semantics for arbitrary projects. The conflict fixture tests Maven's selected-version output for one controlled case; it is not a general conflict-resolution engine. Dynamic declarations, unresolved versions, unsupported constraints and incomplete build models must remain explicitly incomplete rather than being assigned guessed JARs.
+
+
+## Engine-neutral semantic fact oracle (J2-A3)
+
+The initial expected-fact corpus is maintained independently of JDT and JavaParser in semantic-facts.tsv. Its stable IDs refer to fixture sources under the SemanticFacts fixture tree and cover declarations, inheritance, generic substitution, annotations, constructor/method invocations, overload selection, method references, JPMS directives and an intentionally unresolved type.
+
+Member identities use a language-neutral comparison convention: fully qualified owner, member name, fully qualified parameter types and return type; constructors use <init>. Generic source-level identities preserve type arguments. The corpus validator checks contract integrity and fixture references only. It does not claim that either candidate has extracted these facts.
+
+The next checkpoint implements equivalent extraction from both ASTs against this exact oracle. A fact passes only when the expected target identity and resolution state match; aggregate AST-node counts are not used as a substitute.

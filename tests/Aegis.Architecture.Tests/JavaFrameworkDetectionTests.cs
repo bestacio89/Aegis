@@ -159,4 +159,83 @@ public sealed class JavaFrameworkDetectionTests
         }
     }
 
+
+    [Fact]
+    public void Detect_classifies_java_test_frameworks_and_maven_test_plugins_as_test_only_evidence()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisJavaTestFrameworks_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>org.example</groupId>
+                  <artifactId>test-framework-service</artifactId>
+                  <version>1.0.0</version>
+                  <dependencies>
+                    <dependency><groupId>junit</groupId><artifactId>junit</artifactId><version>4.13.2</version><scope>test</scope></dependency>
+                    <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId><version>5.12.2</version><scope>test</scope></dependency>
+                    <dependency><groupId>org.junit.platform</groupId><artifactId>junit-platform-launcher</artifactId><version>1.12.2</version><scope>test</scope></dependency>
+                    <dependency><groupId>org.junit.vintage</groupId><artifactId>junit-vintage-engine</artifactId><version>5.12.2</version><scope>test</scope></dependency>
+                    <dependency><groupId>org.testng</groupId><artifactId>testng</artifactId><version>7.10.2</version><scope>test</scope></dependency>
+                    <dependency><groupId>org.mockito</groupId><artifactId>mockito-junit-jupiter</artifactId><version>5.15.2</version><scope>test</scope></dependency>
+                    <dependency><groupId>org.assertj</groupId><artifactId>assertj-core</artifactId><version>3.27.3</version><scope>test</scope></dependency>
+                    <dependency><groupId>org.testcontainers</groupId><artifactId>junit-jupiter</artifactId><version>1.20.4</version><scope>test</scope></dependency>
+                  </dependencies>
+                  <build>
+                    <plugins>
+                      <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.5.2</version>
+                      </plugin>
+                      <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>3.5.2</version>
+                      </plugin>
+                    </plugins>
+                  </build>
+                </project>
+                """);
+            var source = Path.Combine(root, "src", "main", "java", "example", "Service.java");
+            Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+            File.WriteAllText(source, "package example; public final class Service { }");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+
+            var module = Assert.Single(context.Modules);
+            var expectedVersions = new Dictionary<string, string>
+            {
+                ["JUnit 4"] = "4.13.2",
+                ["JUnit 5"] = "5.12.2",
+                ["TestNG"] = "7.10.2",
+                ["Mockito"] = "5.15.2",
+                ["AssertJ"] = "3.27.3",
+                ["Testcontainers"] = "1.20.4",
+                ["Maven Surefire"] = "3.5.2",
+                ["Maven Failsafe"] = "3.5.2"
+            };
+
+            foreach (var (name, version) in expectedVersions)
+            {
+                var evidence = Assert.Single(module.FrameworkEvidence.Where(item => item.Name == name));
+                Assert.Equal(FrameworkEvidenceKind.Testing, evidence.Kind);
+                Assert.Equal(version, evidence.Version);
+                Assert.True(evidence.IsTestOnly);
+                Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(evidence.Provenance).Source);
+                Assert.Contains(context.FrameworkEvidence, item => item.Id == evidence.Id);
+            }
+
+            Assert.DoesNotContain(module.FrameworkEvidence.Where(item =>
+                item.Name is "JUnit 4" or "JUnit 5" or "TestNG" or "Mockito" or "AssertJ" or "Testcontainers"),
+                item => !item.IsTestOnly);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
 }

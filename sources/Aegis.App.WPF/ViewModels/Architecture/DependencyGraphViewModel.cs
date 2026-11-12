@@ -125,11 +125,9 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                 .ToArray() ?? [];
             var componentNodes = _context?.ProductionComponents ?? [];
 
-            GraphProjectionOptions = buildDependencies.Length > 0 && componentNodes.Count > 0
+            GraphProjectionOptions = componentNodes.Count > 0
                 ? ["Architectural components", "Build modules"]
-                : componentNodes.Count > 0
-                    ? ["Architectural components", "Build modules"]
-                    : ["Build modules"];
+                : ["Build modules"];
 
             // Build dependencies describe independently deployable modules.
             // When semantic package nodes exist, they are the useful default

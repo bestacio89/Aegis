@@ -63,6 +63,15 @@
               <mainClass>org.aegis.spike.SemanticFactCorpusValidator</mainClass>
             </configuration>
           </execution>
+          <execution>
+            <id>semantic-fact-benchmark</id>
+            <goals>
+              <goal>java</goal>
+            </goals>
+            <configuration>
+              <mainClass>org.aegis.spike.SemanticFactBenchmark</mainClass>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
     </plugins>

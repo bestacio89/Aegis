@@ -107,3 +107,20 @@ The initial expected-fact corpus is maintained independently of JDT and JavaPars
 Member identities use a language-neutral comparison convention: fully qualified owner, member name, fully qualified parameter types and return type; constructors use <init>. Generic source-level identities preserve type arguments. The corpus validator checks contract integrity and fixture references only. It does not claim that either candidate has extracted these facts.
 
 The next checkpoint implements equivalent extraction from both ASTs against this exact oracle. A fact passes only when the expected target identity and resolution state match; aggregate AST-node counts are not used as a substitute.
+
+
+## J2-A4 — Per-fact semantic extraction
+
+The semantic fact benchmark runs JDT and JavaParser independently against the same semantic-facts.tsv oracle. Each engine must resolve the expected target identity in the fixture that owns the fact; unresolved facts must remain unresolved. Output is one JSON record per fact plus a process-level pass/fail record. A mismatch fails the workflow.
+
+Run from the repository root:
+
+```bash
+mvn -B -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-benchmark \
+  -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv"
+
+mvn -B -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-benchmark \
+  -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv"
+```
+
+The first extraction slice covers the 11 current oracle categories. It is intentionally an evaluation harness, not a production adapter. Passing this corpus is necessary but not sufficient for full J2-A: larger repositories, diagnostic taxonomy, generated code, JPMS module-path cases, repeatable performance measurements, licensing and worker-operational review remain required.

@@ -911,3 +911,14 @@ All mandatory workflows passed on implementation head 3549fdc25161102d50a23d7542
 - WPF build validation — run 43180514089, success.
 
 **Decision:** J2-A3 accepted. J2-A4 now owns equivalent JDT/JavaParser extraction and per-fact target-identity comparison. Full J2-A remains in progress; J2-B remains blocked.
+
+
+# J2-A4 — Equivalent semantic fact extraction — in progress
+
+**Objective:** Execute the J2-A3 oracle independently through Eclipse JDT and JavaParser and compare each expected target identity and resolution state.
+
+Implementation adds a dedicated SemanticFactBenchmark to the isolated spike. It materializes only the fixture files referenced by the oracle, configures each engine with the same source-root boundary and emits a per-fact JSON result. Each engine process fails when an expected resolved target is absent or an intentionally unresolved type resolves. CI runs both engines against the same 11 facts.
+
+The benchmark uses canonical identities for declarations, generic supertypes, annotations, methods and constructors. It does not compare parser-specific AST counts or treat diagnostic totals as equivalent. The source corpus and engine libraries remain isolated from Aegis production dependencies.
+
+**Acceptance boundary:** J2-A4 is not accepted until both engine runs pass all 11 facts on the same latest head, the observed identities are reviewed for parity, and all mandatory CI workflows pass. Any normalization discrepancy must be resolved explicitly; do not weaken the expected identity to make both engines pass. Full J2-A remains open and J2-B remains blocked.

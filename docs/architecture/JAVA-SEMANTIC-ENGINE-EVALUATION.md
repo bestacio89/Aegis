@@ -186,3 +186,14 @@ All mandatory workflows passed on implementation head 3549fdc25161102d50a23d7542
 - WPF build validation — run 43180514089, success.
 
 **Decision:** J2-A3 accepted. J2-A4 must implement equivalent JDT and JavaParser fact extraction and compare each stable fact ID's target identity and resolution state. Full J2-A remains open; J2-B remains blocked.
+
+
+## J2-A4 — Equivalent semantic fact extraction — in progress
+
+A dedicated semantic-fact benchmark now extracts the J2-A3 oracle through each candidate independently. The harness materializes only oracle-referenced fixtures, supplies the owning source root to the engine, and emits one JSON record per fact. The process fails if a resolved target identity is absent or if an intentionally unresolved type obtains a binding.
+
+The first extraction slice covers all 11 current categories: record declaration, record inheritance, generic interface supertype, annotation, constructor invocation, generic method invocation, overload selection, constructor method reference, JPMS requires, JPMS exports and unresolved type. Canonical method/constructor identities include fully qualified declaring type, parameter types and return type. Generic type arguments are retained.
+
+The CI workflow invokes JDT and JavaParser with the same fact corpus. This avoids using AST-node counts or engine-specific diagnostic totals as correctness proxies. The harness is isolated under tools/java-semantic-spike and introduces no production parser dependency.
+
+**Acceptance boundary:** J2-A4 requires both engines to pass every fact on the same latest commit, followed by review of their per-fact observations and all mandatory CI workflows. This first corpus remains bounded; it does not complete J2-A. Larger representative repositories, diagnostic taxonomy, generated code, JPMS module-path behaviour, repeatable performance measurement, licensing and worker-operational review remain outstanding. J2-B remains blocked.

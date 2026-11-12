@@ -54,6 +54,15 @@
               <mainClass>org.aegis.spike.ModuleVisibilityBenchmark</mainClass>
             </configuration>
           </execution>
+          <execution>
+            <id>semantic-fact-validation</id>
+            <goals>
+              <goal>java</goal>
+            </goals>
+            <configuration>
+              <mainClass>org.aegis.spike.SemanticFactCorpusValidator</mainClass>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
     </plugins>

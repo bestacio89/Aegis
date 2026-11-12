@@ -39,8 +39,7 @@ jobs:
 
       - name: Validate engine-neutral semantic fact oracle
         run: |
-          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
-            -Dexec.mainClass=org.aegis.spike.SemanticFactCorpusValidator \
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-validation \
             -Dexec.args="tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv"
 
       - name: Resolve controlled external classpath

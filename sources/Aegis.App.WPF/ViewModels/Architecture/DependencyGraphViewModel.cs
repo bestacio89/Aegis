@@ -126,16 +126,18 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             var componentNodes = _context?.ProductionComponents ?? [];
 
             GraphProjectionOptions = buildDependencies.Length > 0 && componentNodes.Count > 0
-                ? ["Build modules", "Architectural components"]
+                ? ["Architectural components", "Build modules"]
                 : componentNodes.Count > 0
                     ? ["Architectural components", "Build modules"]
                     : ["Build modules"];
 
-            var preferredProjection = buildDependencies.Length > 0
-                ? "Build modules"
-                : componentNodes.Count > 0
-                    ? "Architectural components"
-                    : "Build modules";
+            // Build dependencies describe independently deployable modules.
+            // When semantic package nodes exist, they are the useful default
+            // projection for a single-module Java application; users can still
+            // switch to the build-module graph explicitly.
+            var preferredProjection = componentNodes.Count > 0
+                ? "Architectural components"
+                : "Build modules";
 
             if (!GraphProjectionOptions.Contains(GraphProjection, StringComparer.OrdinalIgnoreCase)
                 || (!_hasUserSelectedProjection

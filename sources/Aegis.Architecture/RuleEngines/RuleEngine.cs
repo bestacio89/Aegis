@@ -594,13 +594,21 @@ public sealed class RuleEngine
             return false;
         }
 
-        // A repository context may contain several valid framework signals.
-        // The primary framework is descriptive, not an exclusive allow-list.
+        // Framework identity is module-owned. The context's primary framework
+        // remains descriptive and must not hide additional frameworks in mixed modules.
         var frameworks = new List<string>();
         if (!string.IsNullOrWhiteSpace(context.Framework))
             frameworks.Add(context.Framework);
         if (context.DetectedFrameworks is not null)
             frameworks.AddRange(context.DetectedFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+        var exactModules = context.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .Where(module => PathsEqual(module.Path, context.RootPath))
+            .ToArray();
+        var relevantModules = exactModules.Length > 0 ? exactModules : context.Modules;
+        foreach (var module in relevantModules)
+            frameworks.AddRange(module.Frameworks.Where(value => !string.IsNullOrWhiteSpace(value)));
 
         if (frameworks.Count == 0)
             return SupportsFramework(evaluator, context.Framework);
@@ -657,6 +665,12 @@ public sealed class RuleEngine
                     || evaluator.SupportedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+
+            if (languages.Length == 0)
+            {
+                missingByScope.Add($"Unknown ({Path.GetFileName(scope.Path)}): {string.Join(", ", required)}");
+                continue;
+            }
 
             foreach (var language in languages)
             {

@@ -418,6 +418,74 @@ public sealed class RuleEngineOrchestrationTests
         Assert.True(invoked);
     }
 
+    [Fact]
+    public async Task RunAsync_matches_framework_support_against_all_frameworks_owned_by_a_module()
+    {
+        using var directory = new TemporaryDirectory();
+        var invoked = false;
+        var evaluator = new FixtureEvaluator(
+            "SpringEvaluator",
+            (_, _) =>
+            {
+                invoked = true;
+                return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>([]);
+            },
+            supportedLanguages: ["Java"],
+            supportedFrameworks: ["Spring Boot"]);
+
+        await CreateEngine([evaluator]).RunAsync(
+            directory.Path,
+            new ProjectArchitectureContext
+            {
+                ProjectName = "MixedJvmProject",
+                RootPath = directory.Path,
+                Language = "C#",
+                Framework = "C#",
+                Modules =
+                [
+                    new ProjectModuleContext
+                    {
+                        Name = "MixedJvmProject",
+                        Path = directory.Path,
+                        Languages = ["C#", "Java"],
+                        Frameworks = ["Java", "Spring Boot"]
+                    }
+                ]
+            });
+
+        Assert.True(invoked);
+    }
+
+    [Fact]
+    public async Task RunAsync_fails_closed_when_required_semantic_capabilities_have_no_detected_language()
+    {
+        using var directory = new TemporaryDirectory();
+        var invoked = false;
+        var evaluator = new FixtureEvaluator(
+            "SemanticEvaluator",
+            (_, _) =>
+            {
+                invoked = true;
+                return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>([]);
+            },
+            requiredSemanticCapabilities: ["symbols"]);
+
+        var report = await CreateEngine([evaluator]).RunAsync(
+            directory.Path,
+            new ProjectArchitectureContext
+            {
+                ProjectName = "UnknownProject",
+                RootPath = directory.Path,
+                Language = "Unknown"
+            });
+
+        Assert.False(invoked);
+        var diagnostic = Assert.Single(report.Diagnostics, item =>
+            item.Code == "EvaluatorSemanticCapabilitiesUnavailable");
+        Assert.Contains("Unknown", diagnostic.Message);
+        Assert.True(diagnostic.AffectsCoverage);
+    }
+
     private static RuleEngine CreateEngine(IEnumerable<IEvaluator> evaluators)
     {
         var weighting = new RuleWeightingEngine(

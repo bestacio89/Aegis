@@ -21,7 +21,8 @@ internal static class ModuleDetector
         "settings.gradle",
         "settings.gradle.kts",
         "pyproject.toml",
-        "setup.py"
+        "setup.py",
+        "requirements.txt"
     ];
 
     public static void Analyze(
@@ -81,9 +82,10 @@ internal static class ModuleDetector
 
             var pythonManifest = projectFiles.FirstOrDefault(file =>
                 Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
-                || Path.GetFileName(file).Equals("setup.py", StringComparison.OrdinalIgnoreCase));
+                || Path.GetFileName(file).Equals("setup.py", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("requirements.txt", StringComparison.OrdinalIgnoreCase));
             if (pythonManifest is not null)
-                PopulatePythonMetadata(module);
+                PopulatePythonMetadata(module, projectFiles);
 
             if (module.BuildSystem == Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Maven)
             {
@@ -426,10 +428,84 @@ internal static class ModuleDetector
         }
     }
 
-    private static void PopulatePythonMetadata(ProjectModuleContext module)
+    private static void PopulatePythonMetadata(
+        ProjectModuleContext module,
+        IReadOnlyCollection<string> projectFiles)
     {
         if (module.ProjectKind == "Unknown")
             module.ProjectKind = "PythonProject";
+
+        var requirementsFile = projectFiles.FirstOrDefault(file =>
+            Path.GetFileName(file).Equals("requirements.txt", StringComparison.OrdinalIgnoreCase));
+        if (requirementsFile is null)
+            return;
+
+        try
+        {
+            var dependencies = File.ReadLines(requirementsFile)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0 && !line.StartsWith('#') && !line.StartsWith('-'))
+                .Select(line => line.Split(
+                    ['[', '=', '<', '>', '!', '~', ';', ' ', '@'],
+                    StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!.Replace('_', '-').ToLowerInvariant())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var backendFrameworks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["django"] = "Django",
+                ["fastapi"] = "FastAPI",
+                ["flask"] = "Flask",
+                ["starlette"] = "Starlette",
+                ["sanic"] = "Sanic",
+                ["aiohttp"] = "aiohttp",
+                ["tornado"] = "Tornado"
+            };
+
+            var frontendFrameworks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["streamlit"] = "Streamlit",
+                ["dash"] = "Dash",
+                ["gradio"] = "Gradio",
+                ["panel"] = "Panel"
+            };
+
+            var detectedBackend = backendFrameworks
+                .Where(entry => dependencies.Contains(entry.Key))
+                .Select(entry => entry.Value)
+                .ToArray();
+            var detectedFrontend = frontendFrameworks
+                .Where(entry => dependencies.Contains(entry.Key))
+                .Select(entry => entry.Value)
+                .ToArray();
+
+            foreach (var framework in detectedBackend.Concat(detectedFrontend))
+                AddFramework(module, framework);
+
+            var hasBackend = detectedBackend.Length > 0;
+            var hasFrontend = detectedFrontend.Length > 0;
+            var existingBackend = module.ProjectKind is "BackendApplication" or "FullStackApplication";
+            var existingFrontend = module.ProjectKind is "FrontendApplication" or "FullStackApplication";
+
+            if (hasBackend || hasFrontend)
+            {
+                module.ProjectKind = (hasFrontend || existingFrontend, hasBackend || existingBackend) switch
+                {
+                    (true, true) => "FullStackApplication",
+                    (true, false) => "FrontendApplication",
+                    (false, true) => "BackendApplication",
+                    _ => module.ProjectKind
+                };
+                module.IsWebProject = true;
+                module.IsExecutable = true;
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            // Unreadable dependency files do not invalidate module ownership.
+        }
     }
 
     private static void NormalizeJvmProjectMetadata(
@@ -499,7 +575,8 @@ internal static class ModuleDetector
 
         if (projectFiles.Any(file =>
                 Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
-                || Path.GetFileName(file).Equals("setup.py", StringComparison.OrdinalIgnoreCase)))
+                || Path.GetFileName(file).Equals("setup.py", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("requirements.txt", StringComparison.OrdinalIgnoreCase)))
         {
             buildSystems.Add(HasOwnedManifest(allFiles, modulePath, "poetry.lock")
                 ? Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Poetry
@@ -624,6 +701,16 @@ internal static class ModuleDetector
             {
                 // The manifest evaluator owns malformed or unreadable Maven diagnostics.
             }
+        }
+
+        var manifestName = Path.GetFileName(projectFile);
+        if (manifestName.Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
+            || manifestName.Equals("setup.py", StringComparison.OrdinalIgnoreCase)
+            || manifestName.Equals("requirements.txt", StringComparison.OrdinalIgnoreCase))
+        {
+            return Path.GetFileName(modulePath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar));
         }
 
         if (LanguageAndBuildDetector.IsGradleManifest(projectFile))

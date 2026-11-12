@@ -38,6 +38,7 @@ public sealed class PolyglotModuleDiscoveryTests
             version = "1.0.0"
             """);
         File.WriteAllText(Path.Combine(directory.Path, "poetry.lock"), "# lockfile");
+        File.WriteAllText(Path.Combine(directory.Path, "requirements.txt"), "fastapi>=0.100");
         File.WriteAllText(Path.Combine(directory.Path, "src", "sample", "__init__.py"), "VALUE = 1");
 
         var context = ProjectArchitectureContextDetector.Detect(directory.Path);
@@ -47,7 +48,29 @@ public sealed class PolyglotModuleDiscoveryTests
         Assert.Equal(ArchitectureBuildSystem.Poetry, context.BuildSystem);
         Assert.Equal(ArchitectureBuildSystem.Poetry, module.BuildSystem);
         Assert.Contains("Python", module.Languages);
-        Assert.Equal("PythonProject", module.ProjectKind);
+        Assert.Contains("FastAPI", module.Frameworks);
+        Assert.Equal("BackendApplication", module.ProjectKind);
+        Assert.Contains(ProjectModuleRole.Backend, module.Roles);
+    }
+
+    [Fact]
+    public void Detect_classifies_Python_UI_frameworks_as_frontend_modules()
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "pyproject.toml"), """
+            [project]
+            name = "analytics-dashboard"
+            version = "1.0.0"
+            """);
+        File.WriteAllText(Path.Combine(directory.Path, "requirements.txt"), "streamlit>=1.40");
+        File.WriteAllText(Path.Combine(directory.Path, "app.py"), "import streamlit");
+
+        var context = ProjectArchitectureContextDetector.Detect(directory.Path);
+        var module = Assert.Single(context.Modules);
+
+        Assert.Equal("FrontendApplication", module.ProjectKind);
+        Assert.Contains(ProjectModuleRole.Frontend, module.Roles);
+        Assert.DoesNotContain(ProjectModuleRole.Backend, module.Roles);
     }
 
     [Fact]

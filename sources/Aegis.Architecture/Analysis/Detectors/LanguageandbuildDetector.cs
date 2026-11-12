@@ -33,7 +33,8 @@ internal static class LanguageAndBuildDetector
         else if (files.Any(file =>
                      Path.GetExtension(file).Equals(".py", StringComparison.OrdinalIgnoreCase)
                      || Path.GetFileName(file).Equals("setup.py", StringComparison.OrdinalIgnoreCase)
-                     || Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)))
+                      || Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetFileName(file).Equals("requirements.txt", StringComparison.OrdinalIgnoreCase)))
         {
             context.Language = "Python";
             context.BuildSystem = ResolvePythonBuildSystem(files);

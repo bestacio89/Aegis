@@ -25,7 +25,11 @@ internal static class ModuleRoleDetector
         "Vue",
         "Next.js",
         "Nuxt",
-        "Blazor"
+        "Blazor",
+        "Streamlit",
+        "Dash",
+        "Gradio",
+        "Panel"
     };
 
     private static readonly HashSet<string> BackendFrameworks = new(StringComparer.OrdinalIgnoreCase)
@@ -40,7 +44,14 @@ internal static class ModuleRoleDetector
         "Spring Boot",
         "Quarkus",
         "Micronaut",
-        "Ktor"
+        "Ktor",
+        "Django",
+        "FastAPI",
+        "Flask",
+        "Starlette",
+        "Sanic",
+        "aiohttp",
+        "Tornado"
     };
 
     public static void Analyze(IReadOnlyCollection<ProjectModuleContext> modules)
@@ -69,6 +80,7 @@ internal static class ModuleRoleDetector
             var isFrontend = module.ProjectKind.Equals("FrontendApplication", StringComparison.OrdinalIgnoreCase)
                 || module.Frameworks.Any(FrontendFrameworks.Contains);
             var isBackend = module.ProjectKind.Equals("BackendApplication", StringComparison.OrdinalIgnoreCase)
+                || module.ProjectKind.Equals("WebApplication", StringComparison.OrdinalIgnoreCase)
                 || module.Frameworks.Any(BackendFrameworks.Contains)
                 || (module.IsWebProject && !isFrontend);
 

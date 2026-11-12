@@ -1157,7 +1157,9 @@ All three mandatory workflows passed on the exact implementation head:
 
 ## J2-A5.1 — Representative source-local semantic fact gate (2026-11-12)
 
-The pinned representative-project matrix now includes six explicit semantic facts across three real Java projects and two build ecosystems:
+**Status: accepted (bounded representative source-local semantic checkpoint).** The acceptance is limited to the six pinned source-local facts below; it does not claim full framework classpath resolution or complete Java compiler equivalence.
+
+The pinned representative-project matrix covers three real Java projects and two build ecosystems:
 
 | Project | Build model | Facts | Coverage |
 |---|---|---:|---|
@@ -1165,10 +1167,18 @@ The pinned representative-project matrix now includes six explicit semantic fact
 | Quarkus getting-started | Maven | 1 | Intra-project method invocation |
 | Micronaut starter AWS CDK module | Gradle Kotlin DSL | 2 | Cross-source inheritance and constructor invocation |
 
-Both Eclipse JDT and JavaParser are checked against the same expected source/target identities. The six baseline facts passed for both candidates on the preceding implementation head. The negative Spring Petclinic fact is important: the target method exists in the type, but the designated source method does not call it; a candidate must not fabricate that relationship.
+Both Eclipse JDT and JavaParser were checked against the same expected source/target identities. All six facts passed for both candidates. The negative Spring Petclinic fact is intentional: the target method exists in the type, but the designated source method does not call it; neither candidate fabricated that relationship.
 
-The runner is hardened to make these comparisons strict CI gates. It no longer uses report-only mode. It verifies pinned repository commits and Apache-2.0 license evidence, counts the expected facts, checks every per-fact `passed` flag and validates the terminal summary (engine, fact count, zero mismatches). A candidate regression therefore fails the Java semantic workflow instead of merely appearing in an artifact.
+The runner uses strict benchmark mode and enforces the expected fact count, every per-fact `passed` flag, terminal summary, pinned repository revision and Apache-2.0 license evidence. Any candidate regression fails the Java semantic workflow rather than being retained as report-only output.
 
-**Scope boundary:** the six facts run against project source roots plus the running JDK. No third-party dependency JARs are supplied and no project build scripts, plugins or annotation processors are executed. This is real-project source-local binding evidence, not complete framework compilation or dependency-resolution evidence. Representative parser-robustness results remain descriptive; their aggregate binding percentages are not candidate acceptance thresholds.
+**Environment boundary:** the six facts use checked-out project source roots plus the running JDK. No third-party dependency JARs are supplied and no project build scripts, plugins or annotation processors are executed. This is real-project source-local binding evidence, not full framework compilation or dependency-resolution evidence. The parser-robustness matrix remains source-roots-plus-JDK-only; its aggregate binding percentages are descriptive and are not candidate acceptance thresholds.
 
-**Acceptance:** implementation is committed; the strict gate and all three mandatory workflows must pass on the exact same PR head before this sub-checkpoint is accepted. Broader diagnostic validation, representative external classpaths, JPMS module-path coverage, worker supervision/isolation and legal review remain open. J2-A remains in progress; J2-B remains blocked.
+### Exact-head CI evidence
+
+All three mandatory workflows passed on implementation head `39a9596352c09bdcaf2d0b0a36fd1fd48d8f002d`:
+
+- Java semantic engine spike — run [43220024095](https://github.com/bestacio89/Aegis/actions/runs/43220024095), success. The strict representative semantic-fact step passed for all three projects and both candidates.
+- Non-WPF quality gates — run [43220024261](https://github.com/bestacio89/Aegis/actions/runs/43220024261), success.
+- WPF build validation — run [43220024202](https://github.com/bestacio89/Aegis/actions/runs/43220024202), success.
+
+**Decision:** accept this bounded J2-A5.1 representative source-local semantic fact checkpoint. Broader representative diagnostics, controlled external dependency classpaths, JPMS module-path coverage, worker supervision/isolation and legal review remain open. J2-A remains in progress; J2-B remains blocked.

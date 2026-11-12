@@ -121,7 +121,9 @@ public final class RepresentativeProjectBenchmark {
         for (Path sourceFile : sourceFiles) {
             try {
                 var parseResult = parser.parse(sourceFile);
-                metrics.syntaxErrors += parseResult.getProblems().size();
+                metrics.syntaxErrors += (int) parseResult.getProblems().stream()
+                    .filter(problem -> problem.isError())
+                    .count();
                 if (parseResult.getResult().isEmpty()) {
                     metrics.parseFailures++;
                     continue;
@@ -147,6 +149,9 @@ public final class RepresentativeProjectBenchmark {
                 }
 
                 for (ClassOrInterfaceType type : unit.findAll(ClassOrInterfaceType.class)) {
+                    if (isQualifiedTypeScope(type)) {
+                        continue;
+                    }
                     metrics.typeReferences++;
                     try {
                         type.resolve();
@@ -235,16 +240,47 @@ public final class RepresentativeProjectBenchmark {
 
                 @Override
                 public boolean visit(SimpleType type) {
-                    metrics.typeReferences++;
-                    ITypeBinding binding = type.resolveBinding();
-                    if (binding != null) {
-                        metrics.resolvedTypeReferences++;
-                    }
+                    recordTypeReference(type, type.resolveBinding(), metrics);
+                    return true;
+                }
+
+                @Override
+                public boolean visit(org.eclipse.jdt.core.dom.QualifiedType type) {
+                    recordTypeReference(type, type.resolveBinding(), metrics);
+                    return true;
+                }
+
+                @Override
+                public boolean visit(org.eclipse.jdt.core.dom.NameQualifiedType type) {
+                    recordTypeReference(type, type.resolveBinding(), metrics);
                     return true;
                 }
             });
         }
         return metrics;
+    }
+
+    private static boolean isQualifiedTypeScope(ClassOrInterfaceType type) {
+        return type.getParentNode()
+            .filter(ClassOrInterfaceType.class::isInstance)
+            .map(ClassOrInterfaceType.class::cast)
+            .flatMap(ClassOrInterfaceType::getScope)
+            .filter(scope -> scope == type)
+            .isPresent();
+    }
+
+    private static void recordTypeReference(
+        org.eclipse.jdt.core.dom.Type type,
+        ITypeBinding binding,
+        Metrics metrics) {
+        if (type.getParent() instanceof org.eclipse.jdt.core.dom.QualifiedType parent
+            && parent.getQualifier() == type) {
+            return;
+        }
+        metrics.typeReferences++;
+        if (binding != null) {
+            metrics.resolvedTypeReferences++;
+        }
     }
 
     private static List<Path> resolveRoots(Path projectRoot, String value) {
@@ -326,6 +362,7 @@ public final class RepresentativeProjectBenchmark {
                 + "\"filesDiscovered\":%d,\"filesParsed\":%d,\"parseFailures\":%d,"
                 + "\"syntaxErrors\":%d,\"typeDeclarations\":%d,\"methodDeclarations\":%d,"
                 + "\"methodCalls\":%d,\"resolvedMethodCalls\":%d,\"unresolvedMethodCalls\":%d,"
+                + "\"typeReferenceMetric\":\"outermost-reference-type-nodes-v1\","
                 + "\"typeReferences\":%d,\"resolvedTypeReferences\":%d,\"unresolvedTypeReferences\":%d,"
                 + "\"methodCallResolutionPercent\":%.2f,\"typeResolutionPercent\":%.2f,"
                 + "\"elapsedMillis\":%d}%n",

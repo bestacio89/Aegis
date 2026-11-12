@@ -35,6 +35,7 @@ run_benchmark() {
     and .parseFailures == 0
     and .syntaxErrors == 0
     and .environment == "source-roots+jdk-only"
+    and .typeReferenceMetric == "outermost-reference-type-nodes-v1"
   ' "$output" > /dev/null
 }
 

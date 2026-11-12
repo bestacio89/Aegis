@@ -140,10 +140,10 @@ public final class SemanticDiagnosticCorpusValidator {
 
         String missingCategoriesJson = missingCategories.stream()
             .sorted()
-            .map(category -> "\\"" + category + "\\"")
+            .map(category -> "\"" + category + "\"")
             .collect(Collectors.joining(",", "[", "]"));
         System.out.printf(
-            "{\\"status\\":\\"passed\\",\\"cases\\":%d,\\"categories\\":%d,\\"missingCategories\\":%s}%n",
+            "{\"status\":\"passed\",\"cases\":%d,\"categories\":%d,\"missingCategories\":%s}%n",
             caseCount, observedCategories.size(), missingCategoriesJson);
     }
 

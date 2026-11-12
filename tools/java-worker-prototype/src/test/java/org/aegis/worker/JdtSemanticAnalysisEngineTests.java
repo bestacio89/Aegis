@@ -160,14 +160,6 @@ final class JdtSemanticAnalysisEngineTests {
             item.getAsJsonObject().get("kind").getAsInt() == 4
                 && item.getAsJsonObject().get("resolutionStatus").getAsInt() == 1));
 
-        String resolvedApiSymbolId = resolvedResult.getAsJsonArray("relationships").asList().stream()
-            .map(item -> item.getAsJsonObject())
-            .filter(item -> item.get("kind").getAsInt() == 5
-                && item.get("resolutionStatus").getAsInt() == 1)
-            .map(item -> item.get("targetSymbolId").getAsString())
-            .findFirst()
-            .orElseThrow();
-
         JsonObject apiPayload = new JsonObject();
         apiPayload.addProperty("projectPath", apiProject.toString());
         apiPayload.addProperty("workspaceRoot", workspace.toString());
@@ -179,6 +171,15 @@ final class JdtSemanticAnalysisEngineTests {
             .map(item -> item.getAsJsonObject())
             .filter(item -> item.get("qualifiedName").getAsString().equals("api.PublicApi"))
             .map(item -> item.get("id").getAsString())
+            .findFirst()
+            .orElseThrow();
+
+        String resolvedApiSymbolId = resolvedResult.getAsJsonArray("relationships").asList().stream()
+            .map(item -> item.getAsJsonObject())
+            .filter(item -> item.get("kind").getAsInt() == 5
+                && item.get("resolutionStatus").getAsInt() == 1
+                && item.get("targetSymbolId").getAsString().equals(declaredApiSymbolId))
+            .map(item -> item.get("targetSymbolId").getAsString())
             .findFirst()
             .orElseThrow();
 

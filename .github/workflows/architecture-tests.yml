@@ -41,6 +41,8 @@ jobs:
 
       - name: run all non-WPF test projects
         shell: pwsh
+        env:
+          AEGIS_JAVA_WORKER_PACKAGE: ${{ github.workspace }}/artifacts/java-worker-package/Java
         run: |
           $projects = Get-ChildItem tests -Recurse -Filter *.csproj | Sort-Object FullName
           if (-not $projects) {

@@ -829,3 +829,23 @@ J2-A is accepted only when:
 - a production recommendation is supported by evidence and known limitations.
 
 **Decision:** engine selection remains open. J2-B production integration is blocked until J2-A is accepted.
+
+
+# J2-A1 — Module-scoped semantic visibility — 2026-11-12
+
+**Status: accepted (bounded implementation checkpoint).** This is not full J2-A acceptance and does not authorize production engine selection or J2-B integration.
+
+The isolated JDT and JavaParser benchmark now receives module-owned production/test source roots and explicit project dependency edges from a controlled J1 fixture projection. Both engines pass the same four visibility assertions:
+1. Declared consumer-to-API dependency resolves.
+2. Undeclared isolated-to-API reference remains unresolved.
+3. Production code cannot resolve a test-only support dependency.
+4. Test code can resolve its declared test-only support dependency.
+
+Each engine passed 4/4 expected facts across 11 observations (7 resolved, 4 unresolved). This is fixture gate evidence, not a cross-engine accuracy ranking.
+
+All three mandatory workflows passed on `021feeeb0998a4d3c65ef3e2236183d88ffc2553`:
+- Java semantic engine spike — run `43174315755`, success.
+- Non-WPF quality gates — run `43174315694`, success.
+- WPF build validation — run `43174315692`, success.
+
+**Decision:** J2-A1 accepted. J2-A continues with module-owned external artifact classpaths, dependency scopes/exclusions/conflicts, JPMS module-path behaviour, broader semantic fact coverage, representative corpora, repeatable performance measurement and operational/legal review. J2-B remains blocked.

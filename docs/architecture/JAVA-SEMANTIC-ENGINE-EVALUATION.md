@@ -75,3 +75,38 @@ A single run with an approximate post-run heap snapshot is not a reliable benchm
 J2-A requires module-aware visibility correctness, the same semantic fact oracle across candidates, explicit diagnostic taxonomy, representative corpus coverage, repeatable performance measurements, legal/operational review, and an evidence-backed production recommendation.
 
 **Current decision:** no production engine selected. J2-B remains blocked.
+
+
+## J2-A1 — Module-scoped project and source-set visibility — accepted
+
+**Checkpoint result:** accepted on 2026-11-12. This accepts the first bounded J2-A implementation slice only; it does not accept the full J2-A evaluation or select a production engine.
+
+The isolated visibility harness now consumes an explicit, reviewable projection of J1 fixture evidence:
+- module-owned production source roots;
+- module-owned test source roots;
+- declared production project-dependency edges;
+- declared test-only project-dependency edges.
+
+The same fixture and four expected visibility outcomes are evaluated independently by Eclipse JDT and JavaParser.
+
+| Expected fact | JDT | JavaParser |
+|---|---|---|
+| Declared consumer resolves API module type | Pass | Pass |
+| Undeclared isolated module cannot resolve API module type | Pass | Pass |
+| Production source cannot resolve test-only support dependency | Pass | Pass |
+| Test source can resolve its declared test-only support dependency | Pass | Pass |
+
+Each engine reported 4/4 expected facts satisfied across 11 observations (7 resolved, 4 unresolved). The observations are gate evidence for this fixture, not comparative accuracy metrics.
+
+### J2-A1 CI evidence
+
+All mandatory workflows passed on implementation head `021feeeb0998a4d3c65ef3e2236183d88ffc2553`:
+- Java semantic engine spike — run `43174315755`, success; includes both module-visibility engine runs.
+- Non-WPF quality gates — run `43174315694`, success.
+- WPF build validation — run `43174315692`, success.
+
+### Boundaries retained
+
+The manifest is a controlled fixture projection, not yet a general exporter from every Maven/Gradle model. It proves source-root and project-dependency isolation for the declared cases. It does not yet prove external artifact classpath ownership, Maven/Gradle scope completeness, exclusions, dependency conflict selection, JPMS module-path visibility, generated-source completeness or arbitrary transitive build-model behaviour.
+
+**Decision:** J2-A1 accepted. Continue J2-A with module-owned external artifact classpaths and broader visibility matrices. Full J2-A remains in progress; J2-B remains blocked.

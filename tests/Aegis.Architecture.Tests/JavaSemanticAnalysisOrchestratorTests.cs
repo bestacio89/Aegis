@@ -62,6 +62,65 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
         }
     }
 
+    [Fact]
+    public async Task Adds_compiler_confirmed_framework_annotation_evidence()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var sourceRoot = Path.Combine(repository, "src", "main", "java");
+        Directory.CreateDirectory(sourceRoot);
+        var sourceFile = Path.Combine(sourceRoot, "Service.java");
+        await File.WriteAllTextAsync(sourceFile, "package sample; public class Service {}");
+
+        try
+        {
+            var adapter = new AnnotationJavaAdapter(sourceFile);
+            var orchestrator = new JavaSemanticAnalysisOrchestrator(
+                [adapter],
+                new EmptyClasspathResolver(),
+                NullLogger<JavaSemanticAnalysisOrchestrator>.Instance);
+            var module = new ProjectModuleContext
+            {
+                Name = "service",
+                Path = repository,
+                Languages = ["Java"],
+                Framework = "Java SE",
+                SourceRoots =
+                [
+                    new ProjectSourceRoot
+                    {
+                        Directory = sourceRoot,
+                        Ownership = ProjectSourceRootOwnership.Production,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    }
+                ]
+            };
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "service",
+                RootPath = repository,
+                Language = "Java",
+                Framework = "Java SE",
+                Modules = [module]
+            };
+
+            await orchestrator.AnalyzeAsync(context);
+
+            Assert.Contains("Spring Framework", module.Frameworks);
+            Assert.Contains("Spring Framework", context.DetectedFrameworks);
+            var evidence = Assert.Single(module.FrameworkEvidence);
+            Assert.Equal(FrameworkEvidenceKind.Web, evidence.Kind);
+            Assert.False(evidence.IsTestOnly);
+            Assert.Equal(SemanticEvidenceSource.Compiler, Assert.Single(evidence.Provenance).Source);
+            Assert.Equal(sourceFile, evidence.Provenance[0].FilePath);
+            Assert.Equal("Spring Framework", context.Framework);
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
     private static ProjectModuleContext CreateModule(string name, string path, string sourceRoot) =>
         new()
         {
@@ -106,6 +165,66 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
                 Status = SemanticAnalysisStatus.Completed,
                 AnalyzedFileCount = request.SourceFiles.Count
             });
+        }
+    }
+
+    private sealed class AnnotationJavaAdapter : ISemanticAnalysisAdapter
+    {
+        private readonly string _sourceFile;
+
+        public AnnotationJavaAdapter(string sourceFile) => _sourceFile = sourceFile;
+
+        public string AdapterId => "eclipse-jdt";
+        public string Language => "Java";
+        public IReadOnlyCollection<string> SupportedCapabilities => ["symbols", "annotations"];
+
+        public bool CanAnalyze(SemanticAnalysisRequest request) => true;
+
+        public ValueTask<SemanticAnalysisRun> AnalyzeAsync(
+            SemanticAnalysisRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            var run = new SemanticAnalysisRun
+            {
+                RunId = Guid.NewGuid().ToString("N"),
+                Language = "Java",
+                EngineId = AdapterId,
+                ProjectPath = request.ProjectPath,
+                Status = SemanticAnalysisStatus.Completed,
+                AnalyzedFileCount = 1,
+                Symbols =
+                [
+                    new SemanticSymbol { Id = "source", QualifiedName = "sample.Service" },
+                    new SemanticSymbol
+                    {
+                        Id = "annotation",
+                        QualifiedName = "org.springframework.web.bind.annotation.RestController"
+                    }
+                ],
+                Relationships =
+                [
+                    new SemanticRelationship
+                    {
+                        Id = "annotation-use",
+                        SourceSymbolId = "source",
+                        TargetSymbolId = "annotation",
+                        Kind = SemanticRelationshipKind.UsesAnnotation,
+                        ResolutionStatus = SemanticResolutionStatus.Resolved,
+                        Provenance =
+                        [
+                            new SemanticEvidenceProvenance
+                            {
+                                Source = SemanticEvidenceSource.Compiler,
+                                FilePath = _sourceFile,
+                                StartLine = 4,
+                                StartColumn = 1,
+                                Confidence = 1.0
+                            }
+                        ]
+                    }
+                ]
+            };
+            return ValueTask.FromResult(run);
         }
     }
 

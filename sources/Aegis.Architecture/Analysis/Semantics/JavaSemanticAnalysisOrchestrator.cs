@@ -117,6 +117,8 @@ public sealed class JavaSemanticAnalysisOrchestrator
                 run.Relationships.Count,
                 run.Diagnostics.Count);
         }
+
+        JavaSemanticFrameworkDetector.Analyze(context);
     }
 
     private static bool IsJavaModule(

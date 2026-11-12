@@ -30,7 +30,27 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
 
     public IReadOnlyList<string> LayerFilters { get; private set; }
 
-    public IReadOnlyList<string> ScopeFilters { get; } 
+    public IReadOnlyList<string> ScopeFilters { get; }
+
+    public IReadOnlyList<string> IntegrationPatterns { get; } =
+        ["RequestResponse", "PublishSubscribe", "Streaming", "SharedStorage", "Other"];
+
+    public IReadOnlyList<string> IntegrationProtocols { get; } =
+        ["HTTP", "HTTPS", "gRPC", "AMQP", "Kafka", "WebSocket", "SharedDatabase", "FileTransfer", "Other"];
+
+    public ObservableCollection<ProjectModuleContext> IntegrationModules { get; } = new();
+    public ObservableCollection<ArchitectureIntegrationContext> ApplicationIntegrations { get; } = new();
+    private ProjectArchitectureContext? _context;
+
+    [ObservableProperty] private ProjectModuleContext? selectedIntegrationSource;
+    [ObservableProperty] private ProjectModuleContext? selectedIntegrationTarget;
+    [ObservableProperty] private string selectedIntegrationPattern = "RequestResponse";
+    [ObservableProperty] private string selectedIntegrationProtocol = "HTTP";
+    [ObservableProperty] private string integrationNotes = string.Empty;
+    [ObservableProperty] private ArchitectureIntegrationContext? selectedApplicationIntegration;
+    [ObservableProperty] private string integrationStatus = string.Empty;
+
+ 
 
     [ObservableProperty] private string projectName = "No assessment loaded";
     [ObservableProperty] private string searchText = string.Empty;
@@ -49,8 +69,19 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
     partial void OnSelectedDependencyChanged(ArchitectureDependencyContext? value) =>
         CopySelectedDependencyCommand.NotifyCanExecuteChanged();
 
+    partial void OnSelectedIntegrationSourceChanged(ProjectModuleContext? value) =>
+        AddApplicationIntegrationCommand.NotifyCanExecuteChanged();
+
+    partial void OnSelectedIntegrationTargetChanged(ProjectModuleContext? value) =>
+        AddApplicationIntegrationCommand.NotifyCanExecuteChanged();
+
+    partial void OnSelectedApplicationIntegrationChanged(ArchitectureIntegrationContext? value) =>
+        RemoveApplicationIntegrationCommand.NotifyCanExecuteChanged();
+
+
     public void Update(ProjectArchitectureContext? context)
     {
+        _context = context;
         ProjectName = string.IsNullOrWhiteSpace(context?.ProjectName)
             ? "No architecture context available"
             : context.ProjectName;
@@ -88,8 +119,90 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
         OnPropertyChanged(nameof(LayerFilters));
 
         TotalDependencies = dependencies.Length;
+
+        IntegrationModules.Clear();
+        ApplicationIntegrations.Clear();
+        if (context is not null)
+        {
+            foreach (var module in context.ProductionModules.OrderBy(module => module.Name, StringComparer.OrdinalIgnoreCase))
+                IntegrationModules.Add(module);
+            foreach (var integration in context.ApplicationIntegrations)
+                ApplicationIntegrations.Add(integration);
+        }
+
+        SelectedIntegrationSource = IntegrationModules.FirstOrDefault();
+        SelectedIntegrationTarget = IntegrationModules.Skip(1).FirstOrDefault();
+        SelectedApplicationIntegration = null;
+        IntegrationStatus = string.Empty;
+        AddApplicationIntegrationCommand.NotifyCanExecuteChanged();
+        RemoveApplicationIntegrationCommand.NotifyCanExecuteChanged();
         RefreshFilter();
     }
+
+    [RelayCommand(CanExecute = nameof(CanAddApplicationIntegration))]
+    private void AddApplicationIntegration()
+    {
+        if (_context is null || SelectedIntegrationSource is not { } source || SelectedIntegrationTarget is not { } target)
+            return;
+
+        if (PathsEqual(source.Path, target.Path))
+        {
+            IntegrationStatus = "Source and target must be different modules.";
+            return;
+        }
+
+        if (_context.ApplicationIntegrations.Any(integration =>
+                PathsEqual(integration.SourceModulePath, source.Path)
+                && PathsEqual(integration.TargetModulePath, target.Path)
+                && integration.InteractionPattern.Equals(SelectedIntegrationPattern, StringComparison.OrdinalIgnoreCase)
+                && integration.Protocol.Equals(SelectedIntegrationProtocol, StringComparison.OrdinalIgnoreCase)))
+        {
+            IntegrationStatus = "This application integration is already declared.";
+            return;
+        }
+
+        var integration = new ArchitectureIntegrationContext
+        {
+            SourceModuleName = source.Name,
+            SourceModulePath = Path.GetFullPath(source.Path),
+            TargetModuleName = target.Name,
+            TargetModulePath = Path.GetFullPath(target.Path),
+            InteractionPattern = SelectedIntegrationPattern,
+            Protocol = SelectedIntegrationProtocol,
+            EvidenceOrigin = "UserDefined",
+            Notes = string.IsNullOrWhiteSpace(IntegrationNotes) ? null : IntegrationNotes.Trim()
+        };
+
+        _context.ApplicationIntegrations.Add(integration);
+        ApplicationIntegrations.Add(integration);
+        SelectedApplicationIntegration = integration;
+        IntegrationNotes = string.Empty;
+        IntegrationStatus = "User-defined integration added to the current architecture context.";
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRemoveApplicationIntegration))]
+    private void RemoveApplicationIntegration()
+    {
+        if (_context is null || SelectedApplicationIntegration is not { } integration)
+            return;
+
+        _context.ApplicationIntegrations.RemoveAll(candidate => candidate.Id == integration.Id);
+        ApplicationIntegrations.Remove(integration);
+        SelectedApplicationIntegration = null;
+        IntegrationStatus = "Integration removed from the current architecture context.";
+    }
+
+    private bool CanAddApplicationIntegration() =>
+        _context is not null && SelectedIntegrationSource is not null
+        && SelectedIntegrationTarget is not null && IntegrationModules.Count > 1;
+
+    private bool CanRemoveApplicationIntegration() => SelectedApplicationIntegration is not null;
+
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(
+            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     [RelayCommand]
     private void ClearFilters()

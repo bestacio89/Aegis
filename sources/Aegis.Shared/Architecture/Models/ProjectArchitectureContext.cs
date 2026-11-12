@@ -154,6 +154,9 @@ public sealed class ProjectArchitectureContext
     /// </summary>
     public List<ArchitectureDependencyContext> Dependencies { get; set; } = new();
 
+    /// <summary>Runtime integrations, distinct from compile-time/build dependency edges.</summary>
+    public List<ArchitectureIntegrationContext> ApplicationIntegrations { get; set; } = [];
+
     /// <summary>
     /// Declared, resolved, or observed package/build dependencies. This inventory
     /// is separate from internal project-to-project architecture graph edges.

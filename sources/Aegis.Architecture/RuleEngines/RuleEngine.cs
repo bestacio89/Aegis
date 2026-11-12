@@ -522,6 +522,7 @@ public sealed class RuleEngine
                 // Otherwise project-scoped evaluators lose cross-project
                 // references and misclassify layer relationships as absent.
                 moduleContext.Modules = rootContext.Modules;
+                moduleContext.SemanticAnalysisRuns = rootContext.SemanticAnalysisRuns;
                 moduleContext.Layers = rootContext.Layers;
                 moduleContext.Dependencies = rootContext.Dependencies;
                 moduleContext.Boundaries = rootContext.Boundaries;

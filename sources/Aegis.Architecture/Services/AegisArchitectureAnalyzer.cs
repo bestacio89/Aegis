@@ -2,6 +2,7 @@
 
 using Aegis.Architecture.Analysis;
 using Aegis.Architecture.RuleEngines;
+using Aegis.Architecture.Analysis.Semantics;
 using Aegis.Shared.Architecture.Models;
 using Microsoft.Extensions.Logging;
 
@@ -27,14 +28,20 @@ public sealed class AegisArchitectureAnalyzer
 {
     private readonly RuleEngine _ruleEngine;
     private readonly ILogger<AegisArchitectureAnalyzer> _logger;
+    private readonly JavaSemanticAnalysisOrchestrator? _semanticAnalysisOrchestrator;
 
 
     public AegisArchitectureAnalyzer(
         RuleEngine ruleEngine,
-        ILogger<AegisArchitectureAnalyzer> logger)
+        ILogger<AegisArchitectureAnalyzer> logger,
+        JavaSemanticAnalysisOrchestrator? semanticAnalysisOrchestrator = null)
     {
+        ArgumentNullException.ThrowIfNull(ruleEngine);
+        ArgumentNullException.ThrowIfNull(logger);
+
         _ruleEngine = ruleEngine;
         _logger = logger;
+        _semanticAnalysisOrchestrator = semanticAnalysisOrchestrator;
     }
 
 
@@ -69,6 +76,12 @@ public sealed class AegisArchitectureAnalyzer
             context.ArchitectureStyle ?? "Unknown");
 
 
+
+        if (_semanticAnalysisOrchestrator is not null)
+        {
+            await _semanticAnalysisOrchestrator.AnalyzeAsync(context, token)
+                .ConfigureAwait(false);
+        }
 
         var report =
             await _ruleEngine.RunAsync(

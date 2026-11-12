@@ -17,22 +17,20 @@ public sealed class JavaSemanticAnalysisOrchestrator
             ".git", ".gradle", ".idea", "bin", "build", "node_modules", "obj", "out", "target"
         };
 
-    private readonly ISemanticAnalysisAdapter _adapter;
+    private readonly SemanticAnalysisCoordinator _coordinator;
     private readonly IJavaClasspathResolver _classpathResolver;
     private readonly ILogger<JavaSemanticAnalysisOrchestrator> _logger;
 
     public JavaSemanticAnalysisOrchestrator(
-        IEnumerable<ISemanticAnalysisAdapter> adapters,
+        SemanticAnalysisCoordinator coordinator,
         IJavaClasspathResolver classpathResolver,
         ILogger<JavaSemanticAnalysisOrchestrator> logger)
     {
-        ArgumentNullException.ThrowIfNull(adapters);
+        ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(classpathResolver);
         ArgumentNullException.ThrowIfNull(logger);
 
-        _adapter = adapters.FirstOrDefault(adapter =>
-                adapter.Language.Equals("Java", StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException("The Java semantic analysis adapter is not registered.");
+        _coordinator = coordinator;
         _classpathResolver = classpathResolver;
         _logger = logger;
     }
@@ -158,17 +156,14 @@ public sealed class JavaSemanticAnalysisOrchestrator
             UnresolvedClasspathDependencies = classpath.UnresolvedDependencies,
             ClasspathResolutionComplete = classpath.IsComplete,
             BuildFiles = module.ProjectFiles.ToArray(),
-            RequestedCapabilities = _adapter.SupportedCapabilities.ToArray(),
+            RequestedCapabilities = ["symbols", "relationships", "compiler-diagnostics"],
             SourceLevel = ResolveSourceLevel(module),
             HasDeclaredDependencies = classpath.HasDeclaredDependencies,
             IncludeGeneratedCode = true,
             IncludeTestCode = includeTestCode
         };
 
-        if (!_adapter.CanAnalyze(request))
-            return;
-
-        var run = await _adapter.AnalyzeAsync(request, cancellationToken)
+        var run = await _coordinator.AnalyzeAsync(request, cancellationToken)
             .ConfigureAwait(false);
         context.SemanticAnalysisRuns.Add(run);
 

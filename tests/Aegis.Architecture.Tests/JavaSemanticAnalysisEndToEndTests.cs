@@ -3,23 +3,18 @@ using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Xunit;
-using Xunit.Sdk;
 
 namespace Aegis.Architecture.Tests;
 
 public sealed class JavaSemanticAnalysisEndToEndTests
 {
-    [Fact]
+    [RequiresJavaWorkerPackage]
     [Trait("Category", "Integration")]
     public async Task Packaged_jdt_worker_produces_semantic_evidence_through_the_production_orchestrator()
     {
-        var packageRoot = Environment.GetEnvironmentVariable("AEGIS_JAVA_WORKER_PACKAGE");
-        if (string.IsNullOrWhiteSpace(packageRoot))
-            throw new SkipException("Set AEGIS_JAVA_WORKER_PACKAGE to the packaged Java worker directory to run this integration test.");
-
-        packageRoot = Path.GetFullPath(packageRoot);
+        var packageRoot = Path.GetFullPath(
+            Environment.GetEnvironmentVariable("AEGIS_JAVA_WORKER_PACKAGE")!);
         var javaExecutable = Path.Combine(
             packageRoot,
             "runtime",
@@ -28,12 +23,13 @@ public sealed class JavaSemanticAnalysisEndToEndTests
         var workerClasses = Path.Combine(packageRoot, "worker", "classes");
         var workerLibraries = Path.Combine(packageRoot, "worker", "lib");
 
-        if (!File.Exists(javaExecutable)
-            || !File.Exists(Path.Combine(workerClasses, "org", "aegis", "worker", "WorkerMain.class"))
-            || !File.Exists(Path.Combine(workerLibraries, "org.eclipse.jdt.core-3.47.0.jar")))
-        {
-            throw new SkipException("The packaged Eclipse JDT worker is unavailable; run Package-Worker.ps1 before this integration test.");
-        }
+        Assert.True(File.Exists(javaExecutable), $"Private Java runtime not found: {javaExecutable}");
+        Assert.True(
+            File.Exists(Path.Combine(workerClasses, "org", "aegis", "worker", "WorkerMain.class")),
+            "Packaged Java worker classes were not found.");
+        Assert.True(
+            File.Exists(Path.Combine(workerLibraries, "org.eclipse.jdt.core-3.47.0.jar")),
+            "Packaged Eclipse JDT dependency was not found.");
 
         var workspace = Path.Combine(Path.GetTempPath(), $"aegis-jdt-e2e-{Guid.NewGuid():N}");
         var sourceRoot = Path.Combine(workspace, "src", "main", "java", "sample");

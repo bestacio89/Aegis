@@ -420,3 +420,8 @@ The representative semantic fact oracle contains eleven facts: JDT passed 11/11;
 The external classpath raised Spring Petclinic method-call resolution from 118/230 (JDT) and 115/230 (JavaParser) to 206/230 for both. Quarkus remained 1/1 for both. Micronaut reached 16/16 for JDT, while JavaParser remained at 9/16. Both candidates resolved all measured type references in the Micronaut curated-classpath run. Spring's type-reference denominators differ by one between AST models, so these aggregate values are descriptive, not a claim of identical AST inventories.
 
 The curated classpaths are explicit evaluation inputs, not complete project dependency graphs. No representative project build scripts, wrappers, plugins or annotation processors are executed. The `elapsedMillis` values are single-run observations and are not performance results.
+
+
+### JavaParser comment attribution in semantic runs
+
+Both the representative-project and semantic-fact JavaParser configurations disable comment attribution with `setAttributeComments(false)`. Comments are not semantic inputs, and attaching line comments to fluent method-call AST nodes can contaminate the expression representation consumed by Symbol Solver. The source text is unchanged; this configuration only keeps comments out of semantic AST attribution. The pinned Petclinic and Quarkus test sources provide regression coverage for comment-bearing and fluent-call expressions.

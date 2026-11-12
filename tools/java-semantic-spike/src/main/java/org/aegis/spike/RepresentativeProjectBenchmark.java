@@ -136,7 +136,8 @@ public final class RepresentativeProjectBenchmark {
         int sourceLevel) throws IOException {
 
         ParserConfiguration sourceConfiguration = new ParserConfiguration()
-            .setLanguageLevel(javaParserLanguageLevel(sourceLevel));
+            .setLanguageLevel(javaParserLanguageLevel(sourceLevel))
+            .setAttributeComments(false);
         CombinedTypeSolver typeSolver = new CombinedTypeSolver();
         typeSolver.add(new ReflectionTypeSolver());
         for (Path sourceRoot : resolutionRoots) {
@@ -147,6 +148,7 @@ public final class RepresentativeProjectBenchmark {
         }
         ParserConfiguration parserConfiguration = new ParserConfiguration()
             .setLanguageLevel(javaParserLanguageLevel(sourceLevel))
+            .setAttributeComments(false)
             .setSymbolResolver(new JavaSymbolSolver(typeSolver));
         JavaParser parser = new JavaParser(parserConfiguration);
         Metrics metrics = new Metrics();

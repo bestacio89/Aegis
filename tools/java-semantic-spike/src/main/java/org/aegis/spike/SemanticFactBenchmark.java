@@ -272,7 +272,8 @@ public final class SemanticFactBenchmark {
         List<Path> externalClasspath,
         boolean debugResolution) throws IOException {
         ParserConfiguration sourceConfiguration = new ParserConfiguration()
-            .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21);
+            .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21)
+            .setAttributeComments(false);
         CombinedTypeSolver solver = new CombinedTypeSolver();
         solver.add(new ReflectionTypeSolver());
         for (Path root : discoverSourceRoots(sources.values())) {
@@ -284,6 +285,7 @@ public final class SemanticFactBenchmark {
 
         JavaParser parser = new JavaParser(new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21)
+            .setAttributeComments(false)
             .setSymbolResolver(new JavaSymbolSolver(solver)));
         Map<String, Observation> observations = new HashMap<>();
 

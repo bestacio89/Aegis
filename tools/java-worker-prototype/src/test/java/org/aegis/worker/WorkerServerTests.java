@@ -4,13 +4,17 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -115,10 +119,6 @@ final class WorkerServerTests {
 
     @Test
     void oversized_analysis_response_is_replaced_with_a_bounded_protocol_error() throws Exception {
-        String input = """
-            {"protocolVersion":1,"requestId":"handshake-1","operation":"handshake"}
-            {"protocolVersion":1,"requestId":"analysis-1","operation":"analyze"}
-            """;
         WorkerOperationHandler largeResultHandler = new WorkerOperationHandler() {
             @Override
             public boolean isAvailable() { return true; }
@@ -130,73 +130,44 @@ final class WorkerServerTests {
                 return result;
             }
         };
-        var responseWritten = new CountDownLatch(2);
-        var output = new SignallingOutputStream(responseWritten);
-        var inputStream = new GatedInputStream(
-            input.getBytes(StandardCharsets.UTF_8),
-            responseWritten);
-        new WorkerServer(largeResultHandler, 4096, 2, 512).serve(inputStream, output);
-        List<JsonObject> responses = output.toString(StandardCharsets.UTF_8).lines()
-            .map(line -> GSON.fromJson(line, JsonObject.class))
-            .toList();
 
-        JsonObject analysis = responses.stream()
-            .filter(response -> response.get("requestId").getAsString().equals("analysis-1"))
-            .findFirst()
-            .orElseThrow();
+        var workerInput = new PipedInputStream();
+        var requestWriter = new PipedOutputStream(workerInput);
+        var responseInput = new PipedInputStream();
+        var workerOutput = new PipedOutputStream(responseInput);
+        var serverTask = CompletableFuture.runAsync(() ->
+            new WorkerServer(largeResultHandler, 4096, 2, 512).serve(workerInput, workerOutput));
+
+        JsonObject analysisResponse;
+        try (var writer = new BufferedWriter(new OutputStreamWriter(requestWriter, StandardCharsets.UTF_8));
+             var reader = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8))) {
+            var handshakeRequest = new JsonObject();
+            handshakeRequest.addProperty("protocolVersion", 1);
+            handshakeRequest.addProperty("requestId", "handshake-1");
+            handshakeRequest.addProperty("operation", "handshake");
+            writer.write(GSON.toJson(handshakeRequest));
+            writer.newLine();
+            writer.flush();
+
+            JsonObject handshake = GSON.fromJson(reader.readLine(), JsonObject.class);
+            assertEquals("ok", handshake.get("status").getAsString());
+
+            var analysisRequest = new JsonObject();
+            analysisRequest.addProperty("protocolVersion", 1);
+            analysisRequest.addProperty("requestId", "analysis-1");
+            analysisRequest.addProperty("operation", "analyze");
+            writer.write(GSON.toJson(analysisRequest));
+            writer.newLine();
+            writer.flush();
+            analysisResponse = GSON.fromJson(reader.readLine(), JsonObject.class);
+        }
+
+        serverTask.get(5, TimeUnit.SECONDS);
+        workerOutput.close();
+
+        assertEquals("analysis-1", analysisResponse.get("requestId").getAsString());
         assertEquals("RESPONSE_TOO_LARGE",
-            analysis.getAsJsonObject("error").get("code").getAsString());
-    }
-
-    private static final class GatedInputStream extends ByteArrayInputStream {
-        private final CountDownLatch responsesWritten;
-
-        private GatedInputStream(byte[] input, CountDownLatch responsesWritten) {
-            super(input);
-            this.responsesWritten = responsesWritten;
-        }
-
-        @Override
-        public synchronized int read(byte[] buffer, int offset, int length) {
-            if (pos >= count) {
-                awaitResponses();
-                return -1;
-            }
-            return super.read(buffer, offset, length);
-        }
-
-        @Override
-        public synchronized int read() {
-            if (pos >= count) {
-                awaitResponses();
-                return -1;
-            }
-            return super.read();
-        }
-
-        private void awaitResponses() {
-            try {
-                if (!responsesWritten.await(5, TimeUnit.SECONDS))
-                    throw new IllegalStateException("The worker did not write both responses before input closed.");
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("The worker response wait was interrupted.", exception);
-            }
-        }
-    }
-
-    private static final class SignallingOutputStream extends ByteArrayOutputStream {
-        private final CountDownLatch responsesWritten;
-
-        private SignallingOutputStream(CountDownLatch responsesWritten) {
-            this.responsesWritten = responsesWritten;
-        }
-
-        @Override
-        public synchronized void write(byte[] bytes, int offset, int length) {
-            super.write(bytes, offset, length);
-            responsesWritten.countDown();
-        }
+            analysisResponse.getAsJsonObject("error").get("code").getAsString());
     }
 
     private static List<JsonObject> execute(String input, int maxFrameBytes) throws Exception {

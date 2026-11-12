@@ -1059,10 +1059,10 @@ The harness rejects non-Linux execution rather than substituting heap occupancy 
 
 | Mode | Candidate | Analysis median / p95 | Process median / p95 | Peak RSS median / p95 |
 |---|---|---:|---:|---:|
-| Source-only | Eclipse JDT | 593 / 624 ms | 1,005 / 1,022 ms | 149.7 / 153.4 MiB |
-| Source-only | JavaParser | 369 / 380 ms | 770 / 799 ms | 117.2 / 119.0 MiB |
-| External classpath | Eclipse JDT | 643 / 679 ms | 1,047 / 1,090 ms | 143.8 / 154.0 MiB |
-| External classpath | JavaParser | 386 / 407 ms | 815 / 833 ms | 120.5 / 121.1 MiB |
+| Source-only | Eclipse JDT | 791 / 835 ms | 1,312 / 1,393 ms | 150.9 / 156.3 MiB |
+| Source-only | JavaParser | 472 / 508 ms | 994 / 1,097 ms | 116.9 / 118.2 MiB |
+| External classpath | Eclipse JDT | 805 / 817 ms | 1,340 / 1,351 ms | 152.0 / 155.6 MiB |
+| External classpath | JavaParser | 478 / 495 ms | 1,057 / 1,070 ms | 119.1 / 120.8 MiB |
 
 JavaParser is approximately 1.6–1.7x faster in analysis and uses approximately 1.2–1.3x less process time/peak RSS on this bounded corpus. The earlier JDT per-file timing baseline is superseded by the fairer documented JDT batch ASTParser path. The measured gap remains a material counterweight, while JDT retains stronger bounded semantic/diagnostic coverage (17/17 facts and 7/7 diagnostics versus JavaParser's 14/17 and 5/7). These 42-file, single-runner measurements do not establish production-scale performance or a final engine winner. J2-A5.2 is accepted as a repeatable bounded measurement checkpoint; J2-A5.1 broader corpus validation and J2-A5.3 operational/legal review remain open. J2-B remains blocked; no production parser dependency is introduced.
 
@@ -1084,7 +1084,7 @@ Aegis is distributed under its own proprietary license. That fact does not by it
 
 JavaParser 3.28.2's published dependency metadata selects Guava 33.6.0-jre. Google advisory GHSA-xxph-c9ww-hj94 / CVE-2026-102554 affects Guava through 33.7.1; the issue is uncontrolled allocation during native Java deserialization of selected Guava collections. The fix is present in 33.7.2 and later.
 
-The current spike now manages Guava to 33.8.0-jre and CI asserts the resolved dependency-tree version. The advisory's attack path requires untrusted Java object deserialization; the parser workload does not intentionally deserialize project-controlled Java objects. That narrows the direct reachability assessment but is not a reason to ship a known-affected dependency. A full transitive vulnerability scan remains required for both candidate closures and every future version update.
+The current spike manages Guava to 33.8.0-jre and CI asserts the resolved dependency-tree version. CI also emits a CycloneDX 1.6 JSON SBOM for the combined candidate dependency closure and verifies both parser roots plus the patched Guava component. This is an inventory artifact; missing/ambiguous license metadata and all transitive notices still require manual review. The advisory's attack path requires untrusted Java object deserialization; the parser workload does not intentionally deserialize project-controlled Java objects. That narrows the direct reachability assessment but is not a reason to ship a known-affected dependency. A full transitive vulnerability scan remains required for both candidate closures and every future version update.
 
 ### Runtime and packaging
 
@@ -1103,7 +1103,7 @@ The 42-file cold-process measurements show roughly 1.0 s median process time and
 
 ### J2-A5.3 acceptance gates
 
-1. Produce an SBOM and full transitive license inventory for both exact candidate closures; verify notices and selected license terms.
+1. Review the generated CycloneDX SBOM; reconcile missing/ambiguous license metadata and produce a full transitive license inventory for both exact candidate closures; verify notices and selected license terms.
 2. Run a current vulnerability scan against direct and transitive dependencies; fail CI on unapproved high/critical findings and document reachability exceptions.
 3. Prototype a private Java runtime/worker package on Windows and Linux, recording artifact size, startup, runtime patch process and upgrade/rollback behaviour.
 4. Exercise worker handshake, malformed requests, cancellation, timeouts, process crash/restart, memory exhaustion, bounded concurrency and cross-project isolation.

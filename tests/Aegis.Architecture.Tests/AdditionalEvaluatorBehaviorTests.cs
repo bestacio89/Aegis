@@ -396,7 +396,7 @@ public sealed class AdditionalEvaluatorBehaviorTests
         var results = await Evaluate(project, "DependencyGraphEvaluator", context);
         var summary = Assert.Single(
             results,
-            result => result.Metrics.ContainsKey("DependencyGraphDensity"));
+            result => result.Metrics.ContainsKey("TotalRelations"));
 
         Assert.Equal(2, summary.Metrics["TotalRelations"]);
         Assert.False(summary.Metrics.ContainsKey("DependencyGraphDensity"));

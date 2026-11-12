@@ -1,9 +1,7 @@
 package org.aegis.diagnostics;
 
-@Deprecated
-final class LegacyApi {
-}
-
 public final class DeprecatedUse {
-    private LegacyApi legacyApi;
+    public void stop(Thread thread) {
+        thread.stop();
+    }
 }

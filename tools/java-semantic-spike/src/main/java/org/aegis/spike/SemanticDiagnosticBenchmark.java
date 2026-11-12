@@ -91,9 +91,6 @@ public final class SemanticDiagnosticBenchmark {
                 json(observation.severity()));
         }
 
-        long matched = cases.stream()
-            .filter(item -> item.category().equals(item.category()))
-            .count();
         long capabilityGaps = engine.equals("javaparser")
             ? cases.stream().filter(item -> item.category().equals("compiler-error")
                 || item.category().equals("warning")).count()

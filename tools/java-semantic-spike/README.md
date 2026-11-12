@@ -350,3 +350,24 @@ Each checkout is pinned to an immutable commit and its license file and source i
 The benchmark records parse completeness, syntax errors, declarations, method-call resolution and type-reference resolution. It runs in a deliberately bounded **source-roots plus running-JDK environment**: project build scripts are not executed and third-party dependency classpaths are not supplied. Unresolved external framework symbols are therefore environment evidence, not candidate correctness failures. The strict gate requires every pinned Java source file in the selected source sets to parse without syntax errors.
 
 This is the first real-project robustness and local-source-resolution checkpoint, not a full compiler-equivalence oracle. The next evaluation step must add controlled external dependency visibility and selected expected semantic facts before using these measurements to make a final engine recommendation.
+
+
+## Representative source-local semantic facts (J2-A5.1)
+
+The representative-project matrix is supplemented by an engine-neutral semantic fact corpus for three pinned, Apache-2.0 projects:
+
+- Spring Petclinic (Maven and Gradle Groovy): inheritance, overload-aware method invocation, and a negative fact proving that an unrelated method is not reported as the target invocation.
+- Quarkus getting-started (Maven): an intra-project method invocation.
+- Micronaut starter AWS CDK module (Gradle Kotlin DSL): inheritance and constructor invocation across local project source roots.
+
+Each fact identifies the source declaration, expected target identity and expected resolution state. Both JDT and JavaParser are run independently against the same source files and source-root boundary. The negative fact is intentional: the benchmark must not accept a nearby declaration as evidence that the requested call exists.
+
+The runner now uses strict benchmark mode. A candidate mismatch fails the workflow rather than being retained as report-only evidence. It validates every per-fact result, the final summary, the expected fact count, the pinned repository commit and the repository license evidence. Six JSONL reports are retained (three projects × two engines).
+
+**Environment boundary:** these facts use checked-out project source roots plus the running JDK. Third-party framework dependencies are not supplied, and no Maven/Gradle build script, plugin or annotation processor is executed. The six facts therefore validate source-local semantic resolution, not framework binding coverage or complete project compilation. The separate parser-robustness matrix also remains source-roots-plus-JDK-only. Controlled external dependency classpaths for these representative repositories are a subsequent evaluation task.
+
+Run from the repository root after the pinned repositories have been checked out:
+
+```bash
+bash tools/java-semantic-spike/run-representative-semantic-facts.sh
+```

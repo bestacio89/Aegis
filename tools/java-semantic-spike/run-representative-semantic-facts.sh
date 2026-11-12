@@ -4,6 +4,8 @@ set -euo pipefail
 manifest="tools/java-semantic-spike/representative-projects.tsv"
 facts_directory="tools/java-semantic-spike/representative-semantic-facts"
 results_directory="artifacts/representative-projects/facts"
+
+rm -rf "$results_directory"
 mkdir -p "$results_directory"
 
 while IFS=$'\t' read -r \
@@ -13,6 +15,17 @@ while IFS=$'\t' read -r \
 
   [[ -z "$project_id" ]] && continue
 
+  actual_commit="$(git -C "$checkout_path" rev-parse HEAD)"
+  if [[ "$actual_commit" != "$commit_sha" ]]; then
+    echo "Pinned commit mismatch for $project_id: expected $commit_sha, got $actual_commit" >&2
+    exit 1
+  fi
+
+  if ! grep -qi "Apache License" "$checkout_path/$license_file"; then
+    echo "Expected Apache-2.0 license evidence is missing for $project_id" >&2
+    exit 1
+  fi
+
   project_root="$checkout_path/$project_subdirectory"
   corpus="$facts_directory/$project_id.tsv"
   if [[ ! -d "$project_root" || ! -f "$corpus" ]]; then
@@ -20,12 +33,29 @@ while IFS=$'\t' read -r \
     exit 1
   fi
 
+  expected_fact_count="$(awk -F '\t' 'NR > 1 && NF > 1 && $1 != "" { count++ } END { print count + 0 }' "$corpus")"
+  if [[ "$expected_fact_count" -lt 1 ]]; then
+    echo "Representative semantic fact corpus is empty for $project_id" >&2
+    exit 1
+  fi
+
   for engine in jdt javaparser; do
     output="$results_directory/$project_id-$engine.jsonl"
     mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-benchmark \
-      -Dexec.args="$engine $project_root $corpus --project-root --report-only" \
+      -Dexec.args="$engine $project_root $corpus --project-root" \
       | tee "$output"
+
+    jq -s -e --arg engine "$engine" --argjson expected "$expected_fact_count" '
+      length == ($expected + 1)
+      and all(.[0:-1][]; .engine == $engine and .passed == true)
+      and .[-1].engine == $engine
+      and .[-1].status == "passed"
+      and .[-1].facts == $expected
+      and .[-1].mismatches == 0
+    ' "$output" > /dev/null
   done
+
+  echo "Representative semantic facts passed: $project_id ($expected_fact_count facts per engine)"
 done < <(tail -n +2 "$manifest")
 
 report_count="$(find "$results_directory" -maxdepth 1 -type f -name '*.jsonl' | wc -l | tr -d ' ')"

@@ -1153,3 +1153,22 @@ All three mandatory workflows passed on the exact implementation head:
 - WPF build validation — [run 43207732997](https://github.com/bestacio89/Aegis/actions/runs/43207732997).
 
 **Acceptance boundary:** This accepts the bounded protocol and private-runtime process-feasibility sub-checkpoint only. The executable reports `analysisAvailable=false`; neither JDT nor JavaParser is attached. This does not implement the .NET/WPF supervisor, host-enforced analysis deadlines, CPU/memory limits, OS sandboxing, workspace isolation, runtime patch/upgrade/rollback, or legal approval. J2-A5.3 remains in progress; J2-A5.4 candidate recommendation and J2-B production integration remain blocked.
+
+
+## J2-A5.1 — Representative source-local semantic fact gate (2026-11-12)
+
+The pinned representative-project matrix now includes six explicit semantic facts across three real Java projects and two build ecosystems:
+
+| Project | Build model | Facts | Coverage |
+|---|---|---:|---|
+| Spring Petclinic | Maven and Gradle Groovy | 3 | Inheritance, overload-aware method invocation, negative non-invocation |
+| Quarkus getting-started | Maven | 1 | Intra-project method invocation |
+| Micronaut starter AWS CDK module | Gradle Kotlin DSL | 2 | Cross-source inheritance and constructor invocation |
+
+Both Eclipse JDT and JavaParser are checked against the same expected source/target identities. The six baseline facts passed for both candidates on the preceding implementation head. The negative Spring Petclinic fact is important: the target method exists in the type, but the designated source method does not call it; a candidate must not fabricate that relationship.
+
+The runner is hardened to make these comparisons strict CI gates. It no longer uses report-only mode. It verifies pinned repository commits and Apache-2.0 license evidence, counts the expected facts, checks every per-fact `passed` flag and validates the terminal summary (engine, fact count, zero mismatches). A candidate regression therefore fails the Java semantic workflow instead of merely appearing in an artifact.
+
+**Scope boundary:** the six facts run against project source roots plus the running JDK. No third-party dependency JARs are supplied and no project build scripts, plugins or annotation processors are executed. This is real-project source-local binding evidence, not complete framework compilation or dependency-resolution evidence. Representative parser-robustness results remain descriptive; their aggregate binding percentages are not candidate acceptance thresholds.
+
+**Acceptance:** implementation is committed; the strict gate and all three mandatory workflows must pass on the exact same PR head before this sub-checkpoint is accepted. Broader diagnostic validation, representative external classpaths, JPMS module-path coverage, worker supervision/isolation and legal review remain open. J2-A remains in progress; J2-B remains blocked.

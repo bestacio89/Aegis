@@ -15,6 +15,8 @@ public sealed class ArchitectureIntegrationContext
     public string InteractionPattern { get; set; } = "RequestResponse";
     public string Protocol { get; set; } = "HTTP";
     public string EvidenceOrigin { get; set; } = "UserDefined";
+
+    public string EndpointResolutionStatus { get; set; } = "Declared";
     public string? Notes { get; set; }
     public DateTimeOffset DeclaredAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }

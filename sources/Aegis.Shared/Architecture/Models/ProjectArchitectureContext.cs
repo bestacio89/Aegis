@@ -383,6 +383,7 @@ public sealed class ProjectArchitectureContext
 
             BoundaryCount = Boundaries.Count,
             DependencyCount = Dependencies.Count,
+            ApplicationIntegrationCount = ApplicationIntegrations.Count,
             ProductionDependencyCount = ProductionDependencies.Count,
             TestDependencyCount = TestDependencies.Count,
             DependencyEvidenceCount = DependencyEvidence.Count,

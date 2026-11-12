@@ -1,3 +1,4 @@
+using Aegis.Architecture.Analysis;
 using Aegis.Shared.Architecture.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -175,6 +176,24 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
         };
 
         _context.ApplicationIntegrations.Add(integration);
+        try
+        {
+            ApplicationIntegrationConfigurationStore.Save(
+                _context.RootPath,
+                _context.ApplicationIntegrations);
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or InvalidDataException
+                or ArgumentException
+                or NotSupportedException)
+        {
+            _context.ApplicationIntegrations.Remove(integration);
+            IntegrationStatus = $"Unable to persist the integration declaration: {exception.Message}";
+            return;
+        }
+
         ApplicationIntegrations.Add(integration);
         SelectedApplicationIntegration = integration;
         IntegrationNotes = string.Empty;
@@ -188,9 +207,27 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             return;
 
         _context.ApplicationIntegrations.RemoveAll(candidate => candidate.Id == integration.Id);
+        try
+        {
+            ApplicationIntegrationConfigurationStore.Save(
+                _context.RootPath,
+                _context.ApplicationIntegrations);
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or InvalidDataException
+                or ArgumentException
+                or NotSupportedException)
+        {
+            _context.ApplicationIntegrations.Add(integration);
+            IntegrationStatus = $"Unable to persist the integration removal: {exception.Message}";
+            return;
+        }
+
         ApplicationIntegrations.Remove(integration);
         SelectedApplicationIntegration = null;
-        IntegrationStatus = "Integration removed from the current architecture context.";
+        IntegrationStatus = "Integration removed and saved to the repository's .aegis configuration.";
     }
 
     private bool CanAddApplicationIntegration() =>

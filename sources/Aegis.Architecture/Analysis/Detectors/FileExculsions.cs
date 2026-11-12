@@ -5,7 +5,7 @@ internal static class FileExclusions
     private static readonly HashSet<string> ExcludedDirectories =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            ".git", ".vs", ".idea", ".vscode",
+            ".git", ".vs", ".idea", ".vscode", ".aegis",
             "bin", "obj", "node_modules", "dist", "build",
             "__pycache__", ".venv", "venv", "coverage", "TestResults",
             "Logs", "PackageCache", "Generated",

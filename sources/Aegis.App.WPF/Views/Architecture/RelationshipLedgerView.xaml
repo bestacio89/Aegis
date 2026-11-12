@@ -93,6 +93,7 @@
                         <DataGridTextColumn Header="Interaction" Binding="{Binding InteractionPattern}" Width="140" />
                         <DataGridTextColumn Header="Protocol" Binding="{Binding Protocol}" Width="110" />
                         <DataGridTextColumn Header="Origin" Binding="{Binding EvidenceOrigin}" Width="110" />
+                        <DataGridTextColumn Header="Endpoint status" Binding="{Binding EndpointResolutionStatus}" Width="120" />
                         <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="2*" />
                     </DataGrid.Columns>
                 </DataGrid>

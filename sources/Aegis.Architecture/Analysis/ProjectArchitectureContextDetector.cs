@@ -57,6 +57,7 @@ public static class ProjectArchitectureContextDetector
             ctx,
             files);
 
+        LoadApplicationIntegrations(ctx);
 
         // Build manifests and structured dependency evidence must be available
         // before framework classification. Java framework identity is derived
@@ -272,6 +273,75 @@ public static class ProjectArchitectureContextDetector
         }
 
         return files;
+    }
+
+    private static void LoadApplicationIntegrations(ProjectArchitectureContext context)
+    {
+        try
+        {
+            context.ApplicationIntegrations =
+                ApplicationIntegrationConfigurationStore.Load(context.RootPath);
+
+            foreach (var integration in context.ApplicationIntegrations)
+            {
+                var source = context.Modules.FirstOrDefault(module =>
+                    PathsEqual(module.Path, integration.SourceModulePath));
+                var target = context.Modules.FirstOrDefault(module =>
+                    PathsEqual(module.Path, integration.TargetModulePath));
+
+                integration.EndpointResolutionStatus =
+                    source is not null && target is not null
+                        ? "Resolved"
+                        : "Unresolved";
+
+                if (source is not null)
+                    integration.SourceModuleName = source.Name;
+                if (target is not null)
+                    integration.TargetModuleName = target.Name;
+
+                if (integration.EndpointResolutionStatus == "Unresolved")
+                {
+                    context.DiscoveryDiagnostics.Add(new AnalysisDiagnostic
+                    {
+                        Code = "ApplicationIntegrationEndpointUnresolved",
+                        Component = nameof(ApplicationIntegrationConfigurationStore),
+                        Message = "A user-defined application integration references a module that was not discovered in this assessment.",
+                        Target = $"{integration.SourceModulePath} -> {integration.TargetModulePath}",
+                        AffectsCoverage = false
+                    });
+                }
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or JsonException
+                or InvalidDataException
+                or ArgumentException
+                or NotSupportedException)
+        {
+            context.DiscoveryDiagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = "ApplicationIntegrationConfigurationReadFailed",
+                Component = nameof(ApplicationIntegrationConfigurationStore),
+                Message = $"User-defined application integrations could not be loaded: {exception.Message}",
+                Target = ApplicationIntegrationConfigurationStore.GetConfigurationPath(context.RootPath),
+                ExceptionType = exception.GetType().Name,
+                AffectsCoverage = false
+            });
+        }
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        return string.Equals(
+            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            comparison);
     }
 
     private static void RecordExcludedEntry(

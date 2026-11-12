@@ -304,7 +304,7 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
 
             var spring = Assert.Single(module.FrameworkEvidence.Where(evidence => evidence.Name == "Spring Boot"));
             Assert.Equal("3.4.1", spring.Version);
-            Assert.Equal(FrameworkEvidenceKind.Application, spring.Kind);
+            Assert.Equal(FrameworkEvidenceKind.Web, spring.Kind);
             Assert.False(spring.IsTestOnly);
             Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(spring.Provenance).Source);
             Assert.Equal(pomFile, spring.Provenance[0].FilePath);

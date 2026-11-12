@@ -77,6 +77,47 @@ internal static class ModuleRoleDetector
                 continue;
             }
 
+            var isJvmModule = module.ProjectKind.Equals("JavaProject", StringComparison.OrdinalIgnoreCase)
+                || module.Languages.Any(language =>
+                    language.Equals("Java", StringComparison.OrdinalIgnoreCase)
+                    || language.Equals("Kotlin", StringComparison.OrdinalIgnoreCase));
+
+            var hasJvmBackendFramework = isJvmModule
+                && module.Frameworks.Any(framework =>
+                    framework.Equals("Spring Boot", StringComparison.OrdinalIgnoreCase)
+                    || framework.Equals("Quarkus", StringComparison.OrdinalIgnoreCase)
+                    || framework.Equals("Micronaut", StringComparison.OrdinalIgnoreCase)
+                    || framework.Equals("Ktor", StringComparison.OrdinalIgnoreCase));
+
+            var hasJvmExecutablePlugin =
+                module.MavenModel?.Plugins.Any(plugin =>
+                    plugin.ArtifactId is "spring-boot-maven-plugin"
+                        or "quarkus-maven-plugin"
+                        or "micronaut-maven-plugin") == true
+                || module.GradleBuildModel?.Plugins.Any(plugin =>
+                    plugin.Id is "application"
+                        or "org.springframework.boot"
+                        or "io.quarkus"
+                        or "io.micronaut.application") == true;
+
+            if (isJvmModule && hasJvmBackendFramework)
+            {
+                if (module.Type.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                {
+                    module.Type = module.ProjectKind.Equals("WebApplication", StringComparison.OrdinalIgnoreCase)
+                        ? "Api"
+                        : "Application";
+                }
+
+                if (module.ProjectKind.Equals("JavaProject", StringComparison.OrdinalIgnoreCase))
+                    module.ProjectKind = hasJvmExecutablePlugin
+                        ? "Executable"
+                        : "BackendApplication";
+            }
+
+            if (isJvmModule && hasJvmExecutablePlugin)
+                module.IsExecutable = true;
+
             var isFrontend = module.ProjectKind.Equals("FrontendApplication", StringComparison.OrdinalIgnoreCase)
                 || module.Frameworks.Any(FrontendFrameworks.Contains);
             var isBackend = module.ProjectKind.Equals("BackendApplication", StringComparison.OrdinalIgnoreCase)

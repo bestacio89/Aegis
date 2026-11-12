@@ -110,6 +110,15 @@ public sealed class JavaProjectDiscoveryTests
                             <version>3.4.1</version>
                         </dependency>
                     </dependencies>
+                    <build>
+                        <plugins>
+                            <plugin>
+                                <groupId>org.springframework.boot</groupId>
+                                <artifactId>spring-boot-maven-plugin</artifactId>
+                                <version>3.4.1</version>
+                            </plugin>
+                        </plugins>
+                    </build>
                 </project>
                 """);
 
@@ -123,8 +132,14 @@ public sealed class JavaProjectDiscoveryTests
 
             var module = Assert.Single(context.Modules);
             Assert.Contains("Spring Boot", module.Frameworks);
+            Assert.Equal("Application", module.Type);
+            Assert.Equal("Executable", module.ProjectKind);
+            Assert.True(module.IsExecutable);
             Assert.Contains(
                 Aegis.Shared.Architecture.Enums.ProjectModuleRole.Backend,
+                module.Roles);
+            Assert.Contains(
+                Aegis.Shared.Architecture.Enums.ProjectModuleRole.Executable,
                 module.Roles);
             Assert.DoesNotContain(
                 Aegis.Shared.Architecture.Enums.ProjectModuleRole.Unknown,

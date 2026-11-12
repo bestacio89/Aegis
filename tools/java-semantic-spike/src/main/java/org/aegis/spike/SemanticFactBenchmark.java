@@ -7,7 +7,6 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
-import com.github.javaparser.ast.expr.CreationReference;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
@@ -235,7 +234,7 @@ public final class SemanticFactBenchmark {
                 for (MethodReferenceExpr reference : unit.findAll(MethodReferenceExpr.class)) {
                     try {
                         ResolvedMethodDeclaration method = reference.resolve();
-                        String identity = reference instanceof CreationReference
+                        String identity = reference.getIdentifier().equals("new")
                             ? constructorReferenceIdentity(method)
                             : methodIdentity(method);
                         put(observations, fixture, "method-reference", identity, "resolved");
@@ -340,12 +339,20 @@ public final class SemanticFactBenchmark {
                 }
 
                 @Override
-                public boolean visit(Annotation annotation) {
-                    ITypeBinding binding = annotation.resolveTypeBinding();
-                    if (binding != null) {
-                        put(observations, fixture, "annotation",
-                            binding.getTypeDeclaration().getQualifiedName(), "resolved");
-                    }
+                public boolean visit(org.eclipse.jdt.core.dom.MarkerAnnotation annotation) {
+                    observeJdtAnnotation(observations, fixture, annotation);
+                    return true;
+                }
+
+                @Override
+                public boolean visit(org.eclipse.jdt.core.dom.NormalAnnotation annotation) {
+                    observeJdtAnnotation(observations, fixture, annotation);
+                    return true;
+                }
+
+                @Override
+                public boolean visit(org.eclipse.jdt.core.dom.SingleMemberAnnotation annotation) {
+                    observeJdtAnnotation(observations, fixture, annotation);
                     return true;
                 }
 
@@ -434,6 +441,17 @@ public final class SemanticFactBenchmark {
             .max(Comparator.comparingInt(Path::getNameCount))
             .map(root -> root.relativize(sourceFile).toString().replace('\\', '/'))
             .orElseGet(() -> sourceFile.getFileName().toString());
+    }
+
+    private static void observeJdtAnnotation(
+        Map<String, Observation> observations,
+        String fixture,
+        Annotation annotation) {
+        ITypeBinding binding = annotation.resolveTypeBinding();
+        if (binding != null) {
+            put(observations, fixture, "annotation",
+                binding.getTypeDeclaration().getQualifiedName(), "resolved");
+        }
     }
 
     private static void observeJdtType(

@@ -148,7 +148,7 @@ public sealed class JavaFrameworkDetectionTests
 
             foreach (var (name, expectedEvidence) in expected)
             {
-                var evidence = Assert.Single(module.FrameworkEvidence.Where(item => item.Name == name));
+                var evidence = Assert.Single(module.FrameworkEvidence, item => item.Name == name);
                 Assert.Equal(expectedEvidence.Kind, evidence.Kind);
                 Assert.Equal(expectedEvidence.Version, evidence.Version);
                 Assert.False(evidence.IsTestOnly);

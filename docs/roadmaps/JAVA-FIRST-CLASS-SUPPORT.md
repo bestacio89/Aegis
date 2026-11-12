@@ -627,3 +627,147 @@ This is validation of the current implementation, **not J1 acceptance**.
 Implementation and focused tests have been pushed to the existing Java support branch. Final-head non-WPF, WPF and semantic-engine workflows must complete successfully before this checkpoint can be accepted.
 
 **Checkpoint decision:** continue J1-A validation and hardening. J1-B and J2 remain blocked.
+
+
+---
+
+# J1-B — Gradle included-build membership and ownership — 2026-11-11
+
+**Status: accepted.**
+
+- Included builds are modelled as independent Gradle roots, not as ordinary subprojects of the including build.
+- Literal includeBuild paths are resolved relative to the owning settings root and constrained to the analysis root.
+- Membership is associated with independently discovered Gradle roots/modules; parent build project graphs do not absorb included-build descendants.
+- Shared included builds retain distinct membership evidence when referenced by multiple parent builds.
+- Missing, inaccessible, dynamic, external or undiscovered included-build targets remain diagnostic/incomplete evidence.
+- Version-catalog and source-root ownership remain scoped to the correct Gradle root.
+
+Automated coverage verifies independent roots, shared membership, missing targets, analysis-root boundaries and prevention of parent-project leakage.
+
+All mandatory workflows passed on head `a602f0287aee97534565aba79b2f3af7b95b4b26`:
+- Non-WPF quality gates — success.
+- WPF build validation — success.
+- Java semantic engine comparison — success.
+
+**Decision:** J1-B accepted.
+
+# J1-C — Maven parent, BOM and profile semantics — 2026-11-11
+
+**Status: accepted.**
+
+- Local parent POM inheritance validates declared parent coordinates against the candidate POM before inheriting.
+- Parent resolution distinguishes not declared, external declared, locally resolved, locally incomplete and local-coordinate mismatch states.
+- Local imported BOMs are resolved from the scanned POM coordinate index; external/unavailable BOM imports remain explicit evidence and diagnostics.
+- Maven profile declarations retain conditional properties, dependencies, managed dependencies, plugins, managed plugins and activation metadata.
+- Profiles are not implicitly activated or merged into the unconditional model.
+- Incomplete inheritance remains explicit; no remote repository lookup, Maven invocation or plugin execution occurs.
+
+Automated coverage verifies parent-coordinate mismatch and profile isolation in addition to the earlier Maven reactor, dependency-management and BOM fixtures.
+
+All mandatory workflows passed on head `90f30fcfab6006c545723bbdfaf7fa3993d03a27`:
+- Non-WPF quality gates — success.
+- WPF build validation — success.
+- Java semantic engine comparison — success.
+
+**Decision:** J1-C accepted.
+
+# J1-D1 — Gradle custom source-set ownership — 2026-11-11
+
+**Status: accepted.**
+
+- Supported literal custom source-set declarations are projected into module-owned Java source roots.
+- Relative source directories are resolved against the owning Gradle project.
+- Production, test, generated and unknown ownership remain distinct.
+- Dynamic or ambiguous source-set declarations remain incomplete and diagnostic; ownership is not guessed.
+- Included-build boundaries are preserved.
+
+Automated coverage includes literal Kotlin/Groovy custom source sets, nested Java blocks, file notation and dynamic-directory negative cases.
+
+All mandatory workflows passed on head `6001772697d9a06732b337ba3a7eedf50267017d`:
+- Non-WPF quality gates — success.
+- WPF build validation — success.
+- Java semantic engine comparison — success.
+
+**Decision:** J1-D1 accepted.
+
+# J1-D2 — Advanced Gradle version catalogs — 2026-11-11
+
+**Status: accepted.**
+
+- Static `libs.bundles.*` declarations expand into their constituent library declarations.
+- Literal `version.ref` references are resolved for libraries and plugins.
+- Supported rich version declarations extract the strongest static version value in this order: `strictly`, `require`, then `prefer`.
+- Missing bundle members, missing version references and unsupported declarations produce diagnostics and incomplete evidence.
+- Catalog resolution remains isolated to the owning Gradle build root.
+
+The current shared dependency contract retains the selected declared version string, not the complete Gradle rich-version constraint language. In particular, all reject/rejectAll and conflict-resolution semantics are not represented as a first-class resolved constraint model. No artifact resolution is claimed.
+
+All mandatory workflows passed on head `d64108e348bba560bd336474715b90d6964a346e`:
+- Non-WPF quality gates — run `43116603281`, success.
+- WPF build validation — run `43116603294`, success.
+- Java semantic engine comparison — run `43116603638`, success.
+
+**Decision:** J1-D2 accepted within the documented static-catalog scope.
+
+# J1-E — Dependency contract and fixture matrix — 2026-11-12
+
+**Status: accepted.**
+
+- Gradle project dependencies are emitted as project-kind dependency evidence, not dropped or represented as external packages.
+- Enforced-platform declarations retain their enforcement flag through the additive `ArchitectureDependencyEvidence.IsEnforced` property.
+- Maven annotation-processor paths are projected into normalized dependency evidence with declaring-POM provenance and inherited/direct ownership.
+- Gradle test-only classification uses configuration-name segments, preventing false positives from arbitrary substrings.
+- Maven fixtures cover compile, provided, system and test scopes plus optional/type/classifier metadata and inherited processor provenance.
+- Gradle fixtures cover API, compile-only, runtime-only, test-runtime, project, enforced-platform and custom-configuration declarations.
+- Declared versions remain separate from resolved artifact versions; the static inventory does not claim remote artifact resolution.
+
+All mandatory workflows passed on final J1-E head `67813b74aa345fd62ccdd75776b09c189fbdff2b`:
+- Non-WPF quality gates — run `43118586301`, success.
+- WPF build validation — run `43118586278`, success.
+- Java semantic engine comparison — run `43118586393`, success.
+
+**Decision:** J1-E accepted.
+
+# J1-F — Final regression and acceptance review — 2026-11-12
+
+**Review result: implementation criteria satisfied; documentation-head CI pending.**
+
+## Acceptance matrix
+
+| J1 acceptance criterion | Evidence and result |
+|---|---|
+| Single- and multi-module Maven projects | Maven reactor paths and module ownership are retained; multi-module fixture corpus and model tests pass. |
+| Gradle multi-project and included-build boundaries | Settings/project discovery and independent included-build membership are tested; parent/child ownership leakage is guarded against. |
+| Declared and resolved dependency distinction | Declared versions and resolution status are explicit. Static discovery does not invent resolved artifact versions; `ResolvedVersion` remains null without resolution evidence. |
+| Dependency scopes/configurations | Maven scopes and Gradle configurations are retained; production/test ownership is separately classified. |
+| Incomplete or unsupported model evidence | Maven parent/BOM/profile and Gradle dynamic/catalog/source-set limitations produce diagnostics and incomplete model state rather than fabricated effective values. |
+| Plugins and annotation processors | Maven applied plugins and pluginManagement are distinct; Maven and Gradle annotation-processor declarations are retained in their build models, with Maven processor evidence projected into the shared inventory. |
+| Source roots and generated-source ownership | Conventional, supported custom and generated roots are represented with production/test/unknown ownership and source provenance. Ambiguous ownership remains unknown. |
+| Framework evidence | Framework classification consumes module-owned dependency coordinates; the Java path-name heuristic has been removed. |
+| Regression compatibility | Mandatory non-WPF test/production build, WPF build and Java semantic-engine workflows passed together on the final J1-E implementation head. |
+
+## Explicit boundaries and known limitations
+
+J1 delivers bounded, static build intelligence. It does **not** claim to implement a complete Maven effective model or a complete Groovy/Kotlin Gradle interpreter.
+
+- External Maven parents and BOMs are not fetched. Their declared-but-unavailable status remains explicit.
+- Maven profiles are represented as conditional evidence; profile activation is not evaluated or implicitly merged.
+- Maven custom/generated source roots are limited to supported literal and conventional evidence. Arbitrary build-helper executions and generator configuration are not executed.
+- Gradle dynamic expressions and unsupported DSL/catalog constructs are not evaluated. They remain diagnostic/incomplete.
+- Gradle custom source sets and generated-source ownership are supported only for the statically recognised forms and layouts.
+- Gradle rich-version extraction retains the strongest supported literal version value, not the full reject/rejectAll and conflict-resolution model.
+- No Maven/Gradle scripts, plugins, annotation processors or remote artifact resolution are executed during ordinary analysis.
+
+These are documented scope boundaries, not claims of complete effective-build resolution. They must remain visible in diagnostics/documentation and must not be represented as successful artifact resolution.
+
+## Final J1-F validation
+
+The final regression review was performed against implementation head `67813b74aa345fd62ccdd75776b09c189fbdff2b`. All three mandatory workflows passed on that same head:
+
+- Non-WPF quality gates — run `43118586301`, success.
+- WPF build validation — run `43118586278`, success.
+- Java semantic engine comparison — run `43118586393`, success.
+
+This roadmap update records the checkpoint evidence and acceptance matrix. The updated documentation commit must itself pass all mandatory workflows before J1-F is formally accepted.
+
+**Checkpoint decision:** J1 implementation and regression criteria are satisfied. J1-F formal acceptance is pending final-head CI on this documentation update. J2 remains blocked until that validation completes.

@@ -342,7 +342,7 @@ public sealed class AdditionalEvaluatorBehaviorTests
     }
 
     [Fact]
-    public async Task DependencyGraphEvaluator_measures_semantic_component_edges_and_includes_isolated_nodes()
+    public async Task DependencyGraphEvaluator_reports_observed_component_edges_without_scoring_incomplete_analysis()
     {
         using var project = new TemporaryProject();
         var context = CreateContext(project, "Java", "Spring Boot");
@@ -399,11 +399,77 @@ public sealed class AdditionalEvaluatorBehaviorTests
             result => result.Metrics.ContainsKey("DependencyGraphDensity"));
 
         Assert.Equal(2, summary.Metrics["TotalRelations"]);
-        Assert.Equal(1d / 6d, summary.Metrics["DependencyGraphDensity"], precision: 5);
+        Assert.False(summary.Metrics.ContainsKey("DependencyGraphDensity"));
         Assert.Equal("ArchitecturalComponents", summary.Metadata["GraphLevel"]);
         Assert.Equal("3", summary.Metadata["GraphNodeCount"]);
         Assert.Equal("1", summary.Metadata["GraphEdgeCount"]);
         Assert.Equal("false", summary.Metadata["AnalysisComplete"]);
+        Assert.Equal("Unavailable: semantic analysis is incomplete.", summary.Metadata["GraphDensityStatus"]);
+    }
+
+    [Fact]
+    public async Task DependencyGraphEvaluator_measures_semantic_component_density_when_analysis_is_complete()
+    {
+        using var project = new TemporaryProject();
+        var context = CreateContext(project, "Java", "Spring Boot");
+        context.ArchitectureComponents.AddRange(
+        [
+            new ArchitectureComponentContext
+            {
+                Id = "package:application",
+                Name = "application",
+                QualifiedName = "sample.application",
+                Language = "Java",
+                ComponentKind = "Package",
+                ProductionSymbolCount = 4
+            },
+            new ArchitectureComponentContext
+            {
+                Id = "package:domain",
+                Name = "domain",
+                QualifiedName = "sample.domain",
+                Language = "Java",
+                ComponentKind = "Package",
+                ProductionSymbolCount = 3
+            },
+            new ArchitectureComponentContext
+            {
+                Id = "package:utilities",
+                Name = "utilities",
+                QualifiedName = "sample.utilities",
+                Language = "Java",
+                ComponentKind = "Package",
+                ProductionSymbolCount = 1
+            }
+        ]);
+        context.ArchitectureComponentDependencies.Add(
+            new ArchitectureComponentDependencyContext
+            {
+                SourceComponentId = "package:application",
+                SourceComponentName = "sample.application",
+                TargetComponentId = "package:domain",
+                TargetComponentName = "sample.domain",
+                RelationshipCount = 2
+            });
+        context.SemanticAnalysisRuns.Add(
+            new SemanticAnalysisRun
+            {
+                Language = "Java",
+                EngineId = "eclipse-jdt",
+                Status = SemanticAnalysisStatus.Completed
+            });
+
+        var results = await Evaluate(project, "DependencyGraphEvaluator", context);
+        var summary = Assert.Single(
+            results,
+            result => result.Metrics.ContainsKey("DependencyGraphDensity"));
+
+        Assert.Equal(2, summary.Metrics["TotalRelations"]);
+        Assert.Equal(1d / 6d, summary.Metrics["DependencyGraphDensity"], precision: 5);
+        Assert.Equal("ArchitecturalComponents", summary.Metadata["GraphLevel"]);
+        Assert.Equal("3", summary.Metadata["GraphNodeCount"]);
+        Assert.Equal("1", summary.Metadata["GraphEdgeCount"]);
+        Assert.Equal("true", summary.Metadata["AnalysisComplete"]);
         Assert.Equal("MeasuredOnObservedEdges", summary.Metadata["GraphDensityStatus"]);
     }
 

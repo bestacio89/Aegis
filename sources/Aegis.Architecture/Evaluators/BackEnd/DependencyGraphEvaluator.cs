@@ -217,7 +217,7 @@ public sealed class DependencyGraphEvaluator
             && !context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
         result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
 
-        if (nodes.Length > 1 && (distinctEdges > 0 || analysisComplete))
+        if (nodes.Length > 1 && analysisComplete)
         {
             var possibleDirectedEdges = (double)nodes.Length * (nodes.Length - 1);
             result.Metrics["DependencyGraphDensity"] = distinctEdges / possibleDirectedEdges;
@@ -231,7 +231,7 @@ public sealed class DependencyGraphEvaluator
         {
             result.Metadata["GraphDensityStatus"] = nodes.Length < 2
                 ? "Unavailable: fewer than two distinct architectural components."
-                : "Unavailable: no observed cross-component dependencies and semantic analysis is incomplete.";
+                : "Unavailable: semantic analysis is incomplete.";
         }
 
         results.Add(result);

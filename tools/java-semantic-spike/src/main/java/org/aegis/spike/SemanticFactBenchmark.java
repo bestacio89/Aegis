@@ -62,13 +62,14 @@ public final class SemanticFactBenchmark {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 3 || args.length > 6) {
+        if (args.length < 3 || args.length > 7) {
             throw new IllegalArgumentException(
                 "Usage: SemanticFactBenchmark <jdt|javaparser> <source-root> <fact-corpus> "
-                    + "[--project-root] [--report-only] [--classpath-file=<path>]");
+                    + "[--project-root] [--report-only] [--classpath-file=<path>] [--debug-resolution]");
         }
         boolean projectRootMode = false;
         boolean reportOnly = false;
+        boolean debugResolution = false;
         Path classpathFile = null;
         for (int index = 3; index < args.length; index++) {
             String option = args[index];
@@ -91,6 +92,11 @@ public final class SemanticFactBenchmark {
                     throw new IllegalArgumentException("The --classpath-file option requires a path.");
                 }
                 classpathFile = Path.of(value).toAbsolutePath().normalize();
+            } else if (option.equals("--debug-resolution")) {
+                if (debugResolution) {
+                    throw new IllegalArgumentException("The --debug-resolution option must not be repeated.");
+                }
+                debugResolution = true;
             } else {
                 throw new IllegalArgumentException("Unsupported benchmark option: " + option);
             }
@@ -114,7 +120,7 @@ public final class SemanticFactBenchmark {
                 : readClasspath(classpathFile);
             Map<String, Observation> observations = engine.equals("jdt")
                 ? extractWithJdt(sources, externalClasspath)
-                : extractWithJavaParser(sources, externalClasspath);
+                : extractWithJavaParser(sources, externalClasspath, debugResolution);
 
             List<String> failures = new ArrayList<>();
             for (Fact fact : facts) {
@@ -264,7 +270,8 @@ public final class SemanticFactBenchmark {
 
     private static Map<String, Observation> extractWithJavaParser(
         Map<String, Path> sources,
-        List<Path> externalClasspath) throws IOException {
+        List<Path> externalClasspath,
+        boolean debugResolution) throws IOException {
         ParserConfiguration sourceConfiguration = new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21);
         CombinedTypeSolver solver = new CombinedTypeSolver();
@@ -350,10 +357,18 @@ public final class SemanticFactBenchmark {
                         put(observations, fixture, "overload-selection",
                             sourceIdentity, identity, "resolved");
                     } catch (RuntimeException unresolved) {
-                        // Captured as absence for this expected fact.
+                        if (debugResolution) {
+                            System.err.printf(
+                                Locale.ROOT,
+                                "JavaParser method resolution failed: fixture=%s, call=%s, exception=%s, message=%s%n",
+                                fixture,
+                                call,
+                                unresolved.getClass().getName(),
+                                unresolved.getMessage());
+                        }
                     }
                 }
-                for (MethodReferenceExpr reference : unit.findAll(MethodReferenceExpr.class)) {
+                for (MethodReferenceExpr reference : unit.findAll(MethodReferenceExpr.class))
                     try {
                         ResolvedMethodDeclaration method = reference.resolve();
                         String identity = reference.getIdentifier().equals("new")

@@ -7,12 +7,12 @@ Set-StrictMode -Version Latest
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 Set-Location $repositoryRoot
 
-$artifactRoot = Join-Path $repositoryRoot 'artifacts\windows-runtime-probe'
+$artifactRoot = Join-Path $repositoryRoot 'artifacts/private-runtime-probe'
 $runtimeDirectory = Join-Path $artifactRoot 'runtime'
 $appDirectory = Join-Path $artifactRoot 'app'
 $libraryDirectory = Join-Path $artifactRoot 'lib'
 $classpathFile = Join-Path $artifactRoot 'runtime-classpath.txt'
-$moduleFile = Join-Path $artifactRoot 'jdk-module-closure.txt'
+$moduleFile = Join-Path $artifactRoot 'jdk-module-roots.txt'
 
 New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $appDirectory -Force | Out-Null
@@ -43,9 +43,10 @@ if ([string]::IsNullOrWhiteSpace($classpath)) {
     throw 'Maven produced an empty runtime classpath.'
 }
 
-$classesDirectory = Join-Path $repositoryRoot 'tools\java-semantic-spike\target\classes'
-$jdeps = Join-Path $env:JAVA_HOME 'bin\jdeps.exe'
-$jlink = Join-Path $env:JAVA_HOME 'bin\jlink.exe'
+$classesDirectory = Join-Path $repositoryRoot 'tools/java-semantic-spike/target/classes'
+$executableSuffix = if ($IsWindows) { '.exe' } else { '' }
+$jdeps = Join-Path $env:JAVA_HOME "bin/jdeps$executableSuffix"
+$jlink = Join-Path $env:JAVA_HOME "bin/jlink$executableSuffix"
 
 $jdepsArguments = @(
     '--multi-release', '21',
@@ -94,16 +95,18 @@ $dependencyJars = @(
     $classpath.Split([IO.Path]::PathSeparator) |
         Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) }
 )
-if ($dependencyJars.Count -eq 0) {
-    throw 'No runtime dependency JARs were resolved.'
+if ($dependencyJars.Count -ne 29) {
+    throw "Expected the pinned 29-JAR combined candidate closure, found $($dependencyJars.Count)."
 }
 
 foreach ($jar in $dependencyJars) {
     Copy-Item -LiteralPath $jar -Destination $libraryDirectory -Force
 }
 
-$runtimeJava = Join-Path $runtimeDirectory 'bin\java.exe'
-$packagedClasspath = "$appDirectory;$libraryDirectory\*"
+$runtimeJava = Join-Path $runtimeDirectory "bin/java$executableSuffix"
+$libraryWildcard = Join-Path $libraryDirectory '*'
+$packagedClasspath = [string]::Join([IO.Path]::PathSeparator, @($appDirectory, $libraryWildcard))
+$script:probeMeasurements = [System.Collections.Generic.List[object]]::new()
 
 function Invoke-PackagedJavaProbe {
     param(
@@ -118,9 +121,17 @@ function Invoke-PackagedJavaProbe {
     )
 
     $outputPath = Join-Path $artifactRoot "$Name.jsonl"
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $output = & $runtimeJava -cp $packagedClasspath $MainClass @Arguments 2>&1
     $exitCode = $LASTEXITCODE
+    $stopwatch.Stop()
     $output | Set-Content -LiteralPath $outputPath -Encoding utf8
+
+    $script:probeMeasurements.Add([ordered]@{
+        name = $Name
+        durationMillis = $stopwatch.ElapsedMilliseconds
+        exitCode = $exitCode
+    })
 
     if ($exitCode -ne 0) {
         throw "Packaged runtime probe '$Name' failed with exit code $exitCode."
@@ -140,17 +151,33 @@ $runtimeBytes = [long]((Get-ChildItem -LiteralPath $runtimeDirectory -File -Recu
 $dependencyBytes = [long](($dependencyJars | ForEach-Object { (Get-Item -LiteralPath $_).Length } | Measure-Object -Sum).Sum)
 $applicationBytes = [long]((Get-ChildItem -LiteralPath $appDirectory -File -Recurse | Measure-Object -Property Length -Sum).Sum)
 $combinedBytes = $runtimeBytes + $dependencyBytes + $applicationBytes
-$runtimeVersion = (& $runtimeJava -version 2>&1 | Out-String).Trim()
-$runtimeModules = & $runtimeJava --list-modules
+
+$startupStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+$runtimeVersionOutput = & $runtimeJava -version 2>&1
+$runtimeVersionExitCode = $LASTEXITCODE
+$startupStopwatch.Stop()
+if ($runtimeVersionExitCode -ne 0) {
+    throw "The generated private runtime failed its startup probe with exit code $runtimeVersionExitCode."
+}
+$runtimeVersion = ($runtimeVersionOutput | Out-String).Trim()
+
+$runtimeModules = @(& $runtimeJava --list-modules)
 if ($LASTEXITCODE -ne 0) {
     throw 'The generated private runtime could not enumerate its modules.'
 }
+$runtimeModuleNames = @($runtimeModules | ForEach-Object { ($_ -split '@')[0] })
 $runtimeModules | Set-Content -LiteralPath (Join-Path $artifactRoot 'runtime-modules.txt') -Encoding utf8
 
 $summary = [ordered]@{
+    operatingSystem = [System.Runtime.InteropServices.RuntimeInformation]::OSDescription
+    architecture = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
     javaVersion = $runtimeVersion
-    moduleCount = $moduleNames.Count
-    modules = $moduleNames
+    jdepsModuleRootCount = $moduleNames.Count
+    jdepsModuleRoots = $moduleNames
+    runtimeModuleCount = $runtimeModuleNames.Count
+    runtimeModules = $runtimeModuleNames
+    runtimeLaunchMillis = $startupStopwatch.ElapsedMilliseconds
+    candidateProbeDurations = @($script:probeMeasurements)
     dependencyJarCount = $dependencyJars.Count
     runtimeBytes = $runtimeBytes
     dependencyJarBytes = $dependencyBytes
@@ -162,4 +189,4 @@ $summary = [ordered]@{
     estimatedWorkerPackageMiB = [Math]::Round($combinedBytes / 1MB, 2)
 }
 
-$summary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $artifactRoot 'runtime-package-summary.json') -Encoding utf8
+$summary | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $artifactRoot 'runtime-package-summary.json') -Encoding utf8

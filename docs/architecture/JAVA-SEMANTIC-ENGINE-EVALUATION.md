@@ -402,7 +402,7 @@ This is a combined candidate dependency closure; the SBOM preserves dependency e
 
 ## Windows private-runtime packaging probe
 
-The Java semantic workflow includes a Windows-only J2-A5.3 packaging probe. It compiles the spike, resolves the combined runtime JAR closure, derives the JDK module closure with `jdeps`, creates a minimized Java 21 runtime with `jlink`, and assembles a runnable package containing the runtime image, candidate JARs and harness classes.
+The Java semantic workflow includes a cross-platform J2-A5.3 packaging probe on Windows and Linux. It compiles the spike, resolves the combined runtime JAR closure, derives the JDK module closure with `jdeps`, creates a minimized Java 21 runtime with `jlink`, and assembles a runnable package containing the runtime image, candidate JARs and harness classes.
 
 The probe then executes the JDT and JavaParser semantic-fact and diagnostic benchmarks from that private runtime. It uploads the runtime image, dependency JARs, module list, smoke-test JSONL and a size summary. The estimated worker-package size includes the Java runtime, both candidate dependency closures and harness classes; it excludes the Aegis WPF host, launcher, notices and installer overhead. Because both candidates are included, it is an upper-bound evaluation package rather than a final candidate-specific distribution.
 
@@ -432,3 +432,6 @@ The private runtime successfully executed the semantic-fact and normalized-diagn
 The package contains both candidates and is therefore an upper-bound evaluation bundle. It excludes the Aegis WPF host, launcher, notices, installer overhead and worker protocol. This proves that a minimized private Java runtime can execute both candidate engines on the Windows target; it does not prove worker supervision, cancellation, crash recovery, sandboxing or final distribution readiness.
 
 The complete runtime image, 29 JARs, module list, four smoke-test outputs and size summary are retained in [the Windows packaging artifact](https://github.com/bestacio89/Aegis/actions/runs/43201770009/artifacts/13935597122).
+
+
+The packaging job runs the same private-runtime probe on Windows and Linux. Each OS artifact records the requested JDK module roots, actual modules present in the linked runtime, runtime launch time, per-candidate semantic/diagnostic process durations and the package-size breakdown. These remain descriptive measurements of the combined evaluation bundle; they are not production worker capacity or startup guarantees.

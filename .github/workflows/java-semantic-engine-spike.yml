@@ -44,7 +44,7 @@ jobs:
 
       - name: Validate normalized semantic diagnostic corpus
         run: |
-          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-validation \\
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-validation \
             -Dexec.args="tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-diagnostics.tsv"
 
       - name: Compare Eclipse JDT semantic facts

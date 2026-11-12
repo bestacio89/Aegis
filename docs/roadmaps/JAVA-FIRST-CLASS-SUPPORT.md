@@ -771,3 +771,61 @@ The final regression review was performed against implementation head `67813b74a
 The roadmap update and acceptance matrix passed all mandatory workflows on final documentation head `e20832ebed3a64a9caac55a23a78183cb522ae38`.
 
 **Checkpoint decision:** J1 implementation and regression criteria are satisfied. J1-F is formally accepted. J1 is complete and J2 is unblocked.
+
+
+# J2-A — Semantic-engine evaluation audit — 2026-11-12
+
+**Status: evaluation design in progress; production engine selection is not accepted.**
+
+The existing J0 spike is a useful smoke test, but it is not sufficient to select a production engine. The archived 15-file run demonstrates that both candidates can parse the fixture corpus and resolve selected source/external symbols. It does not establish comparative semantic accuracy or production suitability.
+
+## Confirmed benchmark limitations
+
+- The harness combines source roots from all fixture modules into one resolution environment. This can expose declarations to modules that do not have a declared project dependency.
+- The controlled external classpath is global rather than module-owned; Maven/Gradle scope, test visibility, exclusions, dependency conflicts and module-path behaviour are not modelled per module.
+- JavaParser visits `ClassOrInterfaceType` while JDT visits `SimpleType`; their aggregate binding attempts and ratios are not equivalent measures.
+- JavaParser parse problems and JDT compiler `IProblem` errors are counted together as if they were the same diagnostic category.
+- Five source-type and three external-type names are narrow spot checks, not a semantic fact matrix.
+- One process run and a post-run heap snapshot do not establish repeatable performance or peak memory.
+
+## Archived smoke-test observations
+
+On the 15-file fixture corpus:
+- JavaParser parsed 15/15 files and resolved 5/5 named source-type spot checks; with the controlled classpath it resolved 3/3 named external-type spot checks.
+- JDT parsed 15/15 files and resolved 3/5 named source-type spot checks; with the controlled classpath it resolved 3/3 named external-type spot checks.
+- JavaParser reported zero parse problems in this run; JDT reported 22 source-only and 9 classpath-mode compiler errors. These diagnostic categories are not directly comparable.
+- JavaParser elapsed times were 295/304 ms (source-only/classpath); JDT elapsed times were 770/860 ms. These are single-run observations without controlled warm-up, repeated trials, GC controls or peak-memory measurement.
+- Neither engine resolved the deliberately missing type names.
+
+These results are not a production engine ranking. In particular, aggregate resolution ratios and elapsed times must not be used to choose a winner.
+
+## Required J2-A work
+
+1. **Module-scoped inputs:** derive a separate source/classpath/module-path view for every module from J1 module, source-root and dependency evidence. Do not expose all repository source roots or all external artifacts to every module.
+2. **Visibility correctness:** add positive and negative cross-module tests. A module with a declared project dependency must resolve the target; a module without that dependency must not. Test-only dependencies and test source roots must not leak into production analysis.
+3. **Semantic fact oracle:** define engine-neutral expected facts with stable fact IDs and expected source/target identities. Cover declarations, inheritance, implementation, generic substitutions, overload selection, calls, constructor references, annotations, visibility, module declarations, generated code and unresolved symbols.
+4. **Equivalent extraction coverage:** make JDT and JavaParser inspect equivalent semantic constructs. Report per-fact outcomes and unsupported cases; do not compare raw node counts from different AST categories.
+5. **Diagnostic taxonomy:** separate syntax/parse errors, compiler diagnostics, unresolved bindings, unsupported constructs, incomplete environment and infrastructure failures.
+6. **Representative corpus:** extend beyond the current fixtures to realistic Maven/Gradle modules, named modules, dependency conflicts, generated sources, partial projects and larger repositories.
+7. **Measurement protocol:** use fresh worker processes, controlled warm-up and repeated trials. Report distributions (median and dispersion) and define heap/RSS measurement semantics. Do not use one post-run heap snapshot as peak memory.
+8. **Operational and legal review:** compare worker lifecycle, cancellation, timeout/crash isolation, concurrency, JVM/runtime prerequisites, packaging, dependency update burden and licensing/redistribution obligations for JDT, JavaParser and Spoon.
+
+## Architecture constraints
+
+- Keep parser/compiler types behind the language adapter boundary; no Java AST or binding type may enter `Aegis.Shared`.
+- Use the J1 build model as the source of module ownership and declared dependency evidence. Do not independently guess classpaths in the semantic engine.
+- Ordinary analysis remains static and must not execute Maven/Gradle scripts, plugins or annotation processors.
+- Declared dependencies are not resolved artifacts. Any optional artifact-resolution phase must be separately authorized and report incomplete evidence.
+- Evaluate an isolated JVM worker as a candidate, not as a foregone conclusion. The .NET orchestration contract must remain language-neutral and versioned.
+
+## Acceptance gate
+
+J2-A is accepted only when:
+- the module-aware benchmark proves both allowed and forbidden cross-module visibility;
+- the same semantic fact oracle is exercised by each candidate;
+- diagnostic categories and incomplete environments are explicit;
+- representative corpus and repeated measurement results are available;
+- legal and operational trade-offs are documented;
+- a production recommendation is supported by evidence and known limitations.
+
+**Decision:** engine selection remains open. J2-B production integration is blocked until J2-A is accepted.

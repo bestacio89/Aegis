@@ -288,7 +288,7 @@ This is a deployment feasibility probe, not production integration. Acceptance s
 
 ### Windows private-runtime result (2026-11-12)
 
-The Windows packaging probe completed successfully using Temurin JDK 21.0.13. `jdeps` derived a nine-module closure:
+The Windows packaging probe completed successfully using Temurin JDK 21.0.13. `jdeps` identified nine root modules; the resulting `jlink` runtime contains 14 modules after transitive closure:
 
 `java.base, java.compiler, java.desktop, java.instrument, java.logging, java.management, jdk.attach, jdk.jdi, jdk.unsupported`.
 
@@ -308,4 +308,4 @@ The private runtime successfully executed the semantic-fact and normalized-diagn
 
 The package contains both candidates and is therefore an upper-bound evaluation bundle. It excludes the Aegis WPF host, launcher, notices, installer overhead and worker protocol. This proves that a minimized private Java runtime can execute both candidate engines on the Windows target; it does not prove worker supervision, cancellation, crash recovery, sandboxing or final distribution readiness.
 
-The complete runtime image, 29 JARs, module list, four smoke-test outputs and size summary are retained in [the Windows packaging artifact](https://github.com/bestacio89/Aegis/actions/runs/43201079603/artifacts/13935027808).
+The complete runtime image, 29 JARs, module list, four smoke-test outputs and size summary are retained in [the Windows packaging artifact](https://github.com/bestacio89/Aegis/actions/runs/43201770009/artifacts/13935597122).

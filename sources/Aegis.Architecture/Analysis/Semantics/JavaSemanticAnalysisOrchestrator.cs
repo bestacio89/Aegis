@@ -9,7 +9,7 @@ namespace Aegis.Architecture.Analysis.Semantics;
 /// Builds module-scoped Java semantic requests from discovered source-root ownership.
 /// Build declarations are not treated as resolved classpath entries.
 /// </summary>
-public sealed class JavaSemanticAnalysisOrchestrator
+public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectAnalyzer
 {
     private static readonly HashSet<string> ExcludedDirectoryNames =
         new(StringComparer.OrdinalIgnoreCase)
@@ -20,6 +20,8 @@ public sealed class JavaSemanticAnalysisOrchestrator
     private readonly SemanticAnalysisCoordinator _coordinator;
     private readonly IJavaClasspathResolver _classpathResolver;
     private readonly ILogger<JavaSemanticAnalysisOrchestrator> _logger;
+
+    public string Language => "Java";
 
     public JavaSemanticAnalysisOrchestrator(
         IEnumerable<ISemanticAnalysisAdapter> adapters,
@@ -110,6 +112,7 @@ public sealed class JavaSemanticAnalysisOrchestrator
 
         JavaSemanticFrameworkDetector.Analyze(context);
         JavaSemanticDependencyDetector.Analyze(context);
+        ModuleRoleDetector.Analyze(context.Modules);
     }
 
     private async Task AnalyzeScopeAsync(

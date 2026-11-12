@@ -15,6 +15,9 @@ public static class JavaSemanticAnalysisServiceCollectionExtensions
         services.TryAddSingleton<ISemanticAnalysisAdapter, JavaSemanticAnalysisAdapter>();
         services.TryAddSingleton<SemanticAnalysisCoordinator>();
         services.TryAddSingleton<JavaSemanticAnalysisOrchestrator>();
+        services.TryAddSingleton<ISemanticAnalysisProjectAnalyzer>(
+            provider => provider.GetRequiredService<JavaSemanticAnalysisOrchestrator>());
+        services.TryAddSingleton<SemanticAnalysisPipeline>();
 
         return services;
     }

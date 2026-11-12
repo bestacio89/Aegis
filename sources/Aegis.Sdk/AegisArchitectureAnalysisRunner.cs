@@ -36,6 +36,7 @@ public sealed class AegisArchitectureAnalysisRunner
     private readonly AegisArchitecturePolicy _configuredPolicy;
     private readonly ILogger<AegisArchitectureAnalysisRunner> _logger;
     private readonly JavaSemanticAnalysisOrchestrator? _javaSemanticAnalysis;
+    private readonly SemanticAnalysisPipeline? _semanticAnalysisPipeline;
 
     public AegisArchitectureAnalysisRunner(
         RuleEngine engine,
@@ -46,7 +47,8 @@ public sealed class AegisArchitectureAnalysisRunner
         IEnumerable<IReportExporter> exporters,
         IOptions<AegisArchitecturePolicy> policyOptions,
         ILogger<AegisArchitectureAnalysisRunner> logger,
-        JavaSemanticAnalysisOrchestrator? javaSemanticAnalysis = null)
+        JavaSemanticAnalysisOrchestrator? javaSemanticAnalysis = null,
+        SemanticAnalysisPipeline? semanticAnalysisPipeline = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(ruleResultRepo);
@@ -65,6 +67,7 @@ public sealed class AegisArchitectureAnalysisRunner
         _configuredPolicy = policyOptions.Value;
         _logger = logger;
         _javaSemanticAnalysis = javaSemanticAnalysis;
+        _semanticAnalysisPipeline = semanticAnalysisPipeline;
 
         var exporterList = exporters.ToList();
 
@@ -171,7 +174,13 @@ public sealed class AegisArchitectureAnalysisRunner
                 context.DomainType,
                 context.Layer);
 
-            if (_javaSemanticAnalysis is not null)
+            if (_semanticAnalysisPipeline is not null)
+            {
+                Report(progress, 7, "Semantic analysis", "Running registered language analyzers");
+                await _semanticAnalysisPipeline.AnalyzeAsync(context, token)
+                    .ConfigureAwait(false);
+            }
+            else if (_javaSemanticAnalysis is not null)
             {
                 Report(progress, 7, "Semantic analysis", "Analysing Java project modules");
                 await _javaSemanticAnalysis.AnalyzeAsync(context, token)

@@ -29,12 +29,14 @@ public sealed class AegisArchitectureAnalyzer
     private readonly RuleEngine _ruleEngine;
     private readonly ILogger<AegisArchitectureAnalyzer> _logger;
     private readonly JavaSemanticAnalysisOrchestrator? _semanticAnalysisOrchestrator;
+    private readonly SemanticAnalysisPipeline? _semanticAnalysisPipeline;
 
 
     public AegisArchitectureAnalyzer(
         RuleEngine ruleEngine,
         ILogger<AegisArchitectureAnalyzer> logger,
-        JavaSemanticAnalysisOrchestrator? semanticAnalysisOrchestrator = null)
+        JavaSemanticAnalysisOrchestrator? semanticAnalysisOrchestrator = null,
+        SemanticAnalysisPipeline? semanticAnalysisPipeline = null)
     {
         ArgumentNullException.ThrowIfNull(ruleEngine);
         ArgumentNullException.ThrowIfNull(logger);
@@ -42,6 +44,7 @@ public sealed class AegisArchitectureAnalyzer
         _ruleEngine = ruleEngine;
         _logger = logger;
         _semanticAnalysisOrchestrator = semanticAnalysisOrchestrator;
+        _semanticAnalysisPipeline = semanticAnalysisPipeline;
     }
 
 
@@ -77,7 +80,12 @@ public sealed class AegisArchitectureAnalyzer
 
 
 
-        if (_semanticAnalysisOrchestrator is not null)
+        if (_semanticAnalysisPipeline is not null)
+        {
+            await _semanticAnalysisPipeline.AnalyzeAsync(context, token)
+                .ConfigureAwait(false);
+        }
+        else if (_semanticAnalysisOrchestrator is not null)
         {
             await _semanticAnalysisOrchestrator.AnalyzeAsync(context, token)
                 .ConfigureAwait(false);

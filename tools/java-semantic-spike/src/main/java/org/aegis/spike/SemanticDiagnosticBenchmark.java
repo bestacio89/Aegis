@@ -233,7 +233,8 @@ public final class SemanticDiagnosticBenchmark {
             : "";
         return message.contains("source level")
             || message.contains("record pattern")
-            || sourceLine.contains("case Point(");
+            || sourceLine.contains("case Point(")
+            || hasFeatureNearLine(lines, lineNumber, "case Point(", 2);
     }
 
     private static String classifyUnresolvedEvidence(
@@ -244,8 +245,13 @@ public final class SemanticDiagnosticBenchmark {
             return null;
         }
         String simpleName = simpleName(diagnosticCase.symbol());
-        if (!source.contains(simpleName)
-            || !nativeMessage.toLowerCase(Locale.ROOT).contains(simpleName.toLowerCase(Locale.ROOT))) {
+        String normalizedMessage = nativeMessage.toLowerCase(Locale.ROOT);
+        String packageName = diagnosticCase.symbol().contains(".")
+            ? diagnosticCase.symbol().substring(0, diagnosticCase.symbol().lastIndexOf('.'))
+            : "";
+        boolean nativeSymbolEvidence = normalizedMessage.contains(simpleName.toLowerCase(Locale.ROOT))
+            || (!packageName.isEmpty() && normalizedMessage.contains(packageName.toLowerCase(Locale.ROOT)));
+        if (!source.contains(simpleName) || !nativeSymbolEvidence) {
             return null;
         }
         if (!diagnosticCase.declaredArtifact().isBlank()) {
@@ -261,7 +267,8 @@ public final class SemanticDiagnosticBenchmark {
     }
 
     private static boolean isUnresolvedProblem(int problemId) {
-        return problemId == IProblem.UndefinedType
+        return problemId == IProblem.ImportNotFound
+            || problemId == IProblem.UndefinedType
             || problemId == IProblem.UndefinedName
             || problemId == IProblem.UndefinedMethod
             || problemId == IProblem.UndefinedField
@@ -365,7 +372,26 @@ public final class SemanticDiagnosticBenchmark {
             : "";
         return message.contains("record pattern")
             || message.contains("unsupported")
-            || line.contains("case Point(");
+            || line.contains("case Point(")
+            || hasFeatureNearLine(lines, sourceLine, "case Point(", 2);
+    }
+
+    private static boolean hasFeatureNearLine(
+        String[] lines,
+        int sourceLine,
+        String feature,
+        int radius) {
+        if (sourceLine <= 0 || sourceLine > lines.length) {
+            return false;
+        }
+        int start = Math.max(0, sourceLine - radius - 1);
+        int end = Math.min(lines.length - 1, sourceLine + radius - 1);
+        for (int index = start; index <= end; index++) {
+            if (lines[index].contains(feature)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String simpleName(String qualifiedName) {

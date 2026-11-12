@@ -606,7 +606,7 @@ public sealed class RuleEngine
             .Where(module => !string.IsNullOrWhiteSpace(module.Path))
             .Where(module => PathsEqual(module.Path, context.RootPath))
             .ToArray();
-        var relevantModules = exactModules.Length > 0 ? exactModules : context.Modules;
+        IEnumerable<ProjectModuleContext> relevantModules = exactModules.Length > 0 ? exactModules : context.Modules;
         foreach (var module in relevantModules)
             frameworks.AddRange(module.Frameworks.Where(value => !string.IsNullOrWhiteSpace(value)));
 

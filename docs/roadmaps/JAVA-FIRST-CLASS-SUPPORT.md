@@ -988,3 +988,30 @@ Consolidate correctness, diagnostic quality, performance, memory, operational co
 **Acceptance:** An evidence-backed recommendation is reviewed and recorded. Final production-engine approval is separate from the provisional preference. No production parser dependency is introduced before this decision.
 
 **Current decision:** J2-A4 accepted as a comparative checkpoint. J2-A5 in progress, starting with J2-A5.1. Full J2-A remains open; J2-B remains blocked.
+
+
+## J2-A5.1 progress — semantic corpus and diagnostic contract (2026-11-12)
+
+**Bounded result:** The semantic corpus expansion is validated. The oracle now contains 17 facts and includes a nested record, inherited default-interface method invocation, generic overload selection, and a checked-in generated-source class under a distinct `src/generated/java` root. Production source references the generated class; no annotation processor or project build script is executed.
+
+The generated-source constructor is explicitly declared so the generated-source visibility fact is independent of JavaParser's known implicit record-constructor limitation.
+
+| Candidate | Facts resolved correctly | Mismatches |
+|---|---:|---:|
+| Eclipse JDT Core 3.47.0 | 17/17 | 0 |
+| JavaParser 3.28.2 + Symbol Solver | 14/17 | 3 |
+
+The same three JavaParser mismatches remain: implicit canonical record constructor binding, implicit record-component accessor binding, and constructor method-reference binding to the implicit canonical record constructor. The five added facts did not create additional candidate gaps.
+
+A separate diagnostic scenario corpus now defines seven categories: syntax error, compiler/type error, unresolved symbol, incomplete declared dependency environment, unsupported construct at a lower configured source level, warning, and infrastructure failure. Its validator checks stable IDs, category/severity consistency, source-level values, fixture containment/existence and complete category coverage. The semantic fact validator's empty-category JSON output was also corrected.
+
+**Boundary:** The diagnostic corpus is currently a validated engine-neutral contract. Candidate-specific diagnostic extraction and normalization are not yet implemented; a green validator does not mean that either engine has passed diagnostic classification.
+
+### CI evidence
+
+All mandatory workflows passed on head `5c91f92f2d7f104e3b955944c5deebb4a0f10df7`:
+- Java semantic engine spike — run `43188405804`, success; validates both corpora, runs both semantic-fact candidates, and runs source/classpath/module-visibility checks.
+- Non-WPF quality gates — run `43188405806`, success.
+- WPF build validation — run `43188405812`, success.
+
+**Decision:** Accept the expanded semantic-fact corpus sub-checkpoint. Keep J2-A5.1 in progress until engine-native diagnostic extraction and normalized category mapping are implemented and asserted. JDT remains the preferred candidate. J2-B remains blocked.

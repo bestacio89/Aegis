@@ -254,3 +254,24 @@ Assess dependency closure, licensing/redistribution obligations, packaging, supp
 Consolidate semantic correctness, diagnostic quality, repeatable performance, peak memory, deployment/operational complexity and legal obligations. JDT remains the preferred candidate unless evidence demonstrates a material disadvantage. Final production approval requires this review; J2-B remains blocked.
 
 **Current checkpoint:** J2-A5.1 is the immediate implementation target. No production parser dependency is to be added during J2-A5.
+
+
+### J2-A5.1 progress — corpus expansion and diagnostic contract (2026-11-12)
+
+The expanded semantic oracle contains 17 facts. It now covers a nested record declaration, an inherited default interface method invocation, a generic overload selection, a generated-source ordinary class declaration, and a production-source constructor reference into the generated source root. The generated class has an explicit constructor so this fact isolates generated-source visibility from implicit record-member synthesis.
+
+| Candidate | Correct facts | Mismatches |
+|---|---:|---:|
+| Eclipse JDT Core 3.47.0 | 17/17 | 0 |
+| JavaParser 3.28.2 + Symbol Solver | 14/17 | 3 |
+
+The three JavaParser gaps remain exactly the J2-A4 findings: implicit canonical record constructor, implicit record-component accessor and constructor method reference to the implicit canonical record constructor. The expanded corpus did not add another gap.
+
+The new `semantic-diagnostics.tsv` defines seven engine-neutral diagnostic scenarios: syntax error, compiler/type error, unresolved symbol, incomplete declared dependency environment, unsupported construct at a lower configured source level, warning, and infrastructure failure. The corpus validator passes all seven categories and enforces stable IDs, severity/category consistency, fixture containment and source-level constraints. It validates scenario integrity only; neither candidate has yet been credited with normalized diagnostic coverage.
+
+All mandatory workflows passed on head `5c91f92f2d7f104e3b955944c5deebb4a0f10df7`:
+- Java semantic engine spike — run `43188405804`, success.
+- Non-WPF quality gates — run `43188405806`, success.
+- WPF build validation — run `43188405812`, success.
+
+**Decision:** The semantic-corpus expansion sub-checkpoint is accepted. J2-A5.1 remains in progress until JDT and JavaParser diagnostic extraction is normalized and asserted against the scenario contract. JDT remains the preferred candidate; final production approval and J2-B remain blocked.

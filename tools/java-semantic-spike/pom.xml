@@ -109,6 +109,15 @@
               <mainClass>org.aegis.spike.SemanticPerformanceBenchmark</mainClass>
             </configuration>
           </execution>
+          <execution>
+            <id>representative-project-benchmark</id>
+            <goals>
+              <goal>java</goal>
+            </goals>
+            <configuration>
+              <mainClass>org.aegis.spike.RepresentativeProjectBenchmark</mainClass>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
     </plugins>

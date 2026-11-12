@@ -333,3 +333,20 @@ The worker-specific protocol test suite passed 7/7 tests. The Windows and Linux 
 - [Java comparison, worker SBOM and OSV artifact](https://github.com/bestacio89/Aegis/actions/runs/43207732837/artifacts/13940141303)
 
 This is a protocol/process feasibility result. The worker still advertises no semantic engine and does not provide a .NET supervisor or OS sandbox.
+
+
+## Representative project matrix
+
+The CI matrix uses three pinned Apache-2.0 source snapshots, recorded in `representative-projects.tsv`:
+
+| Project | Build model | Main Java files | Test Java files |
+|---|---|---:|---:|
+| Spring Petclinic | Maven and Gradle Groovy | 30 | 20 |
+| Quarkus getting-started | Maven | 2 | 2 |
+| Micronaut starter AWS CDK module | Gradle Kotlin DSL | 3 | 2 |
+
+Each checkout is pinned to an immutable commit and its license file and source inventory are verified before analysis. The Micronaut module resolves local project types through the `starter-core` source root. Both engines analyze main and test source sets separately; test analysis can see main sources, while main analysis cannot see test sources.
+
+The benchmark records parse completeness, syntax errors, declarations, method-call resolution and type-reference resolution. It runs in a deliberately bounded **source-roots plus running-JDK environment**: project build scripts are not executed and third-party dependency classpaths are not supplied. Unresolved external framework symbols are therefore environment evidence, not candidate correctness failures. The strict gate requires every pinned Java source file in the selected source sets to parse without syntax errors.
+
+This is the first real-project robustness and local-source-resolution checkpoint, not a full compiler-equivalence oracle. The next evaluation step must add controlled external dependency visibility and selected expected semantic facts before using these measurements to make a final engine recommendation.

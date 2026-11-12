@@ -24,6 +24,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout pinned Spring Petclinic snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: spring-projects/spring-petclinic
+          ref: 500158f732419217507c7656904b8e6aa1bcc0d6
+          path: representative-projects/spring-petclinic
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout pinned Quarkus quickstart snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: quarkusio/quarkus-quickstarts
+          ref: b3e90af5f60b94a1acb14736be97e34127f079ec
+          path: representative-projects/quarkus-quickstarts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout pinned Micronaut starter snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: micronaut-projects/micronaut-starter
+          ref: 987728468ed839a8350e70d00d94da2cf272f5a9
+          path: representative-projects/micronaut-starter
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
@@ -120,6 +147,9 @@ jobs:
         run: |
           mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-validation \
             -Dexec.args="tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-diagnostics.tsv"
+
+      - name: Run pinned representative project matrix
+        run: bash tools/java-semantic-spike/run-representative-project-matrix.sh
 
       - name: Compare Eclipse JDT normalized diagnostics
         run: |

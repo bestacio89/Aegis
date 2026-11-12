@@ -121,6 +121,86 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
         }
     }
 
+    [Fact]
+    public async Task Adds_test_framework_evidence_from_declared_maven_test_dependencies()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var sourceRoot = Path.Combine(repository, "src", "test", "java");
+        Directory.CreateDirectory(sourceRoot);
+        var sourceFile = Path.Combine(sourceRoot, "ServiceTests.java");
+        var pomFile = Path.Combine(repository, "pom.xml");
+        await File.WriteAllTextAsync(sourceFile, "package sample; public class ServiceTests {}");
+        await File.WriteAllTextAsync(pomFile, "<project />");
+
+        try
+        {
+            var adapter = new AnnotationJavaAdapter(sourceFile, "sample.CustomAnnotation", isTestCode: true);
+            var orchestrator = new JavaSemanticAnalysisOrchestrator(
+                [adapter],
+                new EmptyClasspathResolver(),
+                NullLogger<JavaSemanticAnalysisOrchestrator>.Instance);
+            var module = new ProjectModuleContext
+            {
+                Name = "service-tests",
+                Path = repository,
+                Languages = ["Java"],
+                IsTestProject = true,
+                MavenModel = new MavenProjectModel
+                {
+                    ProjectFile = pomFile,
+                    ProjectCoordinates = new MavenProjectModel.Coordinates("sample", "service-tests", "1.0.0"),
+                    Dependencies =
+                    [
+                        new MavenProjectModel.Dependency(
+                            "org.junit.jupiter",
+                            "junit-jupiter",
+                            "5.10.2",
+                            "test",
+                            "jar",
+                            null,
+                            false,
+                            false,
+                            false,
+                            [],
+                            pomFile,
+                            false)
+                    ]
+                },
+                SourceRoots =
+                [
+                    new ProjectSourceRoot
+                    {
+                        Directory = sourceRoot,
+                        Ownership = ProjectSourceRootOwnership.Test,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    }
+                ]
+            };
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "service-tests",
+                RootPath = repository,
+                Language = "Java",
+                Framework = "Java SE",
+                Modules = [module]
+            };
+
+            await orchestrator.AnalyzeAsync(context);
+
+            var evidence = Assert.Single(module.FrameworkEvidence);
+            Assert.Equal("JUnit 5", evidence.Name);
+            Assert.Equal("5.10.2", evidence.Version);
+            Assert.Equal(FrameworkEvidenceKind.Testing, evidence.Kind);
+            Assert.True(evidence.IsTestOnly);
+            Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(evidence.Provenance).Source);
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
     private static ProjectModuleContext CreateModule(string name, string path, string sourceRoot) =>
         new()
         {
@@ -171,8 +251,18 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
     private sealed class AnnotationJavaAdapter : ISemanticAnalysisAdapter
     {
         private readonly string _sourceFile;
+        private readonly string _annotationName;
+        private readonly bool _isTestCode;
 
-        public AnnotationJavaAdapter(string sourceFile) => _sourceFile = sourceFile;
+        public AnnotationJavaAdapter(
+            string sourceFile,
+            string annotationName = "org.springframework.web.bind.annotation.RestController",
+            bool isTestCode = false)
+        {
+            _sourceFile = sourceFile;
+            _annotationName = annotationName;
+            _isTestCode = isTestCode;
+        }
 
         public string AdapterId => "eclipse-jdt";
         public string Language => "Java";
@@ -195,11 +285,7 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
                 Symbols =
                 [
                     new SemanticSymbol { Id = "source", QualifiedName = "sample.Service" },
-                    new SemanticSymbol
-                    {
-                        Id = "annotation",
-                        QualifiedName = "org.springframework.web.bind.annotation.RestController"
-                    }
+                    new SemanticSymbol { Id = "annotation", QualifiedName = _annotationName }
                 ],
                 Relationships =
                 [
@@ -210,6 +296,7 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
                         TargetSymbolId = "annotation",
                         Kind = SemanticRelationshipKind.UsesAnnotation,
                         ResolutionStatus = SemanticResolutionStatus.Resolved,
+                        IsTestCode = _isTestCode,
                         Provenance =
                         [
                             new SemanticEvidenceProvenance

@@ -62,7 +62,10 @@ internal static class JavaSemanticFrameworkDetector
                     Name = framework,
                     Kind = kind,
                     ProjectPath = Path.GetFullPath(module.Path),
-                    IsTestOnly = relationship.IsTestCode || module.IsTestProject || module.IsTestSupport,
+                    IsTestOnly = kind == FrameworkEvidenceKind.Testing
+                        || relationship.IsTestCode
+                        || module.IsTestProject
+                        || module.IsTestSupport,
                     Provenance = provenance
                 };
 
@@ -85,6 +88,8 @@ internal static class JavaSemanticFrameworkDetector
             }
         }
 
+        AnalyzeBuildTestFrameworks(context);
+
         if (string.Equals(context.Language, "Java", StringComparison.OrdinalIgnoreCase)
             && string.Equals(context.Framework, "Java SE", StringComparison.OrdinalIgnoreCase))
         {
@@ -102,8 +107,138 @@ internal static class JavaSemanticFrameworkDetector
         }
     }
 
+    private static void AnalyzeBuildTestFrameworks(ProjectArchitectureContext context)
+    {
+        foreach (var module in context.Modules)
+        {
+            if (module.MavenModel is { } maven)
+            {
+                foreach (var dependency in maven.Dependencies)
+                {
+                    var framework = ClassifyTestDependency(dependency.GroupId, dependency.ArtifactId);
+                    if (framework is null)
+                        continue;
+
+                    AddBuildEvidence(
+                        context,
+                        module,
+                        framework,
+                        dependency.Version,
+                        $"{dependency.GroupId}:{dependency.ArtifactId}",
+                        maven.ProjectFile,
+                        "maven-static-model",
+                        string.Equals(dependency.Scope, "test", StringComparison.OrdinalIgnoreCase)
+                            || module.IsTestProject
+                            || module.IsTestSupport);
+                }
+            }
+
+            if (module.GradleBuildModel is { } gradle)
+            {
+                foreach (var dependency in gradle.Dependencies)
+                {
+                    var framework = ClassifyTestDependency(dependency.GroupId, dependency.ArtifactId);
+                    if (framework is null)
+                        continue;
+
+                    AddBuildEvidence(
+                        context,
+                        module,
+                        framework,
+                        dependency.Version,
+                        $"{dependency.GroupId}:{dependency.ArtifactId}",
+                        gradle.BuildFile,
+                        "gradle-static-model",
+                        dependency.Configuration.Contains("test", StringComparison.OrdinalIgnoreCase)
+                            || module.IsTestProject
+                            || module.IsTestSupport);
+                }
+            }
+        }
+    }
+
+    private static string? ClassifyTestDependency(string? groupId, string? artifactId)
+    {
+        if (string.IsNullOrWhiteSpace(groupId) || string.IsNullOrWhiteSpace(artifactId))
+            return null;
+
+        if (groupId == "org.junit.jupiter" && artifactId.StartsWith("junit-jupiter", StringComparison.Ordinal))
+            return "JUnit 5";
+        if (groupId == "junit" && artifactId == "junit")
+            return "JUnit 4";
+        if (groupId == "org.testng" && artifactId == "testng")
+            return "TestNG";
+        if (groupId == "org.mockito" && artifactId.StartsWith("mockito-", StringComparison.Ordinal))
+            return "Mockito";
+        if (groupId == "org.assertj" && artifactId.StartsWith("assertj-", StringComparison.Ordinal))
+            return "AssertJ";
+        if (groupId == "org.springframework.boot" && artifactId == "spring-boot-starter-test")
+            return "Spring Boot Test";
+        if (groupId == "io.quarkus" && artifactId.StartsWith("quarkus-junit", StringComparison.Ordinal))
+            return "Quarkus Test";
+        if (groupId == "io.micronaut.test")
+            return "Micronaut Test";
+
+        return null;
+    }
+
+    private static void AddBuildEvidence(
+        ProjectArchitectureContext context,
+        ProjectModuleContext module,
+        string framework,
+        string? version,
+        string dependencyIdentity,
+        string projectFile,
+        string analyzerId,
+        bool isTestOnly)
+    {
+        var evidenceKey = string.Join("|", module.Path, framework, dependencyIdentity, projectFile, isTestOnly);
+        var evidence = new FrameworkEvidence
+        {
+            Id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(evidenceKey))).ToLowerInvariant(),
+            Name = framework,
+            Version = version,
+            Kind = FrameworkEvidenceKind.Testing,
+            ProjectPath = Path.GetFullPath(module.Path),
+            IsTestOnly = isTestOnly,
+            Provenance =
+            [
+                new SemanticEvidenceProvenance
+                {
+                    AnalyzerId = analyzerId,
+                    Source = SemanticEvidenceSource.BuildModel,
+                    FilePath = projectFile,
+                    Confidence = 1.0
+                }
+            ]
+        };
+
+        if (module.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
+            module.FrameworkEvidence.Add(evidence);
+        if (context.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
+            context.FrameworkEvidence.Add(evidence);
+
+        AddDistinct(module.Frameworks, framework);
+        AddDistinct(context.DetectedFrameworks, framework);
+    }
+
     private static (string Name, FrameworkEvidenceKind Kind)? Classify(string qualifiedName)
     {
+        if (qualifiedName.StartsWith("org.junit.jupiter.api.", StringComparison.Ordinal))
+            return ("JUnit 5", FrameworkEvidenceKind.Testing);
+        if (qualifiedName.StartsWith("org.junit.", StringComparison.Ordinal))
+            return ("JUnit 4", FrameworkEvidenceKind.Testing);
+        if (qualifiedName.StartsWith("org.testng.annotations.", StringComparison.Ordinal))
+            return ("TestNG", FrameworkEvidenceKind.Testing);
+        if (qualifiedName.StartsWith("org.mockito.", StringComparison.Ordinal))
+            return ("Mockito", FrameworkEvidenceKind.Testing);
+        if (qualifiedName.StartsWith("org.springframework.boot.test.", StringComparison.Ordinal))
+            return ("Spring Boot Test", FrameworkEvidenceKind.Testing);
+        if (qualifiedName.StartsWith("io.quarkus.test.", StringComparison.Ordinal))
+            return ("Quarkus Test", FrameworkEvidenceKind.Testing);
+        if (qualifiedName.StartsWith("io.micronaut.test.", StringComparison.Ordinal))
+            return ("Micronaut Test", FrameworkEvidenceKind.Testing);
+
         if (qualifiedName.StartsWith("org.springframework.boot.autoconfigure.", StringComparison.Ordinal))
             return ("Spring Boot", FrameworkEvidenceKind.Application);
         if (qualifiedName.StartsWith("org.springframework.web.bind.annotation.", StringComparison.Ordinal))

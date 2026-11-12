@@ -8,6 +8,21 @@
 
 **Delivery model:** One umbrella pull request, implemented through J0–J7 phases with explicit acceptance checkpoints. The PR remains open until all mandatory acceptance criteria are met. A checkpoint is not complete merely because its code has been committed.
 
+## Execution reset — 2026-11-12
+
+**Selected production semantic engine: Eclipse JDT Core 3.47.0.** The candidate evaluation is closed. Historical JDT/JavaParser measurements, comparison fixtures and SBOM records remain below as decision evidence only; they are not an active workstream.
+
+Execution rules from this point:
+- Do not add more parser comparisons, benchmark dimensions, scoring metrics or evaluator layers.
+- Do not expand the evaluation framework absent a concrete correctness defect.
+- Keep existing quality and architecture gates unchanged.
+- Tests validate implemented behaviour, security boundaries and regressions.
+- Prioritize JDT production integration, project/source relationships, framework intelligence and test architecture.
+- J6 runtime/dynamic evidence is deferred. It is optional and is not a prerequisite for first-class static Java support.
+
+The active completion path is **J0–J5 plus J7**. Historical status statements in the evaluation sections below are superseded by this execution reset. J7 must use the existing representative corpus and mandatory CI; expand the matrix only when a concrete uncovered capability requires it.
+
+
 ---
 
 ## 1. Engineering principles
@@ -82,6 +97,8 @@ Security and correctness:
 
 **Objective:** Replace heuristic source inspection with semantic source analysis.
 
+**Implementation state (2026-11-12):** Eclipse JDT is attached to the production worker and integrated through the .NET language adapter. The versioned worker protocol, host supervision/cancellation, private Java 21 packaging, and Windows/Linux process probes are implemented. Recovered JDT bindings remain unresolved evidence and are never promoted to resolved dependencies. The full transitive external-artifact classpath is still incomplete and must remain explicit in analysis status.
+
 Technology candidates:
 - Eclipse JDT.
 - JavaParser with Symbol Solver.
@@ -109,7 +126,7 @@ Required capabilities:
 - Generated versus handwritten code.
 - Source locations and stable symbol identity.
 
-The engine must be isolated behind a versioned language-adapter boundary. A JVM worker is a candidate deployment model, not a foregone conclusion; the J0 spike must compare operational alternatives.
+The selected engine is isolated behind a versioned language-adapter boundary and runs in a supervised out-of-process Java 21 worker. The worker is the production deployment model for this implementation.
 
 **Checkpoint J2:**
 - Source symbols can be resolved reliably.
@@ -121,6 +138,8 @@ The engine must be isolated behind a versioned language-adapter boundary. A JVM 
 ### J3 — Dependency graph and architectural relationships
 
 **Objective:** Integrate resolved Java relationships into the Aegis investigation workspace.
+
+**Accepted implementation checkpoint (2026-11-12):** Declared project dependencies are traversed transitively to provide in-workspace Java source roots as JDT binding-only inputs. Dependency files are not added to the consumer module's analyzed-file inventory. Resolved, non-recovered compiler relationships are projected onto module dependency edges with provenance and production/test scope. Workspace-boundary checks reject referenced roots outside the workspace. Complete external-artifact resolution and a separate test-source analysis path remain known limitations.
 
 Relationship types:
 - Project and module dependencies.
@@ -202,7 +221,7 @@ Analysis:
 - Test findings retain source attribution.
 - Coverage is never inferred merely from test-file existence.
 
-### J6 — Runtime and dynamic architecture evidence
+### J6 — Deferred: optional runtime and dynamic architecture evidence
 
 **Objective:** Introduce optional runtime evidence to complement static analysis.
 
@@ -345,7 +364,7 @@ This PR does not implement Kotlin, Python, Android-specific analysis, native com
 ## 8. Definition of done
 
 Java support is complete only when:
-- J0–J7 acceptance gates are satisfied.
+- J0–J5 and J7 acceptance gates are satisfied. J6 is deferred and is not required for static first-class Java support.
 - Java projects are semantically analysed rather than merely recognised.
 - Maven and Gradle structures are correctly understood.
 - Source relationships are resolved with traceable evidence.

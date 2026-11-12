@@ -1,0 +1,111 @@
+name: Java semantic worker
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'tools/java-worker-prototype/**'
+      - 'sources/Aegis.Architecture/Analysis/Detectors/**'
+      - 'sources/Aegis.Architecture/Analysis/Semantics/**'
+      - 'sources/Aegis.Shared/Architecture/Models/**'
+      - 'tests/Aegis.Architecture.Tests/**'
+      - '.github/workflows/java-semantic-worker.yml'
+      - '.github/workflows/java-semantic-engine-spike.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: java-semantic-worker-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  worker-tests:
+    name: Verify selected Eclipse JDT worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: tools/java-worker-prototype/pom.xml
+
+      - name: Verify JDT worker and semantic regression tests
+        run: mvn --batch-mode --no-transfer-progress -f tools/java-worker-prototype/pom.xml verify
+
+      - name: Upload Maven test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-worker-maven-test-reports
+          path: tools/java-worker-prototype/target/surefire-reports/
+          if-no-files-found: warn
+
+  private-runtime-probe:
+    name: Probe private JDT runtime (${{ matrix.os }})
+    needs: worker-tests
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: tools/java-worker-prototype/pom.xml
+
+      - name: Package selected JDT worker and private Java runtime
+        shell: pwsh
+        run: pwsh -File tools/java-worker-prototype/packaging/Package-Worker.ps1 -OutputDirectory artifacts/java-worker-package
+
+      - name: Exercise worker protocol, JDT analysis and process lifecycle
+        shell: pwsh
+        run: |
+          $javaRoot = Join-Path $PWD 'artifacts/java-worker-package/Java'
+          $javaExecutable = Join-Path $javaRoot 'runtime/bin/java'
+          if ($IsWindows) { $javaExecutable += '.exe' }
+          $classpath = [string]::Join(
+              [IO.Path]::PathSeparator,
+              @(
+                  (Join-Path $javaRoot 'worker/classes'),
+                  (Join-Path $javaRoot 'worker/lib/*')
+              ))
+          & tools/java-worker-prototype/packaging/Probe-WorkerProcess.ps1 `
+              -JavaExecutable $javaExecutable `
+              -Classpath $classpath `
+              -ArtifactDirectory 'artifacts/java-worker-package/probe'
+
+      - name: Scan selected worker SBOM with OSV
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/src" ghcr.io/google/osv-scanner:v2.7.1 \
+            scan -L /src/artifacts/java-worker-package/Java/worker/sbom.cdx.json \
+            --format json \
+            --output-file /src/artifacts/java-worker-package/worker-osv-report.json
+
+      - name: Upload private runtime and process evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-worker-private-runtime-${{ matrix.os }}
+          path: artifacts/java-worker-package/
+          if-no-files-found: warn

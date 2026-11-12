@@ -1,19 +1,14 @@
-name: Java semantic engine spike
+name: Java semantic engine evaluation (manual)
 
+# Historical parser comparison; run manually only. Eclipse JDT is the selected engine.
 on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: java-semantic-engine-spike-${{ github.event.pull_request.number || github.ref }}
+  group: java-semantic-engine-evaluation-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

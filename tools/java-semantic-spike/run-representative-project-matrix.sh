@@ -39,7 +39,7 @@ run_benchmark() {
     mode="curated-classpath"
     options="--classpath-file=$classpath_file"
     expected_environment="source-roots+jdk+curated-external-classpath"
-    expected_classpath_entries="$(tr ':' '\\n' < "$classpath_file" | wc -l | tr -d ' ')"
+    expected_classpath_entries="$(awk -F ':' '{ print NF }' "$classpath_file")"
   fi
 
   local output="$results_directory/$project_id-$source_set-$mode-$engine.jsonl"

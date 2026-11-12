@@ -69,8 +69,13 @@ $workerDependencyJars = @(
     $workerClasspath.Split([IO.Path]::PathSeparator) |
         Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) }
 )
-if ($workerDependencyJars.Count -ne 1 -or (Split-Path -Leaf $workerDependencyJars[0]) -notlike 'gson-2.13.2.jar') {
-    throw "Expected the isolated Gson 2.13.2 worker runtime dependency, found $($workerDependencyJars.Count) JAR(s)."
+$workerDependencyJarNames = @($workerDependencyJars | ForEach-Object { Split-Path -Leaf $_ })
+if ($workerDependencyJarNames -notcontains 'gson-2.13.2.jar') {
+    throw "The isolated worker runtime closure does not contain Gson 2.13.2: $($workerDependencyJarNames -join ', ')."
+}
+$unexpectedParserJars = @($workerDependencyJarNames | Where-Object { $_ -match 'jdt|javaparser' })
+if ($unexpectedParserJars.Count -gt 0) {
+    throw "The isolated worker runtime closure must not contain parser candidate JARs: $($unexpectedParserJars -join ', ')."
 }
 
 $mavenClasspathArguments = @(
@@ -268,6 +273,7 @@ $summary = [ordered]@{
     candidateProbeDurations = @($script:probeMeasurements)
     dependencyJarCount = $dependencyJars.Count
     workerDependencyJarCount = $workerDependencyJars.Count
+    workerDependencyJarNames = $workerDependencyJarNames
     workerProcessProbe = $workerProcessSummary
     runtimeBytes = $runtimeBytes
     dependencyJarBytes = $dependencyBytes

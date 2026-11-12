@@ -46,7 +46,7 @@ The protocol prototype does not provide an OS sandbox. A supervising host must s
 
 ## Cross-platform private-runtime process probe
 
-The Java semantic workflow's existing Windows/Linux packaging matrix now compiles this worker, resolves its runtime-only dependency closure, includes its classes and Gson JAR in the minimized Java 21 package, and invokes `packaging/Probe-WorkerProcess.ps1` using that private runtime.
+The Java semantic workflow's existing Windows/Linux packaging matrix now compiles this worker, resolves its runtime-only dependency closure, includes its classes and Gson runtime dependency closure in the minimized Java 21 package, and invokes `packaging/Probe-WorkerProcess.ps1` using that private runtime.
 
 The process-level probe verifies:
 

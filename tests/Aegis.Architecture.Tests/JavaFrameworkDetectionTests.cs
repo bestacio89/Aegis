@@ -301,6 +301,8 @@ public sealed class JavaFrameworkDetectionTests
         {
             File.WriteAllText(Path.Combine(root, "settings.gradle.kts"), "rootProject.name = \"test-task-evidence\"");
             File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                import org.gradle.api.tasks.testing.Test
+
                 plugins { id("java") }
                 tasks.register<Test>("integrationTest")
                 tasks.register("componentTest", Test::class)

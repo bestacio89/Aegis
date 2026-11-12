@@ -185,14 +185,14 @@ Additional integrations:
 
 Framework evidence must be contextual. An annotation alone must not establish an architectural layer or responsibility.
 
-**Current implementation increment (2026-11-12; exact-head CI pending):** Production Maven/Gradle dependency coordinates now populate normalized framework evidence with declared/resolved version information, module ownership, architectural role and original build-model provenance. Initial mappings cover Spring Framework/Boot, Jakarta/Java EE, Quarkus, Micronaut, Hibernate and MicroProfile. Spring Boot starter coordinates distinguish web, persistence, messaging and runtime roles. Test-only dependencies are excluded from production framework evidence. Compiler-confirmed annotation evidence remains a separate source and is not replaced by dependency-name inference.
+**Status: Accepted (2026-11-12; mandatory exact-head CI passed).** Production Maven/Gradle dependency coordinates populate normalized framework evidence with declared/resolved versions, module ownership, architectural role and original build-model provenance. The supported catalogue covers Spring Framework/Boot, Jakarta/Java EE, Quarkus, Micronaut, Hibernate/JPA, MicroProfile, Apache Kafka, RabbitMQ, gRPC, Protocol Buffers, MapStruct, Lombok, Jackson, OpenAPI, Flyway, Liquibase and EclipseLink. Spring Boot starter coordinates distinguish web, persistence, messaging and runtime roles. Test-only dependencies are excluded from production framework evidence. Compiler-confirmed annotation evidence remains separate from build-coordinate evidence; dependency names do not establish source-level usage or architecture layers.
 
-**Checkpoint J4:**
-- Frameworks and versions are identified when evidence exists.
-- Framework-managed dependencies are represented.
-- Architectural roles are resolved contextually.
-- Framework fixtures demonstrate correct classification.
-- Framework-specific rules do not contaminate shared evaluators.
+**Checkpoint J4 — accepted:**
+- [x] Frameworks and versions are identified when evidence exists.
+- [x] Framework-managed dependencies are represented.
+- [x] Architectural roles are resolved contextually.
+- [x] Maven and Gradle framework fixtures demonstrate classification and provenance.
+- [x] Framework-specific rules do not contaminate shared evaluators.
 
 ### J5 — Test architecture and quality analysis
 
@@ -217,15 +217,15 @@ Analysis:
 - Coverage ingestion where available.
 - Architectural boundary checks
 
-**Current implementation increment (2026-11-12; exact-head CI pending):** Explicitly owned production and test source roots are analysed through separate JDT requests. Production requests use production classpaths and exclude test-scoped project source roots; test requests use test-aware classpaths and can bind against declared test-support roots. Generated roots remain scoped to their owning request. Unknown source ownership retains the previous combined analysis rather than being guessed. Regression coverage asserts source-root, classpath and test-support separation.
+**Status: Accepted (2026-11-12; mandatory exact-head CI passed).** JUnit 4/5 (including JUnit Platform and Vintage), TestNG, Mockito, AssertJ and Testcontainers are recognized with version and build-model provenance. Maven Surefire/Failsafe, Gradle test plugins, test source sets and literal Kotlin/Groovy custom Gradle Test task registrations are represented as test-only evidence. Explicitly owned production and test source roots are analysed through separate JDT requests. Production requests use production classpaths and exclude test-scoped project source roots; test requests use test-aware classpaths and can bind against declared test-support roots. Generated roots remain scoped to their owning request. Unknown source ownership retains the previous combined analysis rather than being guessed. Test-to-production relationships preserve their test scope and source-file provenance.
 
-Dynamic Gradle task configuration remains unexecuted. Coverage ingestion remains unimplemented; test-file existence is not treated as coverage evidence..
+Dynamic Gradle task configuration is not executed; only literal typed Test task declarations are recognized. Coverage ingestion remains unimplemented and deferred; test-file existence is never treated as coverage evidence. Coverage ingestion is not a J5 acceptance blocker.
 
-**Checkpoint J5:**
-- Test projects and support modules are correctly identified.
-- Production and test relationships remain separate.
-- Test findings retain source attribution.
-- Coverage is never inferred merely from test-file existence.
+**Checkpoint J5 — accepted:**
+- [x] Test projects and support modules are correctly identified.
+- [x] Production and test relationships remain separate.
+- [x] Test findings retain source attribution.
+- [x] Coverage is never inferred merely from test-file existence.
 
 ### J6 — Deferred: optional runtime and dynamic architecture evidence
 

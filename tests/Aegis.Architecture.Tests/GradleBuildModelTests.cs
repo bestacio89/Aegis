@@ -533,6 +533,8 @@ public sealed class GradleBuildModelTests
         {
             File.WriteAllText(Path.Combine(root, "settings.gradle.kts"), "rootProject.name = \"test-tasks\"");
             File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                import org.gradle.api.tasks.testing.Test
+
                 plugins { id("java") }
                 sourceSets {
                     create("integrationTest") { java.srcDir("src/integrationTest/java") }
@@ -540,6 +542,37 @@ public sealed class GradleBuildModelTests
                 }
                 tasks.register<Test>("integrationTest") { description = "Integration tests" }
                 tasks.register("componentTest", Test::class)
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.Equal(2, model.TestTasks.Count);
+            Assert.Contains(model.TestTasks, task =>
+                task.Name == "integrationTest" && task.TaskType == "Test" && task.SourceSetName == "integrationTest");
+            Assert.Contains(model.TestTasks, task =>
+                task.Name == "componentTest" && task.TaskType == "Test" && task.SourceSetName == "componentTest");
+            Assert.All(model.TestTasks, task => Assert.False(string.IsNullOrWhiteSpace(task.Declaration)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+
+
+    [Fact]
+    public void Detect_extracts_groovy_test_task_registrations_without_executing_gradle()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleGroovyTestTasks_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle"), "rootProject.name = 'groovy-test-tasks'");
+            File.WriteAllText(Path.Combine(root, "build.gradle"), """
+                tasks.register('integrationTest', Test)
                 task acceptanceTest(type: Test)
                 """);
 
@@ -547,14 +580,9 @@ public sealed class GradleBuildModelTests
             var module = Assert.Single(context.Modules);
             var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
 
-            Assert.Equal(3, model.TestTasks.Count);
-            Assert.Contains(model.TestTasks, task =>
-                task.Name == "integrationTest" && task.TaskType == "Test" && task.SourceSetName == "integrationTest");
-            Assert.Contains(model.TestTasks, task =>
-                task.Name == "componentTest" && task.TaskType == "Test" && task.SourceSetName == "componentTest");
-            Assert.Contains(model.TestTasks, task =>
-                task.Name == "acceptanceTest" && task.TaskType == "Test" && task.SourceSetName is null);
-            Assert.All(model.TestTasks, task => Assert.False(string.IsNullOrWhiteSpace(task.Declaration)));
+            Assert.Equal(2, model.TestTasks.Count);
+            Assert.Contains(model.TestTasks, task => task.Name == "integrationTest" && task.TaskType == "Test");
+            Assert.Contains(model.TestTasks, task => task.Name == "acceptanceTest" && task.TaskType == "Test");
         }
         finally
         {

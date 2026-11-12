@@ -26,7 +26,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
         _dependenciesView.Filter = MatchesFilter;
     }
 
-    public ObservableCollection<ArchitectureDependencyContext> Dependencies { get; private set; } = new();
+    public ObservableCollection<ArchitectureRelationshipRecordViewModel> Dependencies { get; private set; } = new();
 
     public ICollectionView DependenciesView => _dependenciesView;
 
@@ -58,7 +58,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
     [ObservableProperty] private string searchText = string.Empty;
     [ObservableProperty] private string selectedLayer = "All";
     [ObservableProperty] private string selectedScope = "All";
-    [ObservableProperty] private ArchitectureDependencyContext? selectedDependency;
+    [ObservableProperty] private ArchitectureRelationshipRecordViewModel? selectedDependency;
     [ObservableProperty] private int totalDependencies;
     [ObservableProperty] private int filteredDependencies;
 
@@ -68,7 +68,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
 
     partial void OnSelectedScopeChanged(string value) => RefreshFilter();
 
-    partial void OnSelectedDependencyChanged(ArchitectureDependencyContext? value) =>
+    partial void OnSelectedDependencyChanged(ArchitectureRelationshipRecordViewModel? value) =>
         CopySelectedDependencyCommand.NotifyCanExecuteChanged();
 
     partial void OnSelectedIntegrationSourceChanged(ProjectModuleContext? value) =>
@@ -88,19 +88,71 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             ? "No architecture context available"
             : context.ProjectName;
 
-        var dependencies = context?.Dependencies
+        var componentsById = context?.ArchitectureComponents
+            .Where(component => !string.IsNullOrWhiteSpace(component.Id))
+            .GroupBy(component => component.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal)
+            ?? new Dictionary<string, ArchitectureComponentContext>(StringComparer.Ordinal);
+
+        var buildRelationships = context?.Dependencies
             .Where(dependency =>
                 !string.IsNullOrWhiteSpace(dependency.Source)
                 && !string.IsNullOrWhiteSpace(dependency.Target))
-            .OrderBy(dependency => dependency.SourceLayer, StringComparer.OrdinalIgnoreCase)
+            .Select(dependency => new ArchitectureRelationshipRecordViewModel
+            {
+                RelationshipLevel = "Build module",
+                Source = dependency.Source,
+                SourceLayer = dependency.SourceLayer,
+                SourceProjectPath = dependency.SourceProjectPath,
+                Target = dependency.Target,
+                TargetLayer = dependency.TargetLayer,
+                TargetProjectPath = dependency.TargetProjectPath,
+                DependencyType = dependency.DependencyType,
+                Scope = dependency.Scope,
+                File = dependency.File
+            }) ?? [];
+
+        var componentRelationships = context?.ArchitectureComponentDependencies
+            .Where(dependency =>
+                !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
+                && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
+            .Select(dependency =>
+            {
+                componentsById.TryGetValue(dependency.SourceComponentId, out var source);
+                componentsById.TryGetValue(dependency.TargetComponentId, out var target);
+                var relationshipKinds = dependency.RelationshipKinds
+                    .Select(kind => kind.ToString())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(kind => kind, StringComparer.OrdinalIgnoreCase);
+
+                return new ArchitectureRelationshipRecordViewModel
+                {
+                    RelationshipLevel = "Architectural component",
+                    Source = dependency.SourceComponentName,
+                    SourceLayer = source?.ComponentKind ?? "Component",
+                    SourceProjectPath = source?.BuildModulePath ?? string.Empty,
+                    Target = dependency.TargetComponentName,
+                    TargetLayer = target?.ComponentKind ?? "Component",
+                    TargetProjectPath = target?.BuildModulePath ?? string.Empty,
+                    DependencyType = relationshipKinds.Any()
+                        ? $"{dependency.DependencyType} ({string.Join(", ", relationshipKinds)})"
+                        : dependency.DependencyType,
+                    Scope = dependency.Scope,
+                    File = string.Join(Environment.NewLine, dependency.EvidenceFiles),
+                    RelationshipCount = dependency.RelationshipCount
+                };
+            }) ?? [];
+
+        var dependencies = buildRelationships
+            .Concat(componentRelationships)
+            .OrderBy(dependency => dependency.RelationshipLevel, StringComparer.OrdinalIgnoreCase)
             .ThenBy(dependency => dependency.Source, StringComparer.OrdinalIgnoreCase)
             .ThenBy(dependency => dependency.Target, StringComparer.OrdinalIgnoreCase)
             .ThenBy(dependency => dependency.DependencyType, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(dependency => dependency.File, StringComparer.OrdinalIgnoreCase)
-            .ToArray() ?? [];
+            .ToArray();
 
         SelectedDependency = null;
-        Dependencies = new ObservableCollection<ArchitectureDependencyContext>(dependencies);
+        Dependencies = new ObservableCollection<ArchitectureRelationshipRecordViewModel>(dependencies);
         _dependenciesView = CollectionViewSource.GetDefaultView(Dependencies);
         _dependenciesView.Filter = MatchesFilter;
 
@@ -257,7 +309,9 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             return;
 
         Clipboard.SetText($"""
+            Relationship level: {dependency.RelationshipLevel}
             {dependency.Source} -> {dependency.Target}
+            Relationship count: {dependency.RelationshipCount}
             Source layer: {dependency.SourceLayer}
             Target layer: {dependency.TargetLayer}
             Dependency type: {dependency.DependencyType}
@@ -272,7 +326,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
 
     private bool MatchesFilter(object item)
     {
-        if (item is not ArchitectureDependencyContext dependency)
+        if (item is not ArchitectureRelationshipRecordViewModel dependency)
             return false;
 
         if (!string.Equals(SelectedLayer, "All", StringComparison.OrdinalIgnoreCase)
@@ -292,7 +346,8 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             return true;
 
         var query = SearchText.Trim();
-        return Contains(dependency.Source, query)
+        return Contains(dependency.RelationshipLevel, query)
+            || Contains(dependency.Source, query)
             || Contains(dependency.Target, query)
             || Contains(dependency.SourceLayer, query)
             || Contains(dependency.TargetLayer, query)

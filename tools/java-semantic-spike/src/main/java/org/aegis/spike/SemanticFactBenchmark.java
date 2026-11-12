@@ -632,7 +632,7 @@ public final class SemanticFactBenchmark {
                     return declaration.getFullyQualifiedName().orElse("<unresolved-source>");
                 }
             }
-            if (current instanceof ModuleDeclaration module) {
+            if (current instanceof com.github.javaparser.ast.modules.ModuleDeclaration module) {
                 return module.getNameAsString();
             }
             current = current.getParentNode().orElse(null);

@@ -4,6 +4,7 @@ import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
@@ -91,13 +92,13 @@ public final class SemanticFactBenchmark {
             List<String> failures = new ArrayList<>();
             for (Fact fact : facts) {
                 Observation observation = observations.getOrDefault(
-                    key(fact.fixturePath(), fact.kind(), fact.targetIdentity()),
+                    key(fact.fixturePath(), fact.kind(), fact.sourceIdentity(), fact.targetIdentity()),
                     Observation.missing());
                 boolean passed = fact.expectation().equals(observation.resolution());
                 if (!passed) {
                     String candidates = observations.entrySet().stream()
                         .filter(candidate -> candidate.getKey().startsWith(
-                            fact.fixturePath() + "|" + fact.kind() + "|"))
+                            fact.fixturePath() + "|" + fact.kind() + "|" + fact.sourceIdentity() + "|"))
                         .map(candidate -> candidate.getValue().identity()
                             + "(" + candidate.getValue().resolution() + ")")
                         .sorted()
@@ -111,10 +112,11 @@ public final class SemanticFactBenchmark {
                 }
                 System.out.printf(
                     Locale.ROOT,
-                    "{\"engine\":\"%s\",\"factId\":\"%s\",\"kind\":\"%s\",\"expected\":\"%s\",\"observed\":\"%s\",\"resolution\":\"%s\",\"passed\":%s}%n",
+                    "{\"engine\":\"%s\",\"factId\":\"%s\",\"kind\":\"%s\",\"sourceIdentity\":\"%s\",\"expected\":\"%s\",\"observed\":\"%s\",\"resolution\":\"%s\",\"passed\":%s}%n",
                     engine,
                     fact.factId(),
                     fact.kind(),
+                    jsonEscape(fact.sourceIdentity()),
                     fact.targetIdentity(),
                     observation.identity(),
                     observation.resolution(),
@@ -257,35 +259,39 @@ public final class SemanticFactBenchmark {
                 CompilationUnit unit = result.getResult().orElseThrow();
 
                 for (RecordDeclaration declaration : unit.findAll(RecordDeclaration.class)) {
-                    String owner = declaration.resolve().getQualifiedName();
-                    put(observations, fixture, "type-declaration", owner, "resolved");
+                    String sourceIdentity = declaration.resolve().getQualifiedName();
+                    put(observations, fixture, "type-declaration",
+                        sourceIdentity, sourceIdentity, "resolved");
                     for (ClassOrInterfaceType type : declaration.getImplementedTypes()) {
-                        observeType(observations, fixture, "inheritance", type);
+                        observeType(observations, fixture, "inheritance", sourceIdentity, type);
                     }
                 }
                 for (ClassOrInterfaceDeclaration declaration :
                     unit.findAll(ClassOrInterfaceDeclaration.class)) {
-                    if (!declaration.isInterface()) {
-                        try {
+                    String sourceIdentity = null;
+                    try {
+                        sourceIdentity = declaration.resolve().getQualifiedName();
+                        if (!declaration.isInterface()) {
                             put(observations, fixture, "type-declaration",
-                                declaration.resolve().getQualifiedName(), "resolved");
-                        } catch (RuntimeException unresolved) {
-                            // Captured as absence for this expected fact.
+                                sourceIdentity, sourceIdentity, "resolved");
                         }
+                    } catch (RuntimeException unresolved) {
+                        // Captured as absence for this expected fact.
                     }
-                    if (declaration.isInterface()) {
+                    if (sourceIdentity != null && declaration.isInterface()) {
                         for (ClassOrInterfaceType type : declaration.getExtendedTypes()) {
-                            observeType(observations, fixture, "generic-supertype", type);
+                            observeType(observations, fixture, "generic-supertype", sourceIdentity, type);
                         }
-                    } else {
+                    } else if (sourceIdentity != null) {
                         for (ClassOrInterfaceType type : declaration.getExtendedTypes()) {
-                            observeType(observations, fixture, "inheritance", type);
+                            observeType(observations, fixture, "inheritance", sourceIdentity, type);
                         }
                     }
                 }
                 for (AnnotationExpr annotation : unit.findAll(AnnotationExpr.class)) {
                     try {
                         put(observations, fixture, "annotation",
+                            javaParserSourceIdentity(annotation),
                             annotation.resolve().getQualifiedName(), "resolved");
                     } catch (RuntimeException unresolved) {
                         // An unresolved annotation is not a positive semantic fact.
@@ -295,6 +301,7 @@ public final class SemanticFactBenchmark {
                     try {
                         ResolvedConstructorDeclaration constructor = creation.resolve();
                         put(observations, fixture, "constructor-invocation",
+                            javaParserSourceIdentity(creation),
                             constructorIdentity(constructor), "resolved");
                     } catch (RuntimeException unresolved) {
                         // Captured as absence for this expected fact.
@@ -304,8 +311,11 @@ public final class SemanticFactBenchmark {
                     try {
                         ResolvedMethodDeclaration method = call.resolve();
                         String identity = methodIdentity(method);
-                        put(observations, fixture, "method-invocation", identity, "resolved");
-                        put(observations, fixture, "overload-selection", identity, "resolved");
+                        String sourceIdentity = javaParserSourceIdentity(call);
+                        put(observations, fixture, "method-invocation",
+                            sourceIdentity, identity, "resolved");
+                        put(observations, fixture, "overload-selection",
+                            sourceIdentity, identity, "resolved");
                     } catch (RuntimeException unresolved) {
                         // Captured as absence for this expected fact.
                     }
@@ -316,7 +326,8 @@ public final class SemanticFactBenchmark {
                         String identity = reference.getIdentifier().equals("new")
                             ? constructorReferenceIdentity(method)
                             : methodIdentity(method);
-                        put(observations, fixture, "method-reference", identity, "resolved");
+                        put(observations, fixture, "method-reference",
+                            javaParserSourceIdentity(reference), identity, "resolved");
                     } catch (RuntimeException unresolved) {
                         // Captured as absence for this expected fact.
                     }
@@ -335,19 +346,21 @@ public final class SemanticFactBenchmark {
                             .orElse(type.getNameAsString()));
                     try {
                         type.resolve();
-                        put(observations, fixture, "unresolved-type", identity, "resolved");
+                        put(observations, fixture, "unresolved-type",
+                            javaParserSourceIdentity(type), identity, "resolved");
                     } catch (RuntimeException unresolved) {
-                        put(observations, fixture, "unresolved-type", identity, "unresolved");
+                        put(observations, fixture, "unresolved-type",
+                            javaParserSourceIdentity(type), identity, "unresolved");
                     }
                 }
                 unit.getModule().ifPresent(module -> {
                     for (var directive : module.getDirectives()) {
                         if (directive instanceof ModuleRequiresDirective requires) {
                             put(observations, fixture, "module-requires",
-                                requires.getNameAsString(), "resolved");
+                                module.getNameAsString(), requires.getNameAsString(), "resolved");
                         } else if (directive instanceof ModuleExportsDirective exports) {
                             put(observations, fixture, "module-exports",
-                                exports.getNameAsString(), "resolved");
+                                module.getNameAsString(), exports.getNameAsString(), "resolved");
                         }
                     }
                 });
@@ -362,9 +375,11 @@ public final class SemanticFactBenchmark {
         Map<String, Observation> observations,
         String fixture,
         String kind,
+        String sourceIdentity,
         ClassOrInterfaceType type) {
         try {
-            put(observations, fixture, kind, type.resolve().describe(), "resolved");
+            put(observations, fixture, kind, sourceIdentity,
+                type.resolve().describe(), "resolved");
         } catch (RuntimeException unresolved) {
             // Captured as absence for this expected fact.
         }
@@ -399,11 +414,13 @@ public final class SemanticFactBenchmark {
                 public boolean visit(org.eclipse.jdt.core.dom.RecordDeclaration declaration) {
                     ITypeBinding binding = declaration.resolveBinding();
                     if (binding != null) {
+                        String sourceIdentity = binding.getTypeDeclaration().getQualifiedName();
                         put(observations, fixture, "type-declaration",
-                            binding.getTypeDeclaration().getQualifiedName(), "resolved");
+                            sourceIdentity, sourceIdentity, "resolved");
                     }
                     for (Object item : declaration.superInterfaceTypes()) {
                         observeJdtType(observations, fixture, "inheritance",
+                            binding.getTypeDeclaration().getQualifiedName(),
                             (org.eclipse.jdt.core.dom.Type) item);
                     }
                     return true;
@@ -413,16 +430,19 @@ public final class SemanticFactBenchmark {
                 public boolean visit(TypeDeclaration declaration) {
                     ITypeBinding binding = declaration.resolveBinding();
                     if (binding != null && !declaration.isInterface()) {
+                        String sourceIdentity = binding.getTypeDeclaration().getQualifiedName();
                         put(observations, fixture, "type-declaration",
-                            binding.getTypeDeclaration().getQualifiedName(), "resolved");
+                            sourceIdentity, sourceIdentity, "resolved");
                     }
                     if (declaration.isInterface()) {
                         for (Object item : declaration.superInterfaceTypes()) {
                             observeJdtType(observations, fixture, "generic-supertype",
+                                binding.getTypeDeclaration().getQualifiedName(),
                                 (org.eclipse.jdt.core.dom.Type) item);
                         }
                     } else if (declaration.getSuperclassType() != null) {
                         observeJdtType(observations, fixture, "inheritance",
+                            binding == null ? "<unresolved>" : binding.getTypeDeclaration().getQualifiedName(),
                             declaration.getSuperclassType());
                     }
                     return true;
@@ -451,7 +471,7 @@ public final class SemanticFactBenchmark {
                     IMethodBinding binding = creation.resolveConstructorBinding();
                     if (binding != null) {
                         put(observations, fixture, "constructor-invocation",
-                            jdtMethodIdentity(binding, true), "resolved");
+                            jdtSourceIdentity(creation), jdtMethodIdentity(binding, true), "resolved");
                     }
                     return true;
                 }
@@ -461,8 +481,11 @@ public final class SemanticFactBenchmark {
                     IMethodBinding binding = invocation.resolveMethodBinding();
                     if (binding != null) {
                         String identity = jdtMethodIdentity(binding, false);
-                        put(observations, fixture, "method-invocation", identity, "resolved");
-                        put(observations, fixture, "overload-selection", identity, "resolved");
+                        String sourceIdentity = jdtSourceIdentity(invocation);
+                        put(observations, fixture, "method-invocation",
+                            sourceIdentity, identity, "resolved");
+                        put(observations, fixture, "overload-selection",
+                            sourceIdentity, identity, "resolved");
                     }
                     return true;
                 }
@@ -472,7 +495,7 @@ public final class SemanticFactBenchmark {
                     IMethodBinding binding = reference.resolveMethodBinding();
                     if (binding != null) {
                         put(observations, fixture, "method-reference",
-                            jdtMethodIdentity(binding, true), "resolved");
+                            jdtSourceIdentity(reference), jdtMethodIdentity(binding, true), "resolved");
                     }
                     return true;
                 }
@@ -488,6 +511,7 @@ public final class SemanticFactBenchmark {
                             unit, "MissingPort", fallbackIdentity);
                         ITypeBinding binding = type.resolveBinding();
                         put(observations, fixture, "unresolved-type",
+                            jdtSourceIdentity(type),
                             binding == null ? identity : binding.getQualifiedName(),
                             binding == null ? "unresolved" : "resolved");
                     }
@@ -500,9 +524,11 @@ public final class SemanticFactBenchmark {
                 for (Object directive : module.moduleStatements()) {
                     if (directive instanceof RequiresDirective requires) {
                         put(observations, fixture, "module-requires",
+                            module.getName().getFullyQualifiedName(),
                             requires.getName().getFullyQualifiedName(), "resolved");
                     } else if (directive instanceof ExportsDirective exports) {
                         put(observations, fixture, "module-exports",
+                            module.getName().getFullyQualifiedName(),
                             exports.getName().getFullyQualifiedName(), "resolved");
                     }
                 }
@@ -557,6 +583,7 @@ public final class SemanticFactBenchmark {
         ITypeBinding binding = annotation.resolveTypeBinding();
         if (binding != null) {
             put(observations, fixture, "annotation",
+                jdtSourceIdentity(annotation),
                 binding.getTypeDeclaration().getQualifiedName(), "resolved");
         }
     }
@@ -565,11 +592,96 @@ public final class SemanticFactBenchmark {
         Map<String, Observation> observations,
         String fixture,
         String kind,
+        String sourceIdentity,
         org.eclipse.jdt.core.dom.Type type) {
         ITypeBinding binding = type.resolveBinding();
         if (binding != null) {
-            put(observations, fixture, kind, binding.getQualifiedName(), "resolved");
+            put(observations, fixture, kind, sourceIdentity, binding.getQualifiedName(), "resolved");
         }
+    }
+
+    private static String javaParserSourceIdentity(Node node) {
+        Node current = node;
+        while (current != null) {
+            if (current instanceof com.github.javaparser.ast.body.MethodDeclaration method) {
+                try {
+                    ResolvedMethodDeclaration resolved = method.resolve();
+                    return sourceMethodIdentity(resolved);
+                } catch (RuntimeException unresolved) {
+                    return "<unresolved-source>";
+                }
+            }
+            if (current instanceof com.github.javaparser.ast.body.ConstructorDeclaration constructor) {
+                try {
+                    return sourceConstructorIdentity(constructor.resolve());
+                } catch (RuntimeException unresolved) {
+                    return "<unresolved-source>";
+                }
+            }
+            if (current instanceof ClassOrInterfaceDeclaration declaration) {
+                try {
+                    return declaration.resolve().getQualifiedName();
+                } catch (RuntimeException unresolved) {
+                    return declaration.getFullyQualifiedName().orElse("<unresolved-source>");
+                }
+            }
+            if (current instanceof RecordDeclaration declaration) {
+                try {
+                    return declaration.resolve().getQualifiedName();
+                } catch (RuntimeException unresolved) {
+                    return declaration.getFullyQualifiedName().orElse("<unresolved-source>");
+                }
+            }
+            if (current instanceof ModuleDeclaration module) {
+                return module.getNameAsString();
+            }
+            current = current.getParentNode().orElse(null);
+        }
+        return "<unknown-source>";
+    }
+
+    private static String sourceMethodIdentity(ResolvedMethodDeclaration method) {
+        String parameters = java.util.stream.IntStream.range(0, method.getNumberOfParams())
+            .mapToObj(index -> method.getParam(index).getType().describe())
+            .reduce((left, right) -> left + "," + right).orElse("");
+        return method.declaringType().getQualifiedName() + "#" + method.getName()
+            + "(" + parameters + ")";
+    }
+
+    private static String sourceConstructorIdentity(ResolvedConstructorDeclaration constructor) {
+        String parameters = java.util.stream.IntStream.range(0, constructor.getNumberOfParams())
+            .mapToObj(index -> constructor.getParam(index).getType().describe())
+            .reduce((left, right) -> left + "," + right).orElse("");
+        return constructor.declaringType().getQualifiedName() + "#<init>(" + parameters + ")";
+    }
+
+    private static String jdtSourceIdentity(org.eclipse.jdt.core.dom.ASTNode node) {
+        org.eclipse.jdt.core.dom.ASTNode current = node;
+        while (current != null) {
+            if (current instanceof org.eclipse.jdt.core.dom.MethodDeclaration method) {
+                IMethodBinding binding = method.resolveBinding();
+                if (binding != null) {
+                    IMethodBinding declaration = binding.getMethodDeclaration();
+                    String owner = declaration.getDeclaringClass().getTypeDeclaration().getQualifiedName();
+                    String name = declaration.isConstructor() ? "<init>" : declaration.getName();
+                    String parameters = Stream.of(declaration.getParameterTypes())
+                        .map(ITypeBinding::getQualifiedName)
+                        .reduce((left, right) -> left + "," + right).orElse("");
+                    return owner + "#" + name + "(" + parameters + ")";
+                }
+            }
+            if (current instanceof org.eclipse.jdt.core.dom.AbstractTypeDeclaration declaration) {
+                ITypeBinding binding = declaration.resolveBinding();
+                if (binding != null) {
+                    return binding.getTypeDeclaration().getQualifiedName();
+                }
+            }
+            if (current instanceof ModuleDeclaration module) {
+                return module.getName().getFullyQualifiedName();
+            }
+            current = current.getParent();
+        }
+        return "<unknown-source>";
     }
 
     private static String jdtMethodIdentity(IMethodBinding binding, boolean constructor) {
@@ -609,14 +721,19 @@ public final class SemanticFactBenchmark {
         Map<String, Observation> observations,
         String fixture,
         String kind,
+        String sourceIdentity,
         String identity,
         String resolution) {
-        observations.put(key(fixture, kind, identity),
-            new Observation(identity, resolution));
+        observations.put(key(fixture, kind, sourceIdentity, identity),
+            new Observation(sourceIdentity, identity, resolution));
     }
 
-    private static String key(String fixture, String kind, String identity) {
-        return fixture + "|" + kind + "|" + identity;
+    private static String key(
+        String fixture,
+        String kind,
+        String sourceIdentity,
+        String identity) {
+        return fixture + "|" + kind + "|" + sourceIdentity + "|" + identity;
     }
 
     private static void deleteDirectory(Path directory) throws IOException {
@@ -636,9 +753,9 @@ public final class SemanticFactBenchmark {
         String expectation) {
     }
 
-    private record Observation(String identity, String resolution) {
+    private record Observation(String sourceIdentity, String identity, String resolution) {
         private static Observation missing() {
-            return new Observation("<not-observed>", "missing");
+            return new Observation("<unknown-source>", "<not-observed>", "missing");
         }
     }
 }

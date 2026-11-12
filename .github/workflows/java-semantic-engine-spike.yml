@@ -93,14 +93,14 @@ jobs:
             -f tools/java-worker-prototype/pom.xml \
             org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeBom \
             -DoutputFormat=json -Dcyclonedx.skipAttach=true
-          cp tools/java-worker-prototype/target/bom.json artifacts/java-worker-prototype-bom.json
-          jq -e '.components[] | select(.name == "gson" and .version == "2.13.2")' artifacts/java-worker-prototype-bom.json > /dev/null
-          jq -e '.components | all(.[]; (.licenses // []) | length > 0)' artifacts/java-worker-prototype-bom.json > /dev/null
+          cp tools/java-worker-prototype/target/bom.json artifacts/java-worker-prototype.cdx.json
+          jq -e '.components[] | select(.name == "gson" and .version == "2.13.2")' artifacts/java-worker-prototype.cdx.json > /dev/null
+          jq -e '.components | all(.[]; (.licenses // []) | length > 0)' artifacts/java-worker-prototype.cdx.json > /dev/null
 
       - name: Scan Java worker protocol SBOM with OSV
         run: |
           docker run --rm -v "${{ github.workspace }}:/src" ghcr.io/google/osv-scanner:v2.7.1 \
-            scan -L /src/artifacts/java-worker-prototype-bom.json \
+            scan -L /src/artifacts/java-worker-prototype.cdx.json \
             --format json \
             --output-file /src/artifacts/java-worker-prototype-osv-report.json
 

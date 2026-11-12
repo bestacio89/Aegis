@@ -137,7 +137,7 @@ internal static class JavaSemanticFrameworkDetector
             {
                 foreach (var dependency in gradle.Dependencies)
                 {
-                    var framework = ClassifyTestDependency(dependency.GroupId, dependency.ArtifactId);
+                    var framework = ClassifyTestDependency(dependency.Group, dependency.Artifact);
                     if (framework is null)
                         continue;
 
@@ -146,7 +146,7 @@ internal static class JavaSemanticFrameworkDetector
                         module,
                         framework,
                         dependency.Version,
-                        $"{dependency.GroupId}:{dependency.ArtifactId}",
+                        $"{dependency.Group}:{dependency.Artifact}",
                         gradle.BuildFile,
                         "gradle-static-model",
                         dependency.Configuration.Contains("test", StringComparison.OrdinalIgnoreCase)

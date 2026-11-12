@@ -31,51 +31,56 @@ internal static class JavaSemanticComponentDependencyDetector
         context.ArchitectureComponentDependencies.RemoveAll(dependency =>
             dependency.DependencyType.Equals(DependencyType, StringComparison.OrdinalIgnoreCase));
 
+        // Semantic runs are already scoped to a build module. Their ProjectPath
+        // is the authoritative owner identity; the discovered module inventory
+        // enriches the display name but must not gate package discovery. In
+        // particular, duplicate or incomplete module records must not erase a
+        // valid JDT package graph.
         var modulesByPath = context.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
             .GroupBy(module => NormalizePath(module.Path), PathComparer)
-            .Where(group => group.Count() == 1)
-            .ToDictionary(group => group.Key, group => group.Single(), PathComparer);
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(module => module.Languages.Contains("Java", StringComparer.OrdinalIgnoreCase))
+                    .ThenByDescending(module => module.SourceRoots.Any(root => root.ContainsJavaSources))
+                    .ThenBy(module => module.Name, StringComparer.OrdinalIgnoreCase)
+                    .First(),
+                PathComparer);
 
-        // The orchestrator supports a single implicit Java module when project
-        // discovery has no build-module records. Preserve that semantic graph
-        // instead of dropping every package because the module inventory is empty.
-        if (context.Modules.Count == 0)
+        ProjectModuleContext ResolveModule(SemanticAnalysisRun run)
         {
-            foreach (var run in context.SemanticAnalysisRuns.Where(IsUsableJavaRun))
-            {
-                var modulePath = NormalizePath(run.ProjectPath);
-                if (modulesByPath.ContainsKey(modulePath))
-                    continue;
+            var modulePath = NormalizePath(run.ProjectPath);
+            if (modulesByPath.TryGetValue(modulePath, out var discovered))
+                return discovered;
 
-                var moduleName = Path.GetFileName(modulePath);
-                modulesByPath.Add(modulePath, new ProjectModuleContext
-                {
-                    Name = string.IsNullOrWhiteSpace(moduleName) ? context.ProjectName : moduleName,
-                    Path = modulePath,
-                    Languages = ["Java"]
-                });
-            }
+            var moduleName = Path.GetFileName(modulePath);
+            return new ProjectModuleContext
+            {
+                Name = string.IsNullOrWhiteSpace(moduleName) ? context.ProjectName : moduleName,
+                Path = modulePath,
+                Languages = ["Java"]
+            };
         }
 
         var symbolComponents = context.SemanticAnalysisRuns
             .Where(IsUsableJavaRun)
             .SelectMany(run =>
             {
-                if (!modulesByPath.TryGetValue(NormalizePath(run.ProjectPath), out var module))
-                    return Enumerable.Empty<SymbolComponent>();
-
+                var module = ResolveModule(run);
                 return run.Symbols
                     .Where(IsProjectSourceSymbol)
                     .Where(symbol =>
                         !string.IsNullOrWhiteSpace(symbol.Id)
-                        && string.Equals(symbol.ContainerKind, "Package", StringComparison.OrdinalIgnoreCase)
-                        && !string.IsNullOrWhiteSpace(symbol.FilePath))
+                        && !string.IsNullOrWhiteSpace(symbol.FilePath)
+                        && (string.Equals(symbol.ContainerKind, "Package", StringComparison.OrdinalIgnoreCase)
+                            || !string.IsNullOrWhiteSpace(symbol.ContainerName)))
                     .Select(symbol =>
                     {
                         var packageName = string.IsNullOrWhiteSpace(symbol.ContainerName)
                             ? "<default>"
                             : symbol.ContainerName.Trim();
-                        var modulePath = NormalizePath(module.Path);
+                        var modulePath = NormalizePath(run.ProjectPath);
                         var componentId = CreateComponentId(modulePath, packageName);
                         return new SymbolComponent(
                             symbol.Id,
@@ -159,8 +164,7 @@ internal static class JavaSemanticComponentDependencyDetector
 
         foreach (var run in context.SemanticAnalysisRuns.Where(IsUsableJavaRun))
         {
-            if (!modulesByPath.TryGetValue(NormalizePath(run.ProjectPath), out var sourceModule))
-                continue;
+            var sourceModule = ResolveModule(run);
 
             var runSymbols = run.Symbols
                 .Where(IsProjectSourceSymbol)
@@ -171,9 +175,8 @@ internal static class JavaSemanticComponentDependencyDetector
 
             foreach (var relationship in run.Relationships.Where(relationship =>
                          ComponentRelationshipKinds.Contains(relationship.Kind)
-                         && relationship.ResolutionStatus == SemanticResolutionStatus.Resolved
-                         && relationship.Provenance.Any(provenance =>
-                             provenance.Source == SemanticEvidenceSource.Compiler)
+                         && relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
+                             or SemanticResolutionStatus.PartiallyResolved
                          && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)))
             {
                 if (!runSymbols.TryGetValue(relationship.SourceSymbolId, out var sourceSymbol)

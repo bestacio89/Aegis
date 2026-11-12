@@ -48,6 +48,9 @@ public sealed class ProjectModuleContext
 
     public List<string> Languages { get; set; } = [];
 
+    /// <summary>Evidence-based architectural responsibilities owned by this module.</summary>
+    public List<ProjectModuleRole> Roles { get; set; } = [];
+
     public bool IsTestProject { get; set; }
 
     /// <summary>Identifies reusable utilities intended exclusively for tests.</summary>

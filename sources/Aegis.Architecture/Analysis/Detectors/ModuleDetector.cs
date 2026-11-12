@@ -19,7 +19,9 @@ internal static class ModuleDetector
         "build.gradle",
         "build.gradle.kts",
         "settings.gradle",
-        "settings.gradle.kts"
+        "settings.gradle.kts",
+        "pyproject.toml",
+        "setup.py"
     ];
 
     public static void Analyze(
@@ -63,7 +65,7 @@ internal static class ModuleDetector
                 Path = modulePath,
                 ProjectFile = primaryProjectFile,
                 ProjectFiles = projectFiles,
-                BuildSystem = ResolveBuildSystem(projectFiles),
+                BuildSystem = ResolveBuildSystem(projectFiles, files, modulePath),
                 Type = DetectModuleType(context.RootPath, modulePath, moduleName)
             };
 
@@ -76,6 +78,12 @@ internal static class ModuleDetector
                 Path.GetFileName(file).Equals("package.json", StringComparison.OrdinalIgnoreCase));
             if (packageManifest is not null)
                 PopulateNodeMetadata(module, packageManifest);
+
+            var pythonManifest = projectFiles.FirstOrDefault(file =>
+                Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("setup.py", StringComparison.OrdinalIgnoreCase));
+            if (pythonManifest is not null)
+                PopulatePythonMetadata(module);
 
             if (module.BuildSystem == Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Maven)
             {
@@ -156,6 +164,8 @@ internal static class ModuleDetector
         GradleBuildModelResolver.Analyze(context, files);
 
         PopulateOwnedLanguages(context.Modules, files);
+        NormalizeJvmProjectMetadata(context.Modules);
+        ModuleRoleDetector.Analyze(context.Modules);
     }
 
     private static void PopulateOwnedLanguages(
@@ -320,6 +330,7 @@ internal static class ModuleDetector
         {
             var package = JsonNode.Parse(File.ReadAllText(packageFile))?.AsObject();
             var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var runtimeDependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var key in new[]
                      {
@@ -333,37 +344,67 @@ internal static class ModuleDetector
                     continue;
 
                 foreach (var dependency in group)
+                {
                     dependencies.Add(dependency.Key);
+                    if (!key.Equals("devDependencies", StringComparison.OrdinalIgnoreCase))
+                        runtimeDependencies.Add(dependency.Key);
+                }
             }
 
-            if (dependencies.Contains("@angular/core")
-                || dependencies.Contains("@angular/cli"))
-                AddFramework(module, "Angular");
-            if (dependencies.Contains("react"))
-                AddFramework(module, "React");
-            if (dependencies.Contains("vue"))
-                AddFramework(module, "Vue");
+            var hasAngular = dependencies.Contains("@angular/core")
+                || dependencies.Contains("@angular/cli");
+            var hasReact = dependencies.Contains("react");
+            var hasVue = dependencies.Contains("vue");
+            var hasNext = dependencies.Contains("next");
+            var hasNuxt = dependencies.Contains("nuxt");
 
-            if (module.Frameworks.Count == 0)
-                AddFramework(module, "Node.js");
+            if (hasAngular)
+                AddFramework(module, "Angular");
+            if (hasReact)
+                AddFramework(module, "React");
+            if (hasVue)
+                AddFramework(module, "Vue");
+            if (hasNext)
+                AddFramework(module, "Next.js");
+            if (hasNuxt)
+                AddFramework(module, "Nuxt");
+
+            var backendFrameworks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["express"] = "Express",
+                ["@nestjs/core"] = "NestJS",
+                ["fastify"] = "Fastify",
+                ["koa"] = "Koa",
+                ["@hapi/hapi"] = "Hapi",
+                ["hono"] = "Hono"
+            };
+
+            var backendFrameworksDetected = backendFrameworks
+                .Where(entry => runtimeDependencies.Contains(entry.Key))
+                .Select(entry => entry.Value)
+                .ToArray();
+
+            foreach (var framework in backendFrameworksDetected)
+                AddFramework(module, framework);
+
+            var hasFrontend = hasAngular || hasReact || hasVue || hasNext || hasNuxt;
+            var hasBackend = backendFrameworksDetected.Length > 0 || hasNext || hasNuxt;
+            module.IsWebProject = hasFrontend || hasBackend;
+            module.IsExecutable = hasBackend;
 
             if (module.ProjectKind == "Unknown")
             {
-                module.ProjectKind = module.Frameworks.Any(framework =>
-                    framework is "Angular" or "React" or "Vue")
-                    ? "FrontendApplication"
-                    : "NodePackage";
-            }
-
-            if (module.Framework is null)
-            {
-                module.Framework = module.Frameworks.Count switch
+                module.ProjectKind = (hasFrontend, hasBackend) switch
                 {
-                    0 => null,
-                    1 => module.Frameworks[0],
-                    _ => "Multi-Framework"
+                    (true, true) => "FullStackApplication",
+                    (true, false) => "FrontendApplication",
+                    (false, true) => "BackendApplication",
+                    _ => "NodePackage"
                 };
             }
+
+            if (module.Frameworks.Count == 0)
+                AddFramework(module, "Node.js");
 
             if (string.IsNullOrWhiteSpace(module.Name)
                 || module.Name.Equals("package", StringComparison.OrdinalIgnoreCase))
@@ -385,6 +426,46 @@ internal static class ModuleDetector
         }
     }
 
+    private static void PopulatePythonMetadata(ProjectModuleContext module)
+    {
+        if (module.ProjectKind == "Unknown")
+            module.ProjectKind = "PythonProject";
+    }
+
+    private static void NormalizeJvmProjectMetadata(
+        IReadOnlyCollection<ProjectModuleContext> modules)
+    {
+        foreach (var module in modules)
+        {
+            var hasKotlin = module.Languages.Contains("Kotlin", StringComparer.OrdinalIgnoreCase);
+            if (!hasKotlin)
+                continue;
+
+            var hasJava = module.Languages.Contains("Java", StringComparer.OrdinalIgnoreCase);
+            AddFramework(module, "Kotlin");
+
+            if (!hasJava)
+            {
+                module.Frameworks.RemoveAll(framework =>
+                    framework.Equals("Java", StringComparison.OrdinalIgnoreCase));
+                module.ProjectKind = module.ProjectKind == "JavaProject"
+                    ? "KotlinProject"
+                    : module.ProjectKind;
+            }
+            else if (module.ProjectKind == "JavaProject")
+            {
+                module.ProjectKind = "MixedJvmProject";
+            }
+
+            module.Framework = module.Frameworks.Count switch
+            {
+                0 => null,
+                1 => module.Frameworks[0],
+                _ => "Multi-Framework"
+            };
+        }
+    }
+
     private static void PopulateGradleMetadata(ProjectModuleContext module)
     {
         module.ProjectKind = "JavaProject";
@@ -393,7 +474,9 @@ internal static class ModuleDetector
     }
 
     private static Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem ResolveBuildSystem(
-        IReadOnlyCollection<string> projectFiles)
+        IReadOnlyCollection<string> projectFiles,
+        IReadOnlyCollection<string> allFiles,
+        string modulePath)
     {
         var buildSystems = new List<Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem>();
 
@@ -405,12 +488,36 @@ internal static class ModuleDetector
             buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Gradle);
         if (projectFiles.Any(file =>
                 Path.GetFileName(file).Equals("package.json", StringComparison.OrdinalIgnoreCase)))
-            buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Npm);
+        {
+            if (HasOwnedManifest(allFiles, modulePath, "pnpm-lock.yaml"))
+                buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Pnpm);
+            else if (HasOwnedManifest(allFiles, modulePath, "yarn.lock"))
+                buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Yarn);
+            else
+                buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Npm);
+        }
+
+        if (projectFiles.Any(file =>
+                Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("setup.py", StringComparison.OrdinalIgnoreCase)))
+        {
+            buildSystems.Add(HasOwnedManifest(allFiles, modulePath, "poetry.lock")
+                ? Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Poetry
+                : Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Pip);
+        }
 
         return buildSystems.Count == 1
             ? buildSystems[0]
             : Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Unknown;
     }
+
+    private static bool HasOwnedManifest(
+        IReadOnlyCollection<string> files,
+        string modulePath,
+        string manifestName) =>
+        files.Any(file =>
+            Path.GetFileName(file).Equals(manifestName, StringComparison.OrdinalIgnoreCase)
+            && IsSameOrDescendantPath(file, modulePath));
 
     private static void PopulateMavenMetadata(
         ProjectModuleContext module,
@@ -701,9 +808,11 @@ internal static class ModuleDetector
         {
             ".cs" => "C#",
             ".java" => "Java",
+            ".kt" => "Kotlin",
+            ".kts" when !LanguageAndBuildDetector.IsGradleManifest(file) => "Kotlin",
             ".py" => "Python",
-            ".ts" or ".tsx" => "TypeScript",
-            ".js" or ".jsx" => "JavaScript",
+            ".ts" or ".tsx" or ".mts" or ".cts" => "TypeScript",
+            ".js" or ".jsx" or ".mjs" or ".cjs" => "JavaScript",
             _ => "Unknown"
         };
     }

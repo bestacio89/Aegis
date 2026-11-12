@@ -31,7 +31,7 @@ internal static class LanguageAndBuildDetector
                      || Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)))
         {
             context.Language = "Python";
-            context.BuildSystem = ArchitectureBuildSystem.Pip;
+            context.BuildSystem = ResolvePythonBuildSystem(files);
         }
         else if (files.Any(file =>
                      Path.GetExtension(file).Equals(".ts", StringComparison.OrdinalIgnoreCase)
@@ -39,10 +39,7 @@ internal static class LanguageAndBuildDetector
                      || Path.GetExtension(file).Equals(".js", StringComparison.OrdinalIgnoreCase)))
         {
             context.Language = "TypeScript/JavaScript";
-            context.BuildSystem = files.Any(file =>
-                Path.GetFileName(file).Equals("package.json", StringComparison.OrdinalIgnoreCase))
-                ? ArchitectureBuildSystem.Npm
-                : ArchitectureBuildSystem.Unknown;
+            context.BuildSystem = ResolveNodeBuildSystem(files);
         }
         else if (files.Any(file => Path.GetExtension(file).Equals(".go", StringComparison.OrdinalIgnoreCase)))
         {

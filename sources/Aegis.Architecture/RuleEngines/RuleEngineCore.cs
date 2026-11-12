@@ -171,6 +171,10 @@ public sealed class RuleEngineCore
         var factsWithoutMatchingScopedMetrics = 0;
         var factsWithMetricsAtWrongScope = 0;
         var factsWithKnownMetricsWithoutEligibleRule = 0;
+        var wrongScopeMetricDetails =
+            new Dictionary<
+                (string Producer, string RuleId, string MetricKey, string ActualScope, string RequiredScope),
+                (int Count, List<string> SampleTargets)>();
 
         foreach (var fact in factList)
         {
@@ -242,6 +246,29 @@ public sealed class RuleEngineCore
                 // an incompatible scope for diagnostics, but never evaluate it.
                 if ((rule.Scope == RuleEvaluationScope.Project) != isProjectFact)
                 {
+                    var actualScope = isProjectFact ? "Project" : "File";
+                    var requiredScope = rule.Scope.ToString();
+                    var key = (
+                        fact.Source,
+                        rule.Id,
+                        metricKey,
+                        actualScope,
+                        requiredScope);
+
+                    var aggregate = wrongScopeMetricDetails.GetValueOrDefault(
+                        key,
+                        (0, []));
+
+                    aggregate.Count++;
+                    if (aggregate.SampleTargets.Count < 3
+                        && !aggregate.SampleTargets.Contains(
+                            fact.Target,
+                            StringComparer.OrdinalIgnoreCase))
+                    {
+                        aggregate.SampleTargets.Add(fact.Target);
+                    }
+
+                    wrongScopeMetricDetails[key] = aggregate;
                     continue;
                 }
 
@@ -426,6 +453,24 @@ public sealed class RuleEngineCore
         }
 
         var totalChecks = checksPassed + checksViolated;
+
+        foreach (var mismatch in wrongScopeMetricDetails.OrderBy(
+                     entry => entry.Key.Producer,
+                     StringComparer.OrdinalIgnoreCase)
+                 .ThenBy(entry => entry.Key.RuleId, StringComparer.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "Metric scope mismatch: Producer={Evaluator}; Rule={RuleId}; " +
+                "Metric={MetricKey}; ActualScope={ActualScope}; RequiredScope={RequiredScope}; " +
+                "Observations={ObservationCount}; SampleTargets={SampleTargets}",
+                mismatch.Key.Producer,
+                mismatch.Key.RuleId,
+                mismatch.Key.MetricKey,
+                mismatch.Key.ActualScope,
+                mismatch.Key.RequiredScope,
+                mismatch.Value.Count,
+                string.Join(", ", mismatch.Value.SampleTargets));
+        }
 
         var rulesNotEvaluated = applicableRules
             .Where(rule => !evaluatedRuleIds.Contains(rule.Id))

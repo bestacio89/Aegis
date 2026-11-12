@@ -71,6 +71,11 @@ public static class ProjectArchitectureContextDetector
             ctx,
             files);
 
+        // Framework discovery enriches module-owned evidence (notably Java
+        // Maven/Gradle frameworks). Recompute roles only after that evidence
+        // is available; the initial pass in ModuleDetector handles manifest-
+        // local roles, but cannot classify frameworks discovered here.
+        ModuleRoleDetector.Analyze(ctx.Modules);
 
         LayerDetector.Analyze(
             ctx,

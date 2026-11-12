@@ -90,6 +90,53 @@ public sealed class JavaProjectDiscoveryTests
     }
 
     [Fact]
+    public void Detect_assigns_backend_role_after_java_framework_discovery()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "pom.xml"),
+                """
+                <project>
+                    <modelVersion>4.0.0</modelVersion>
+                    <groupId>org.aegis</groupId>
+                    <artifactId>orders-service</artifactId>
+                    <version>1.0.0</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-starter-web</artifactId>
+                            <version>3.4.1</version>
+                        </dependency>
+                    </dependencies>
+                </project>
+                """);
+
+            var source = Path.Combine(root, "src", "main", "java", "example", "OrdersApplication.java");
+            Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+            File.WriteAllText(
+                source,
+                "package example; public final class OrdersApplication { }");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+
+            var module = Assert.Single(context.Modules);
+            Assert.Contains("Spring Boot", module.Frameworks);
+            Assert.Contains(
+                Aegis.Shared.Architecture.Enums.ProjectModuleRole.Backend,
+                module.Roles);
+            Assert.DoesNotContain(
+                Aegis.Shared.Architecture.Enums.ProjectModuleRole.Unknown,
+                module.Roles);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_does_not_claim_a_build_system_for_source_only_java()
     {
         var root = CreateTemporaryDirectory();

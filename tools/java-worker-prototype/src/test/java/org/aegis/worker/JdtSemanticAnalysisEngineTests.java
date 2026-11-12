@@ -140,9 +140,10 @@ final class JdtSemanticAnalysisEngineTests {
         unresolvedPayload.add("classpathEntries", new JsonArray());
 
         JsonObject unresolvedResult = new JdtSemanticAnalysisEngine().analyze(unresolvedPayload);
-        assertTrue(unresolvedResult.getAsJsonArray("relationships").asList().stream().anyMatch(item ->
-            item.getAsJsonObject().get("kind").getAsInt() == 5
-                && item.getAsJsonObject().get("resolutionStatus").getAsInt() == 3));
+        assertEquals(3, unresolvedResult.get("status").getAsInt());
+        assertTrue(unresolvedResult.getAsJsonArray("diagnostics").asList().stream().anyMatch(item ->
+            item.getAsJsonObject().get("severity").getAsString().equals("Error")
+                && item.getAsJsonObject().get("affectsCoverage").getAsBoolean()));
 
         JsonObject resolvedPayload = unresolvedPayload.deepCopy();
         resolvedPayload.add("referencedSourceRoots", paths(apiSourceRoot));

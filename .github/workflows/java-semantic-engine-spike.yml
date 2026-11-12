@@ -50,6 +50,7 @@ jobs:
             | tee artifacts/jdt-semantic-facts.jsonl
 
       - name: Compare JavaParser semantic facts
+        if: always()
         run: |
           set -o pipefail
           mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-benchmark \

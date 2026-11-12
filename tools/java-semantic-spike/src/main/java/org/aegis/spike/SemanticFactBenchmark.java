@@ -86,9 +86,18 @@ public final class SemanticFactBenchmark {
                     Observation.missing());
                 boolean passed = fact.expectation().equals(observation.resolution());
                 if (!passed) {
+                    String candidates = observations.entrySet().stream()
+                        .filter(candidate -> candidate.getKey().startsWith(
+                            fact.fixturePath() + "|" + fact.kind() + "|"))
+                        .map(candidate -> candidate.getValue().identity()
+                            + "(" + candidate.getValue().resolution() + ")")
+                        .sorted()
+                        .reduce((left, right) -> left + "," + right)
+                        .orElse("<none>");
                     failures.add(fact.factId() + " expected " + fact.targetIdentity()
                         + " (" + fact.expectation() + ") but observed "
-                        + observation.identity() + " (" + observation.resolution() + ")");
+                        + observation.identity() + " (" + observation.resolution()
+                        + "); candidates=" + candidates);
                 }
                 System.out.printf(
                     Locale.ROOT,

@@ -6,7 +6,7 @@ facts_directory="tools/java-semantic-spike/representative-semantic-facts"
 classpath_directory="artifacts/representative-projects/classpaths"
 results_directory="artifacts/representative-projects/facts"
 
-rm -rf "artifacts/representative-projects"
+rm -rf "$classpath_directory" "$results_directory"
 mkdir -p "$classpath_directory" "$results_directory"
 
 while IFS=$'\t' read -r \

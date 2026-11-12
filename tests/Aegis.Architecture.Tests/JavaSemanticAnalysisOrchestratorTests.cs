@@ -442,7 +442,6 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
         }
     }
 
-
     [Fact]
     public async Task Uses_separate_production_and_test_classpaths_for_owned_source_roots()
     {
@@ -542,8 +541,8 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
 
             Assert.False(productionRequest.IncludeTestCode);
             Assert.True(testRequest.IncludeTestCode);
-            Assert.Equal([Path.GetFullPath(productionRoot)], productionRequest.SourceRoots);
-            Assert.Equal([Path.GetFullPath(testRoot)], testRequest.SourceRoots);
+            Assert.Equal(new[] { Path.GetFullPath(productionRoot) }, productionRequest.SourceRoots);
+            Assert.Equal(new[] { Path.GetFullPath(testRoot) }, testRequest.SourceRoots);
             Assert.DoesNotContain(Path.GetFullPath(testSupportRoot), productionRequest.ReferencedSourceRoots);
             Assert.Contains(Path.GetFullPath(testSupportRoot), testRequest.ReferencedSourceRoots);
             Assert.Contains("production-classpath.jar", productionRequest.ClasspathEntries);
@@ -760,7 +759,6 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
             return ValueTask.FromResult(run);
         }
     }
-
 
     private sealed class RecordingClasspathResolver : IJavaClasspathResolver
     {

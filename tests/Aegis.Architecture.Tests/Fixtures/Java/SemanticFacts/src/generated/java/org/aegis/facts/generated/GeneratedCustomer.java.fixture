@@ -5,4 +5,7 @@ package org.aegis.facts.generated;
  * directly and never executes an annotation processor.
  */
 public record GeneratedCustomer(String id) {
+    public GeneratedCustomer(String id) {
+        this.id = id;
+    }
 }

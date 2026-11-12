@@ -41,7 +41,7 @@ internal static class JavaSemanticComponentDependencyDetector
             .SelectMany(run =>
             {
                 if (!modulesByPath.TryGetValue(NormalizePath(run.ProjectPath), out var module))
-                    return [];
+                    return Enumerable.Empty<SymbolComponent>();
 
                 return run.Symbols
                     .Where(IsProjectSourceSymbol)

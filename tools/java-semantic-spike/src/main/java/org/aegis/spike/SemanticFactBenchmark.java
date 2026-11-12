@@ -736,6 +736,14 @@ public final class SemanticFactBenchmark {
         return fixture + "|" + kind + "|" + sourceIdentity + "|" + identity;
     }
 
+    private static String jsonEscape(String value) {
+        return value.replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t");
+    }
+
     private static void deleteDirectory(Path directory) throws IOException {
         try (Stream<Path> paths = Files.walk(directory)) {
             for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {

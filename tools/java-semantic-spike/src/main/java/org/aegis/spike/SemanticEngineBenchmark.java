@@ -18,6 +18,7 @@ import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
+import org.eclipse.jdt.core.dom.FileASTRequestor;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.SimpleType;
@@ -270,104 +271,102 @@ public final class SemanticEngineBenchmark {
         String[] sourcePaths = sourceRoots.stream()
             .map(Path::toString)
             .toArray(String[]::new);
-        String[] encodings = sourceRoots.stream()
+        String[] encodings = sourceFiles.stream()
             .map(ignored -> "UTF-8")
+            .toArray(String[]::new);
+        String[] compilationUnitPaths = sourceFiles.stream()
+            .map(Path::toString)
             .toArray(String[]::new);
 
         Map<String, String> compilerOptions = JavaCore.getOptions();
         JavaCore.setComplianceOptions(JavaCore.VERSION_21, compilerOptions);
 
-        int parsedFiles = 0;
-        int diagnostics = 0;
-        int resolutionAttempts = 0;
-        int resolvedBindings = 0;
+        int[] parsedFiles = {0};
+        int[] diagnostics = {0};
+        int[] resolutionAttempts = {0};
+        int[] resolvedBindings = {0};
         Set<String> resolvedExpectedTypes = new HashSet<>();
         Set<String> resolvedExternalTypes = new HashSet<>();
         Set<String> unexpectedlyResolvedMissingTypes = new HashSet<>();
+
+        ASTParser parser = ASTParser.newParser(AST.getJLSLatest());
+        parser.setKind(ASTParser.K_COMPILATION_UNIT);
+        parser.setEnvironment(classpathEntries, sourcePaths, encodingsForRoots(sourceRoots), true);
+        parser.setResolveBindings(true);
+        parser.setBindingsRecovery(true);
+        parser.setStatementsRecovery(true);
+        parser.setCompilerOptions(compilerOptions);
+
         long started = System.nanoTime();
-
-        for (Path sourceFile : sourceFiles) {
-            try {
-                ASTParser parser = ASTParser.newParser(AST.getJLSLatest());
-                parser.setKind(ASTParser.K_COMPILATION_UNIT);
-                parser.setSource(Files.readString(sourceFile).toCharArray());
-                parser.setUnitName(resolveUnitName(sourceFile, sourceRoots));
-                parser.setEnvironment(classpathEntries, sourcePaths, encodings, true);
-                parser.setResolveBindings(true);
-                parser.setBindingsRecovery(true);
-                parser.setStatementsRecovery(true);
-                parser.setCompilerOptions(compilerOptions);
-
-                org.eclipse.jdt.core.dom.CompilationUnit unit =
-                    (org.eclipse.jdt.core.dom.CompilationUnit) parser.createAST(null);
-                parsedFiles++;
-
-                for (IProblem problem : unit.getProblems()) {
-                    if (problem.isError()) {
-                        diagnostics++;
+        parser.createASTs(
+            compilationUnitPaths,
+            encodings,
+            null,
+            new FileASTRequestor() {
+                @Override
+                public void acceptAST(
+                    String sourceFilePath,
+                    org.eclipse.jdt.core.dom.CompilationUnit unit) {
+                    parsedFiles[0]++;
+                    for (IProblem problem : unit.getProblems()) {
+                        if (problem.isError()) {
+                            diagnostics[0]++;
+                        }
                     }
+
+                    unit.accept(new ASTVisitor() {
+                        @Override
+                        public boolean visit(SimpleType node) {
+                            resolutionAttempts[0]++;
+                            try {
+                                ITypeBinding binding = node.resolveBinding();
+                                if (binding != null) {
+                                    resolvedBindings[0]++;
+                                    if (EXPECTED_SOURCE_TYPES.contains(binding.getQualifiedName())) {
+                                        resolvedExpectedTypes.add(binding.getQualifiedName());
+                                    }
+                                    if (EXPECTED_EXTERNAL_TYPES.contains(binding.getQualifiedName())) {
+                                        resolvedExternalTypes.add(binding.getQualifiedName());
+                                    }
+                                    if (EXPECTED_UNRESOLVED_TYPES.contains(binding.getQualifiedName())) {
+                                        unexpectedlyResolvedMissingTypes.add(binding.getQualifiedName());
+                                    }
+                                }
+                            } catch (RuntimeException unresolvedOrUnsupported) {
+                                // Resolution failures are evidence; they do not abort the corpus.
+                            }
+                            return true;
+                        }
+
+                        @Override
+                        public boolean visit(MethodInvocation node) {
+                            resolutionAttempts[0]++;
+                            try {
+                                if (node.resolveMethodBinding() != null) {
+                                    resolvedBindings[0]++;
+                                }
+                            } catch (RuntimeException unresolvedOrUnsupported) {
+                                // Resolution failures are evidence; they do not abort the corpus.
+                            }
+                            return true;
+                        }
+
+                        @Override
+                        public boolean visit(ClassInstanceCreation node) {
+                            resolutionAttempts[0]++;
+                            try {
+                                if (node.resolveConstructorBinding() != null) {
+                                    resolvedBindings[0]++;
+                                }
+                            } catch (RuntimeException unresolvedOrUnsupported) {
+                                // Resolution failures are evidence; they do not abort the corpus.
+                            }
+                            return true;
+                        }
+                    });
                 }
-
-                final int[] attempts = { 0 };
-                final int[] resolved = { 0 };
-
-                unit.accept(new ASTVisitor() {
-                    @Override
-                    public boolean visit(SimpleType node) {
-                        attempts[0]++;
-                        try {
-                            ITypeBinding binding = node.resolveBinding();
-                            if (binding != null) {
-                                resolved[0]++;
-                                if (EXPECTED_SOURCE_TYPES.contains(binding.getQualifiedName())) {
-                                    resolvedExpectedTypes.add(binding.getQualifiedName());
-                                }
-                                if (EXPECTED_EXTERNAL_TYPES.contains(binding.getQualifiedName())) {
-                                    resolvedExternalTypes.add(binding.getQualifiedName());
-                                }
-                                if (EXPECTED_UNRESOLVED_TYPES.contains(binding.getQualifiedName())) {
-                                    unexpectedlyResolvedMissingTypes.add(binding.getQualifiedName());
-                                }
-                            }
-                        } catch (RuntimeException unresolvedOrUnsupported) {
-                            // Resolution failures are evidence; they do not abort the corpus.
-                        }
-                        return true;
-                    }
-
-                    @Override
-                    public boolean visit(MethodInvocation node) {
-                        attempts[0]++;
-                        try {
-                            if (node.resolveMethodBinding() != null) {
-                                resolved[0]++;
-                            }
-                        } catch (RuntimeException unresolvedOrUnsupported) {
-                            // Resolution failures are evidence; they do not abort the corpus.
-                        }
-                        return true;
-                    }
-
-                    @Override
-                    public boolean visit(ClassInstanceCreation node) {
-                        attempts[0]++;
-                        try {
-                            if (node.resolveConstructorBinding() != null) {
-                                resolved[0]++;
-                            }
-                        } catch (RuntimeException unresolvedOrUnsupported) {
-                            // Resolution failures are evidence; they do not abort the corpus.
-                        }
-                        return true;
-                    }
-                });
-
-                resolutionAttempts += attempts[0];
-                resolvedBindings += resolved[0];
-            } catch (IOException | RuntimeException parseFailure) {
-                diagnostics++;
-            }
-        }
+            },
+            null);
 
         long elapsedMilliseconds = (System.nanoTime() - started) / 1_000_000;
         long heapUsedBytes = Runtime.getRuntime().totalMemory()
@@ -375,10 +374,10 @@ public final class SemanticEngineBenchmark {
 
         return new Metrics(
             sourceFiles.size(),
-            parsedFiles,
-            diagnostics,
-            resolutionAttempts,
-            resolvedBindings,
+            parsedFiles[0],
+            diagnostics[0],
+            resolutionAttempts[0],
+            resolvedBindings[0],
             resolvedExpectedTypes.size(),
             EXPECTED_SOURCE_TYPES.size(),
             resolvedExternalTypes.size(),
@@ -388,12 +387,10 @@ public final class SemanticEngineBenchmark {
             heapUsedBytes);
     }
 
-    private static String resolveUnitName(Path sourceFile, List<Path> sourceRoots) {
+    private static String[] encodingsForRoots(List<Path> sourceRoots) {
         return sourceRoots.stream()
-            .filter(sourceFile::startsWith)
-            .max(Comparator.comparingInt(Path::getNameCount))
-            .map(root -> root.relativize(sourceFile).toString().replace('\\', '/'))
-            .orElseGet(() -> sourceFile.getFileName().toString());
+            .map(ignored -> "UTF-8")
+            .toArray(String[]::new);
     }
 
     private static List<Path> readClasspath(Path classpathFile) throws IOException {

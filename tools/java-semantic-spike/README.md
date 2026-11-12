@@ -161,7 +161,7 @@ JavaParser's lack of compiler type-check and deprecation-warning diagnostics rem
 
 ## J2-A5.2 — Repeatable performance and memory evaluation
 
-The performance harness launches each candidate in a fresh JVM with the same fixed heap settings and the same compiled harness/runtime classpath. It evaluates both source-only and controlled-external-classpath modes. The candidate order alternates per trial to reduce systematic order bias.
+The performance harness launches each candidate in a fresh JVM with the same fixed heap settings and the same compiled harness/runtime classpath. It evaluates both source-only and controlled-external-classpath modes. The candidate order alternates per trial to reduce systematic order bias. The JDT side uses ASTParser.createASTs for the complete source-file set so binding work can be shared across compilation units, as supported by the JDT API. JavaParser uses one configured parser and a shared JavaSymbolSolver/CombinedTypeSolver for the same source roots. Both candidates receive the same source files, external JAR set and JVM resource settings; their native processing strategies are measured as intended usage paths.
 
 The default CI protocol uses two warm-up processes per candidate/mode followed by seven measured processes. Warm-ups are excluded from the summary. Each measured process records:
 

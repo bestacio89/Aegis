@@ -1049,7 +1049,7 @@ The infrastructure scenario is a controlled missing-input read failure. The corp
 
 ### J2-A5.2 — Repeatable performance and memory protocol implemented (2026-11-12)
 
-The isolated performance harness launches each candidate in a fresh JVM with identical fixed heap/GC arguments, the same harness/runtime classpath and identical fixture inputs. It runs source-only and controlled-external-classpath modes separately and alternates candidate order between trials.
+The isolated performance harness launches each candidate in a fresh JVM with identical fixed heap/GC arguments, the same harness/runtime classpath and identical fixture inputs. It runs source-only and controlled-external-classpath modes separately and alternates candidate order between trials. The JDT candidate uses ASTParser.createASTs batch processing across the full source set to share binding-resolution work; JavaParser reuses a configured parser and shared type solver over the same roots.
 
 The CI protocol uses two warm-up processes and seven measured processes per engine/mode. Warm-ups are excluded from summary statistics. Per-trial JSONL captures analysis duration, process duration including JVM startup/shutdown, peak resident set size sampled from Linux /proc VmHWM, source/parsed file counts, diagnostics, resolution attempts, resolved bindings and the unresolved-symbol guard. Environment metadata records JDK, OS, architecture, processor count and JVM arguments. Summaries report sample count, median and nearest-rank p95 for analysis time, process time and peak RSS.
 

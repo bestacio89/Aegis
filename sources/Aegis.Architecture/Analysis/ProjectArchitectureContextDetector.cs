@@ -316,7 +316,6 @@ public static class ProjectArchitectureContextDetector
             exception is IOException
                 or UnauthorizedAccessException
                 or JsonException
-                or InvalidDataException
                 or ArgumentException
                 or NotSupportedException)
         {

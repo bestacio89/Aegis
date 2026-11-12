@@ -185,7 +185,6 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
         catch (Exception exception) when (
             exception is IOException
                 or UnauthorizedAccessException
-                or InvalidDataException
                 or ArgumentException
                 or NotSupportedException)
         {

@@ -44,6 +44,17 @@
         <configuration>
           <mainClass>org.aegis.spike.SemanticEngineBenchmark</mainClass>
         </configuration>
+        <executions>
+          <execution>
+            <id>module-visibility</id>
+            <goals>
+              <goal>java</goal>
+            </goals>
+            <configuration>
+              <mainClass>org.aegis.spike.ModuleVisibilityBenchmark</mainClass>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

@@ -76,16 +76,14 @@ jobs:
       - name: Run Eclipse JDT module visibility checks
         run: |
           set -o pipefail
-          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
-            -Dexec.mainClass=org.aegis.spike.ModuleVisibilityBenchmark \
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@module-visibility \
             -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/module-visibility.properties" \
             | tee artifacts/jdt-module-visibility.jsonl
 
       - name: Run JavaParser module visibility checks
         run: |
           set -o pipefail
-          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
-            -Dexec.mainClass=org.aegis.spike.ModuleVisibilityBenchmark \
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@module-visibility \
             -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/module-visibility.properties" \
             | tee artifacts/javaparser-module-visibility.jsonl
 

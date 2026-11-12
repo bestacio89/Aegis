@@ -232,7 +232,7 @@ Aegis is distributed under its own proprietary license. That fact does not by it
 
 JavaParser 3.28.2's published dependency metadata selects Guava 33.6.0-jre. Google advisory GHSA-xxph-c9ww-hj94 / CVE-2026-102554 affects Guava through 33.7.1; the issue is uncontrolled allocation during native Java deserialization of selected Guava collections. The fix is present in 33.7.2 and later.
 
-The current spike manages Guava to 33.8.0-jre and CI asserts the resolved dependency-tree version. CI also emits a CycloneDX 1.6 JSON SBOM for the combined candidate dependency closure and verifies both parser roots plus the patched Guava component. This is an inventory artifact; missing/ambiguous license metadata and all transitive notices still require manual review. The advisory's attack path requires untrusted Java object deserialization; the parser workload does not intentionally deserialize project-controlled Java objects. That narrows the direct reachability assessment but is not a reason to ship a known-affected dependency. A full transitive vulnerability scan remains required for both candidate closures and every future version update.
+The current spike manages Guava to 33.8.0-jre and CI asserts the resolved dependency-tree version. CI also emits a CycloneDX 1.6 JSON SBOM for the combined candidate dependency closure and verifies both parser roots plus the patched Guava component. The current combined SBOM has 29 components and no missing license metadata: 15 EPL-2.0, 10 Apache-2.0-only, two Apache-2.0/LGPL-2.1-or-later, one Apache-2.0/LGPL-2.1-only/MPL-1.1 and one MIT. This is inventory evidence, not legal approval; multi-license choices and notices still require review. The workflow now runs OSV-Scanner 2.7.1 against the SBOM and uploads its JSON report. The advisory's attack path requires untrusted Java object deserialization; the parser workload does not intentionally deserialize project-controlled Java objects. That narrows the direct reachability assessment but is not a reason to ship a known-affected dependency. A full transitive vulnerability scan remains required for both candidate closures and every future version update.
 
 ### Runtime and packaging
 
@@ -260,3 +260,16 @@ The 42-file cold-process measurements show roughly 1.0 s median process time and
 
 **Status:** J2-A5.3 is in progress and not accepted. The Guava version override is implemented; the complete SBOM/license audit, security scan, Windows packaging prototype, worker lifecycle tests and legal approval remain open. JDT remains the provisional correctness-first candidate, with its measured performance/memory disadvantage recorded. J2-A remains open and J2-B remains blocked.
 
+
+
+### CycloneDX inventory snapshot (2026-11-12)
+
+The generated combined candidate SBOM contains 29 components and reports license metadata for all 29. The current declared license inventory is:
+
+- 15 EPL-2.0 components, comprising JDT Core/ECJ and its Eclipse platform dependency closure.
+- 10 Apache-2.0-only components.
+- 2 components declaring Apache-2.0 and LGPL-2.1-or-later (JNA and JNA Platform).
+- 1 component declaring Apache-2.0, LGPL-2.1-only and MPL-1.1 (Javassist).
+- 1 MIT component (Checker Framework annotations).
+
+This is a combined candidate dependency closure; the SBOM preserves dependency edges and package URLs. License metadata is not a legal determination, and multi-license expressions require explicit selection and notice review. The JDT EPL-2.0 distribution obligations and Aegis's proprietary distribution model still require legal approval. The SBOM and OSV report are uploaded as CI artifacts; a clean scan would not replace a complete license/security review.

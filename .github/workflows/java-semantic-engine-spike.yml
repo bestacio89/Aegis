@@ -58,6 +58,13 @@ jobs:
           jq -e '.components[] | select(.name == "javaparser-symbol-solver-core" and .version == "3.28.2")' artifacts/java-semantic-spike-bom.json > /dev/null
           jq -e '.components[] | select(.name == "guava" and .version == "33.8.0-jre")' artifacts/java-semantic-spike-bom.json > /dev/null
 
+      - name: Scan candidate dependency SBOM with OSV
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/src" ghcr.io/google/osv-scanner:v2.7.1 \
+            scan -L /src/artifacts/java-semantic-spike-bom.json \
+            --format json \
+            --output-file /src/artifacts/osv-vulnerability-report.json
+
       - name: Validate engine-neutral semantic fact oracle
         run: |
           mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-validation \

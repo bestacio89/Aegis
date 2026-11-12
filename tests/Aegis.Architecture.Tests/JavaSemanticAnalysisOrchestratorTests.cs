@@ -174,6 +174,97 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
     }
 
     [Fact]
+    public async Task Projects_test_source_relationships_as_test_edges_without_losing_production_edges()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var consumerPath = Path.Combine(repository, "consumer");
+        var apiPath = Path.Combine(repository, "api");
+        var consumerProductionRoot = Path.Combine(consumerPath, "src", "main", "java");
+        var consumerTestRoot = Path.Combine(consumerPath, "src", "test", "java");
+        var apiRoot = Path.Combine(apiPath, "src", "main", "java");
+        Directory.CreateDirectory(consumerProductionRoot);
+        Directory.CreateDirectory(consumerTestRoot);
+        Directory.CreateDirectory(apiRoot);
+
+        var consumerProductionFile = Path.Combine(consumerProductionRoot, "Consumer.java");
+        var consumerTestFile = Path.Combine(consumerTestRoot, "ConsumerTests.java");
+        await File.WriteAllTextAsync(consumerProductionFile, "package consumer; public class Consumer {}");
+        await File.WriteAllTextAsync(consumerTestFile, "package consumer; public class ConsumerTests {}");
+        await File.WriteAllTextAsync(Path.Combine(apiRoot, "PublicApi.java"), "package api; public class PublicApi {}");
+
+        try
+        {
+            var consumer = new ProjectModuleContext
+            {
+                Name = "consumer",
+                Path = consumerPath,
+                Languages = ["Java"],
+                SourceRoots =
+                [
+                    new ProjectSourceRoot
+                    {
+                        Directory = consumerProductionRoot,
+                        Ownership = ProjectSourceRootOwnership.Production,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    },
+                    new ProjectSourceRoot
+                    {
+                        Directory = consumerTestRoot,
+                        Ownership = ProjectSourceRootOwnership.Test,
+                        Origin = ProjectSourceRootOrigin.Explicit,
+                        ContainsJavaSources = true
+                    }
+                ]
+            };
+            var api = CreateModule("api", apiPath, apiRoot);
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "multi-module",
+                RootPath = repository,
+                Language = "Java",
+                Modules = [consumer, api],
+                Dependencies =
+                [
+                    new ArchitectureDependencyContext
+                    {
+                        Source = "consumer",
+                        SourceProjectPath = consumerPath,
+                        Target = "api",
+                        TargetProjectPath = apiPath,
+                        DependencyType = "MavenProjectDependency",
+                        Scope = "Production"
+                    }
+                ]
+            };
+            var adapter = new SemanticGraphJavaAdapter(consumerProductionFile);
+            var orchestrator = new JavaSemanticAnalysisOrchestrator(
+                [adapter],
+                new EmptyClasspathResolver(),
+                NullLogger<JavaSemanticAnalysisOrchestrator>.Instance);
+
+            await orchestrator.AnalyzeAsync(context);
+
+            Assert.Contains(context.Dependencies, dependency =>
+                dependency.DependencyType == "JavaSemanticDependency"
+                && Path.GetFullPath(dependency.SourceProjectPath) == Path.GetFullPath(consumerPath)
+                && Path.GetFullPath(dependency.TargetProjectPath) == Path.GetFullPath(apiPath)
+                && dependency.Scope == "Production"
+                && dependency.File == consumerProductionFile);
+            Assert.Contains(context.Dependencies, dependency =>
+                dependency.DependencyType == "JavaSemanticDependency"
+                && Path.GetFullPath(dependency.SourceProjectPath) == Path.GetFullPath(consumerPath)
+                && Path.GetFullPath(dependency.TargetProjectPath) == Path.GetFullPath(apiPath)
+                && dependency.Scope == "Test"
+                && dependency.File == consumerTestFile);
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Adds_compiler_confirmed_framework_annotation_evidence()
     {
         var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -796,12 +887,13 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
                             TargetSymbolId = "api-public-type",
                             Kind = SemanticRelationshipKind.References,
                             ResolutionStatus = SemanticResolutionStatus.Resolved,
+                            IsTestCode = request.IncludeTestCode,
                             Provenance =
                             [
                                 new SemanticEvidenceProvenance
                                 {
                                     Source = SemanticEvidenceSource.Compiler,
-                                    FilePath = _consumerFile,
+                                    FilePath = request.SourceFiles.FirstOrDefault() ?? _consumerFile,
                                     StartLine = 1,
                                     StartColumn = 1,
                                     Confidence = 1.0

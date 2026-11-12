@@ -73,6 +73,22 @@ jobs:
             -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java artifacts/external-classpath.txt" \
             | tee artifacts/javaparser-external-classpath.jsonl
 
+      - name: Run Eclipse JDT module visibility checks
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
+            -Dexec.mainClass=org.aegis.spike.ModuleVisibilityBenchmark \
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/module-visibility.properties" \
+            | tee artifacts/jdt-module-visibility.jsonl
+
+      - name: Run JavaParser module visibility checks
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
+            -Dexec.mainClass=org.aegis.spike.ModuleVisibilityBenchmark \
+            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/module-visibility.properties" \
+            | tee artifacts/javaparser-module-visibility.jsonl
+
       - name: Upload comparison results
         if: always()
         uses: actions/upload-artifact@v4

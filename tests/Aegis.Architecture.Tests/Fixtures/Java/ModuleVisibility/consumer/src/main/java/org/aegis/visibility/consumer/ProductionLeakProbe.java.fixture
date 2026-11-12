@@ -1,0 +1,11 @@
+package org.aegis.visibility.consumer;
+
+import org.aegis.visibility.support.TestSupport;
+
+public final class ProductionLeakProbe {
+    private final TestSupport support;
+
+    public ProductionLeakProbe(TestSupport support) {
+        this.support = support;
+    }
+}

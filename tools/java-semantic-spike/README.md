@@ -59,3 +59,22 @@ mvn -B -f tools/java-semantic-spike/pom.xml compile exec:java \
 ```
 
 Do not select a production engine from this small corpus alone. Add larger real-world repositories, effective Maven/Gradle model resolution, module-path cases and dependency-version conflict cases before final production integration.
+
+
+## Module visibility gate (J2-A)
+
+The workflow also runs a separate module-aware visibility gate for both engines. Its
+`module-visibility.properties` file is an explicit, reviewable projection of the J1
+fixture model: module-owned production/test source roots, production project dependencies,
+and test-only project dependencies. It does not merge source roots repository-wide.
+
+The gate asserts four boundaries:
+
+- A consumer with a declared project dependency resolves the API module type.
+- A module without that dependency does not resolve the API module type.
+- A production source set does not resolve a test-only support dependency.
+- The consumer test source set does resolve that test-only support dependency.
+
+The manifest is intentionally limited to this controlled fixture. It is not a replacement
+for exporting the complete J1 model, and it does not yet model external artifact classpaths,
+version conflicts, JPMS module paths or all Maven/Gradle scopes. Those remain J2-A work.

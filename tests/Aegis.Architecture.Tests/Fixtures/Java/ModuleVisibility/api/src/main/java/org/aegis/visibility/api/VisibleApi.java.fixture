@@ -1,0 +1,5 @@
+package org.aegis.visibility.api;
+
+public interface VisibleApi {
+    String value();
+}

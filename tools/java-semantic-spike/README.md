@@ -400,7 +400,7 @@ Run the matrix from the repository root:
 bash tools/java-semantic-spike/run-representative-project-matrix.sh
 ```
 
-A report is accepted only when every discovered file parses without syntax errors, the output declares the expected environment and classpath-entry count, and the shared type-reference metric contract remains `outermost-reference-type-nodes-v1`. Resolution percentages are comparative observations, not semantic correctness gates; the separate source-scoped semantic fact oracle remains the correctness gate.
+A report is accepted only when every discovered file parses without syntax errors, the output declares the expected environment and classpath-entry count, the unresolved-method sample count matches the bounded sample contract (up to twenty per report), and the shared type-reference metric contract remains `outermost-reference-type-nodes-v1`. Each unresolved-method sample retains source path, line, expression and native resolution detail where available. Resolution percentages are comparative observations, not semantic correctness gates; the separate source-scoped semantic fact oracle remains the correctness gate.
 
 
 ### Historical 18-report baseline (before test-classpath expansion, 2026-11-12)

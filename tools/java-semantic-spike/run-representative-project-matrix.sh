@@ -55,6 +55,7 @@ run_benchmark() {
     and .syntaxErrors == 0
     and .environment == $environment
     and .externalClasspathEntries == $classpathEntries
+    and (.unresolvedMethodCallSamples | length) == (if .unresolvedMethodCalls < 20 then .unresolvedMethodCalls else 20 end)
     and .typeReferenceMetric == "outermost-reference-type-nodes-v1"
   ' "$output" > /dev/null
 }

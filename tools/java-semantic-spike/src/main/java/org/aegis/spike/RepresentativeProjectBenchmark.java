@@ -176,7 +176,12 @@ public final class RepresentativeProjectBenchmark {
                         call.resolve();
                         metrics.resolvedMethodCalls++;
                     } catch (RuntimeException unresolved) {
-                        // Missing external dependencies remain visible as unresolved evidence.
+                        int line = call.getBegin().map(position -> position.line).orElse(0);
+                        metrics.recordUnresolvedMethodCall(
+                            sourceFile,
+                            line,
+                            call.toString(),
+                            unresolved.getClass().getSimpleName() + ": " + unresolved.getMessage());
                     }
                 }
 
@@ -268,6 +273,13 @@ public final class RepresentativeProjectBenchmark {
                     metrics.methodCalls++;
                     if (invocation.resolveMethodBinding() != null) {
                         metrics.resolvedMethodCalls++;
+                    } else {
+                        int line = unit.getLineNumber(invocation.getStartPosition());
+                        metrics.recordUnresolvedMethodCall(
+                            sourceFile,
+                            line,
+                            invocation.toString(),
+                            "JDT binding recovery returned no method binding");
                     }
                     return true;
                 }
@@ -398,6 +410,7 @@ public final class RepresentativeProjectBenchmark {
                 + "\"filesDiscovered\":%d,\"filesParsed\":%d,\"parseFailures\":%d,"
                 + "\"syntaxErrors\":%d,\"typeDeclarations\":%d,\"methodDeclarations\":%d,"
                 + "\"methodCalls\":%d,\"resolvedMethodCalls\":%d,\"unresolvedMethodCalls\":%d,"
+                + "\"unresolvedMethodCallSamples\":%s,"
                 + "\"typeReferenceMetric\":\"outermost-reference-type-nodes-v1\","
                 + "\"typeReferences\":%d,\"resolvedTypeReferences\":%d,\"unresolvedTypeReferences\":%d,"
                 + "\"methodCallResolutionPercent\":%.2f,\"typeResolutionPercent\":%.2f,"
@@ -417,12 +430,24 @@ public final class RepresentativeProjectBenchmark {
             metrics.methodCalls,
             metrics.resolvedMethodCalls,
             metrics.methodCalls - metrics.resolvedMethodCalls,
+            jsonArray(metrics.unresolvedMethodCallSamples),
             metrics.typeReferences,
             metrics.resolvedTypeReferences,
             metrics.typeReferences - metrics.resolvedTypeReferences,
             percentage(metrics.resolvedMethodCalls, metrics.methodCalls),
             percentage(metrics.resolvedTypeReferences, metrics.typeReferences),
             metrics.elapsedMillis);
+    }
+
+    private static String jsonArray(List<String> values) {
+        StringBuilder json = new StringBuilder("[");
+        for (int index = 0; index < values.size(); index++) {
+            if (index > 0) {
+                json.append(',');
+            }
+            json.append('"').append(jsonEscape(values.get(index))).append('"');
+        }
+        return json.append(']').toString();
     }
 
     private static double percentage(int resolved, int total) {
@@ -437,6 +462,9 @@ public final class RepresentativeProjectBenchmark {
     }
 
     private static final class Metrics {
+        private static final int MAX_UNRESOLVED_METHOD_CALL_SAMPLES = 20;
+
+        private final List<String> unresolvedMethodCallSamples = new ArrayList<>();
         private int filesDiscovered;
         private int filesParsed;
         private int parseFailures;
@@ -448,5 +476,25 @@ public final class RepresentativeProjectBenchmark {
         private int typeReferences;
         private int resolvedTypeReferences;
         private long elapsedMillis;
+
+        private void recordUnresolvedMethodCall(
+            Path sourceFile,
+            int line,
+            String expression,
+            String diagnostic) {
+            if (unresolvedMethodCallSamples.size() >= MAX_UNRESOLVED_METHOD_CALL_SAMPLES) {
+                return;
+            }
+
+            String normalizedDiagnostic = diagnostic == null
+                ? "unresolved"
+                : diagnostic.replaceAll("\\s+", " ").trim();
+            if (normalizedDiagnostic.length() > 300) {
+                normalizedDiagnostic = normalizedDiagnostic.substring(0, 300);
+            }
+
+            unresolvedMethodCallSamples.add(
+                sourceFile + ":" + line + ": " + expression + " => " + normalizedDiagnostic);
+        }
     }
 }

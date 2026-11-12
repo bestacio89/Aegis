@@ -35,7 +35,7 @@ jobs:
         run: mvn --version
 
       - name: Prepare result directory
-        run: mkdir -p artifacts
+        run: mkdir -p artifacts/classpaths
 
       - name: Resolve controlled external classpath
         run: |
@@ -73,18 +73,42 @@ jobs:
             -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java artifacts/external-classpath.txt" \
             | tee artifacts/javaparser-external-classpath.jsonl
 
+      - name: Resolve module-owned consumer compile classpath
+        run: |
+          mvn --batch-mode --no-transfer-progress -f tools/java-semantic-spike/classpaths/consumer-pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=compile -Dmdep.outputFile="${{ github.workspace }}/artifacts/classpaths/consumer.txt"
+
+      - name: Resolve module-owned consumer test classpath
+        run: |
+          mvn --batch-mode --no-transfer-progress -f tools/java-semantic-spike/classpaths/consumer-test-pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=compile -Dmdep.outputFile="${{ github.workspace }}/artifacts/classpaths/consumer-test.txt"
+
+      - name: Resolve runtime-only artifact evidence
+        run: |
+          mvn --batch-mode --no-transfer-progress -f tools/java-semantic-spike/classpaths/runtime-pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=runtime -Dmdep.outputFile="${{ github.workspace }}/artifacts/classpaths/runtime.txt"
+
+      - name: Resolve dependency-conflict mediation fixture
+        run: |
+          mvn --batch-mode --no-transfer-progress -f tools/java-semantic-spike/classpaths/conflict-pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=compile -Dmdep.outputFile="${{ github.workspace }}/artifacts/classpaths/conflict.txt"
+
       - name: Run Eclipse JDT module visibility checks
         run: |
           set -o pipefail
           mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@module-visibility \
-            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/module-visibility.properties" \
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/module-visibility.properties artifacts/classpaths" \
             | tee artifacts/jdt-module-visibility.jsonl
 
       - name: Run JavaParser module visibility checks
         run: |
           set -o pipefail
           mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@module-visibility \
-            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/module-visibility.properties" \
+            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/module-visibility.properties artifacts/classpaths" \
             | tee artifacts/javaparser-module-visibility.jsonl
 
       - name: Upload comparison results

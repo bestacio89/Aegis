@@ -1,0 +1,11 @@
+package org.aegis.visibility.consumer;
+
+import org.mapstruct.Mapper;
+import org.springframework.context.ApplicationContext;
+import org.springframework.core.io.Resource;
+
+public interface ExternalArtifactProbe {
+    ApplicationContext context();
+    Mapper mapper();
+    Resource excludedResource();
+}

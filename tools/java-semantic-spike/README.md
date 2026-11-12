@@ -76,5 +76,25 @@ The gate asserts four boundaries:
 - The consumer test source set does resolve that test-only support dependency.
 
 The manifest is intentionally limited to this controlled fixture. It is not a replacement
-for exporting the complete J1 model, and it does not yet model external artifact classpaths,
-version conflicts, JPMS module paths or all Maven/Gradle scopes. Those remain J2-A work.
+for exporting the complete J1 model. External artifact visibility is covered separately by
+the bounded J2-A2 fixture below; JPMS module paths and complete Maven/Gradle model semantics
+remain open J2-A work.
+
+
+## Module-owned external artifact visibility (J2-A2)
+
+The module gate now accepts a separate resolved-classpath file for each module and source set. The J1 source-root/project-edge projection remains separate from artifact resolution: the controlled Maven fixture POMs under `classpaths/` produce the artifact snapshots used by this harness. These snapshots are test inputs, **not** a claim that J1 currently exports resolved artifacts or that Aegis resolves production dependencies.
+
+The fixture matrix verifies:
+
+- **Compile scope:** the consumer receives Spring Context and MapStruct on its production compile classpath.
+- **Test scope:** JUnit Jupiter is available to the consumer test source set, not its production source set.
+- **Runtime-only scope:** Spring JCL is present in the runtime evidence file but is not passed to either engine's compile-time semantic environment; its `Log` type must remain unresolved in production source analysis.
+- **Exclusion:** the consumer fixture excludes Spring Core. The generated consumer classpath must not contain a Spring Core JAR, and its `Resource` type must remain unresolved.
+- **Conflict mediation:** the conflict fixture requests Spring Context 6.2.8 and directly pins Spring Core 6.1.0. Maven's controlled fixture resolution must select exactly Spring Core 6.1.0; the harness rejects a classpath containing Spring Core 6.2.8.
+
+JDT receives the module's compile/test JAR entries through `ASTParser.setEnvironment`; JavaParser receives the exact same entries through `JarTypeSolver`. Runtime-only entries are checked as evidence but deliberately excluded from compile-time analysis. The manifest rejects missing classpath files, missing JARs, duplicate entries, missing required artifacts and forbidden artifacts.
+
+### Limits
+
+This checkpoint validates module-owned, resolved Maven fixture classpaths and the visibility behaviour of the two candidate engines. It does not implement dependency resolution in Aegis, export resolved artifacts from J1, establish Gradle variant selection, model every Maven scope or Gradle configuration, or prove full transitive/exclusion semantics for arbitrary projects. The conflict fixture tests Maven's selected-version output for one controlled case; it is not a general conflict-resolution engine. Dynamic declarations, unresolved versions, unsupported constraints and incomplete build models must remain explicitly incomplete rather than being assigned guessed JARs.

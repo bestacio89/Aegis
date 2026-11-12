@@ -1,0 +1,11 @@
+package org.aegis.visibility.runtime;
+
+import org.apache.commons.logging.Log;
+
+public final class RuntimeOnlyProbe {
+    private final Log logger;
+
+    public RuntimeOnlyProbe(Log logger) {
+        this.logger = logger;
+    }
+}

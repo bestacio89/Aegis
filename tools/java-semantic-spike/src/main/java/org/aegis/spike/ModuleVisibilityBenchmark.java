@@ -7,6 +7,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.dom.AST;
@@ -38,9 +39,9 @@ public final class ModuleVisibilityBenchmark {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 3) {
+        if (args.length != 4) {
             throw new IllegalArgumentException(
-                "Usage: ModuleVisibilityBenchmark <jdt|javaparser> <fixture-root> <module-manifest>");
+                "Usage: ModuleVisibilityBenchmark <jdt|javaparser> <fixture-root> <module-manifest> <classpath-root>");
         }
 
         String engine = args[0].toLowerCase(Locale.ROOT);
@@ -50,6 +51,7 @@ public final class ModuleVisibilityBenchmark {
 
         Path fixtureRoot = Path.of(args[1]).toAbsolutePath().normalize();
         Path manifestPath = Path.of(args[2]).toAbsolutePath().normalize();
+        Path classpathRoot = Path.of(args[3]).toAbsolutePath().normalize();
         if (!Files.isDirectory(fixtureRoot) || !Files.isRegularFile(manifestPath)) {
             throw new IllegalArgumentException("Fixture root or module manifest does not exist.");
         }
@@ -62,7 +64,8 @@ public final class ModuleVisibilityBenchmark {
         Path workspace = Files.createTempDirectory("aegis-java-module-visibility-");
         try {
             materializeSources(fixtureRoot, workspace);
-            List<Module> modules = readModules(manifest, workspace);
+            List<Module> modules = readModules(manifest, workspace, classpathRoot);
+            validateClasspathAssertions(modules);
             List<Expectation> expectations = readExpectations(manifest);
             List<Observation> observations = engine.equals("jdt")
                 ? analyzeWithJdt(modules)
@@ -91,7 +94,7 @@ public final class ModuleVisibilityBenchmark {
         }
     }
 
-    private static List<Module> readModules(Properties manifest, Path workspace) {
+    private static List<Module> readModules(Properties manifest, Path workspace, Path classpathRoot) throws IOException {
         String[] moduleIds = required(manifest, "modules").split(",");
         List<Module> modules = new ArrayList<>();
         for (String rawId : moduleIds) {
@@ -103,7 +106,12 @@ public final class ModuleVisibilityBenchmark {
             if (productionRoots.isEmpty() && testRoots.isEmpty()) {
                 throw new IllegalStateException("Module has no declared source roots: " + id);
             }
-            modules.add(new Module(id, productionRoots, testRoots, dependencies, testDependencies));
+            modules.add(new Module(id, productionRoots, testRoots, dependencies, testDependencies,
+                readClasspath(manifest, classpathRoot, "module." + id + ".compileClasspath"),
+                readClasspath(manifest, classpathRoot, "module." + id + ".testClasspath"),
+                readClasspath(manifest, classpathRoot, "module." + id + ".runtimeClasspath"),
+                parseSet(manifest.getProperty("module." + id + ".requiredArtifacts", "")),
+                parseSet(manifest.getProperty("module." + id + ".forbiddenArtifacts", ""))));
         }
 
         Set<String> knownIds = modules.stream().map(Module::id).collect(java.util.stream.Collectors.toSet());
@@ -118,6 +126,65 @@ public final class ModuleVisibilityBenchmark {
             }
         }
         return List.copyOf(modules);
+    }
+
+    private static List<Path> readClasspath(
+        Properties manifest, Path classpathRoot, String property) throws IOException {
+        String fileName = manifest.getProperty(property);
+        if (fileName == null || fileName.isBlank()) {
+            return List.of();
+        }
+        Path classpathFile = classpathRoot.resolve(fileName.trim()).normalize();
+        if (!classpathFile.startsWith(classpathRoot) || !Files.isRegularFile(classpathFile)) {
+            throw new IllegalStateException("Declared module classpath file is missing or outside its root: "
+                + property + "=" + fileName);
+        }
+        String content = Files.readString(classpathFile).trim();
+        if (content.isEmpty()) {
+            return List.of();
+        }
+        List<Path> entries = Stream.of(content.split(java.util.regex.Pattern.quote(
+                java.io.File.pathSeparator)))
+            .map(String::trim)
+            .filter(value -> !value.isEmpty())
+            .map(Path::of)
+            .map(Path::toAbsolutePath)
+            .map(Path::normalize)
+            .toList();
+        for (Path entry : entries) {
+            if (!Files.isRegularFile(entry)) {
+                throw new IllegalStateException("Module classpath entry does not exist: " + entry);
+            }
+        }
+        if (entries.size() != entries.stream().distinct().count()) {
+            throw new IllegalStateException("Duplicate entries in module classpath: " + property);
+        }
+        return entries;
+    }
+
+    private static void validateClasspathAssertions(List<Module> modules) {
+        for (Module module : modules) {
+            List<String> names = Stream.of(
+                    module.compileClasspath(), module.testClasspath(), module.runtimeClasspath())
+                .flatMap(List::stream)
+                .map(path -> path.getFileName().toString())
+                .toList();
+            for (String required : module.requiredArtifacts()) {
+                long count = names.stream().filter(name -> name.contains(required)).count();
+                if (count != 1) {
+                    throw new IllegalStateException("Module " + module.id()
+                        + " expected exactly one artifact matching '" + required
+                        + "' but found " + count + ": " + names);
+                }
+            }
+            for (String forbidden : module.forbiddenArtifacts()) {
+                if (names.stream().anyMatch(name -> name.contains(forbidden))) {
+                    throw new IllegalStateException("Module " + module.id()
+                        + " must not contain excluded/conflicting artifact '" + forbidden
+                        + "': " + names);
+                }
+            }
+        }
     }
 
     private static List<Path> resolveRoots(Path workspace, String value) {
@@ -186,6 +253,9 @@ public final class ModuleVisibilityBenchmark {
         for (Path root : visibleRoots) {
             solver.add(new JavaParserTypeSolver(root.toFile()));
         }
+        for (Path artifact : visibleClasspath(module, sourceSet)) {
+            solver.add(new JarTypeSolver(artifact));
+        }
         ParserConfiguration configuration = new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21)
             .setSymbolResolver(new JavaSymbolSolver(solver));
@@ -233,6 +303,8 @@ public final class ModuleVisibilityBenchmark {
         List<Observation> observations) throws IOException {
         String[] sourcePaths = visibleRoots.stream().map(Path::toString).toArray(String[]::new);
         String[] encodings = visibleRoots.stream().map(ignored -> "UTF-8").toArray(String[]::new);
+        String[] classpathEntries = visibleClasspath(module, sourceSet).stream()
+            .map(Path::toString).toArray(String[]::new);
         var options = JavaCore.getOptions();
         JavaCore.setComplianceOptions(JavaCore.VERSION_21, options);
 
@@ -241,7 +313,7 @@ public final class ModuleVisibilityBenchmark {
             parser.setKind(ASTParser.K_COMPILATION_UNIT);
             parser.setSource(Files.readString(source).toCharArray());
             parser.setUnitName(resolveUnitName(source, ownedRoots));
-            parser.setEnvironment(new String[0], sourcePaths, encodings, true);
+            parser.setEnvironment(classpathEntries, sourcePaths, encodings, true);
             parser.setResolveBindings(true);
             parser.setBindingsRecovery(true);
             parser.setStatementsRecovery(true);
@@ -261,6 +333,14 @@ public final class ModuleVisibilityBenchmark {
                 }
             });
         }
+    }
+
+    private static List<Path> visibleClasspath(Module module, String sourceSet) {
+        List<Path> entries = new ArrayList<>(module.compileClasspath());
+        if (sourceSet.equals("test")) {
+            entries.addAll(module.testClasspath());
+        }
+        return entries.stream().distinct().sorted(Comparator.comparing(Path::toString)).toList();
     }
 
     private static List<Path> visibleProductionRoots(Module module, List<Module> modules) {
@@ -411,7 +491,9 @@ public final class ModuleVisibilityBenchmark {
 
     private record Module(
         String id, List<Path> productionRoots, List<Path> testRoots,
-        Set<String> dependencies, Set<String> testDependencies) {
+        Set<String> dependencies, Set<String> testDependencies,
+        List<Path> compileClasspath, List<Path> testClasspath, List<Path> runtimeClasspath,
+        Set<String> requiredArtifacts, Set<String> forbiddenArtifacts) {
     }
 
     private record Expectation(

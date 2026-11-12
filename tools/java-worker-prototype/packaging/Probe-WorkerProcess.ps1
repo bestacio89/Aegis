@@ -96,7 +96,7 @@ try {
     $handshake = Read-WorkerResponse $worker
     $handshakeTimer.Stop()
     Assert-WorkerSuccess $handshake 'runtime-handshake'
-    if ($handshake.result.protocolVersion -ne 1 -or $handshake.result.maxFrameBytes -ne 1048576) {
+    if ($handshake.result.protocolVersion -ne 1 -or $handshake.result.maxFrameBytes -ne 1048576 -or $handshake.result.maxResponseBytes -ne 67108864) {
         throw 'Unexpected worker handshake contract.'
     }
 
@@ -215,6 +215,7 @@ $summary = [ordered]@{
     architecture = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
     protocolVersion = 1
     maxFrameBytes = 1048576
+    maxResponseBytes = 67108864
     engine = 'eclipse-jdt'
     engineVersion = '3.47.0'
     scenarios = @($script:measurements)

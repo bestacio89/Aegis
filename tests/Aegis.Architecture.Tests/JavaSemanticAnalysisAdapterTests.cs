@@ -31,7 +31,8 @@ public sealed class JavaSemanticAnalysisAdapterTests
             ProjectPath = Path.GetTempPath(),
             SourceRoots = [Path.GetTempPath()],
             SourceFiles = [Path.Combine(Path.GetTempPath(), "Service.java")],
-            HasDeclaredExternalDependencies = true
+            HasDeclaredDependencies = true,
+            ClasspathResolutionComplete = false
         };
 
         var run = await adapter.AnalyzeAsync(request);

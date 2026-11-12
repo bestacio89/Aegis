@@ -10,6 +10,7 @@ public static class JavaSemanticAnalysisServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.Configure<JavaWorkerOptions>(_ => { });
+        services.TryAddSingleton<IJavaClasspathResolver, LocalJavaClasspathResolver>();
         services.TryAddSingleton<IJavaWorkerClient, JavaWorkerClient>();
         services.TryAddSingleton<ISemanticAnalysisAdapter, JavaSemanticAnalysisAdapter>();
         services.TryAddSingleton<JavaSemanticAnalysisOrchestrator>();

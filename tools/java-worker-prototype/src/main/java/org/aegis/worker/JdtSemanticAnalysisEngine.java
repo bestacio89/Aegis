@@ -226,6 +226,17 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             analyzedFiles++;
             unit.accept(new ASTVisitor() {
                 @Override
+                public void preVisit(ASTNode node) {
+                    if (node instanceof Type type && !type.isPrimitiveType()) {
+                        String sourceId = enclosingSymbol(type);
+                        if (sourceId != null) {
+                            addTypeRelationship(sourceId, type.resolveBinding(), type.toString(),
+                                PROTOCOL_REL_REFERENCES, type, file, test);
+                        }
+                    }
+                }
+
+                @Override
                 public boolean visit(TypeDeclaration node) {
                     ITypeBinding binding = node.resolveBinding();
                     String id = addType(binding, node, file, test, generated,
@@ -519,7 +530,15 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             result.addProperty("engineId", ENGINE_ID);
             result.addProperty("engineVersion", ENGINE_VERSION);
             result.addProperty("projectPath", projectRoot.toString());
-            result.addProperty("status", skippedFiles == 0 ? 2 : 3);
+            boolean hasCoverageErrors = false;
+            for (var item : diagnostics) {
+                if (item.getAsJsonObject().has("affectsCoverage")
+                    && item.getAsJsonObject().get("affectsCoverage").getAsBoolean()) {
+                    hasCoverageErrors = true;
+                    break;
+                }
+            }
+            result.addProperty("status", skippedFiles == 0 && !hasCoverageErrors ? 2 : 3);
             result.addProperty("analyzedFileCount", analyzedFiles);
             result.addProperty("skippedFileCount", skippedFiles + Math.max(0, requestedFiles - analyzedFiles - skippedFiles));
             JsonArray symbolArray = new JsonArray();

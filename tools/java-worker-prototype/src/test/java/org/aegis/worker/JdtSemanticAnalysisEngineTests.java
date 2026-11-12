@@ -62,6 +62,30 @@ final class JdtSemanticAnalysisEngineTests {
         assertTrue(relationships.asList().stream().anyMatch(item ->
             item.getAsJsonObject().get("kind").getAsInt() == 7
                 && item.getAsJsonObject().get("resolutionStatus").getAsInt() == 1));
+        assertTrue(relationships.asList().stream().anyMatch(item ->
+            item.getAsJsonObject().get("kind").getAsInt() == 5
+                && item.getAsJsonObject().get("resolutionStatus").getAsInt() == 1));
+    }
+
+    @Test
+    void marks_analysis_partial_when_jdt_reports_coverage_affecting_compiler_errors() throws Exception {
+        Path project = Files.createDirectories(workspace.resolve("broken-project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("src/main/java/example"));
+        Path source = sourceRoot.resolve("Broken.java");
+        Files.writeString(source, "package example; public class Broken { MissingType value; }");
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("projectPath", project.toString());
+        payload.add("sourceRoots", paths(sourceRoot.getParent()));
+        payload.add("sourceFiles", paths(source));
+        payload.add("classpathEntries", new JsonArray());
+
+        JsonObject result = new JdtSemanticAnalysisEngine().analyze(payload);
+
+        assertEquals(3, result.get("status").getAsInt());
+        assertTrue(result.getAsJsonArray("diagnostics").asList().stream().anyMatch(item ->
+            item.getAsJsonObject().get("severity").getAsString().equals("Error")
+                && item.getAsJsonObject().get("affectsCoverage").getAsBoolean()));
     }
 
     @Test

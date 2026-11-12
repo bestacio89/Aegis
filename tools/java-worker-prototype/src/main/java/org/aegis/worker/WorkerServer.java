@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class WorkerServer {
     public static final int PROTOCOL_VERSION = 1;
     public static final int DEFAULT_MAX_FRAME_BYTES = 1_048_576;
+    public static final int DEFAULT_MAX_RESPONSE_BYTES = 67_108_864;
     public static final int DEFAULT_MAX_CONCURRENT_REQUESTS = 2;
     public static final int MAX_REQUESTS_PER_SESSION = 10_000;
 
@@ -39,18 +40,29 @@ public final class WorkerServer {
     private final WorkerOperationHandler operationHandler;
     private final int maxFrameBytes;
     private final int maxConcurrentRequests;
+    private final int maxResponseBytes;
 
     public WorkerServer(WorkerOperationHandler operationHandler, int maxFrameBytes, int maxConcurrentRequests) {
+        this(operationHandler, maxFrameBytes, maxConcurrentRequests, DEFAULT_MAX_RESPONSE_BYTES);
+    }
+
+    public WorkerServer(
+        WorkerOperationHandler operationHandler,
+        int maxFrameBytes,
+        int maxConcurrentRequests,
+        int maxResponseBytes) {
         if (operationHandler == null) throw new IllegalArgumentException("An operation handler is required.");
         if (maxFrameBytes < 256) throw new IllegalArgumentException("The maximum frame size must be at least 256 bytes.");
         if (maxConcurrentRequests < 1) throw new IllegalArgumentException("At least one concurrent request slot is required.");
+        if (maxResponseBytes < 256) throw new IllegalArgumentException("The maximum response size must be at least 256 bytes.");
         this.operationHandler = operationHandler;
         this.maxFrameBytes = maxFrameBytes;
         this.maxConcurrentRequests = maxConcurrentRequests;
+        this.maxResponseBytes = maxResponseBytes;
     }
 
     public void serve(InputStream input, OutputStream output) throws IOException {
-        var writer = new ProtocolWriter(output);
+        var writer = new ProtocolWriter(output, maxResponseBytes);
         var executor = new ThreadPoolExecutor(
             maxConcurrentRequests,
             maxConcurrentRequests,
@@ -128,6 +140,7 @@ public final class WorkerServer {
                         var result = new JsonObject();
                         result.addProperty("protocolVersion", PROTOCOL_VERSION);
                         result.addProperty("maxFrameBytes", maxFrameBytes);
+                        result.addProperty("maxResponseBytes", maxResponseBytes);
                         result.addProperty("maxConcurrentRequests", maxConcurrentRequests);
                         writer.write(WorkerResponse.success(request.requestId(), result));
                     }
@@ -258,10 +271,26 @@ public final class WorkerServer {
 
     private static final class ProtocolWriter {
         private final OutputStream output;
-        private ProtocolWriter(OutputStream output) { this.output = output; }
+        private final int maxResponseBytes;
+
+        private ProtocolWriter(OutputStream output, int maxResponseBytes) {
+            this.output = output;
+            this.maxResponseBytes = maxResponseBytes;
+        }
 
         private synchronized void write(WorkerResponse response) throws IOException {
-            output.write((GSON.toJson(response) + "\n").getBytes(StandardCharsets.UTF_8));
+            byte[] frame = (GSON.toJson(response) + "\n").getBytes(StandardCharsets.UTF_8);
+            if (frame.length > maxResponseBytes) {
+                response = WorkerResponse.failure(
+                    response.requestId(),
+                    "RESPONSE_TOO_LARGE",
+                    "The analysis result exceeded the configured response byte limit.");
+                frame = (GSON.toJson(response) + "\n").getBytes(StandardCharsets.UTF_8);
+            }
+            if (frame.length > maxResponseBytes) {
+                throw new IOException("The bounded worker error response exceeds its configured response limit.");
+            }
+            output.write(frame);
             output.flush();
         }
     }

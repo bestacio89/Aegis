@@ -109,6 +109,34 @@ final class WorkerServerTests {
         assertEquals("REQUEST_CANCELLED", analysis.getAsJsonObject("error").get("code").getAsString());
     }
 
+    @Test
+    void oversized_analysis_response_is_replaced_with_a_bounded_protocol_error() throws Exception {
+        String input = """
+            {"protocolVersion":1,"requestId":"handshake-1","operation":"handshake"}
+            {"protocolVersion":1,"requestId":"analysis-1","operation":"analyze"}
+            """;
+        WorkerOperationHandler largeResultHandler = new WorkerOperationHandler() {
+            @Override
+            public boolean isAvailable() { return true; }
+
+            @Override
+            public JsonObject analyze(JsonObject payload) {
+                var result = new JsonObject();
+                result.addProperty("large", "x".repeat(2048));
+                return result;
+            }
+        };
+        var output = new ByteArrayOutputStream();
+        new WorkerServer(largeResultHandler, 4096, 2, 512).serve(
+            new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)), output);
+        List<JsonObject> responses = output.toString(StandardCharsets.UTF_8).lines()
+            .map(line -> GSON.fromJson(line, JsonObject.class))
+            .toList();
+
+        assertEquals("RESPONSE_TOO_LARGE",
+            responses.get(1).getAsJsonObject("error").get("code").getAsString());
+    }
+
     private static List<JsonObject> execute(String input, int maxFrameBytes) throws Exception {
         WorkerOperationHandler unavailableHandler = new WorkerOperationHandler() {
             @Override

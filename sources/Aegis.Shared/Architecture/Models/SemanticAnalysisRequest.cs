@@ -26,6 +26,10 @@ public sealed class SemanticAnalysisRequest
     /// <summary>Explicit, module-owned resolved artifacts. Declared coordinates are not classpath entries.</summary>
     public IReadOnlyList<string> ClasspathEntries { get; init; } = Array.Empty<string>();
 
+    public IReadOnlyList<string> UnresolvedClasspathDependencies { get; init; } = Array.Empty<string>();
+
+    public bool ClasspathResolutionComplete { get; init; } = true;
+
     public IReadOnlyList<string> BuildFiles { get; init; } = Array.Empty<string>();
 
     /// <summary>Stable capability identifiers requested from the selected adapter.</summary>
@@ -33,7 +37,7 @@ public sealed class SemanticAnalysisRequest
 
     public string? SourceLevel { get; init; }
 
-    public bool HasDeclaredExternalDependencies { get; init; }
+    public bool HasDeclaredDependencies { get; init; }
 
     public bool IncludeGeneratedCode { get; init; }
 

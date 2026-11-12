@@ -78,7 +78,7 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
                         includeGeneratedCode = request.IncludeGeneratedCode
                     };
 
-                    var result = await SendRequestAsync("analyze", payload, options.MaxFrameBytes, timeout.Token)
+                    var result = await SendRequestAsync("analyze", payload, options.MaxFrameBytes, options.MaxResponseBytes, timeout.Token)
                         .ConfigureAwait(false);
                     return MapResult(result, request, startedAt);
                 }
@@ -163,6 +163,7 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
             "handshake",
             null,
             options.MaxFrameBytes,
+            options.MaxResponseBytes,
             startupTimeout.Token).ConfigureAwait(false);
 
         if (!handshake.TryGetProperty("protocolVersion", out var version)
@@ -180,6 +181,7 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
         string operation,
         object? payload,
         int maxFrameBytes,
+        int maxResponseBytes,
         CancellationToken cancellationToken)
     {
         var process = _process
@@ -209,9 +211,9 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
         if (responseLine is null)
             throw new EndOfStreamException("The Java worker closed stdout before returning a response.");
 
-        if (Encoding.UTF8.GetByteCount(responseLine) > maxFrameBytes)
+        if (Encoding.UTF8.GetByteCount(responseLine) > maxResponseBytes)
             throw new InvalidDataException(
-                $"The Java worker response exceeds the configured {maxFrameBytes}-byte frame limit.");
+                $"The Java worker response exceeds the configured {maxResponseBytes}-byte response limit.");
 
         using var document = JsonDocument.Parse(responseLine);
         var response = document.RootElement;

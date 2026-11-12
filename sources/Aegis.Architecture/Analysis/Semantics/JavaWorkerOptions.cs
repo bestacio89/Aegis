@@ -3,7 +3,7 @@ namespace Aegis.Architecture.Analysis.Semantics;
 /// <summary>Deployment and resource limits for the isolated Eclipse JDT worker.</summary>
 public sealed class JavaWorkerOptions
 {
-    public string JavaExecutablePath { get; set; } = "java";
+    public string JavaExecutablePath { get; set; } = ResolveDefaultJavaExecutable();
 
     public string WorkerClassesDirectory { get; set; } =
         Path.Combine(AppContext.BaseDirectory, "Java", "worker", "classes");
@@ -18,6 +18,15 @@ public sealed class JavaWorkerOptions
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromMinutes(2);
 
     public int MaxFrameBytes { get; set; } = 1_048_576;
+
+    public int MaxResponseBytes { get; set; } = 67_108_864;
+
+    private static string ResolveDefaultJavaExecutable()
+    {
+        var executableName = OperatingSystem.IsWindows() ? "java.exe" : "java";
+        var packagedRuntime = Path.Combine(AppContext.BaseDirectory, "Java", "runtime", "bin", executableName);
+        return File.Exists(packagedRuntime) ? packagedRuntime : "java";
+    }
 
     public bool IsConfigured =>
         Directory.Exists(WorkerClassesDirectory)

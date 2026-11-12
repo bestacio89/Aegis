@@ -17,18 +17,22 @@ public sealed class JavaSemanticAnalysisOrchestrator
         };
 
     private readonly ISemanticAnalysisAdapter _adapter;
+    private readonly IJavaClasspathResolver _classpathResolver;
     private readonly ILogger<JavaSemanticAnalysisOrchestrator> _logger;
 
     public JavaSemanticAnalysisOrchestrator(
         IEnumerable<ISemanticAnalysisAdapter> adapters,
+        IJavaClasspathResolver classpathResolver,
         ILogger<JavaSemanticAnalysisOrchestrator> logger)
     {
         ArgumentNullException.ThrowIfNull(adapters);
+        ArgumentNullException.ThrowIfNull(classpathResolver);
         ArgumentNullException.ThrowIfNull(logger);
 
         _adapter = adapters.FirstOrDefault(adapter =>
                 adapter.Language.Equals("Java", StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException("The Java semantic analysis adapter is not registered.");
+        _classpathResolver = classpathResolver;
         _logger = logger;
     }
 
@@ -39,11 +43,13 @@ public sealed class JavaSemanticAnalysisOrchestrator
         ArgumentNullException.ThrowIfNull(context);
 
         var modules = context.Modules
-            .Where(IsJavaModule)
+            .Where(module => IsJavaModule(module, context.Modules))
             .OrderBy(module => module.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        if (modules.Count == 0 && context.Language.Equals("Java", StringComparison.OrdinalIgnoreCase))
+        if (modules.Count == 0
+            && context.Modules.Count == 0
+            && context.Language.Equals("Java", StringComparison.OrdinalIgnoreCase))
         {
             modules.Add(new ProjectModuleContext
             {
@@ -68,6 +74,7 @@ public sealed class JavaSemanticAnalysisOrchestrator
             if (sourceFiles.Count == 0)
                 continue;
 
+            var classpath = _classpathResolver.Resolve(module, context.Modules, includeTestCode: true);
             var request = new SemanticAnalysisRequest
             {
                 Language = "Java",
@@ -84,10 +91,13 @@ public sealed class JavaSemanticAnalysisOrchestrator
                     .Where(root => root.IsGenerated)
                     .Select(root => root.Directory)
                     .ToArray(),
+                ClasspathEntries = classpath.Entries,
+                UnresolvedClasspathDependencies = classpath.UnresolvedDependencies,
+                ClasspathResolutionComplete = classpath.IsComplete,
                 BuildFiles = module.ProjectFiles.ToArray(),
                 RequestedCapabilities = _adapter.SupportedCapabilities.ToArray(),
                 SourceLevel = ResolveSourceLevel(module),
-                HasDeclaredExternalDependencies = HasDeclaredExternalDependencies(module),
+                HasDeclaredDependencies = classpath.HasDeclaredDependencies,
                 IncludeGeneratedCode = true,
                 IncludeTestCode = true
             };
@@ -109,11 +119,23 @@ public sealed class JavaSemanticAnalysisOrchestrator
         }
     }
 
-    private static bool IsJavaModule(ProjectModuleContext module) =>
-        module.Languages.Any(language =>
-            language.Equals("Java", StringComparison.OrdinalIgnoreCase))
-        || module.SourceRoots.Any(root => root.ContainsJavaSources)
-        || module.BuildSystem is ArchitectureBuildSystem.Maven or ArchitectureBuildSystem.Gradle;
+    private static bool IsJavaModule(
+        ProjectModuleContext module,
+        IReadOnlyCollection<ProjectModuleContext> modules)
+    {
+        var hasOwnedJavaRoots = module.SourceRoots.Any(root => root.ContainsJavaSources)
+            || Directory.Exists(Path.Combine(module.Path, "src", "main", "java"))
+            || Directory.Exists(Path.Combine(module.Path, "src", "test", "java"));
+        var hasJavaLanguage = module.Languages.Any(language =>
+            language.Equals("Java", StringComparison.OrdinalIgnoreCase));
+        var ownsNestedModules = modules.Any(candidate =>
+            !ReferenceEquals(candidate, module)
+            && IsSameOrDescendantPath(Path.GetFullPath(candidate.Path), Path.GetFullPath(module.Path)));
+
+        // An aggregator with child modules must not recursively absorb their
+        // sources just because repository-level language detection saw Java.
+        return hasOwnedJavaRoots || (hasJavaLanguage && !ownsNestedModules);
+    }
 
     private static List<ProjectSourceRoot> ResolveSourceRoots(ProjectModuleContext module)
     {
@@ -245,21 +267,6 @@ public sealed class JavaSemanticAnalysisOrchestrator
             ExceptionType = exception.GetType().Name,
             AffectsCoverage = true
         };
-
-    private static bool HasDeclaredExternalDependencies(ProjectModuleContext module)
-    {
-        var mavenDependencies = module.MavenModel?.Dependencies.Any(dependency =>
-            !dependency.Scope.Equals("test", StringComparison.OrdinalIgnoreCase)
-            || module.SourceRoots.Any(root => root.Ownership == ProjectSourceRootOwnership.Test));
-
-        var gradleDependencies = module.GradleBuildModel?.Dependencies.Any(dependency =>
-            !dependency.IsPlatform
-            && !dependency.IsAnnotationProcessor
-            && !string.IsNullOrWhiteSpace(dependency.Group)
-            && !string.IsNullOrWhiteSpace(dependency.Artifact));
-
-        return mavenDependencies == true || gradleDependencies == true;
-    }
 
     private static string ResolveSourceLevel(ProjectModuleContext module)
     {

@@ -69,7 +69,7 @@ public sealed class JavaSemanticAnalysisAdapter : ISemanticAnalysisAdapter
                 exception.GetType().Name);
         }
 
-        if (!request.HasDeclaredExternalDependencies || request.ClasspathEntries.Count > 0)
+        if (!request.HasDeclaredDependencies || request.ClasspathResolutionComplete)
             return run;
 
         return new SemanticAnalysisRun
@@ -94,12 +94,21 @@ public sealed class JavaSemanticAnalysisAdapter : ISemanticAnalysisAdapter
                 {
                     Code = "JavaExternalClasspathUnavailable",
                     Component = nameof(JavaSemanticAnalysisAdapter),
-                    Message = "The module declares external dependencies, but no resolved module-owned classpath was supplied. JDK and project-source bindings are available; external library bindings remain incomplete.",
+                    Message = CreateClasspathDiagnostic(request),
                     Target = request.ProjectPath,
                     AffectsCoverage = true
                 }
             ]
         };
+    }
+
+    private static string CreateClasspathDiagnostic(SemanticAnalysisRequest request)
+    {
+        var missing = request.UnresolvedClasspathDependencies.Count;
+        var missingSummary = missing == 0
+            ? "No direct artifact was missing from the local cache."
+            : $"{missing} direct artifact(s) were not found in the local cache: {string.Join(", ", request.UnresolvedClasspathDependencies.Take(10))}.";
+        return $"The module declares dependencies, but its complete resolved module classpath is unavailable. {missingSummary} Direct cached artifacts are used where available; project-module source references and transitive dependency closure have not been resolved, so some bindings remain incomplete.";
     }
 
     private SemanticAnalysisRun CreateUnavailableRun(

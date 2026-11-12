@@ -22,15 +22,16 @@ public sealed class JavaSemanticAnalysisOrchestrator
     private readonly ILogger<JavaSemanticAnalysisOrchestrator> _logger;
 
     public JavaSemanticAnalysisOrchestrator(
-        SemanticAnalysisCoordinator coordinator,
+        IEnumerable<ISemanticAnalysisAdapter> adapters,
         IJavaClasspathResolver classpathResolver,
-        ILogger<JavaSemanticAnalysisOrchestrator> logger)
+        ILogger<JavaSemanticAnalysisOrchestrator> logger,
+        SemanticAnalysisCoordinator? coordinator = null)
     {
-        ArgumentNullException.ThrowIfNull(coordinator);
+        ArgumentNullException.ThrowIfNull(adapters);
         ArgumentNullException.ThrowIfNull(classpathResolver);
         ArgumentNullException.ThrowIfNull(logger);
 
-        _coordinator = coordinator;
+        _coordinator = coordinator ?? new SemanticAnalysisCoordinator(adapters);
         _classpathResolver = classpathResolver;
         _logger = logger;
     }

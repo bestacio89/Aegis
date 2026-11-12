@@ -75,54 +75,114 @@ public sealed class JavaSemanticAnalysisOrchestrator
             if (sourceFiles.Count == 0)
                 continue;
 
-            var classpath = _classpathResolver.Resolve(module, context.Modules, includeTestCode: true);
-            var request = new SemanticAnalysisRequest
+            // Unknown source ownership cannot be split safely. Preserve the
+            // established combined analysis until discovery can classify it.
+            if (sourceRoots.Any(root => root.Ownership == ProjectSourceRootOwnership.Unknown))
             {
-                Language = "Java",
-                ProjectPath = Path.GetFullPath(module.Path),
-                WorkspaceRoot = Path.GetFullPath(context.RootPath),
-                ModuleName = module.Name,
-                BuildSystem = module.BuildSystem.ToString(),
-                SourceFiles = sourceFiles,
-                SourceRoots = sourceRoots.Select(root => root.Directory).ToArray(),
-                ReferencedSourceRoots = ResolveReferencedSourceRoots(module, context),
-                TestSourceRoots = sourceRoots
-                    .Where(root => root.Ownership == ProjectSourceRootOwnership.Test)
-                    .Select(root => root.Directory)
-                    .ToArray(),
-                GeneratedSourceRoots = sourceRoots
-                    .Where(root => root.IsGenerated)
-                    .Select(root => root.Directory)
-                    .ToArray(),
-                ClasspathEntries = classpath.Entries,
-                UnresolvedClasspathDependencies = classpath.UnresolvedDependencies,
-                ClasspathResolutionComplete = classpath.IsComplete,
-                BuildFiles = module.ProjectFiles.ToArray(),
-                RequestedCapabilities = _adapter.SupportedCapabilities.ToArray(),
-                SourceLevel = ResolveSourceLevel(module),
-                HasDeclaredDependencies = classpath.HasDeclaredDependencies,
-                IncludeGeneratedCode = true,
-                IncludeTestCode = true
-            };
-
-            if (!_adapter.CanAnalyze(request))
+                await AnalyzeScopeAsync(
+                    module,
+                    context,
+                    sourceRoots,
+                    includeTestCode: true,
+                    includeTestDependencies: module.IsTestProject || module.IsTestSupport,
+                    cancellationToken).ConfigureAwait(false);
                 continue;
+            }
 
-            var run = await _adapter.AnalyzeAsync(request, cancellationToken)
-                .ConfigureAwait(false);
-            context.SemanticAnalysisRuns.Add(run);
+            var productionRoots = module.IsTestProject || module.IsTestSupport
+                ? Array.Empty<ProjectSourceRoot>()
+                : sourceRoots
+                    .Where(root => root.Ownership != ProjectSourceRootOwnership.Test)
+                    .ToArray();
+            var testRoots = module.IsTestProject || module.IsTestSupport
+                ? sourceRoots
+                : sourceRoots
+                    .Where(root => root.Ownership == ProjectSourceRootOwnership.Test)
+                    .ToArray();
 
-            _logger.LogInformation(
-                "Java semantic analysis for module {ModuleName} completed with status {Status}: {SymbolCount} symbols, {RelationshipCount} relationships, {DiagnosticCount} diagnostics.",
-                module.Name,
-                run.Status,
-                run.Symbols.Count,
-                run.Relationships.Count,
-                run.Diagnostics.Count);
+            await AnalyzeScopeAsync(
+                module,
+                context,
+                productionRoots,
+                includeTestCode: false,
+                includeTestDependencies: false,
+                cancellationToken).ConfigureAwait(false);
+            await AnalyzeScopeAsync(
+                module,
+                context,
+                testRoots,
+                includeTestCode: true,
+                includeTestDependencies: true,
+                cancellationToken).ConfigureAwait(false);
         }
 
         JavaSemanticFrameworkDetector.Analyze(context);
         JavaSemanticDependencyDetector.Analyze(context);
+    }
+
+    private async Task AnalyzeScopeAsync(
+        ProjectModuleContext module,
+        ProjectArchitectureContext context,
+        IReadOnlyCollection<ProjectSourceRoot> sourceRoots,
+        bool includeTestCode,
+        bool includeTestDependencies,
+        CancellationToken cancellationToken)
+    {
+        if (sourceRoots.Count == 0)
+            return;
+
+        var sourceFiles = EnumerateJavaFiles(
+            module.Path,
+            sourceRoots,
+            context.DiscoveryDiagnostics);
+        if (sourceFiles.Count == 0)
+            return;
+
+        var classpath = _classpathResolver.Resolve(module, context.Modules, includeTestCode);
+        var request = new SemanticAnalysisRequest
+        {
+            Language = "Java",
+            ProjectPath = Path.GetFullPath(module.Path),
+            WorkspaceRoot = Path.GetFullPath(context.RootPath),
+            ModuleName = module.Name,
+            BuildSystem = module.BuildSystem.ToString(),
+            SourceFiles = sourceFiles,
+            SourceRoots = sourceRoots.Select(root => root.Directory).ToArray(),
+            ReferencedSourceRoots = ResolveReferencedSourceRoots(module, context, includeTestDependencies),
+            TestSourceRoots = sourceRoots
+                .Where(root => root.Ownership == ProjectSourceRootOwnership.Test)
+                .Select(root => root.Directory)
+                .ToArray(),
+            GeneratedSourceRoots = sourceRoots
+                .Where(root => root.IsGenerated)
+                .Select(root => root.Directory)
+                .ToArray(),
+            ClasspathEntries = classpath.Entries,
+            UnresolvedClasspathDependencies = classpath.UnresolvedDependencies,
+            ClasspathResolutionComplete = classpath.IsComplete,
+            BuildFiles = module.ProjectFiles.ToArray(),
+            RequestedCapabilities = _adapter.SupportedCapabilities.ToArray(),
+            SourceLevel = ResolveSourceLevel(module),
+            HasDeclaredDependencies = classpath.HasDeclaredDependencies,
+            IncludeGeneratedCode = true,
+            IncludeTestCode = includeTestCode
+        };
+
+        if (!_adapter.CanAnalyze(request))
+            return;
+
+        var run = await _adapter.AnalyzeAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+        context.SemanticAnalysisRuns.Add(run);
+
+        _logger.LogInformation(
+            "Java {SourceSet} analysis for module {ModuleName} completed with status {Status}: {SymbolCount} symbols, {RelationshipCount} relationships, {DiagnosticCount} diagnostics.",
+            includeTestCode ? "test" : "production",
+            module.Name,
+            run.Status,
+            run.Symbols.Count,
+            run.Relationships.Count,
+            run.Diagnostics.Count);
     }
 
     private static bool IsJavaModule(
@@ -145,9 +205,9 @@ public sealed class JavaSemanticAnalysisOrchestrator
 
     private static IReadOnlyList<string> ResolveReferencedSourceRoots(
         ProjectModuleContext module,
-        ProjectArchitectureContext context)
+        ProjectArchitectureContext context,
+        bool includeTestDependencies)
     {
-        var includeTestDependencies = module.IsTestProject || module.IsTestSupport;
         var modulePath = Path.GetFullPath(module.Path);
         var pending = new Stack<string>(
             context.Dependencies

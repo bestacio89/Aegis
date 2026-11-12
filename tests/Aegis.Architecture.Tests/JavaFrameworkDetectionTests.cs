@@ -1,5 +1,8 @@
 using Aegis.Architecture.Analysis;
+using Aegis.Architecture.Analysis.Semantics;
 using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Aegis.Architecture.Tests;
@@ -93,7 +96,7 @@ public sealed class JavaFrameworkDetectionTests
     }
 
     [Fact]
-    public void Detect_classifies_additional_java_architecture_integrations_with_version_and_provenance()
+    public async Task Detect_classifies_additional_java_architecture_integrations_with_version_and_provenance()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisJavaIntegrations_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -125,6 +128,7 @@ public sealed class JavaFrameworkDetectionTests
             File.WriteAllText(source, "package example; public final class Service { }");
 
             var context = ProjectArchitectureContextDetector.Detect(root);
+            await CreateOrchestrator().AnalyzeAsync(context);
 
             var module = Assert.Single(context.Modules);
             var expected = new Dictionary<string, (Aegis.Shared.Architecture.Enums.FrameworkEvidenceKind Kind, string Version)>
@@ -162,7 +166,7 @@ public sealed class JavaFrameworkDetectionTests
 
 
     [Fact]
-    public void Detect_classifies_java_test_frameworks_and_maven_test_plugins_as_test_only_evidence()
+    public async Task Detect_classifies_java_test_frameworks_and_maven_test_plugins_as_test_only_evidence()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisJavaTestFrameworks_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -205,6 +209,7 @@ public sealed class JavaFrameworkDetectionTests
             File.WriteAllText(source, "package example; public final class Service { }");
 
             var context = ProjectArchitectureContextDetector.Detect(root);
+            await CreateOrchestrator().AnalyzeAsync(context);
 
             var module = Assert.Single(context.Modules);
             var expectedVersions = new Dictionary<string, string[]>
@@ -240,6 +245,45 @@ public sealed class JavaFrameworkDetectionTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+
+    private static JavaSemanticAnalysisOrchestrator CreateOrchestrator() =>
+        new(
+            [new NoOpJavaAdapter()],
+            new EmptyJavaClasspathResolver(),
+            NullLogger<JavaSemanticAnalysisOrchestrator>.Instance);
+
+    private sealed class NoOpJavaAdapter : ISemanticAnalysisAdapter
+    {
+        public string AdapterId => "java-framework-evidence-test";
+        public string Language => "Java";
+        public IReadOnlyCollection<string> SupportedCapabilities => ["symbols"];
+
+        public bool CanAnalyze(SemanticAnalysisRequest request) =>
+            request.Language.Equals("Java", StringComparison.OrdinalIgnoreCase);
+
+        public ValueTask<SemanticAnalysisRun> AnalyzeAsync(
+            SemanticAnalysisRequest request,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new SemanticAnalysisRun
+            {
+                RunId = Guid.NewGuid().ToString("N"),
+                Language = "Java",
+                EngineId = AdapterId,
+                ProjectPath = request.ProjectPath,
+                Status = SemanticAnalysisStatus.Completed,
+                AnalyzedFileCount = request.SourceFiles.Count
+            });
+    }
+
+    private sealed class EmptyJavaClasspathResolver : IJavaClasspathResolver
+    {
+        public JavaClasspathResolution Resolve(
+            ProjectModuleContext module,
+            IReadOnlyCollection<ProjectModuleContext> projectModules,
+            bool includeTestCode) =>
+            new(Array.Empty<string>(), Array.Empty<string>(), false, true);
     }
 
 }

@@ -50,7 +50,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         Objects.requireNonNull(payload, "payload");
         Path projectRoot = requiredPath(payload, "projectPath").toRealPath();
         List<Path> sourceRoots = readPaths(payload, "sourceRoots", true);
-        List<Path> sourceFiles = readPaths(payload, "sourceFiles", false);
+        List<Path> sourceFiles = readSourceFiles(payload);
         List<Path> classpath = readPaths(payload, "classpathEntries", false);
 
         if (sourceRoots.isEmpty()) {
@@ -62,11 +62,17 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                 throw new IllegalArgumentException("A source root is outside the declared project module.");
             }
         }
+        List<Path> realSourceRoots = sourceRoots.stream()
+            .map(path -> {
+                try { return path.toRealPath(); }
+                catch (IOException exception) {
+                    throw new IllegalArgumentException("A declared source root cannot be resolved: " + path, exception);
+                }
+            }).toList();
         for (Path source : sourceFiles) {
             Path realSource = source.toRealPath();
             if (!Files.isRegularFile(realSource)
-                || sourceRoots.stream().map(path -> path.toAbsolutePath().normalize())
-                    .noneMatch(realSource::startsWith)) {
+                || realSourceRoots.stream().noneMatch(realSource::startsWith)) {
                 throw new IllegalArgumentException("A source file is outside the declared source roots: " + source);
             }
         }
@@ -146,6 +152,25 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         return Path.of(value).toAbsolutePath().normalize();
     }
 
+    private static List<Path> readSourceFiles(JsonObject payload) throws IOException {
+        if (!payload.has("sourceManifestPath")) return readPaths(payload, "sourceFiles", false);
+        Path manifest = Path.of(payload.get("sourceManifestPath").getAsString()).toRealPath();
+        Path temporaryDirectory = Path.of(System.getProperty("java.io.tmpdir")).toRealPath();
+        if (!manifest.startsWith(temporaryDirectory) || !Files.isRegularFile(manifest)
+            || Files.size(manifest) > 32L * 1024 * 1024) {
+            throw new IllegalArgumentException("The source manifest must be a regular file inside the system temporary directory and no larger than 32 MiB.");
+        }
+        var element = com.google.gson.JsonParser.parseString(Files.readString(manifest));
+        if (!element.isJsonArray()) throw new IllegalArgumentException("The source manifest must contain a JSON array of paths.");
+        List<Path> paths = new ArrayList<>();
+        for (var value : element.getAsJsonArray()) {
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString())
+                throw new IllegalArgumentException("Every source manifest entry must be a path string.");
+            paths.add(Path.of(value.getAsString()).toAbsolutePath().normalize());
+        }
+        return List.copyOf(paths);
+    }
+
     private static List<Path> readPaths(JsonObject payload, String name, boolean directories) {
         JsonArray values = payload.has(name) && payload.get(name).isJsonArray()
             ? payload.getAsJsonArray(name) : new JsonArray();
@@ -173,6 +198,8 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         private final List<Path> sourceRoots;
         private final boolean includeTestCode;
         private final boolean includeGeneratedCode;
+        private final Set<Path> testSourceRoots;
+        private final Set<Path> generatedSourceRoots;
         private final Map<String, JsonObject> symbols = new LinkedHashMap<>();
         private final Map<String, JsonObject> relationships = new LinkedHashMap<>();
         private final JsonArray diagnostics = new JsonArray();
@@ -184,6 +211,8 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             this.sourceRoots = sourceRoots;
             this.includeTestCode = request.has("includeTestCode") && request.get("includeTestCode").getAsBoolean();
             this.includeGeneratedCode = request.has("includeGeneratedCode") && request.get("includeGeneratedCode").getAsBoolean();
+            this.testSourceRoots = readPaths(request, "testSourceRoots", true).stream().map(path -> path.toAbsolutePath().normalize()).collect(Collectors.toUnmodifiableSet());
+            this.generatedSourceRoots = readPaths(request, "generatedSourceRoots", true).stream().map(path -> path.toAbsolutePath().normalize()).collect(Collectors.toUnmodifiableSet());
         }
 
         private void accept(Path source, CompilationUnit unit) {
@@ -351,7 +380,8 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             String id = binding == null ? fallbackId(file, node, "type") : bindingId(binding);
             String name = binding == null ? node.toString() : binding.getName();
             String qualified = binding == null ? name : binding.getTypeDeclaration().getQualifiedName();
-            addSymbol(id, name, qualified, kind, binding != null && binding.getModifiers() % 2 == 1,
+            addSymbol(id, name, qualified, kind,
+                binding != null && org.eclipse.jdt.core.dom.Modifier.isPublic(binding.getModifiers()),
                 binding != null && binding.isFromSource(), file, node, test, generated);
             return id;
         }
@@ -396,8 +426,16 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             }
             IMethodBinding declaration = target.getMethodDeclaration();
             String targetId = bindingId(declaration);
-            if (declaration.getDeclaringClass() != null)
+            if (declaration.getDeclaringClass() != null) {
                 addExternalTypeIfNeeded(declaration.getDeclaringClass(), file, node, test);
+                if (!declaration.getDeclaringClass().isFromSource()) {
+                    addSymbol(targetId, declaration.isConstructor() ? "<init>" : declaration.getName(),
+                        methodIdentity(declaration),
+                        declaration.isConstructor() ? PROTOCOL_SYMBOL_CONSTRUCTOR : PROTOCOL_SYMBOL_METHOD,
+                        org.eclipse.jdt.core.dom.Modifier.isPublic(declaration.getModifiers()),
+                        false, file, node, test, false);
+                }
+            }
             addRelationship(sourceId, targetId, null, PROTOCOL_REL_CALLS, PROTOCOL_RESOLVED, node, file, test);
         }
 
@@ -436,7 +474,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             symbol.addProperty("filePath", fromSource ? file.toString() : null);
             symbol.addProperty("startLine", line(node));
             symbol.addProperty("startColumn", column(node));
-            symbol.add("containingSymbolId", enclosingSymbolNode(node) == null ? null : com.google.gson.JsonNull.INSTANCE);
+            symbol.addProperty("containingSymbolId", fromSource ? enclosingSymbol(node) : null);
             symbol.addProperty("origin", fromSource ? (generated ? 2 : PROTOCOL_SOURCE) : PROTOCOL_EXTERNAL);
             symbol.addProperty("isTestCode", test);
             symbol.addProperty("isPublic", isPublic);
@@ -527,12 +565,16 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         }
 
         private boolean isTestPath(Path file) {
+            Path normalized = file.toAbsolutePath().normalize();
+            if (testSourceRoots.stream().anyMatch(normalized::startsWith)) return true;
             String value = file.toString().replace('\\', '/').toLowerCase(Locale.ROOT);
             return value.contains("/src/test/") || value.contains("/src/it/")
                 || value.contains("/test/") || value.contains("/tests/");
         }
 
         private boolean isGeneratedPath(Path file) {
+            Path normalized = file.toAbsolutePath().normalize();
+            if (generatedSourceRoots.stream().anyMatch(normalized::startsWith)) return true;
             String value = file.toString().replace('\\', '/').toLowerCase(Locale.ROOT);
             return value.contains("/generated/") || value.contains("/generated-sources/")
                 || value.contains("/build/generated/") || value.contains("/target/generated/");

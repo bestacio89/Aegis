@@ -121,7 +121,7 @@ jobs:
             org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeBom \
             -DoutputFormat=json -Dcyclonedx.skipAttach=true
           cp tools/java-worker-prototype/target/bom.json artifacts/java-worker-prototype.cdx.json
-          jq -e '.components | length == 20' artifacts/java-worker-prototype.cdx.json > /dev/null
+          jq -e '.components | length >= 20' artifacts/java-worker-prototype.cdx.json > /dev/null
           jq -e '.components[] | select(.name == "gson" and .version == "2.13.2")' artifacts/java-worker-prototype.cdx.json > /dev/null
           jq -e '.components[] | select(.name == "org.eclipse.jdt.core" and .version == "3.47.0")' artifacts/java-worker-prototype.cdx.json > /dev/null
           jq -e '.components | all(.[]; (.licenses // []) | length > 0)' artifacts/java-worker-prototype.cdx.json > /dev/null

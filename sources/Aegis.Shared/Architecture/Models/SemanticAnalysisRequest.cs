@@ -11,12 +11,29 @@ public sealed class SemanticAnalysisRequest
 
     public string ProjectPath { get; init; } = string.Empty;
 
+    public string ModuleName { get; init; } = string.Empty;
+
+    public string BuildSystem { get; init; } = string.Empty;
+
     public IReadOnlyList<string> SourceFiles { get; init; } = Array.Empty<string>();
+
+    public IReadOnlyList<string> SourceRoots { get; init; } = Array.Empty<string>();
+
+    public IReadOnlyList<string> TestSourceRoots { get; init; } = Array.Empty<string>();
+
+    public IReadOnlyList<string> GeneratedSourceRoots { get; init; } = Array.Empty<string>();
+
+    /// <summary>Explicit, module-owned resolved artifacts. Declared coordinates are not classpath entries.</summary>
+    public IReadOnlyList<string> ClasspathEntries { get; init; } = Array.Empty<string>();
 
     public IReadOnlyList<string> BuildFiles { get; init; } = Array.Empty<string>();
 
     /// <summary>Stable capability identifiers requested from the selected adapter.</summary>
     public IReadOnlyList<string> RequestedCapabilities { get; init; } = Array.Empty<string>();
+
+    public string? SourceLevel { get; init; }
+
+    public bool HasDeclaredExternalDependencies { get; init; }
 
     public bool IncludeGeneratedCode { get; init; }
 

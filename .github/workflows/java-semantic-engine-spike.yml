@@ -42,6 +42,11 @@ jobs:
           mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-validation \
             -Dexec.args="tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv"
 
+      - name: Validate normalized semantic diagnostic corpus
+        run: |
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-validation \\
+            -Dexec.args="tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-diagnostics.tsv"
+
       - name: Compare Eclipse JDT semantic facts
         run: |
           set -o pipefail

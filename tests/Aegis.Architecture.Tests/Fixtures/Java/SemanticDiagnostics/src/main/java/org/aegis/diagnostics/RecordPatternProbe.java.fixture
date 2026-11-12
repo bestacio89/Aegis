@@ -1,0 +1,13 @@
+package org.aegis.diagnostics;
+
+record Point(int x, int y) {
+}
+
+public final class RecordPatternProbe {
+    public int sum(Object value) {
+        return switch (value) {
+            case Point(int x, int y) -> x + y;
+            default -> 0;
+        };
+    }
+}

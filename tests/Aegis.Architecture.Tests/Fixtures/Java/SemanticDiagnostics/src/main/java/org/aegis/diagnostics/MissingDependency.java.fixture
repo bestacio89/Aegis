@@ -1,0 +1,7 @@
+package org.aegis.diagnostics;
+
+import org.springframework.context.ApplicationContext;
+
+public final class MissingDependency {
+    private ApplicationContext applicationContext;
+}

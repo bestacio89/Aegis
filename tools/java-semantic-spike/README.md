@@ -123,4 +123,21 @@ mvn -B -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-benc
   -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv"
 ```
 
-The first extraction slice covers the 12 current oracle facts across 11 categories. It is intentionally an evaluation harness, not a production adapter. Passing this corpus is necessary but not sufficient for full J2-A: larger repositories, diagnostic taxonomy, generated code, JPMS module-path cases, repeatable performance measurements, licensing and worker-operational review remain required.
+The expanded J2-A5.1 corpus covers 17 facts across 11 categories. It includes a nested record, inherited default-interface invocation, generic overload selection, and a checked-in generated-source class consumed from production source. The generated fixture is supplied as source; annotation processors are never executed. It is intentionally an evaluation harness, not a production adapter. Passing this corpus is necessary but not sufficient for full J2-A: larger repositories, diagnostic taxonomy, generated code, JPMS module-path cases, repeatable performance measurements, licensing and worker-operational review remain required.
+
+
+## J2-A5.1 — Expanded semantic corpus and diagnostic taxonomy
+
+The semantic fact corpus now includes 17 stable facts. Generated output is represented by a checked-in source fixture under a distinct `src/generated/java` root; the benchmark consumes that output directly and does not execute annotation processors. The fixture verifies generated type discovery and constructor binding from production source. Additional facts cover nested record declarations, inherited default interface methods and generic overload selection.
+
+The normalized diagnostic taxonomy is defined independently of either engine in `semantic-diagnostics.tsv`:
+
+- `syntax-error`: malformed source syntax;
+- `compiler-error`: syntactically valid source with a language/type/visibility error;
+- `unresolved-symbol`: a symbol absent from source and declared dependency evidence;
+- `incomplete-environment`: a symbol expected from a declared dependency that was deliberately omitted from the analysis classpath;
+- `unsupported-construct`: a language feature newer than the configured source level;
+- `warning`: non-fatal compiler information, kept separate from errors;
+- `infrastructure-failure`: analysis could not be performed because an input or engine operation failed.
+
+The diagnostic corpus validator checks stable IDs, category/severity consistency, source-level values, safe fixture paths, fixture existence and complete category coverage. It validates the diagnostic test contract; it does not yet claim that either engine has normalized its native diagnostics. Engine-specific extraction and mapping are the next J2-A5.1 implementation slice.

@@ -119,10 +119,14 @@ public final class SemanticFactCorpusValidator {
             throw new IllegalStateException("Semantic fact IDs are not unique.");
         }
 
+        String missingKindsJson = missingKinds.stream()
+            .sorted()
+            .map(kind -> "\"" + kind + "\"")
+            .collect(Collectors.joining(",", "[", "]"));
         System.out.printf(
             "{\"status\":\"passed\",\"facts\":%d,\"kinds\":%d,\"missingKinds\":%s}%n",
             factCount,
             observedKinds.size(),
-            missingKinds.stream().sorted().collect(Collectors.joining(",", "[\"", "\"]")));
+            missingKindsJson);
     }
 }

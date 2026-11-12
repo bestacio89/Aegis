@@ -44,10 +44,13 @@ internal static class DependencyDetector
             dependencies.ToList();
 
         // Package manifests populate DetectedDependencies only. Internal
-        // architecture edges come from explicit project references, never from
-        // package names or package versions.
+        // architecture edges come from explicit project references or build-tool
+        // project dependencies, never from third-party package coordinates.
         if (includeProjectReferences && ctx.Modules.Count > 0)
+        {
             AnalyzeDotNetProjectReferences(ctx, files);
+            JavaProjectDependencyDetector.Analyze(ctx);
+        }
     }
 
 

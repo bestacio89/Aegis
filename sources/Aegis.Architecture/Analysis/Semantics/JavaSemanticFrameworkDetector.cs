@@ -176,9 +176,22 @@ internal static class JavaSemanticFrameworkDetector
         string groupId,
         string artifactId)
     {
-        if (groupId.Equals("org.springframework.boot", StringComparison.OrdinalIgnoreCase)
-            && artifactId.StartsWith("spring-boot", StringComparison.OrdinalIgnoreCase))
-            return ("Spring Boot", FrameworkEvidenceKind.Application);
+        if (groupId.Equals("org.springframework.boot", StringComparison.OrdinalIgnoreCase))
+        {
+            if (artifactId.Contains("kafka", StringComparison.OrdinalIgnoreCase)
+                || artifactId.Contains("amqp", StringComparison.OrdinalIgnoreCase))
+                return ("Spring Boot", FrameworkEvidenceKind.Messaging);
+            if (artifactId.Contains("data", StringComparison.OrdinalIgnoreCase)
+                || artifactId.Contains("jdbc", StringComparison.OrdinalIgnoreCase)
+                || artifactId.Contains("jpa", StringComparison.OrdinalIgnoreCase))
+                return ("Spring Boot", FrameworkEvidenceKind.Persistence);
+            if (artifactId.Contains("web", StringComparison.OrdinalIgnoreCase))
+                return ("Spring Boot", FrameworkEvidenceKind.Web);
+            if (artifactId.Contains("actuator", StringComparison.OrdinalIgnoreCase))
+                return ("Spring Boot", FrameworkEvidenceKind.Runtime);
+            if (artifactId.StartsWith("spring-boot", StringComparison.OrdinalIgnoreCase))
+                return ("Spring Boot", FrameworkEvidenceKind.Application);
+        }
 
         if (groupId.Equals("org.springframework.data", StringComparison.OrdinalIgnoreCase))
             return ("Spring Data", FrameworkEvidenceKind.Persistence);

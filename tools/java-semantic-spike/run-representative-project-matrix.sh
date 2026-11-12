@@ -104,7 +104,8 @@ while IFS=$'\t' read -r \
   done
 
   classpath_pom="$repository_root/tools/java-semantic-spike/representative-classpaths/$project_id/pom.xml"
-  classpath_file="$classpath_directory/$project_id.txt"
+  main_classpath_file="$classpath_directory/$project_id-main.txt"
+  test_classpath_file="$classpath_directory/$project_id-test.txt"
   if [[ ! -f "$classpath_pom" ]]; then
     echo "Representative curated classpath POM is missing for $project_id" >&2
     exit 1
@@ -114,28 +115,42 @@ while IFS=$'\t' read -r \
     -f "$classpath_pom" \
     org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
     -DincludeScope=compile \
-    -Dmdep.outputFile="$classpath_file"
+    -Dmdep.outputFile="$main_classpath_file"
+  mvn --batch-mode --no-transfer-progress --quiet \
+    -f "$classpath_pom" \
+    org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+    -DincludeScope=test \
+    -Dmdep.outputFile="$test_classpath_file"
 
-  if [[ ! -s "$classpath_file" ]]; then
-    echo "Resolved representative compile classpath is empty for $project_id" >&2
+  if [[ ! -s "$main_classpath_file" || ! -s "$test_classpath_file" ]]; then
+    echo "Resolved representative main/test classpath is empty for $project_id" >&2
     exit 1
   fi
-  if grep -Eiq 'org\.eclipse\.jdt\.core|javaparser-(core|symbol-solver-core)' "$classpath_file"; then
-    echo "Candidate engine dependency leaked into the $project_id analysis classpath" >&2
-    exit 1
-  fi
+  for resolved_classpath in "$main_classpath_file" "$test_classpath_file"; do
+    if grep -Eiq 'org\.eclipse\.jdt\.core|javaparser-(core|symbol-solver-core)' "$resolved_classpath"; then
+      echo "Candidate engine dependency leaked into the $project_id analysis classpath" >&2
+      exit 1
+    fi
+  done
 
   case "$project_id" in
     spring-petclinic)
-      grep -Eq 'jakarta.persistence-api-[^/]+\.jar' "$classpath_file"
-      grep -Eq 'spring-core-[^/]+\.jar' "$classpath_file"
+      grep -Eq 'jakarta.persistence-api-[^/]+\.jar' "$main_classpath_file"
+      grep -Eq 'spring-core-[^/]+\.jar' "$main_classpath_file"
+      grep -Eq 'spring-test-[^/]+\.jar' "$test_classpath_file"
+      grep -Eq 'junit-jupiter-api-[^/]+\.jar' "$test_classpath_file"
+      grep -Eq 'testcontainers-junit-jupiter-[^/]+\.jar' "$test_classpath_file"
       ;;
     quarkus-getting-started)
-      grep -Eq 'jakarta.ws.rs-api-[^/]+\.jar' "$classpath_file"
+      grep -Eq 'jakarta.ws.rs-api-[^/]+\.jar' "$main_classpath_file"
+      grep -Eq 'quarkus-junit-[^/]+\.jar' "$test_classpath_file"
+      grep -Eq 'rest-assured-[^/]+\.jar' "$test_classpath_file"
       ;;
     micronaut-starter-aws-cdk)
-      grep -Fq 'aws-cdk-lib-2.243.0.jar' "$classpath_file"
-      grep -Eq 'constructs-[^/]+\.jar' "$classpath_file"
+      grep -Fq 'aws-cdk-lib-2.243.0.jar' "$main_classpath_file"
+      grep -Eq 'constructs-[^/]+\.jar' "$main_classpath_file"
+      grep -Fq 'aws-cdk-lib-2.243.0.jar' "$test_classpath_file"
+      grep -Eq 'constructs-[^/]+\.jar' "$test_classpath_file"
       ;;
     *)
       echo "No representative classpath contract is defined for $project_id" >&2
@@ -146,14 +161,15 @@ while IFS=$'\t' read -r \
   for engine in jdt javaparser; do
     run_benchmark "$engine" main "$source_level" "$main_resolution_roots" "$main_parse_roots" ""
     run_benchmark "$engine" test "$source_level" "$test_resolution_roots" "$test_parse_roots" ""
-    run_benchmark "$engine" main "$source_level" "$main_resolution_roots" "$main_parse_roots" "$classpath_file"
+    run_benchmark "$engine" main "$source_level" "$main_resolution_roots" "$main_parse_roots" "$main_classpath_file"
+    run_benchmark "$engine" test "$source_level" "$test_resolution_roots" "$test_parse_roots" "$test_classpath_file"
   done
 
-  echo "Representative project passed: $project_id ($license; $build_models; $actual_main_count main/$actual_test_count test Java files; source-only and curated main classpath)"
+  echo "Representative project passed: $project_id ($license; $build_models; $actual_main_count main/$actual_test_count test Java files; source-only and curated main/test classpaths)"
 done < <(tail -n +2 "$manifest")
 
 report_count="$(find "$results_directory" -maxdepth 1 -type f -name '*.jsonl' | wc -l | tr -d ' ')"
-if [[ "$report_count" -ne 18 ]]; then
-  echo "Expected 18 representative-project reports, found $report_count" >&2
+if [[ "$report_count" -ne 24 ]]; then
+  echo "Expected 24 representative-project reports, found $report_count" >&2
   exit 1
 fi

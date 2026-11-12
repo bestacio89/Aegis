@@ -388,11 +388,11 @@ These are curated external API classpaths selected to validate named semantic fa
 
 ## Representative-project external API resolution matrix
 
-The pinned real-project matrix preserves the original twelve source-roots-plus-JDK runs (main and test source sets, both candidates) and adds three external-classpath main-source runs per candidate: one for each representative project.
+The pinned real-project matrix preserves the original twelve source-roots-plus-JDK runs (main and test source sets, both candidates) and adds twelve curated external-classpath runs: main and test source sets for each candidate across all three representative projects.
 
 The external classpaths are resolved from the isolated, project-specific synthetic Maven POMs under `representative-classpaths/`. The dependency plugin resolves only the declared curated API dependencies; no checked-out Maven/Gradle project build, wrapper, settings file, plugin, build script or annotation processor is executed. Both candidates receive the exact same validated JAR list for a given project. Candidate-engine JAR leakage is rejected by the benchmark itself and by the runner.
 
-The added mode reports `source-roots+jdk+curated-external-classpath` and the exact JAR-entry count. It is deliberately not labelled a complete project classpath: it is a controlled API-resolution extension for the main source set. Test-source metrics remain source-roots-plus-JDK-only until project-specific test dependency closures are modelled. The original source-only results remain available as a baseline; do not compare aggregate resolution percentages across different environments as if they represented the same analysis boundary.
+The added mode reports `source-roots+jdk+curated-external-classpath` and the exact JAR-entry count. Main classpaths use Maven `includeScope=compile`; test classpaths use `includeScope=test`, which includes the compile, runtime and test dependency scopes declared by each synthetic POM. Spring Petclinic and Quarkus include the test API dependencies declared by their pinned project revisions. The Micronaut test fixture uses the same curated project-source and AWS CDK APIs; its full Gradle test dependency graph is not claimed. These are controlled evaluation inputs, not complete effective project classpaths. The original source-only results remain available as a baseline; do not compare aggregate resolution percentages across different environments as if they represented the same analysis boundary.
 
 Run the matrix from the repository root:
 
@@ -403,7 +403,7 @@ bash tools/java-semantic-spike/run-representative-project-matrix.sh
 A report is accepted only when every discovered file parses without syntax errors, the output declares the expected environment and classpath-entry count, and the shared type-reference metric contract remains `outermost-reference-type-nodes-v1`. Resolution percentages are comparative observations, not semantic correctness gates; the separate source-scoped semantic fact oracle remains the correctness gate.
 
 
-### Observed representative-project results (2026-11-12)
+### Historical 18-report baseline (before test-classpath expansion, 2026-11-12)
 
 The eighteen-report matrix passed on [workflow run 43237842802](https://github.com/bestacio89/Aegis/actions/runs/43237842802); the JSONL reports and classpath snapshots are retained in [artifact 13952309452](https://github.com/bestacio89/Aegis/actions/runs/43237842802/artifacts/13952309452).
 
@@ -413,7 +413,7 @@ The eighteen-report matrix passed on [workflow run 43237842802](https://github.c
 | Quarkus getting-started | 2 / 2 | 109 | 1/1 | 1/1 |
 | Micronaut starter AWS CDK | 3 / 2 | 12 | 16/16 | 9/16 |
 
-Both candidates parsed all 35 main and 24 test source files without parse failures or syntax errors. The external classpath is supplied only to main-source runs; test-source metrics remain JDK-only and must not be interpreted as complete test dependency resolution.
+Both candidates parsed all 35 main and 24 test source files without parse failures or syntax errors in this historical baseline. At that point, external classpaths were supplied only to main-source runs and test-source metrics were JDK-only. The current runner expands this to curated main and test classpaths and emits twenty-four reports; the results of that expanded matrix will supersede this historical baseline.
 
 The representative semantic fact oracle contains eleven facts: JDT passed 11/11; JavaParser passed 10/11. The single JavaParser mismatch is RFACT-011, the AWS CDK `Function.Builder.create(Construct, String)` binding. The native diagnostic reports `UnsolvedSymbolException: Unsolved symbol : Named`; JDT resolves the expected method. CI asserts this exact known gap and retains the diagnostic instead of treating it as a pass.
 

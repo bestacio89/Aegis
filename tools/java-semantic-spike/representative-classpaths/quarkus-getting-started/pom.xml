@@ -6,7 +6,7 @@
   <groupId>org.aegis.tools</groupId>
   <artifactId>representative-quarkus-classpath</artifactId>
   <version>1.0.0</version>
-  <description>Curated compile-time REST API classpath for pinned Quarkus semantic facts; not a project build.</description>
+  <description>Curated compile/test REST API classpath for pinned Quarkus semantic facts; not a project build.</description>
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -22,6 +22,16 @@
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-rest</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-junit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.rest-assured</groupId>
+      <artifactId>rest-assured</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 </project>

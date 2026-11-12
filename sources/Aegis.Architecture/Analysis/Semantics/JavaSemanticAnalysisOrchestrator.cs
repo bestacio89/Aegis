@@ -157,7 +157,7 @@ public sealed class JavaSemanticAnalysisOrchestrator
             UnresolvedClasspathDependencies = classpath.UnresolvedDependencies,
             ClasspathResolutionComplete = classpath.IsComplete,
             BuildFiles = module.ProjectFiles.ToArray(),
-            RequestedCapabilities = ["symbols", "relationships", "compiler-diagnostics"],
+            RequestedCapabilities = [],
             SourceLevel = ResolveSourceLevel(module),
             HasDeclaredDependencies = classpath.HasDeclaredDependencies,
             IncludeGeneratedCode = true,

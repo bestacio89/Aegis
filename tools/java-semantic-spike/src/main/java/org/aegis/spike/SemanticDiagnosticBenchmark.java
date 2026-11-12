@@ -200,7 +200,7 @@ public final class SemanticDiagnosticBenchmark {
         int id = problem.getID();
         return switch (expectedCategory) {
             case "syntax-error" -> problem.isError() && isSyntaxProblem(id);
-            case "unsupported-construct" -> problem.isError() && isSyntaxProblem(id);
+            case "unsupported-construct" -> problem.isError();
             case "compiler-error" -> problem.isError()
                 && !isSyntaxProblem(id)
                 && !isUnresolvedProblem(id);

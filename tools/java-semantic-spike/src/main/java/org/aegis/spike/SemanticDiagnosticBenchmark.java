@@ -260,7 +260,8 @@ public final class SemanticDiagnosticBenchmark {
                 ? "unsupported-construct"
                 : "syntax-error";
             int sourceLine = problem.getLocation()
-                .map(location -> location.begin.line)
+                .flatMap(location -> location.getBegin().getRange())
+                .map(range -> range.begin.line)
                 .orElse(-1);
             return new Observation(
                 category,

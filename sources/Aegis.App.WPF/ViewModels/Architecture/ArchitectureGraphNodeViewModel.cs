@@ -8,6 +8,7 @@ public sealed partial class ArchitectureGraphNodeViewModel : ObservableObject
     public const double NodeHeight = 72;
 
     public ArchitectureGraphNodeViewModel(
+        string id,
         string name,
         string layer,
         int incomingCount,
@@ -15,6 +16,7 @@ public sealed partial class ArchitectureGraphNodeViewModel : ObservableObject
         double left,
         double top)
     {
+        Id = id;
         Name = name;
         Layer = layer;
         IncomingCount = incomingCount;
@@ -22,6 +24,8 @@ public sealed partial class ArchitectureGraphNodeViewModel : ObservableObject
         Left = left;
         Top = top;
     }
+
+    public string Id { get; }
 
     public string Name { get; }
 

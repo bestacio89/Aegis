@@ -133,6 +133,8 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
             _activeRelations = GraphProjection == "Architectural components"
                 ? componentDependencies.Select(dependency => new GraphRelation(
+                    dependency.SourceComponentId,
+                    dependency.TargetComponentId,
                     dependency.SourceComponentName,
                     dependency.TargetComponentName,
                     "Package",
@@ -141,6 +143,8 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     string.Join(", ", dependency.EvidenceFiles),
                     dependency.RelationshipCount)).ToArray()
                 : buildDependencies.Select(dependency => new GraphRelation(
+                    string.IsNullOrWhiteSpace(dependency.SourceProjectPath) ? dependency.Source : dependency.SourceProjectPath,
+                    string.IsNullOrWhiteSpace(dependency.TargetProjectPath) ? dependency.Target : dependency.TargetProjectPath,
                     dependency.Source,
                     dependency.Target,
                     dependency.SourceLayer,
@@ -168,7 +172,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
             TotalDependencies = _activeRelations.Sum(relation => relation.RelationshipCount);
             ComponentCount = _activeRelations
-                .SelectMany(relation => new[] { relation.Source, relation.Target })
+                .SelectMany(relation => new[] { relation.SourceId, relation.TargetId })
                 .Distinct(StringComparer.Ordinal)
                 .Count();
             LayerCount = _activeRelations
@@ -203,24 +207,24 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
     private void RefreshFilter()
     {
-        var selectedNodeName = SelectedGraphNode?.Name;
+        var selectedNodeId = SelectedGraphNode?.Id;
         var baseDependencies = _activeRelations
             .Where(MatchesBaseFilter)
             .ToArray();
 
-        var graphDependencies = selectedNodeName is null
+        var graphDependencies = selectedNodeId is null
             ? baseDependencies
             : baseDependencies.Where(dependency =>
-                string.Equals(dependency.Source, selectedNodeName, StringComparison.Ordinal)
-                || string.Equals(dependency.Target, selectedNodeName, StringComparison.Ordinal))
+                string.Equals(dependency.SourceId, selectedNodeId, StringComparison.Ordinal)
+                || string.Equals(dependency.TargetId, selectedNodeId, StringComparison.Ordinal))
                 .ToArray();
 
         BuildGraph(graphDependencies);
 
-        if (selectedNodeName is not null)
+        if (selectedNodeId is not null)
         {
             var resolvedNode = GraphNodes.FirstOrDefault(node =>
-                string.Equals(node.Name, selectedNodeName, StringComparison.Ordinal));
+                string.Equals(node.Id, selectedNodeId, StringComparison.Ordinal));
 
             if (resolvedNode is null)
             {
@@ -272,18 +276,19 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
         }
 
         var componentLayers = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var componentNames = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        AddComponentLayers(dependencies, componentLayers);
+        AddComponentLayers(dependencies, componentLayers, componentNames);
 
-        var componentNames = componentLayers.Keys
-            .OrderBy(name => name, StringComparer.Ordinal)
+        var componentIds = componentLayers.Keys
+            .OrderBy(id => id, StringComparer.Ordinal)
             .ToArray();
 
-        var componentLayerNames = componentNames.ToDictionary(
-            name => name,
-            name => componentLayers[name].Count == 0
+        var componentLayerNames = componentIds.ToDictionary(
+            id => id,
+            id => componentLayers[id].Count == 0
                 ? "Unclassified"
-                : string.Join(" · ", componentLayers[name].OrderBy(layer => layer, StringComparer.OrdinalIgnoreCase)),
+                : string.Join(" · ", componentLayers[id].OrderBy(layer => layer, StringComparer.OrdinalIgnoreCase)),
             StringComparer.Ordinal);
 
         var orderedLayers = componentLayerNames.Values
@@ -293,21 +298,21 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             .ToArray();
 
         var incomingCounts = dependencies
-            .GroupBy(dependency => dependency.Target, StringComparer.Ordinal)
+            .GroupBy(dependency => dependency.TargetId, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Sum(relation => relation.RelationshipCount), StringComparer.Ordinal);
 
         var outgoingCounts = dependencies
-            .GroupBy(dependency => dependency.Source, StringComparer.Ordinal)
+            .GroupBy(dependency => dependency.SourceId, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Sum(relation => relation.RelationshipCount), StringComparer.Ordinal);
 
-        var nodeByName = new Dictionary<string, ArchitectureGraphNodeViewModel>(StringComparer.Ordinal);
+        var nodeById = new Dictionary<string, ArchitectureGraphNodeViewModel>(StringComparer.Ordinal);
         var maxNodesInLayer = 0;
 
         for (var layerIndex = 0; layerIndex < orderedLayers.Length; layerIndex++)
         {
             var layerName = orderedLayers[layerIndex];
-            var layerNodes = componentNames
-                .Where(name => string.Equals(componentLayerNames[name], layerName, StringComparison.OrdinalIgnoreCase))
+            var layerNodes = componentIds
+                .Where(id => string.Equals(componentLayerNames[id], layerName, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
 
             maxNodesInLayer = Math.Max(maxNodesInLayer, layerNodes.Length);
@@ -316,28 +321,30 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
             for (var nodeIndex = 0; nodeIndex < layerNodes.Length; nodeIndex++)
             {
-                var name = layerNodes[nodeIndex];
+                var id = layerNodes[nodeIndex];
+                var name = componentNames[id];
                 var node = new ArchitectureGraphNodeViewModel(
+                    id,
                     name,
                     layerName,
-                    incomingCounts.GetValueOrDefault(name),
-                    outgoingCounts.GetValueOrDefault(name),
+                    incomingCounts.GetValueOrDefault(id),
+                    outgoingCounts.GetValueOrDefault(id),
                     left,
                     GraphTopMargin + nodeIndex * GraphRowSpacing);
 
                 GraphNodes.Add(node);
-                nodeByName.Add(name, node);
+                nodeById.Add(id, node);
             }
         }
 
         foreach (var group in dependencies.GroupBy(
-            dependency => (dependency.Source, dependency.Target),
+            dependency => (Source: dependency.SourceId, Target: dependency.TargetId),
             DependencyPairComparer.Instance)
-            .OrderBy(group => group.Key.Source, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(group => group.Key.Target, StringComparer.OrdinalIgnoreCase))
+            .OrderBy(group => group.Key.Source, StringComparer.Ordinal)
+            .ThenBy(group => group.Key.Target, StringComparer.Ordinal))
         {
-            if (!nodeByName.TryGetValue(group.Key.Source, out var source)
-                || !nodeByName.TryGetValue(group.Key.Target, out var target))
+            if (!nodeById.TryGetValue(group.Key.Source, out var source)
+                || !nodeById.TryGetValue(group.Key.Target, out var target))
             {
                 continue;
             }
@@ -369,24 +376,28 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
     private static void AddComponentLayers(
         IEnumerable<GraphRelation> dependencies,
-        IDictionary<string, HashSet<string>> componentLayers)
+        IDictionary<string, HashSet<string>> componentLayers,
+        IDictionary<string, string> componentNames)
     {
         foreach (var dependency in dependencies)
         {
-            AddLayer(dependency.Source, dependency.SourceLayer, componentLayers);
-            AddLayer(dependency.Target, dependency.TargetLayer, componentLayers);
+            AddLayer(dependency.SourceId, dependency.Source, dependency.SourceLayer, componentLayers, componentNames);
+            AddLayer(dependency.TargetId, dependency.Target, dependency.TargetLayer, componentLayers, componentNames);
         }
     }
 
     private static void AddLayer(
-        string component,
+        string componentId,
+        string componentName,
         string? layer,
-        IDictionary<string, HashSet<string>> componentLayers)
+        IDictionary<string, HashSet<string>> componentLayers,
+        IDictionary<string, string> componentNames)
     {
-        if (!componentLayers.TryGetValue(component, out var layers))
+        if (!componentLayers.TryGetValue(componentId, out var layers))
         {
             layers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            componentLayers.Add(component, layers);
+            componentLayers.Add(componentId, layers);
+            componentNames.Add(componentId, componentName);
         }
 
         if (!string.IsNullOrWhiteSpace(layer))
@@ -461,6 +472,8 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
         value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
 
     private sealed record GraphRelation(
+        string SourceId,
+        string TargetId,
         string Source,
         string Target,
         string SourceLayer,

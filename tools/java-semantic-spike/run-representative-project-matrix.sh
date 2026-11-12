@@ -6,7 +6,7 @@ cd "$repository_root"
 
 manifest="tools/java-semantic-spike/representative-projects.tsv"
 results_directory="$repository_root/artifacts/representative-projects/results"
-classpath_directory="$repository_root/artifacts/representative-projects/classpaths"
+classpath_directory="$repository_root/artifacts/representative-projects/matrix-classpaths"
 mkdir -p "$results_directory" "$classpath_directory"
 find "$results_directory" -maxdepth 1 -type f -name '*.jsonl' -delete
 find "$classpath_directory" -maxdepth 1 -type f -name '*.txt' -delete

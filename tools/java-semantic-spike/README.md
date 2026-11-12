@@ -425,3 +425,13 @@ The curated classpaths are explicit evaluation inputs, not complete project depe
 ### JavaParser comment attribution in semantic runs
 
 Both the representative-project and semantic-fact JavaParser configurations disable comment attribution with `setAttributeComments(false)`. Comments are not semantic inputs, and attaching line comments to fluent method-call AST nodes can contaminate the expression representation consumed by Symbol Solver. The source text is unchanged; this configuration only keeps comments out of semantic AST attribution. The pinned Petclinic and Quarkus test sources provide regression coverage for comment-bearing and fluent-call expressions.
+
+
+### Preserved classpath evidence
+
+The representative-project matrix and semantic-fact runner use separate artifact directories so one runner cannot delete the other's dependency snapshots:
+
+- `artifacts/representative-projects/matrix-classpaths/`: compile and test classpaths for all three projects.
+- `artifacts/representative-projects/fact-classpaths/`: curated compile classpath used by the eleven-fact semantic oracle.
+
+The Java workflow verifies all nine files exist before artifact upload. The uploaded `java-semantic-engine-spike` artifact therefore retains the exact dependency inputs associated with each report, not just the resolved JAR counts.

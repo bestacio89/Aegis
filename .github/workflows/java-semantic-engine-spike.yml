@@ -154,6 +154,18 @@ jobs:
       - name: Compare representative-project semantic facts
         run: bash tools/java-semantic-spike/run-representative-semantic-facts.sh
 
+      - name: Verify representative classpath snapshots are retained independently
+        shell: bash
+        run: |
+          for project in spring-petclinic quarkus-getting-started micronaut-starter-aws-cdk; do
+            for source_set in main test; do
+              snapshot="artifacts/representative-projects/matrix-classpaths/$project-$source_set.txt"
+              test -s "$snapshot" || { echo "Missing matrix classpath snapshot: $snapshot" >&2; exit 1; }
+            done
+            snapshot="artifacts/representative-projects/fact-classpaths/$project.txt"
+            test -s "$snapshot" || { echo "Missing semantic-fact classpath snapshot: $snapshot" >&2; exit 1; }
+          done
+
       - name: Compare Eclipse JDT normalized diagnostics
         run: |
           set -o pipefail

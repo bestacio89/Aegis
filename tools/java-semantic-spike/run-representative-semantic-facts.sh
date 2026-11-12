@@ -6,7 +6,7 @@ cd "$repository_root"
 
 manifest="$repository_root/tools/java-semantic-spike/representative-projects.tsv"
 facts_directory="$repository_root/tools/java-semantic-spike/representative-semantic-facts"
-classpath_directory="$repository_root/artifacts/representative-projects/classpaths"
+classpath_directory="$repository_root/artifacts/representative-projects/fact-classpaths"
 results_directory="$repository_root/artifacts/representative-projects/facts"
 
 rm -rf "$classpath_directory" "$results_directory"

@@ -202,10 +202,10 @@ public final class SemanticDiagnosticBenchmark {
         if (!problem.isError()) {
             return null;
         }
+        if (isUnsupportedFeatureDiagnostic(problem, diagnosticCase, source)) {
+            return "unsupported-construct";
+        }
         if (isSyntaxProblem(id)) {
-            if (isUnsupportedFeatureDiagnostic(problem, diagnosticCase, source)) {
-                return "unsupported-construct";
-            }
             return "syntax-error";
         }
         if (isUnresolvedProblem(id)) {

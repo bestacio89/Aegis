@@ -1,4 +1,6 @@
+using Aegis.Architecture.Diagnostics;
 using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Diagnostics;
 using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Architecture.Analysis.Detectors;
@@ -213,6 +215,23 @@ internal static class JavaSemanticComponentDependencyDetector
                 .OrderBy(edge => edge.SourceComponentName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(edge => edge.TargetComponentName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(edge => edge.Scope, StringComparer.OrdinalIgnoreCase));
+
+        var javaRuns = context.SemanticAnalysisRuns.Where(IsUsableJavaRun).ToArray();
+        var sourceSymbolCount = javaRuns.Sum(run => run.Symbols.Count(IsProjectSourceSymbol));
+        var packageSymbolCount = javaRuns.Sum(run => run.Symbols.Count(symbol =>
+            IsProjectSourceSymbol(symbol)
+            && (string.Equals(symbol.ContainerKind, "Package", StringComparison.OrdinalIgnoreCase)
+                || !string.IsNullOrWhiteSpace(symbol.ContainerName))));
+        var candidateRelationshipCount = javaRuns.Sum(run => run.Relationships.Count(relationship =>
+            ComponentRelationshipKinds.Contains(relationship.Kind)
+            && relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
+                or SemanticResolutionStatus.PartiallyResolved
+            && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)));
+
+        AegisDiagnostics.Report(
+            nameof(JavaSemanticComponentDependencyDetector),
+            packageSymbolCount == 0 && sourceSymbolCount > 0 ? DiagnosticLevel.Warning : DiagnosticLevel.Info,
+            $"Java architectural package projection: runs={javaRuns.Length}; sourceSymbols={sourceSymbolCount}; packageSymbols={packageSymbolCount}; components={componentNodes.Count}; candidateRelationships={candidateRelationshipCount}; projectedEdges={edges.Count}; productionEdges={context.ProductionComponentDependencies.Count}; testEdges={context.TestComponentDependencies.Count}.");
     }
 
     private static string CreateComponentId(string modulePath, string packageName) =>

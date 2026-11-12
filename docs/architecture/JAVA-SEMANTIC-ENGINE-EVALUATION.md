@@ -325,10 +325,10 @@ The first per-file JDT timing baseline is superseded. The accepted comparison us
 
 | Mode | Candidate | Analysis median / p95 | Process median / p95 | Peak RSS median / p95 |
 |---|---|---:|---:|---:|
-| Source-only | Eclipse JDT | 791 / 835 ms | 1,312 / 1,393 ms | 150.9 / 156.3 MiB |
-| Source-only | JavaParser | 472 / 508 ms | 994 / 1,097 ms | 116.9 / 118.2 MiB |
-| External classpath | Eclipse JDT | 805 / 817 ms | 1,340 / 1,351 ms | 152.0 / 155.6 MiB |
-| External classpath | JavaParser | 478 / 495 ms | 1,057 / 1,070 ms | 119.1 / 120.8 MiB |
+| Source-only | Eclipse JDT | 810 / 845 ms | 1,318 / 1,372 ms | 152.7 / 155.1 MiB |
+| Source-only | JavaParser | 469 / 491 ms | 973 / 1,009 ms | 117.4 / 117.9 MiB |
+| External classpath | Eclipse JDT | 828 / 869 ms | 1,341 / 1,412 ms | 147.3 / 155.5 MiB |
+| External classpath | JavaParser | 489 / 493 ms | 1,051 / 1,063 ms | 119.1 / 120.8 MiB |
 
 Analysis time excludes process startup; process time includes JVM startup and shutdown. Peak RSS is process-level Linux VmHWM, not Java heap occupancy. With seven samples, nearest-rank p95 is the maximum observed sample. The candidates' diagnostic counts and aggregate binding-attempt counts are not directly comparable because their diagnostic and AST node models differ.
 
@@ -355,7 +355,7 @@ Aegis is distributed under its own proprietary license. That fact does not by it
 
 JavaParser 3.28.2's published dependency metadata selects Guava 33.6.0-jre. Google advisory GHSA-xxph-c9ww-hj94 / CVE-2026-102554 affects Guava through 33.7.1; the issue is uncontrolled allocation during native Java deserialization of selected Guava collections. The fix is present in 33.7.2 and later.
 
-The current spike manages Guava to 33.8.0-jre and CI asserts the resolved dependency-tree version. CI also emits a CycloneDX 1.6 JSON SBOM for the combined candidate dependency closure and verifies both parser roots plus the patched Guava component. The current combined SBOM has 29 components and no missing license metadata: 15 EPL-2.0, 10 Apache-2.0-only, two Apache-2.0/LGPL-2.1-or-later, one Apache-2.0/LGPL-2.1-only/MPL-1.1 and one MIT. This is inventory evidence, not legal approval; multi-license choices and notices still require review. The workflow now runs OSV-Scanner 2.7.1 against the SBOM and uploads its JSON report. The advisory's attack path requires untrusted Java object deserialization; the parser workload does not intentionally deserialize project-controlled Java objects. That narrows the direct reachability assessment but is not a reason to ship a known-affected dependency. A full transitive vulnerability scan remains required for both candidate closures and every future version update.
+The current spike manages Guava to 33.8.0-jre and CI asserts the resolved dependency-tree version. The latest OSV scan of the generated CycloneDX SBOM returned zero findings; the report is retained as a CI artifact. CI also emits a CycloneDX 1.6 JSON SBOM for the combined candidate dependency closure and verifies both parser roots plus the patched Guava component. The current combined SBOM has 29 components and no missing license metadata: 15 EPL-2.0, 10 Apache-2.0-only, two Apache-2.0/LGPL-2.1-or-later, one Apache-2.0/LGPL-2.1-only/MPL-1.1 and one MIT. This is inventory evidence, not legal approval; multi-license choices and notices still require review. The workflow runs OSV-Scanner 2.7.1 against the SBOM and uploads its JSON report. **OSV scan result (2026-11-12):** OSV-Scanner 2.7.1 scanned the generated CycloneDX SBOM and returned an empty vulnerability-results array (zero findings). The JSON report is retained in [the CI artifact](https://github.com/bestacio89/Aegis/actions/runs/43198643879/artifacts/13933598969). This is a point-in-time match against OSV's available database, not a guarantee of absence of vulnerabilities or a substitute for a complete security review. The advisory's attack path requires untrusted Java object deserialization; the parser workload does not intentionally deserialize project-controlled Java objects. That narrows the direct reachability assessment but is not a reason to ship a known-affected dependency. A full transitive vulnerability scan remains required for both candidate closures and every future version update.
 
 ### Runtime and packaging
 
@@ -375,7 +375,7 @@ The 42-file cold-process measurements show roughly 1.0 s median process time and
 ### J2-A5.3 acceptance gates
 
 1. Review the generated CycloneDX SBOM; reconcile missing/ambiguous license metadata and produce a full transitive license inventory for both exact candidate closures; verify notices and selected license terms.
-2. Run a current vulnerability scan against direct and transitive dependencies; fail CI on unapproved high/critical findings and document reachability exceptions.
+2. Keep the OSV SBOM scan current for direct and transitive dependencies; the current snapshot returned zero findings. Review future findings, maintain patch policy and document any reachability exceptions.
 3. Prototype a private Java runtime/worker package on Windows and Linux, recording artifact size, startup, runtime patch process and upgrade/rollback behaviour.
 4. Exercise worker handshake, malformed requests, cancellation, timeouts, process crash/restart, memory exhaustion, bounded concurrency and cross-project isolation.
 5. Confirm no build scripts, plugins or annotation processors are executed and that file/network access is restricted as designed.

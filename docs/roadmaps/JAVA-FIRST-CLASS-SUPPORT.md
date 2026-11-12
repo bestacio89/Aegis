@@ -139,7 +139,7 @@ The selected engine is isolated behind a versioned language-adapter boundary and
 
 **Objective:** Integrate resolved Java relationships into the Aegis investigation workspace.
 
-**Accepted implementation checkpoint (2026-11-12):** Declared project dependencies are traversed transitively to provide in-workspace Java source roots as JDT binding-only inputs. Dependency files are not added to the consumer module's analyzed-file inventory. Resolved, non-recovered compiler relationships are projected onto module dependency edges with provenance and production/test scope. Workspace-boundary checks reject referenced roots outside the workspace. Complete external-artifact resolution and a separate test-source analysis path remain known limitations.
+**Accepted implementation checkpoint (2026-11-12):** Declared project dependencies are traversed transitively to provide in-workspace Java source roots as JDT binding-only inputs. Dependency files are not added to the consumer module's analyzed-file inventory. Resolved, non-recovered compiler relationships are projected onto module dependency edges with provenance and production/test scope. Workspace-boundary checks reject referenced roots outside the workspace. Complete external-artifact resolution remains a known limitation. A separate test-source analysis path was subsequently implemented under J5 and is pending exact-head validation.
 
 Relationship types:
 - Project and module dependencies.
@@ -185,6 +185,8 @@ Additional integrations:
 
 Framework evidence must be contextual. An annotation alone must not establish an architectural layer or responsibility.
 
+**Current implementation increment (2026-11-12; exact-head CI pending):** Production Maven/Gradle dependency coordinates now populate normalized framework evidence with declared/resolved version information, module ownership, architectural role and original build-model provenance. Initial mappings cover Spring Framework/Boot, Jakarta/Java EE, Quarkus, Micronaut, Hibernate and MicroProfile. Spring Boot starter coordinates distinguish web, persistence, messaging and runtime roles. Test-only dependencies are excluded from production framework evidence. Compiler-confirmed annotation evidence remains a separate source and is not replaced by dependency-name inference.
+
 **Checkpoint J4:**
 - Frameworks and versions are identified when evidence exists.
 - Framework-managed dependencies are represented.
@@ -213,7 +215,11 @@ Analysis:
 - Unit versus integration test classification.
 - Test fixtures and shared testing infrastructure.
 - Coverage ingestion where available.
-- Architectural boundary checks.
+- Architectural boundary checks
+
+**Current implementation increment (2026-11-12; exact-head CI pending):** Explicitly owned production and test source roots are analysed through separate JDT requests. Production requests use production classpaths and exclude test-scoped project source roots; test requests use test-aware classpaths and can bind against declared test-support roots. Generated roots remain scoped to their owning request. Unknown source ownership retains the previous combined analysis rather than being guessed. Regression coverage asserts source-root, classpath and test-support separation.
+
+Dynamic Gradle task configuration remains unexecuted. Coverage ingestion remains unimplemented; test-file existence is not treated as coverage evidence..
 
 **Checkpoint J5:**
 - Test projects and support modules are correctly identified.

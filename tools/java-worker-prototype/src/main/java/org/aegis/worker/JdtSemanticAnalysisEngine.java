@@ -552,6 +552,10 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             symbol.addProperty("kind", kind);
             symbol.addProperty("name", name == null ? "" : name);
             symbol.addProperty("qualifiedName", qualified == null ? "" : qualified);
+            if (fromSource) {
+                symbol.addProperty("containerName", packageName(node));
+                symbol.addProperty("containerKind", "Package");
+            }
             symbol.addProperty("language", "Java");
             symbol.addProperty("projectPath", projectRoot.toString());
             symbol.addProperty("filePath", fromSource ? file.toString() : null);
@@ -565,6 +569,12 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             provenance.add(provenance(file, node));
             symbol.add("provenance", provenance);
             symbols.put(id, symbol);
+        }
+
+        private static String packageName(ASTNode node) {
+            ASTNode root = node.getRoot();
+            if (!(root instanceof CompilationUnit unit) || unit.getPackage() == null) return "";
+            return unit.getPackage().getName().getFullyQualifiedName();
         }
 
         private void addRelationship(String sourceId, String targetId, String unresolved, int kind,

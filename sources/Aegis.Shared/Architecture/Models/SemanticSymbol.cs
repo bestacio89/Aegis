@@ -17,6 +17,15 @@ public sealed class SemanticSymbol
 
     public string QualifiedName { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Language-level container identity, such as a Java package, C# namespace,
+    /// Python module or TypeScript module. It is supplied by the semantic provider.
+    /// </summary>
+    public string? ContainerName { get; init; }
+
+    /// <summary>Normalized kind of language-level container.</summary>
+    public string? ContainerKind { get; init; }
+
     public string Language { get; init; } = string.Empty;
 
     public string ProjectPath { get; init; } = string.Empty;

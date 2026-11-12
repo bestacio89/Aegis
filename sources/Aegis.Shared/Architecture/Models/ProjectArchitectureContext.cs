@@ -154,6 +154,32 @@ public sealed class ProjectArchitectureContext
     /// </summary>
     public List<ArchitectureDependencyContext> Dependencies { get; set; } = new();
 
+    /// <summary>
+    /// Language-level architectural components projected from semantic declarations.
+    /// These are intentionally distinct from independently buildable project modules.
+    /// </summary>
+    public List<ArchitectureComponentContext> ArchitectureComponents { get; set; } = [];
+
+    /// <summary>
+    /// Compiler-resolved dependencies between language-level architectural components.
+    /// Build-module dependency edges remain in <see cref="Dependencies"/>.
+    /// </summary>
+    public List<ArchitectureComponentDependencyContext> ArchitectureComponentDependencies { get; set; } = [];
+
+    /// <summary>Production-only semantic component dependencies.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitectureComponentDependencyContext> ProductionComponentDependencies =>
+        ArchitectureComponentDependencies
+            .Where(dependency => dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+    /// <summary>Test-only semantic component dependencies retained as separate evidence.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitectureComponentDependencyContext> TestComponentDependencies =>
+        ArchitectureComponentDependencies
+            .Where(dependency => dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
     /// <summary>Runtime integrations, distinct from compile-time/build dependency edges.</summary>
     public List<ArchitectureIntegrationContext> ApplicationIntegrations { get; set; } = [];
 
@@ -386,6 +412,10 @@ public sealed class ProjectArchitectureContext
             ApplicationIntegrationCount = ApplicationIntegrations.Count,
             ProductionDependencyCount = ProductionDependencies.Count,
             TestDependencyCount = TestDependencies.Count,
+            ArchitectureComponentCount = ArchitectureComponents.Count,
+            ArchitectureComponentDependencyCount = ArchitectureComponentDependencies.Count,
+            ProductionComponentDependencyCount = ProductionComponentDependencies.Count,
+            TestComponentDependencyCount = TestComponentDependencies.Count,
             DependencyEvidenceCount = DependencyEvidence.Count,
             FrameworkEvidenceCount = FrameworkEvidence.Count,
             SemanticAnalysisRunCount = SemanticAnalysisRuns.Count,

@@ -112,6 +112,7 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
 
         JavaSemanticFrameworkDetector.Analyze(context);
         JavaSemanticDependencyDetector.Analyze(context);
+        JavaSemanticComponentDependencyDetector.Analyze(context);
         ModuleRoleDetector.Analyze(context.Modules);
     }
 

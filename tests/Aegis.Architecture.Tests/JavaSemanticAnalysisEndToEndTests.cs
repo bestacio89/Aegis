@@ -32,20 +32,23 @@ public sealed class JavaSemanticAnalysisEndToEndTests
             "Packaged Eclipse JDT dependency was not found.");
 
         var workspace = Path.Combine(Path.GetTempPath(), $"aegis-jdt-e2e-{Guid.NewGuid():N}");
-        var sourceRoot = Path.Combine(workspace, "src", "main", "java", "sample");
-        Directory.CreateDirectory(sourceRoot);
+        var sourceRoot = Path.Combine(workspace, "src", "main", "java");
+        var domainRoot = Path.Combine(sourceRoot, "sample", "domain");
+        var applicationRoot = Path.Combine(sourceRoot, "sample", "application");
+        Directory.CreateDirectory(domainRoot);
+        Directory.CreateDirectory(applicationRoot);
 
         await File.WriteAllTextAsync(
-            Path.Combine(sourceRoot, "Order.java"),
+            Path.Combine(domainRoot, "Order.java"),
             """
-            package sample;
+            package sample.domain;
 
             public record Order(String id) {}
             """);
         await File.WriteAllTextAsync(
-            Path.Combine(sourceRoot, "OrderRepository.java"),
+            Path.Combine(domainRoot, "OrderRepository.java"),
             """
-            package sample;
+            package sample.domain;
 
             public interface OrderRepository
             {
@@ -53,9 +56,12 @@ public sealed class JavaSemanticAnalysisEndToEndTests
             }
             """);
         await File.WriteAllTextAsync(
-            Path.Combine(sourceRoot, "OrderService.java"),
+            Path.Combine(applicationRoot, "OrderService.java"),
             """
-            package sample;
+            package sample.application;
+
+            import sample.domain.Order;
+            import sample.domain.OrderRepository;
 
             public final class OrderService
             {
@@ -84,7 +90,7 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                 [
                     new ProjectSourceRoot
                     {
-                        Directory = Path.GetDirectoryName(sourceRoot)!,
+                        Directory = sourceRoot,
                         Ownership = ProjectSourceRootOwnership.Production,
                         Origin = ProjectSourceRootOrigin.Explicit,
                         ContainsJavaSources = true
@@ -124,6 +130,15 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                 Assert.NotEmpty(run.Symbols);
                 Assert.NotEmpty(run.Relationships);
                 Assert.DoesNotContain(run.Diagnostics, diagnostic => diagnostic.AffectsCoverage);
+
+                Assert.Equal(2, context.ArchitectureComponents.Count);
+                var packageDependency = Assert.Single(context.ProductionComponentDependencies);
+                Assert.Equal("sample.application", context.ArchitectureComponents
+                    .Single(component => component.Id == packageDependency.SourceComponentId).QualifiedName);
+                Assert.Equal("sample.domain", context.ArchitectureComponents
+                    .Single(component => component.Id == packageDependency.TargetComponentId).QualifiedName);
+                Assert.True(packageDependency.RelationshipCount > 0);
+                Assert.Empty(context.TestComponentDependencies);
             }
         }
         finally

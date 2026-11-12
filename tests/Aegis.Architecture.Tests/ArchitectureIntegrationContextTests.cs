@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Aegis.Architecture.Analysis;
 using Aegis.Shared.Architecture.Models;
 using Xunit;
 

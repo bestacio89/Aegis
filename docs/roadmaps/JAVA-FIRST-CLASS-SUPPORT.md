@@ -849,3 +849,34 @@ All three mandatory workflows passed on `021feeeb0998a4d3c65ef3e2236183d88ffc255
 - WPF build validation — run `43174315692`, success.
 
 **Decision:** J2-A1 accepted. J2-A continues with module-owned external artifact classpaths, dependency scopes/exclusions/conflicts, JPMS module-path behaviour, broader semantic fact coverage, representative corpora, repeatable performance measurement and operational/legal review. J2-B remains blocked.
+
+
+# J2-A2 — Module-owned external artifact visibility — 2026-11-12
+
+**Status: accepted (bounded implementation checkpoint).** This does not complete J2-A, select a production engine or authorize J2-B.
+
+The isolated module-visibility harness now loads explicit module-owned compile, test and runtime classpath snapshots. The controlled snapshots are generated from pinned Maven fixture POMs; they are not claimed as J1 output or as production dependency resolution by Aegis.
+
+Both Eclipse JDT and JavaParser passed all 12 expected visibility assertions across 21 observations per engine:
+
+1. Consumer compile dependencies (Spring Context and MapStruct) resolve.
+2. Test-only JUnit API resolves in the consumer test source set and remains unavailable to production sources.
+3. Runtime-only Spring JCL is recorded in runtime evidence but is not exposed to compile-time analysis.
+4. An excluded Spring Core artifact is absent; its Resource type remains unresolved.
+5. The conflict fixture selects Spring Core 6.1.0 and rejects Spring Core 6.2.8.
+6. Existing positive/negative project-module and production/test source-root visibility assertions remain enforced.
+
+The JDT and JavaParser adapters receive the same module/source-set artifact entries. The gate fails on missing classpath snapshots, missing JARs, duplicate entries, missing required artifacts or forbidden artifacts.
+
+### J2-A2 CI evidence
+
+All three mandatory workflows passed on implementation head 3f1824e80d760b5f636466dab8cc8303f43161a9:
+- Java semantic engine spike — run 43179049509, success.
+- Non-WPF quality gates — run 43179049510, success.
+- WPF build validation — run 43179049489, success.
+
+### Boundaries retained
+
+This is controlled Maven-fixture evidence only. It does not implement dependency resolution in Aegis, export resolved artifacts from J1, establish Gradle variant selection, model every Maven scope or Gradle configuration, prove arbitrary transitive/exclusion semantics, or cover JPMS module-path visibility. Conflict mediation is verified for one pinned fixture, not implemented as a general resolver.
+
+**Decision:** J2-A2 accepted. Continue J2-A with an engine-neutral semantic fact oracle and equivalent extraction coverage. Full J2-A remains in progress; J2-B remains blocked.

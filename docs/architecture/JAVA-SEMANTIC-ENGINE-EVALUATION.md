@@ -110,3 +110,37 @@ All mandatory workflows passed on implementation head `021feeeb0998a4d3c65ef3e22
 The manifest is a controlled fixture projection, not yet a general exporter from every Maven/Gradle model. It proves source-root and project-dependency isolation for the declared cases. It does not yet prove external artifact classpath ownership, Maven/Gradle scope completeness, exclusions, dependency conflict selection, JPMS module-path visibility, generated-source completeness or arbitrary transitive build-model behaviour.
 
 **Decision:** J2-A1 accepted. Continue J2-A with module-owned external artifact classpaths and broader visibility matrices. Full J2-A remains in progress; J2-B remains blocked.
+
+
+## J2-A2 — Module-owned external artifact visibility — accepted
+
+**Checkpoint result:** accepted on 2026-11-12. This accepts the second bounded J2-A implementation slice only; it does not accept the full evaluation, select a production engine or authorize J2-B.
+
+The module-aware harness now loads separate compile, test and runtime classpath snapshots per module. Pinned Maven fixture POMs produce these snapshots independently of the J1 declaration/source-root projection. This distinction is intentional: J1 declared dependencies are not equivalent to resolved artifact paths, and the fixture is not presented as Aegis's production resolver.
+
+Both candidate engines passed the same 12 expected visibility assertions across 21 observations per engine. The matrix covers declared compile artifacts, test-only visibility, runtime-only exclusion from compile analysis, a transitive exclusion, a controlled selected-version conflict, and the existing project/source-set visibility boundaries.
+
+| Expected boundary | Eclipse JDT | JavaParser |
+|---|---|---|
+| Module-owned compile artifacts resolve | Pass | Pass |
+| Test-only artifact resolves in test source set | Pass | Pass |
+| Test-only artifact remains unavailable to production | Pass | Pass |
+| Runtime-only artifact remains unavailable to compile analysis | Pass | Pass |
+| Excluded Spring Core artifact remains unavailable | Pass | Pass |
+| Selected Spring Core 6.1.0 resolves; 6.2.8 is rejected | Pass | Pass |
+| Positive/negative project and source-set visibility | Pass | Pass |
+
+The same module/source-set artifact entries are passed to JDT's parser environment and JavaParser's JAR type solvers. Runtime artifacts are retained as evidence but deliberately excluded from compile-time semantic resolution.
+
+### J2-A2 CI evidence
+
+All mandatory workflows passed on implementation head 3f1824e80d760b5f636466dab8cc8303f43161a9:
+- Java semantic engine spike — run 43179049509, success.
+- Non-WPF quality gates — run 43179049510, success.
+- WPF build validation — run 43179049489, success.
+
+### Boundaries retained
+
+The classpath snapshots are controlled Maven fixture inputs, not J1-generated resolved artifacts and not evidence of a general Aegis dependency resolver. Gradle variant selection, complete Maven/Gradle scope semantics, arbitrary transitive/exclusion behaviour, JPMS module paths and production artifact resolution remain open. The one conflict fixture verifies the resolved output of Maven for a pinned case; it does not implement general conflict mediation.
+
+**Decision:** J2-A2 accepted. Continue J2-A with an engine-neutral semantic fact oracle and equivalent extraction coverage. Full J2-A remains in progress; J2-B remains blocked.

@@ -118,10 +118,11 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
                     && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
                 .ToArray() ?? [];
+            var componentNodes = _context?.ProductionComponents ?? [];
 
-            GraphProjectionOptions = buildDependencies.Length > 0 && componentDependencies.Length > 0
+            GraphProjectionOptions = buildDependencies.Length > 0 && componentNodes.Count > 0
                 ? ["Build modules", "Architectural components"]
-                : componentDependencies.Length > 0
+                : componentNodes.Count > 0
                     ? ["Architectural components", "Build modules"]
                     : ["Build modules"];
 

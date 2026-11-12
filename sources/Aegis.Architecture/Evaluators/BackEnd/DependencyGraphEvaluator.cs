@@ -74,7 +74,7 @@ public sealed class DependencyGraphEvaluator
             token.ThrowIfCancellationRequested();
             EvaluateGraphSummary(results, relations, token);
         }
-        else if (componentRelations.Count > 0)
+        else if (context.ProductionComponents.Count > 0)
         {
             EvaluateComponentGraphSummary(results, componentRelations, token);
         }
@@ -206,7 +206,7 @@ public sealed class DependencyGraphEvaluator
             : outgoingCounts.Average();
 
         result.Metadata["GraphLevel"] = "ArchitecturalComponents";
-        result.Metadata["GraphHasRelations"] = "True";
+        result.Metadata["GraphHasRelations"] = (observedEdges.Length > 0).ToString().ToLowerInvariant();
         result.Metadata["MeasurementMethod"] =
             "Compiler-resolved semantic relationships aggregated between language-level architectural components; build-module dependencies are reported separately.";
         result.Metadata["GraphNodeCount"] = nodes.Length.ToString();
@@ -214,23 +214,24 @@ public sealed class DependencyGraphEvaluator
         var javaRuns = context.SemanticAnalysisRuns
             .Where(run => run.Language.Equals("Java", StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        result.Metadata["AnalysisComplete"] = (javaRuns.Length > 0 && javaRuns.All(run => run.IsComplete))
-            .ToString()
-            .ToLowerInvariant();
+        var analysisComplete = javaRuns.Length > 0 && javaRuns.All(run => run.IsComplete);
+        result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
 
-        if (nodes.Length > 1 && distinctEdges > 0)
+        if (nodes.Length > 1 && (distinctEdges > 0 || analysisComplete))
         {
             var possibleDirectedEdges = (double)nodes.Length * (nodes.Length - 1);
             result.Metrics["DependencyGraphDensity"] = distinctEdges / possibleDirectedEdges;
             result.Metadata["GraphDensityDefinition"] =
                 "Distinct observed directed non-self package/component edges divided by n*(n-1); this measures the observed graph and does not imply exhaustive semantic coverage.";
-            result.Metadata["GraphDensityStatus"] = "MeasuredOnObservedEdges";
+            result.Metadata["GraphDensityStatus"] = distinctEdges > 0
+                ? "MeasuredOnObservedEdges"
+                : "MeasuredZeroEdgesWithCompleteAnalysis";
         }
         else
         {
             result.Metadata["GraphDensityStatus"] = nodes.Length < 2
                 ? "Unavailable: fewer than two distinct architectural components."
-                : "Unavailable: no observed cross-component dependencies.";
+                : "Unavailable: no observed cross-component dependencies and semantic analysis is incomplete.";
         }
 
         results.Add(result);

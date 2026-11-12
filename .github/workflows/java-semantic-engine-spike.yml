@@ -58,7 +58,7 @@ jobs:
         if: always()
         run: |
           set -o pipefail
-          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-benchmark \\
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-benchmark \
             -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-diagnostics.tsv --report-only" \
             | tee artifacts/javaparser-semantic-diagnostics.jsonl
 

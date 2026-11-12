@@ -230,6 +230,14 @@ public final class SemanticFactBenchmark {
                 }
                 for (ClassOrInterfaceDeclaration declaration :
                     unit.findAll(ClassOrInterfaceDeclaration.class)) {
+                    if (!declaration.isInterface()) {
+                        try {
+                            put(observations, fixture, "type-declaration",
+                                declaration.resolve().getQualifiedName(), "resolved");
+                        } catch (RuntimeException unresolved) {
+                            // Captured as absence for this expected fact.
+                        }
+                    }
                     if (declaration.isInterface()) {
                         for (ClassOrInterfaceType type : declaration.getExtendedTypes()) {
                             observeType(observations, fixture, "generic-supertype", type);
@@ -364,6 +372,11 @@ public final class SemanticFactBenchmark {
 
                 @Override
                 public boolean visit(TypeDeclaration declaration) {
+                    ITypeBinding binding = declaration.resolveBinding();
+                    if (binding != null && !declaration.isInterface()) {
+                        put(observations, fixture, "type-declaration",
+                            binding.getTypeDeclaration().getQualifiedName(), "resolved");
+                    }
                     if (declaration.isInterface()) {
                         for (Object item : declaration.superInterfaceTypes()) {
                             observeJdtType(observations, fixture, "generic-supertype",

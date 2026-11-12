@@ -4,8 +4,14 @@ package org.aegis.facts.generated;
  * Checked-in generated-source fixture. The benchmark consumes this output
  * directly and never executes an annotation processor.
  */
-public record GeneratedCustomer(String id) {
+public final class GeneratedCustomer {
+    private final String id;
+
     public GeneratedCustomer(String id) {
         this.id = id;
+    }
+
+    public String id() {
+        return id;
     }
 }

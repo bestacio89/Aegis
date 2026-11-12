@@ -8,6 +8,8 @@ manifest="tools/java-semantic-spike/representative-projects.tsv"
 results_directory="$repository_root/artifacts/representative-projects/results"
 classpath_directory="$repository_root/artifacts/representative-projects/classpaths"
 mkdir -p "$results_directory" "$classpath_directory"
+find "$results_directory" -maxdepth 1 -type f -name '*.jsonl' -delete
+find "$classpath_directory" -maxdepth 1 -type f -name '*.txt' -delete
 
 count_java_files() {
   local roots="$1"
@@ -118,22 +120,22 @@ while IFS=$'\t' read -r \
     echo "Resolved representative compile classpath is empty for $project_id" >&2
     exit 1
   fi
-  if grep -Eiq 'org\\.eclipse\\.jdt\\.core|javaparser-(core|symbol-solver-core)' "$classpath_file"; then
+  if grep -Eiq 'org\.eclipse\.jdt\.core|javaparser-(core|symbol-solver-core)' "$classpath_file"; then
     echo "Candidate engine dependency leaked into the $project_id analysis classpath" >&2
     exit 1
   fi
 
   case "$project_id" in
     spring-petclinic)
-      grep -Eq 'jakarta.persistence-api-[^/]+\\.jar' "$classpath_file"
-      grep -Eq 'spring-core-[^/]+\\.jar' "$classpath_file"
+      grep -Eq 'jakarta.persistence-api-[^/]+\.jar' "$classpath_file"
+      grep -Eq 'spring-core-[^/]+\.jar' "$classpath_file"
       ;;
     quarkus-getting-started)
-      grep -Eq 'jakarta.ws.rs-api-[^/]+\\.jar' "$classpath_file"
+      grep -Eq 'jakarta.ws.rs-api-[^/]+\.jar' "$classpath_file"
       ;;
     micronaut-starter-aws-cdk)
       grep -Fq 'aws-cdk-lib-2.243.0.jar' "$classpath_file"
-      grep -Eq 'constructs-[^/]+\\.jar' "$classpath_file"
+      grep -Eq 'constructs-[^/]+\.jar' "$classpath_file"
       ;;
     *)
       echo "No representative classpath contract is defined for $project_id" >&2

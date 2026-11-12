@@ -98,8 +98,9 @@ public final class SemanticFactBenchmark {
                 if (!passed) {
                     String candidates = observations.entrySet().stream()
                         .filter(candidate -> candidate.getKey().startsWith(
-                            fact.fixturePath() + "|" + fact.kind() + "|" + fact.sourceIdentity() + "|"))
-                        .map(candidate -> candidate.getValue().identity()
+                            fact.fixturePath() + "|" + fact.kind() + "|"))
+                        .map(candidate -> candidate.getValue().sourceIdentity() + " => "
+                            + candidate.getValue().identity()
                             + "(" + candidate.getValue().resolution() + ")")
                         .sorted()
                         .reduce((left, right) -> left + "," + right)
@@ -429,21 +430,21 @@ public final class SemanticFactBenchmark {
                 @Override
                 public boolean visit(TypeDeclaration declaration) {
                     ITypeBinding binding = declaration.resolveBinding();
-                    if (binding != null && !declaration.isInterface()) {
+                    if (binding != null) {
                         String sourceIdentity = binding.getTypeDeclaration().getQualifiedName();
-                        put(observations, fixture, "type-declaration",
-                            sourceIdentity, sourceIdentity, "resolved");
-                    }
-                    if (declaration.isInterface()) {
-                        for (Object item : declaration.superInterfaceTypes()) {
-                            observeJdtType(observations, fixture, "generic-supertype",
-                                binding.getTypeDeclaration().getQualifiedName(),
-                                (org.eclipse.jdt.core.dom.Type) item);
+                        if (!declaration.isInterface()) {
+                            put(observations, fixture, "type-declaration",
+                                sourceIdentity, sourceIdentity, "resolved");
                         }
-                    } else if (declaration.getSuperclassType() != null) {
-                        observeJdtType(observations, fixture, "inheritance",
-                            binding == null ? "<unresolved>" : binding.getTypeDeclaration().getQualifiedName(),
-                            declaration.getSuperclassType());
+                        if (declaration.isInterface()) {
+                            for (Object item : declaration.superInterfaceTypes()) {
+                                observeJdtType(observations, fixture, "generic-supertype",
+                                    sourceIdentity, (org.eclipse.jdt.core.dom.Type) item);
+                            }
+                        } else if (declaration.getSuperclassType() != null) {
+                            observeJdtType(observations, fixture, "inheritance",
+                                sourceIdentity, declaration.getSuperclassType());
+                        }
                     }
                     return true;
                 }

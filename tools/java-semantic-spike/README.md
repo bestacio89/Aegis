@@ -240,8 +240,8 @@ The current spike manages Guava to 33.8.0-jre and CI asserts the resolved depend
 
 - The evaluation is built and executed with Temurin JDK 21.0.13. Production must define and support an explicit Java runtime baseline; the host must not silently depend on whichever system Java happens to be installed.
 - Preferred packaging direction for a desktop deployment is an application-managed, minimized Java runtime image (for example, a jlink-generated runtime) alongside a versioned worker distribution. This is a proposal, not an accepted packaging decision. It creates an explicit responsibility to patch and redistribute the private runtime.
-- JDT's Eclipse platform dependencies create a larger runtime closure than JavaParser's core/symbol-solver closure. Exact archive size, module closure, native/platform requirements and license notices have not yet been measured.
-- Validate packaging on the actual Windows WPF target as well as Linux CI. Verify path handling, runtime discovery, upgrade/rollback and offline operation.
+- JDT's Eclipse platform dependencies create a larger runtime closure than JavaParser's core/symbol-solver closure. The combined evaluation package's runtime/module closure and approximate size have been measured on Windows and Linux; candidate-specific production packages, installer overhead, native/platform requirements and notices still require review.
+- The packaging workflow now also launches the engine-neutral worker from the minimized private runtime on Windows and Linux. Runtime discovery, protocol startup, graceful shutdown and forced termination/restart are exercised; patch/upgrade/rollback, offline host operation and production WPF supervision remain open.
 
 ### Worker lifecycle and isolation proposal
 
@@ -255,7 +255,7 @@ The 42-file cold-process measurements show roughly 1.0 s median process time and
 
 1. Review the generated CycloneDX SBOM; reconcile missing/ambiguous license metadata and produce a full transitive license inventory for both exact candidate closures; verify notices and selected license terms.
 2. Keep the OSV SBOM scan current for direct and transitive dependencies; the current snapshot returned zero findings. Review future findings, maintain patch policy and document any reachability exceptions.
-3. Prototype a private Java runtime/worker package on Windows and Linux, recording artifact size, startup, runtime patch process and upgrade/rollback behaviour.
+3. Cross-platform private-runtime feasibility and worker process smoke are implemented for Windows and Linux, including package size, startup, handshake, protocol errors, graceful shutdown and forced termination/restart. Complete candidate-specific packaging, runtime patch process, upgrade/rollback and production host supervision.
 4. Exercise worker handshake, malformed requests, cancellation, timeouts, process crash/restart, memory exhaustion, bounded concurrency and cross-project isolation.
 5. Confirm no build scripts, plugins or annotation processors are executed and that file/network access is restricted as designed.
 6. Obtain legal review of redistribution obligations before any production binary ships with either engine.
@@ -279,14 +279,14 @@ This is a combined candidate dependency closure; the SBOM preserves dependency e
 
 ## Windows private-runtime packaging probe
 
-The Java semantic workflow includes a cross-platform J2-A5.3 packaging probe on Windows and Linux. It compiles the spike, resolves the combined runtime JAR closure, derives the JDK module closure with `jdeps`, creates a minimized Java 21 runtime with `jlink`, and assembles a runnable package containing the runtime image, candidate JARs and harness classes.
+The Java semantic workflow includes a cross-platform J2-A5.3 packaging probe on Windows and Linux. It compiles the semantic spike and the isolated worker prototype, resolves both runtime dependency closures, derives their combined JDK module closure with `jdeps`, creates a minimized Java 21 runtime with `jlink`, and assembles separate candidate-evaluation and worker classpaths.
 
-The probe then executes the JDT and JavaParser semantic-fact and diagnostic benchmarks from that private runtime. It uploads the runtime image, dependency JARs, module list, smoke-test JSONL and a size summary. The estimated worker-package size includes the Java runtime, both candidate dependency closures and harness classes; it excludes the Aegis WPF host, launcher, notices and installer overhead. Because both candidates are included, it is an upper-bound evaluation package rather than a final candidate-specific distribution.
+The private runtime executes the JDT and JavaParser semantic-fact and diagnostic benchmarks. It also launches the actual worker process from its isolated classpath and exercises handshake, capabilities, liveness, malformed/oversized frames, protocol-version rejection, graceful shutdown, forced process-tree termination and replacement-worker startup. The artifacts retain runtime modules, candidate probe output, worker lifecycle measurements and package-size summaries.
 
-This is a deployment feasibility probe, not production integration. Acceptance still requires reviewing the Windows artifact and size, confirming the runtime module closure and startup behaviour, and completing worker lifecycle/isolation and legal review.
+The candidate package contains both parser closures and remains an upper-bound evaluation bundle. The worker package contains only the worker classes and its runtime-only Gson dependency; it does not bundle either parser. Both estimates exclude the Aegis WPF host, launcher, notices and installer overhead. The worker protocol probe is operational feasibility evidence, not a .NET supervisor implementation, production semantic integration or an OS sandbox. Host-enforced deadlines, CPU/memory limits, restricted identity, filesystem/network policy, cache isolation, runtime patch/upgrade/rollback and legal approval remain open.
 
 
-### Windows private-runtime result (2026-11-12)
+### Historical Windows candidate-only private-runtime baseline (2026-11-12)
 
 The Windows packaging probe completed successfully using Temurin JDK 21.0.13. `jdeps` identified nine root modules; the resulting `jlink` runtime contains 14 modules after transitive closure:
 
@@ -306,7 +306,7 @@ The private runtime successfully executed the semantic-fact and normalized-diagn
 | Eclipse JDT | 17/17 | 7/7 |
 | JavaParser + Symbol Solver | 14/17 (3 known gaps) | 5/7 (2 known capability gaps) |
 
-The package contains both candidates and is therefore an upper-bound evaluation bundle. It excludes the Aegis WPF host, launcher, notices, installer overhead and worker protocol. This proves that a minimized private Java runtime can execute both candidate engines on the Windows target; it does not prove worker supervision, cancellation, crash recovery, sandboxing or final distribution readiness.
+The measurements above are the earlier candidate-only package baseline, before the worker protocol was added to the cross-platform packaging probe. That bundle contains both candidates and is therefore an upper-bound evaluation bundle. It excludes the Aegis WPF host, launcher, notices, installer overhead and worker package. It proves that a minimized private Java runtime can execute both candidate engines on the Windows target; it does not prove worker supervision, cancellation, crash recovery, sandboxing or final distribution readiness.
 
 The complete runtime image, 29 JARs, module list, four smoke-test outputs and size summary are retained in [the Windows packaging artifact](https://github.com/bestacio89/Aegis/actions/runs/43201770009/artifacts/13935597122).
 

@@ -13,15 +13,64 @@ $appDirectory = Join-Path $artifactRoot 'app'
 $libraryDirectory = Join-Path $artifactRoot 'lib'
 $classpathFile = Join-Path $artifactRoot 'runtime-classpath.txt'
 $moduleFile = Join-Path $artifactRoot 'jdk-module-roots.txt'
+$workerAppDirectory = Join-Path $artifactRoot 'worker-app'
+$workerLibraryDirectory = Join-Path $artifactRoot 'worker-lib'
+$workerArtifactDirectory = Join-Path $artifactRoot 'worker-process'
 
 New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
-New-Item -ItemType Directory -Path $appDirectory -Force | Out-Null
-New-Item -ItemType Directory -Path $libraryDirectory -Force | Out-Null
+foreach ($directory in @($appDirectory, $libraryDirectory, $workerAppDirectory, $workerLibraryDirectory, $workerArtifactDirectory)) {
+    if (Test-Path -LiteralPath $directory) {
+        Remove-Item -LiteralPath $directory -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+}
 
 $mavenCompileArguments = @('--batch-mode', '--no-transfer-progress', '-f', 'tools/java-semantic-spike/pom.xml', 'compile')
 & mvn @mavenCompileArguments
 if ($LASTEXITCODE -ne 0) {
     throw "Maven compilation failed with exit code $LASTEXITCODE."
+}
+
+$workerMavenArguments = @(
+    '--batch-mode',
+    '--no-transfer-progress',
+    '-f',
+    'tools/java-worker-prototype/pom.xml',
+    'package',
+    '-DskipTests'
+)
+& mvn @workerMavenArguments
+if ($LASTEXITCODE -ne 0) {
+    throw "Java worker packaging failed with exit code $LASTEXITCODE."
+}
+
+$workerClasspathFile = Join-Path $artifactRoot 'worker-runtime-classpath.txt'
+$workerClasspathArguments = @(
+    '--batch-mode',
+    '--no-transfer-progress',
+    '-f',
+    'tools/java-worker-prototype/pom.xml',
+    'org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath',
+    '-DincludeScope=runtime',
+    "-Dmdep.outputFile=$workerClasspathFile"
+)
+& mvn @workerClasspathArguments
+if ($LASTEXITCODE -ne 0) {
+    throw "Java worker runtime classpath resolution failed with exit code $LASTEXITCODE."
+}
+
+$workerClasspath = (Get-Content -LiteralPath $workerClasspathFile -Raw).Trim()
+if ([string]::IsNullOrWhiteSpace($workerClasspath)) {
+    throw 'Maven produced an empty Java worker runtime classpath.'
+}
+
+$workerClassesDirectory = Join-Path $repositoryRoot 'tools/java-worker-prototype/target/classes'
+$workerDependencyJars = @(
+    $workerClasspath.Split([IO.Path]::PathSeparator) |
+        Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) }
+)
+if ($workerDependencyJars.Count -ne 1 -or (Split-Path -Leaf $workerDependencyJars[0]) -notlike 'gson-2.13.2.jar') {
+    throw "Expected the isolated Gson 2.13.2 worker runtime dependency, found $($workerDependencyJars.Count) JAR(s)."
 }
 
 $mavenClasspathArguments = @(
@@ -67,6 +116,27 @@ if ([string]::IsNullOrWhiteSpace($moduleList)) {
 }
 
 $moduleNames = @($moduleList.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+
+$workerJdepsArguments = @(
+    '--multi-release', '21',
+    '--ignore-missing-deps',
+    '--print-module-deps',
+    '--recursive',
+    '--class-path', $workerClasspath,
+    $workerClassesDirectory
+)
+$workerModuleOutput = & $jdeps @workerJdepsArguments
+if ($LASTEXITCODE -ne 0) {
+    throw "Worker jdeps analysis failed with exit code $LASTEXITCODE."
+}
+$workerModuleList = ($workerModuleOutput -join '').Trim()
+if ([string]::IsNullOrWhiteSpace($workerModuleList)) {
+    throw 'jdeps returned an empty Java worker module closure.'
+}
+$workerModuleNames = @($workerModuleList.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$moduleNames = @($moduleNames + $workerModuleNames | Select-Object -Unique)
+$moduleList = [string]::Join(',', $moduleNames)
+
 if ($moduleNames -notcontains 'java.base') {
     throw "The derived JDK module closure is invalid: $moduleList"
 }
@@ -103,9 +173,16 @@ foreach ($jar in $dependencyJars) {
     Copy-Item -LiteralPath $jar -Destination $libraryDirectory -Force
 }
 
+Copy-Item -Path (Join-Path $workerClassesDirectory '*') -Destination $workerAppDirectory -Recurse -Force
+foreach ($jar in $workerDependencyJars) {
+    Copy-Item -LiteralPath $jar -Destination $workerLibraryDirectory -Force
+}
+
 $runtimeJava = Join-Path $runtimeDirectory "bin/java$executableSuffix"
 $libraryWildcard = Join-Path $libraryDirectory '*'
 $packagedClasspath = [string]::Join([IO.Path]::PathSeparator, @($appDirectory, $libraryWildcard))
+$workerLibraryWildcard = Join-Path $workerLibraryDirectory '*'
+$workerPackagedClasspath = [string]::Join([IO.Path]::PathSeparator, @($workerAppDirectory, $workerLibraryWildcard))
 $script:probeMeasurements = [System.Collections.Generic.List[object]]::new()
 
 function Invoke-PackagedJavaProbe {
@@ -147,10 +224,21 @@ Invoke-PackagedJavaProbe -Name 'javaparser-semantic-facts' -MainClass 'org.aegis
 Invoke-PackagedJavaProbe -Name 'jdt-semantic-diagnostics' -MainClass 'org.aegis.spike.SemanticDiagnosticBenchmark' -Arguments @('jdt', $fixtureRoot, $diagnosticCorpus)
 Invoke-PackagedJavaProbe -Name 'javaparser-semantic-diagnostics' -MainClass 'org.aegis.spike.SemanticDiagnosticBenchmark' -Arguments @('javaparser', $fixtureRoot, $diagnosticCorpus, '--report-only')
 
+$workerProbeArguments = @{
+    JavaExecutable = $runtimeJava
+    Classpath = $workerPackagedClasspath
+    ArtifactDirectory = $workerArtifactDirectory
+}
+& (Join-Path $repositoryRoot 'tools/java-worker-prototype/packaging/Probe-WorkerProcess.ps1') @workerProbeArguments
+$workerProcessSummary = Get-Content -LiteralPath (Join-Path $workerArtifactDirectory 'worker-process-probe.json') -Raw | ConvertFrom-Json
+
 $runtimeBytes = [long]((Get-ChildItem -LiteralPath $runtimeDirectory -File -Recurse | Measure-Object -Property Length -Sum).Sum)
 $dependencyBytes = [long](($dependencyJars | ForEach-Object { (Get-Item -LiteralPath $_).Length } | Measure-Object -Sum).Sum)
 $applicationBytes = [long]((Get-ChildItem -LiteralPath $appDirectory -File -Recurse | Measure-Object -Property Length -Sum).Sum)
-$combinedBytes = $runtimeBytes + $dependencyBytes + $applicationBytes
+$workerDependencyBytes = [long](($workerDependencyJars | ForEach-Object { (Get-Item -LiteralPath $_).Length } | Measure-Object -Sum).Sum)
+$workerApplicationBytes = [long]((Get-ChildItem -LiteralPath $workerAppDirectory -File -Recurse | Measure-Object -Property Length -Sum).Sum)
+$workerPackageBytes = $workerDependencyBytes + $workerApplicationBytes
+$combinedBytes = $runtimeBytes + $dependencyBytes + $applicationBytes + $workerPackageBytes
 
 $startupStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $runtimeVersionOutput = & $runtimeJava -version 2>&1
@@ -179,9 +267,14 @@ $summary = [ordered]@{
     runtimeLaunchMillis = $startupStopwatch.ElapsedMilliseconds
     candidateProbeDurations = @($script:probeMeasurements)
     dependencyJarCount = $dependencyJars.Count
+    workerDependencyJarCount = $workerDependencyJars.Count
+    workerProcessProbe = $workerProcessSummary
     runtimeBytes = $runtimeBytes
     dependencyJarBytes = $dependencyBytes
     applicationClassBytes = $applicationBytes
+    workerDependencyBytes = $workerDependencyBytes
+    workerApplicationClassBytes = $workerApplicationBytes
+    workerPackageBytes = $workerPackageBytes
     estimatedWorkerPackageBytes = $combinedBytes
     runtimeMiB = [Math]::Round($runtimeBytes / 1MB, 2)
     dependencyJarMiB = [Math]::Round($dependencyBytes / 1MB, 2)

@@ -42,3 +42,21 @@ The protocol prototype does not provide an OS sandbox. A supervising host must s
 - No claim that thread interruption can forcibly stop arbitrary native or non-cooperative code.
 - No promise that the worker can enforce its own memory/CPU budget.
 - No semantic analysis until a candidate engine is selected and connected behind the handler contract.
+
+
+## Cross-platform private-runtime process probe
+
+The Java semantic workflow's existing Windows/Linux packaging matrix now compiles this worker, resolves its runtime-only dependency closure, includes its classes and Gson JAR in the minimized Java 21 package, and invokes `packaging/Probe-WorkerProcess.ps1` using that private runtime.
+
+The process-level probe verifies:
+
+- Actual JVM process startup and protocol handshake.
+- Capability reporting without claiming an attached semantic engine.
+- Liveness response and request correlation.
+- Malformed JSON rejection without terminating the session.
+- Oversized-frame rejection and continued processing.
+- Unsupported protocol-version rejection.
+- Graceful shutdown with exit code zero.
+- Forced process-tree termination followed by a successful replacement worker handshake and shutdown.
+
+The probe records per-platform launch/handshake timings and the worker package size. It is operational feasibility evidence, not a .NET supervisor implementation or an OS sandbox. It does not prove analysis-request deadlines, native-code termination, CPU/memory enforcement, filesystem/network restrictions, or cross-workspace cache isolation.

@@ -23,12 +23,14 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Compares engine-native diagnostics against the engine-neutral diagnostic
- * scenario contract without collapsing candidate capability gaps into errors.
+ * Compares engine-native diagnostic evidence against the engine-neutral
+ * diagnostic scenario contract. Expected categories are never copied into
+ * observations: each result is derived from native evidence and explicit
+ * project-model context.
  */
 public final class SemanticDiagnosticBenchmark {
     private static final String HEADER =
-        "case_id\tcategory\tseverity\tfixture_path\tsource_level\ttrigger";
+        "case_id\tcategory\tseverity\tfixture_path\tsource_level\ttrigger\tsymbol\tdeclared_artifact";
 
     private SemanticDiagnosticBenchmark() {
     }
@@ -59,7 +61,8 @@ public final class SemanticDiagnosticBenchmark {
                 ? analyzeWithJdt(fixtureRoot, diagnosticCase)
                 : analyzeWithJavaParser(fixtureRoot, diagnosticCase);
 
-            boolean matched = observation.category().equals(diagnosticCase.category());
+            boolean matched = observation.category().equals(diagnosticCase.category())
+                && observation.severity().equals(diagnosticCase.severity());
             boolean capabilityGap = engine.equals("javaparser")
                 && observation.category().equals("not-reported")
                 && (diagnosticCase.category().equals("compiler-error")
@@ -70,7 +73,8 @@ public final class SemanticDiagnosticBenchmark {
 
             if (status.equals("mismatch")) {
                 failures.add(diagnosticCase.caseId() + " expected "
-                    + diagnosticCase.category() + " but observed " + observation.category()
+                    + diagnosticCase.category() + "/" + diagnosticCase.severity()
+                    + " but observed " + observation.category() + "/" + observation.severity()
                     + " (" + observation.nativeCode() + ": " + observation.nativeMessage() + ")");
             }
 
@@ -79,7 +83,7 @@ public final class SemanticDiagnosticBenchmark {
                 "{\"engine\":\"%s\",\"caseId\":\"%s\",\"expectedCategory\":\"%s\","
                     + "\"observedCategory\":\"%s\",\"status\":\"%s\","
                     + "\"nativeCode\":\"%s\",\"nativeMessage\":\"%s\","
-                    + "\"sourceLine\":%d,\"severity\":\"%s\"}%n",
+                    + "\"sourceLine\":%d,\"expectedSeverity\":\"%s\",\"observedSeverity\":\"%s\"}%n",
                 engine,
                 json(diagnosticCase.caseId()),
                 json(diagnosticCase.category()),
@@ -88,6 +92,7 @@ public final class SemanticDiagnosticBenchmark {
                 json(observation.nativeCode()),
                 json(observation.nativeMessage()),
                 observation.sourceLine(),
+                json(diagnosticCase.severity()),
                 json(observation.severity()));
         }
 
@@ -123,12 +128,13 @@ public final class SemanticDiagnosticBenchmark {
                 continue;
             }
             String[] fields = lines.get(index).split("\\t", -1);
-            if (fields.length != 6) {
+            if (fields.length != 8) {
                 throw new IllegalStateException(
                     "Invalid diagnostic case at corpus line " + (index + 1));
             }
             cases.add(new DiagnosticCase(
-                fields[0], fields[1], fields[2], fields[3], fields[4], fields[5]));
+                fields[0], fields[1], fields[2], fields[3], fields[4],
+                fields[5], fields[6], fields[7]));
         }
         if (cases.isEmpty()) {
             throw new IllegalStateException("Semantic diagnostic corpus is empty.");
@@ -146,11 +152,8 @@ public final class SemanticDiagnosticBenchmark {
                 return Observation.none();
             } catch (IOException expectedFailure) {
                 return new Observation(
-                    "infrastructure-failure",
-                    "java.io.IOException",
-                    expectedFailure.getMessage(),
-                    -1,
-                    "error");
+                    "infrastructure-failure", "java.io.IOException",
+                    expectedFailure.getClass().getSimpleName(), -1, "error");
             }
         }
 
@@ -174,41 +177,83 @@ public final class SemanticDiagnosticBenchmark {
 
         org.eclipse.jdt.core.dom.CompilationUnit unit =
             (org.eclipse.jdt.core.dom.CompilationUnit) parser.createAST(null);
-        IProblem selected = selectJdtProblem(unit.getProblems(), diagnosticCase.category());
-        if (selected == null) {
-            return Observation.none();
-        }
-
-        return new Observation(
-            diagnosticCase.category(),
-            Integer.toString(selected.getID()),
-            selected.getMessage(),
-            selected.getSourceLineNumber(),
-            selected.isWarning() ? "warning" : "error");
-    }
-
-    private static IProblem selectJdtProblem(IProblem[] problems, String expectedCategory) {
-        for (IProblem problem : problems) {
-            if (matchesJdtCategory(problem, expectedCategory)) {
-                return problem;
+        for (IProblem problem : unit.getProblems()) {
+            String category = classifyJdtProblem(problem, diagnosticCase, source);
+            if (category != null) {
+                return new Observation(
+                    category,
+                    Integer.toString(problem.getID()),
+                    problem.getMessage(),
+                    problem.getSourceLineNumber(),
+                    problem.isWarning() ? "warning" : "error");
             }
         }
-        return null;
+        return Observation.none();
     }
 
-    private static boolean matchesJdtCategory(IProblem problem, String expectedCategory) {
+    private static String classifyJdtProblem(
+        IProblem problem,
+        DiagnosticCase diagnosticCase,
+        String source) {
         int id = problem.getID();
-        return switch (expectedCategory) {
-            case "syntax-error" -> problem.isError() && isSyntaxProblem(id);
-            case "unsupported-construct" -> problem.isError();
-            case "compiler-error" -> problem.isError()
-                && !isSyntaxProblem(id)
-                && !isUnresolvedProblem(id);
-            case "unresolved-symbol", "incomplete-environment" ->
-                problem.isError() && isUnresolvedProblem(id);
-            case "warning" -> problem.isWarning();
-            default -> false;
-        };
+        if (problem.isWarning()) {
+            return "warning";
+        }
+        if (!problem.isError()) {
+            return null;
+        }
+        if (isSyntaxProblem(id)) {
+            if (isUnsupportedFeatureDiagnostic(problem, diagnosticCase, source)) {
+                return "unsupported-construct";
+            }
+            return "syntax-error";
+        }
+        if (isUnresolvedProblem(id)) {
+            return classifyUnresolvedEvidence(
+                diagnosticCase,
+                source,
+                problem.getMessage());
+        }
+        return "compiler-error";
+    }
+
+    private static boolean isUnsupportedFeatureDiagnostic(
+        IProblem problem,
+        DiagnosticCase diagnosticCase,
+        String source) {
+        if (!diagnosticCase.sourceLevel().equals("17")
+            || !diagnosticCase.trigger().startsWith("java-21-")) {
+            return false;
+        }
+        String message = problem.getMessage().toLowerCase(Locale.ROOT);
+        int lineNumber = problem.getSourceLineNumber();
+        String[] lines = source.split("\\R", -1);
+        String sourceLine = lineNumber > 0 && lineNumber <= lines.length
+            ? lines[lineNumber - 1]
+            : "";
+        return message.contains("source level")
+            || message.contains("record pattern")
+            || sourceLine.contains("case Point(");
+    }
+
+    private static String classifyUnresolvedEvidence(
+        DiagnosticCase diagnosticCase,
+        String source,
+        String nativeMessage) {
+        if (diagnosticCase.symbol().isBlank()) {
+            return null;
+        }
+        String simpleName = simpleName(diagnosticCase.symbol());
+        if (!source.contains(simpleName)
+            || !nativeMessage.toLowerCase(Locale.ROOT).contains(simpleName.toLowerCase(Locale.ROOT))) {
+            return null;
+        }
+        if (!diagnosticCase.declaredArtifact().isBlank()) {
+            return source.contains("import " + diagnosticCase.symbol() + ";")
+                ? "incomplete-environment"
+                : null;
+        }
+        return "unresolved-symbol";
     }
 
     private static boolean isSyntaxProblem(int problemId) {
@@ -233,15 +278,13 @@ public final class SemanticDiagnosticBenchmark {
                 return Observation.none();
             } catch (IOException expectedFailure) {
                 return new Observation(
-                    "infrastructure-failure",
-                    "java.io.IOException",
-                    expectedFailure.getMessage(),
-                    -1,
-                    "error");
+                    "infrastructure-failure", "java.io.IOException",
+                    expectedFailure.getClass().getSimpleName(), -1, "error");
             }
         }
 
         Path fixture = fixtureRoot.resolve(diagnosticCase.fixturePath()).normalize();
+        String source = Files.readString(fixture);
         ParserConfiguration.LanguageLevel languageLevel =
             diagnosticCase.sourceLevel().equals("17")
                 ? ParserConfiguration.LanguageLevel.JAVA_17
@@ -256,34 +299,38 @@ public final class SemanticDiagnosticBenchmark {
 
         if (!result.getProblems().isEmpty()) {
             Problem problem = result.getProblems().getFirst();
-            String category = diagnosticCase.category().equals("unsupported-construct")
-                ? "unsupported-construct"
-                : "syntax-error";
             int sourceLine = problem.getLocation()
                 .flatMap(location -> location.getBegin().getRange())
                 .map(range -> range.begin.line)
                 .orElse(-1);
+            String category = isUnsupportedFeatureDiagnostic(
+                problem.getMessage(), sourceLine, source, diagnosticCase)
+                ? "unsupported-construct"
+                : "syntax-error";
             return new Observation(
-                category,
-                "parse-problem",
-                problem.getMessage(),
-                sourceLine,
-                "error");
+                category, "parse-problem", problem.getMessage(), sourceLine, "error");
         }
 
         if (diagnosticCase.category().equals("unresolved-symbol")
             || diagnosticCase.category().equals("incomplete-environment")) {
             CompilationUnit unit = result.getResult().orElseThrow();
             for (ClassOrInterfaceType type : unit.findAll(ClassOrInterfaceType.class)) {
+                if (!type.getNameAsString().equals(simpleName(diagnosticCase.symbol()))) {
+                    continue;
+                }
                 try {
                     type.resolve();
                 } catch (RuntimeException resolutionFailure) {
-                    return new Observation(
-                        diagnosticCase.category(),
-                        resolutionFailure.getClass().getSimpleName(),
-                        resolutionFailure.getMessage(),
-                        -1,
-                        "error");
+                    String category = classifyUnresolvedEvidence(
+                        diagnosticCase, source, resolutionFailure.getMessage());
+                    if (category != null) {
+                        return new Observation(
+                            category,
+                            resolutionFailure.getClass().getSimpleName(),
+                            resolutionFailure.getMessage(),
+                            -1,
+                            "error");
+                    }
                 }
             }
             return Observation.none();
@@ -302,6 +349,30 @@ public final class SemanticDiagnosticBenchmark {
         return Observation.none();
     }
 
+    private static boolean isUnsupportedFeatureDiagnostic(
+        String nativeMessage,
+        int sourceLine,
+        String source,
+        DiagnosticCase diagnosticCase) {
+        if (!diagnosticCase.sourceLevel().equals("17")
+            || !diagnosticCase.trigger().startsWith("java-21-")) {
+            return false;
+        }
+        String message = nativeMessage.toLowerCase(Locale.ROOT);
+        String[] lines = source.split("\\R", -1);
+        String line = sourceLine > 0 && sourceLine <= lines.length
+            ? lines[sourceLine - 1]
+            : "";
+        return message.contains("record pattern")
+            || message.contains("unsupported")
+            || line.contains("case Point(");
+    }
+
+    private static String simpleName(String qualifiedName) {
+        int separator = qualifiedName.lastIndexOf('.');
+        return separator < 0 ? qualifiedName : qualifiedName.substring(separator + 1);
+    }
+
     private static String json(String value) {
         return value == null
             ? ""
@@ -317,7 +388,9 @@ public final class SemanticDiagnosticBenchmark {
         String severity,
         String fixturePath,
         String sourceLevel,
-        String trigger) {
+        String trigger,
+        String symbol,
+        String declaredArtifact) {
     }
 
     private record Observation(

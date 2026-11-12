@@ -10,21 +10,18 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Validates the engine-neutral diagnostic scenarios before candidate-specific
- * diagnostic extraction and normalization are evaluated.
+ * Validates diagnostic scenarios, including the independent symbol and
+ * declared-artifact evidence needed to distinguish unresolved from incomplete.
  */
 public final class SemanticDiagnosticCorpusValidator {
     private static final String HEADER =
-        "case_id\tcategory\tseverity\tfixture_path\tsource_level\ttrigger";
+        "case_id\tcategory\tseverity\tfixture_path\tsource_level\ttrigger\tsymbol\tdeclared_artifact";
     private static final Pattern CASE_ID = Pattern.compile("JDIAG-[0-9]{3}");
+    private static final Pattern ARTIFACT = Pattern.compile("[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+");
     private static final Set<String> REQUIRED_CATEGORIES = Set.of(
-        "syntax-error",
-        "compiler-error",
-        "unresolved-symbol",
-        "incomplete-environment",
-        "unsupported-construct",
-        "warning",
-        "infrastructure-failure");
+        "syntax-error", "compiler-error", "unresolved-symbol",
+        "incomplete-environment", "unsupported-construct",
+        "warning", "infrastructure-failure");
 
     private SemanticDiagnosticCorpusValidator() {
     }
@@ -56,9 +53,9 @@ public final class SemanticDiagnosticCorpusValidator {
             }
 
             String[] fields = line.split("\\t", -1);
-            if (fields.length != 6) {
+            if (fields.length != 8) {
                 throw new IllegalStateException(
-                    "Expected 6 tab-separated fields at diagnostic corpus line " + (index + 1));
+                    "Expected 8 tab-separated fields at diagnostic corpus line " + (index + 1));
             }
 
             String caseId = fields[0].trim();
@@ -67,6 +64,8 @@ public final class SemanticDiagnosticCorpusValidator {
             String fixturePath = fields[3].trim();
             String sourceLevel = fields[4].trim();
             String trigger = fields[5].trim();
+            String symbol = fields[6].trim();
+            String declaredArtifact = fields[7].trim();
 
             if (!CASE_ID.matcher(caseId).matches() || !caseIds.add(caseId)) {
                 throw new IllegalStateException(
@@ -85,9 +84,10 @@ public final class SemanticDiagnosticCorpusValidator {
             }
 
             if (category.equals("infrastructure-failure")) {
-                if (!fixturePath.equals("-") || !trigger.equals("missing-input-path")) {
+                if (!fixturePath.equals("-") || !trigger.equals("missing-input-path")
+                    || !symbol.isEmpty() || !declaredArtifact.isEmpty()) {
                     throw new IllegalStateException(
-                        "Infrastructure scenario must use the controlled missing-input-path trigger.");
+                        "Infrastructure scenario must use only the controlled missing-input-path trigger.");
                 }
             } else {
                 Path relativeFixture = Path.of(fixturePath).normalize();
@@ -100,6 +100,30 @@ public final class SemanticDiagnosticCorpusValidator {
                     throw new IllegalStateException(
                         "Diagnostic fixture path is invalid or missing for "
                             + caseId + ": " + fixturePath);
+                }
+
+                String source = Files.readString(resolvedFixture);
+                if (category.equals("unresolved-symbol")
+                    || category.equals("incomplete-environment")) {
+                    if (symbol.isEmpty() || !source.contains(simpleName(symbol))) {
+                        throw new IllegalStateException(
+                            "Resolution scenario must identify a symbol present in its fixture: " + caseId);
+                    }
+                    if (category.equals("incomplete-environment")) {
+                        if (!ARTIFACT.matcher(declaredArtifact).matches()
+                            || !trigger.equals("omitted-declared-artifact:" + declaredArtifact)
+                            || !source.contains("import " + symbol + ";")) {
+                            throw new IllegalStateException(
+                                "Incomplete-environment scenario requires matching declared-artifact and import evidence: "
+                                    + caseId);
+                        }
+                    } else if (!declaredArtifact.isEmpty()) {
+                        throw new IllegalStateException(
+                            "Unresolved-symbol scenario cannot claim a declared artifact: " + caseId);
+                    }
+                } else if (!symbol.isEmpty() || !declaredArtifact.isEmpty()) {
+                    throw new IllegalStateException(
+                        "Only symbol-resolution scenarios may declare symbol/artifact evidence: " + caseId);
                 }
             }
 
@@ -116,12 +140,15 @@ public final class SemanticDiagnosticCorpusValidator {
 
         String missingCategoriesJson = missingCategories.stream()
             .sorted()
-            .map(category -> "\"" + category + "\"")
+            .map(category -> "\\"" + category + "\\"")
             .collect(Collectors.joining(",", "[", "]"));
         System.out.printf(
-            "{\"status\":\"passed\",\"cases\":%d,\"categories\":%d,\"missingCategories\":%s}%n",
-            caseCount,
-            observedCategories.size(),
-            missingCategoriesJson);
+            "{\\"status\\":\\"passed\\",\\"cases\\":%d,\\"categories\\":%d,\\"missingCategories\\":%s}%n",
+            caseCount, observedCategories.size(), missingCategoriesJson);
+    }
+
+    private static String simpleName(String qualifiedName) {
+        int separator = qualifiedName.lastIndexOf('.');
+        return separator < 0 ? qualifiedName : qualifiedName.substring(separator + 1);
     }
 }

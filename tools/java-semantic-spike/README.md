@@ -148,3 +148,12 @@ The diagnostic corpus validator checks stable IDs, category/severity consistency
 The `SemanticDiagnosticBenchmark` runs each diagnostic scenario through the selected engine and emits JSON Lines with the expected and observed normalized category, candidate status, native diagnostic code, native message, source line where available and severity.
 
 JDT is evaluated in strict mode against the seven expected scenarios. JavaParser runs in report-only mode: absence of compiler type-check and deprecation-warning diagnostics is recorded as a capability gap, not misrepresented as a successful compiler diagnostic. Other mismatches remain visible in the artifact. The incomplete-environment versus unresolved-symbol distinction is grounded in the explicit fixture/dependency trigger, while the engine must still produce evidence of an unresolved binding or native diagnostic.
+
+
+### Diagnostic evidence normalization
+
+The diagnostic benchmark does not copy an expected category into an observation. It classifies native JDT problem IDs/severity and JavaParser parse/resolution failures, then compares the independently observed category and severity with the scenario contract.
+
+The corpus carries a qualified symbol and declared artifact only for symbol-resolution scenarios. The incomplete-environment classification requires all of the following: a native unresolved-symbol diagnostic, a matching symbol in the fixture's import/source, and explicit declared-artifact evidence whose JAR was deliberately omitted from the analysis environment. An ordinary unresolved symbol has no declared-artifact evidence. This distinction depends on the project model as well as compiler output; neither engine can infer a missing declared dependency from an isolated unresolved name alone.
+
+JavaParser's lack of compiler type-check and deprecation-warning diagnostics remains a reported capability gap. Report-only mode preserves those results without treating the absence of diagnostics as a pass. Strict JDT mode compares both normalized category and severity.

@@ -1015,3 +1015,10 @@ All mandatory workflows passed on head `5c91f92f2d7f104e3b955944c5deebb4a0f10df7
 - WPF build validation — run `43188405812`, success.
 
 **Decision:** Accept the expanded semantic-fact corpus sub-checkpoint. Keep J2-A5.1 in progress until engine-native diagnostic extraction and normalized category mapping are implemented and asserted. JDT remains the preferred candidate. J2-B remains blocked.
+
+
+### J2-A5.1 — Diagnostic evidence normalization hardening
+
+The first diagnostic comparison implementation was reviewed and found to contain a classification tautology: expected categories were reused when constructing observed results. The correction now derives categories from native engine evidence and explicit scenario context, and validates category plus severity. The unresolved-symbol and incomplete-environment cases carry separate qualified-symbol and declared-artifact evidence; the latter is classified only when the unresolved diagnostic matches the imported symbol and the declared artifact is explicitly known to be omitted.
+
+Acceptance remains pending strict JDT comparison, report-only JavaParser comparison, inspection of native diagnostic IDs/messages and all three mandatory CI workflows on the corrected head. A green corpus-schema validator alone is not diagnostic-normalization evidence.

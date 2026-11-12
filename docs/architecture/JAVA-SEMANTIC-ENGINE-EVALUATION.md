@@ -275,3 +275,14 @@ All mandatory workflows passed on head `5c91f92f2d7f104e3b955944c5deebb4a0f10df7
 - WPF build validation — run `43188405812`, success.
 
 **Decision:** The semantic-corpus expansion sub-checkpoint is accepted. J2-A5.1 remains in progress until JDT and JavaParser diagnostic extraction is normalized and asserted against the scenario contract. JDT remains the preferred candidate; final production approval and J2-B remain blocked.
+
+
+## J2-A5.1 diagnostic-normalization correction
+
+Review of the first diagnostic benchmark identified a false-positive risk: the initial implementation stamped the expected category onto any selected JDT problem and used the scenario's expected category to label JavaParser resolution exceptions. It therefore did not independently establish all seven categories.
+
+The corrected scenario contract includes explicit symbol identity and declared-artifact coordinates for the two unresolved-symbol cases. A result is classified as incomplete-environment only when the engine emits native unresolved-symbol evidence matching the fixture symbol and the fixture imports the symbol whose declared artifact is explicitly recorded as omitted. The ordinary unresolved-symbol case has no declared-artifact evidence. The benchmark compares observed category **and severity** with the expected contract; it does not stamp expected values into observations.
+
+The unsupported-construct case also requires native parser/compiler rejection at source level 17 and evidence tied to the Java 21 record-pattern construct. JavaParser compiler-error and warning absence remains a capability gap, not a pass. The infrastructure case is an actual controlled missing-input read failure.
+
+This correction is a prerequisite for accepting diagnostic taxonomy coverage. Until the strict JDT result and report-only JavaParser evidence have been inspected on the corrected benchmark, the diagnostic sub-checkpoint remains in progress.

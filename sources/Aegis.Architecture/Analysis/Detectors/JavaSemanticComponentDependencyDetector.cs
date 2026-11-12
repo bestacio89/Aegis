@@ -84,6 +84,8 @@ internal static class JavaSemanticComponentDependencyDetector
             .Select(group =>
             {
                 var first = group.First();
+                var productionSymbols = group.Where(item => !item.IsTestCode).ToArray();
+                var testSymbols = group.Where(item => item.IsTestCode).ToArray();
                 var files = group.Select(item => item.FilePath)
                     .Distinct(PathComparer)
                     .OrderBy(path => path, PathComparer)
@@ -99,7 +101,23 @@ internal static class JavaSemanticComponentDependencyDetector
                     BuildModuleName = first.ModuleName,
                     BuildModulePath = first.ModulePath,
                     SourceFileCount = files.Count,
+                    ProductionSourceFileCount = productionSymbols
+                        .Select(item => item.FilePath)
+                        .Distinct(PathComparer)
+                        .Count(),
+                    TestSourceFileCount = testSymbols
+                        .Select(item => item.FilePath)
+                        .Distinct(PathComparer)
+                        .Count(),
                     SymbolCount = group.Select(item => item.SymbolId)
+                        .Distinct(StringComparer.Ordinal)
+                        .Count(),
+                    ProductionSymbolCount = productionSymbols
+                        .Select(item => item.SymbolId)
+                        .Distinct(StringComparer.Ordinal)
+                        .Count(),
+                    TestSymbolCount = testSymbols
+                        .Select(item => item.SymbolId)
                         .Distinct(StringComparer.Ordinal)
                         .Count(),
                     SourceFiles = files

@@ -160,6 +160,16 @@ public sealed class ProjectArchitectureContext
     /// </summary>
     public List<ArchitectureComponentContext> ArchitectureComponents { get; set; } = [];
 
+    /// <summary>Components with production declarations; includes isolated packages.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitectureComponentContext> ProductionComponents =>
+        ArchitectureComponents.Where(component => component.ProductionSymbolCount > 0).ToArray();
+
+    /// <summary>Components containing test-only declarations.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitectureComponentContext> TestComponents =>
+        ArchitectureComponents.Where(component => component.TestSymbolCount > 0).ToArray();
+
     /// <summary>
     /// Compiler-resolved dependencies between language-level architectural components.
     /// Build-module dependency edges remain in <see cref="Dependencies"/>.
@@ -413,6 +423,8 @@ public sealed class ProjectArchitectureContext
             ProductionDependencyCount = ProductionDependencies.Count,
             TestDependencyCount = TestDependencies.Count,
             ArchitectureComponentCount = ArchitectureComponents.Count,
+            ProductionArchitectureComponentCount = ProductionComponents.Count,
+            TestArchitectureComponentCount = TestComponents.Count,
             ArchitectureComponentDependencyCount = ArchitectureComponentDependencies.Count,
             ProductionComponentDependencyCount = ProductionComponentDependencies.Count,
             TestComponentDependencyCount = TestComponentDependencies.Count,

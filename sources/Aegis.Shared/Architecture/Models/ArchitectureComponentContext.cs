@@ -27,7 +27,15 @@ public sealed class ArchitectureComponentContext
 
     public int SourceFileCount { get; init; }
 
+    public int ProductionSourceFileCount { get; init; }
+
+    public int TestSourceFileCount { get; init; }
+
     public int SymbolCount { get; init; }
+
+    public int ProductionSymbolCount { get; init; }
+
+    public int TestSymbolCount { get; init; }
 
     public List<string> SourceFiles { get; init; } = [];
 }

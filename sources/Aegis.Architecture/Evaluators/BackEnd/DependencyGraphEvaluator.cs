@@ -167,25 +167,29 @@ public sealed class DependencyGraphEvaluator
         if (Context is not { } context)
             return;
 
-        var nodes = relations
-            .SelectMany(relation => new[]
-            {
-                relation.SourceComponentId,
-                relation.TargetComponentId
-            })
+        var nodes = context.ProductionComponents
+            .Select(component => component.Id)
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        var distinctEdges = relations
+        var nodeSet = nodes.ToHashSet(StringComparer.Ordinal);
+        var observedEdges = relations
+            .Where(relation => nodeSet.Contains(relation.SourceComponentId)
+                && nodeSet.Contains(relation.TargetComponentId))
+            .ToArray();
+
+        var distinctEdges = observedEdges
             .Select(relation => (relation.SourceComponentId, relation.TargetComponentId))
             .Distinct()
             .Count();
 
-        var outgoingCounts = relations
-            .GroupBy(relation => relation.SourceComponentId, StringComparer.Ordinal)
-            .Select(group => group.Select(relation => relation.TargetComponentId)
-                .Distinct(StringComparer.Ordinal).Count())
+        var outgoingCounts = nodes
+            .Select(node => observedEdges
+                .Where(relation => relation.SourceComponentId == node)
+                .Select(relation => relation.TargetComponentId)
+                .Distinct(StringComparer.Ordinal)
+                .Count())
             .ToArray();
 
         var result = CreateAggregateResult("DependencyGraphSummary");
@@ -194,7 +198,7 @@ public sealed class DependencyGraphEvaluator
         result.Framework = context.Framework;
         result.DetectionConfidence = context.Confidence;
 
-        result.Metrics["TotalRelations"] = relations.Sum(relation => relation.RelationshipCount);
+        result.Metrics["TotalRelations"] = observedEdges.Sum(relation => relation.RelationshipCount);
         result.Metrics["TotalComponents"] = nodes.Length;
         result.Metrics["DistinctComponentDependencyCount"] = distinctEdges;
         result.Metrics["AverageDependencies"] = outgoingCounts.Length == 0
@@ -207,13 +211,14 @@ public sealed class DependencyGraphEvaluator
             "Compiler-resolved semantic relationships aggregated between language-level architectural components; build-module dependencies are reported separately.";
         result.Metadata["GraphNodeCount"] = nodes.Length.ToString();
         result.Metadata["GraphEdgeCount"] = distinctEdges.ToString();
-        result.Metadata["AnalysisComplete"] = context.SemanticAnalysisRuns
+        var javaRuns = context.SemanticAnalysisRuns
             .Where(run => run.Language.Equals("Java", StringComparison.OrdinalIgnoreCase))
-            .All(run => run.IsComplete)
+            .ToArray();
+        result.Metadata["AnalysisComplete"] = (javaRuns.Length > 0 && javaRuns.All(run => run.IsComplete))
             .ToString()
             .ToLowerInvariant();
 
-        if (nodes.Length > 1)
+        if (nodes.Length > 1 && distinctEdges > 0)
         {
             var possibleDirectedEdges = (double)nodes.Length * (nodes.Length - 1);
             result.Metrics["DependencyGraphDensity"] = distinctEdges / possibleDirectedEdges;
@@ -223,8 +228,9 @@ public sealed class DependencyGraphEvaluator
         }
         else
         {
-            result.Metadata["GraphDensityStatus"] =
-                "Unavailable: fewer than two distinct architectural components.";
+            result.Metadata["GraphDensityStatus"] = nodes.Length < 2
+                ? "Unavailable: fewer than two distinct architectural components."
+                : "Unavailable: no observed cross-component dependencies.";
         }
 
         results.Add(result);

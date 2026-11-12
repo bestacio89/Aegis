@@ -20,6 +20,11 @@ internal static class LanguageAndBuildDetector
             context.Language = "C#";
             context.BuildSystem = ArchitectureBuildSystem.Unknown;
         }
+        else if (HasKotlinSourceEvidence(files))
+        {
+            context.Language = "Kotlin";
+            context.BuildSystem = ResolveJvmBuildSystem(files);
+        }
         else if (HasJavaEvidence(files))
         {
             context.Language = "Java";
@@ -36,7 +41,12 @@ internal static class LanguageAndBuildDetector
         else if (files.Any(file =>
                      Path.GetExtension(file).Equals(".ts", StringComparison.OrdinalIgnoreCase)
                      || Path.GetExtension(file).Equals(".tsx", StringComparison.OrdinalIgnoreCase)
-                     || Path.GetExtension(file).Equals(".js", StringComparison.OrdinalIgnoreCase)))
+                     || Path.GetExtension(file).Equals(".mts", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".cts", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".js", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".jsx", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".mjs", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".cjs", StringComparison.OrdinalIgnoreCase)))
         {
             context.Language = "TypeScript/JavaScript";
             context.BuildSystem = ResolveNodeBuildSystem(files);
@@ -76,13 +86,13 @@ internal static class LanguageAndBuildDetector
         });
     }
 
-    private static bool HasJavaEvidence(IReadOnlyCollection<string> files) =>
+    private static bool HasKotlinSourceEvidence(IReadOnlyCollection<string> files) =>
         files.Any(file =>
-            Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
-            || IsMavenManifest(file)
-            || IsGradleManifest(file));
+            Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
+            || (Path.GetExtension(file).Equals(".kts", StringComparison.OrdinalIgnoreCase)
+                && !IsGradleManifest(file)));
 
-    private static ArchitectureBuildSystem ResolveJavaBuildSystem(
+    private static ArchitectureBuildSystem ResolveJvmBuildSystem(
         IReadOnlyCollection<string> files)
     {
         var hasMaven = files.Any(IsMavenManifest);
@@ -94,6 +104,39 @@ internal static class LanguageAndBuildDetector
             (false, true) => ArchitectureBuildSystem.Gradle,
             _ => ArchitectureBuildSystem.Unknown
         };
+    }
+
+    private static bool HasJavaEvidence(IReadOnlyCollection<string> files) =>
+        files.Any(file =>
+            Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
+            || IsMavenManifest(file)
+            || IsGradleManifest(file));
+
+    private static ArchitectureBuildSystem ResolveJavaBuildSystem(
+        IReadOnlyCollection<string> files) =>
+        ResolveJvmBuildSystem(files);
+
+    private static ArchitectureBuildSystem ResolvePythonBuildSystem(
+        IReadOnlyCollection<string> files) =>
+        files.Any(file => Path.GetFileName(file).Equals("poetry.lock", StringComparison.OrdinalIgnoreCase))
+            ? ArchitectureBuildSystem.Poetry
+            : ArchitectureBuildSystem.Pip;
+
+    private static ArchitectureBuildSystem ResolveNodeBuildSystem(
+        IReadOnlyCollection<string> files)
+    {
+        if (!files.Any(file =>
+                Path.GetFileName(file).Equals("package.json", StringComparison.OrdinalIgnoreCase)))
+        {
+            return ArchitectureBuildSystem.Unknown;
+        }
+
+        if (files.Any(file => Path.GetFileName(file).Equals("pnpm-lock.yaml", StringComparison.OrdinalIgnoreCase)))
+            return ArchitectureBuildSystem.Pnpm;
+        if (files.Any(file => Path.GetFileName(file).Equals("yarn.lock", StringComparison.OrdinalIgnoreCase)))
+            return ArchitectureBuildSystem.Yarn;
+
+        return ArchitectureBuildSystem.Npm;
     }
 
     internal static bool IsMavenManifest(string file) =>

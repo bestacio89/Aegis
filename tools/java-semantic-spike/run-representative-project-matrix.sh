@@ -138,14 +138,20 @@ while IFS=$'\t' read -r \
     spring-petclinic)
       grep -Eq 'jakarta.persistence-api-[^/]+\.jar' "$main_classpath_file"
       grep -Eq 'spring-core-[^/]+\.jar' "$main_classpath_file"
+      grep -Eq 'spring-webmvc-[^/]+\.jar' "$main_classpath_file"
+      grep -Eq 'cache-api-[^/]+\.jar' "$main_classpath_file"
+      grep -Eq 'jakarta.xml.bind-api-[^/]+\.jar' "$main_classpath_file"
       grep -Eq 'spring-test-[^/]+\.jar' "$test_classpath_file"
       grep -Eq 'junit-jupiter-api-[^/]+\.jar' "$test_classpath_file"
+      grep -Eq 'assertj-core-[^/]+\.jar' "$test_classpath_file"
       grep -Eq 'testcontainers-junit-jupiter-[^/]+\.jar' "$test_classpath_file"
       ;;
     quarkus-getting-started)
       grep -Eq 'jakarta.ws.rs-api-[^/]+\.jar' "$main_classpath_file"
       grep -Eq 'quarkus-junit-[^/]+\.jar' "$test_classpath_file"
       grep -Eq 'rest-assured-[^/]+\.jar' "$test_classpath_file"
+      grep -Eq 'rest-assured-common-[^/]+\.jar' "$test_classpath_file"
+      grep -Eq 'hamcrest-[^/]+\.jar' "$test_classpath_file"
       ;;
     micronaut-starter-aws-cdk)
       grep -Fq 'aws-cdk-lib-2.243.0.jar' "$main_classpath_file"

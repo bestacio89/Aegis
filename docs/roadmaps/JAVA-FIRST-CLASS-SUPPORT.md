@@ -730,7 +730,7 @@ All mandatory workflows passed on final J1-E head `67813b74aa345fd62ccdd75776b09
 
 # J1-F — Final regression and acceptance review — 2026-11-12
 
-**Review result: implementation criteria satisfied; documentation-head CI pending.**
+**Review result: accepted.**
 
 ## Acceptance matrix
 
@@ -768,6 +768,6 @@ The final regression review was performed against implementation head `67813b74a
 - WPF build validation — run `43118586278`, success.
 - Java semantic engine comparison — run `43118586393`, success.
 
-This roadmap update records the checkpoint evidence and acceptance matrix. The updated documentation commit must itself pass all mandatory workflows before J1-F is formally accepted.
+The roadmap update and acceptance matrix passed all mandatory workflows on final documentation head `e20832ebed3a64a9caac55a23a78183cb522ae38`.
 
-**Checkpoint decision:** J1 implementation and regression criteria are satisfied. J1-F formal acceptance is pending final-head CI on this documentation update. J2 remains blocked until that validation completes.
+**Checkpoint decision:** J1 implementation and regression criteria are satisfied. J1-F is formally accepted. J1 is complete and J2 is unblocked.

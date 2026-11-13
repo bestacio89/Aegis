@@ -1078,29 +1078,88 @@ internal static class GradleBuildModelResolver
     {
         var roots = new Dictionary<string, ProjectSourceRoot>(PathComparer);
 
+        void AddSourceRoot(
+            string directory,
+            ProjectSourceRootOwnership ownership,
+            ProjectSourceRootOrigin origin)
+        {
+            var fullDirectory = Path.GetFullPath(directory);
+            var containsJava = files.Any(file =>
+                Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
+                && IsSameOrDescendantPath(file, fullDirectory));
+            var containsKotlin = files.Any(file =>
+                Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
+                && IsSameOrDescendantPath(file, fullDirectory));
+            var languages = new List<string>();
+            if (containsJava)
+                languages.Add("Java");
+            if (containsKotlin)
+                languages.Add("Kotlin");
+
+            if (roots.TryGetValue(fullDirectory, out var existing))
+            {
+                if (existing.Ownership != ownership && existing.Ownership != ProjectSourceRootOwnership.Unknown)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleSourceRootOwnershipConflict",
+                        $"Source root '{fullDirectory}' is assigned to conflicting source sets; ownership remains unknown.",
+                        buildFile));
+                    ownership = ProjectSourceRootOwnership.Unknown;
+                }
+                else if (existing.Ownership == ProjectSourceRootOwnership.Unknown)
+                {
+                    ownership = ProjectSourceRootOwnership.Unknown;
+                }
+
+                languages = existing.Languages
+                    .Concat(languages)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                origin = existing.Origin == ProjectSourceRootOrigin.Explicit
+                    || origin == ProjectSourceRootOrigin.Explicit
+                    ? ProjectSourceRootOrigin.Explicit
+                    : existing.Origin;
+            }
+
+            roots[fullDirectory] = new ProjectSourceRoot
+            {
+                Directory = fullDirectory,
+                Ownership = ownership,
+                Origin = origin,
+                IsGenerated = false,
+                ContainsJavaSources = containsJava
+                    || (roots.TryGetValue(fullDirectory, out var previous) && previous.ContainsJavaSources),
+                Languages = languages,
+                EvidenceFile = buildFile
+            };
+        }
+
         foreach (var sourceSet in sourceSets)
         {
             var ownership = sourceSet.IsTest
                 ? ProjectSourceRootOwnership.Test
                 : ProjectSourceRootOwnership.Production;
+
             foreach (var directory in sourceSet.JavaSourceDirectories)
             {
                 var fullDirectory = Path.GetFullPath(directory);
                 var isExplicit = sourceSet.ExplicitJavaSourceDirectories?.Any(explicitDirectory =>
                     PathsEqual(explicitDirectory, fullDirectory)) == true;
-                roots[fullDirectory] = new ProjectSourceRoot
-                {
-                    Directory = fullDirectory,
-                    Ownership = ownership,
-                    Origin = isExplicit
-                        ? ProjectSourceRootOrigin.Explicit
-                        : ProjectSourceRootOrigin.Conventional,
-                    IsGenerated = false,
-                    ContainsJavaSources = files.Any(file =>
-                        Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
-                        && IsSameOrDescendantPath(file, fullDirectory)),
-                    EvidenceFile = buildFile
-                };
+                AddSourceRoot(
+                    fullDirectory,
+                    ownership,
+                    isExplicit ? ProjectSourceRootOrigin.Explicit : ProjectSourceRootOrigin.Conventional);
+            }
+
+            foreach (var directory in sourceSet.KotlinSourceDirectories ?? [])
+            {
+                var fullDirectory = Path.GetFullPath(directory);
+                var isExplicit = sourceSet.ExplicitKotlinSourceDirectories?.Any(explicitDirectory =>
+                    PathsEqual(explicitDirectory, fullDirectory)) == true;
+                AddSourceRoot(
+                    fullDirectory,
+                    ownership,
+                    isExplicit ? ProjectSourceRootOrigin.Explicit : ProjectSourceRootOrigin.Conventional);
             }
         }
 

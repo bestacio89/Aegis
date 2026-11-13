@@ -353,7 +353,7 @@ class KotlinCompilerIntegrationTests {
             }, "An extension call must resolve to its extension declaration.")
 
             val referenceConsumerId = symbols.single {
-                it.get("qualifiedName").asString.startsWith("sample.ReferenceConsumer.inspect(")
+                it.get("qualifiedName").asString == "sample.ReferenceConsumer.inspect"
             }.get("id").asString
             val referenceTargets = relationships
                 .filter {

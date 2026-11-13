@@ -85,6 +85,8 @@ class PackagedProbe {
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $JavaExecutable
+    $startInfo.ArgumentList.Add('-Xms64m')
+    $startInfo.ArgumentList.Add('-Xmx1024m')
     $startInfo.ArgumentList.Add('-jar')
     $startInfo.ArgumentList.Add($workerJarPath)
     $startInfo.UseShellExecute = $false

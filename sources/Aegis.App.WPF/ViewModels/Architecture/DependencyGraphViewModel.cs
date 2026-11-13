@@ -34,10 +34,22 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
     public IReadOnlyList<string> GraphProjectionOptions { get; private set; }
 
-    public string GroupingLabel =>
-        GraphProjection == "Architectural components"
-            ? "COMPONENT KINDS"
-            : "ARCHITECTURE LAYERS";
+    public string GroupingLabel => GraphProjection switch
+    {
+        "Architectural components" => "ARCHITECTURAL ROLES",
+        "Code containers" => "CONTAINER KINDS",
+        _ => "BUILD MODULE TYPES"
+    };
+
+    public string ProjectionDescription => GraphProjection switch
+    {
+        "Architectural components" =>
+            "Logical architecture inferred or declared from code-container membership. Select a component to inspect its incoming and outgoing dependencies.",
+        "Code containers" =>
+            "Language-native packages, namespaces, and modules. This projection preserves the semantic boundaries discovered by each language provider.",
+        _ =>
+            "Independently discovered build-system modules and project references. This projection describes build boundaries, not logical architecture."
+    };
 
     public ObservableCollection<ArchitectureGraphNodeViewModel> GraphNodes { get; } = new();
 
@@ -118,24 +130,42 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     !string.IsNullOrWhiteSpace(dependency.Source)
                     && !string.IsNullOrWhiteSpace(dependency.Target))
                 .ToArray() ?? [];
-            var componentDependencies = _context?.ProductionComponentDependencies
+
+            var codeContainerDependencies = (_context?.ProductionComponentDependencies ?? [])
+                .Concat((_context?.ArchitectureComponentInternalDependencies ?? [])
+                    .Where(dependency => dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase)))
+                .Where(dependency =>
+                    !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
+                    && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
+                .ToArray();
+
+            var architecturalDependencies = _context?.ProductionArchitecturalComponentDependencies
                 .Where(dependency =>
                     !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
                     && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
                 .ToArray() ?? [];
-            var componentNodes = _context?.ProductionComponents ?? [];
 
-            GraphProjectionOptions = componentNodes.Count > 0
-                ? ["Architectural components", "Build modules"]
-                : ["Build modules"];
+            var buildModules = _context?.ProductionModules ?? [];
+            var codeContainers = _context?.ProductionComponents ?? [];
+            var architecturalComponents = _context?.ArchitecturalComponents
+                .Where(component => component.ProductionSymbolCount > 0)
+                .ToArray() ?? [];
 
-            // Build dependencies describe independently deployable modules.
-            // When semantic package nodes exist, they are the useful default
-            // projection for a single-module Java application; users can still
-            // switch to the build-module graph explicitly.
-            var preferredProjection = componentNodes.Count > 0
+            GraphProjectionOptions =
+            [
+                "Build modules",
+                .. (codeContainers.Count > 0 ? ["Code containers"] : []),
+                .. (architecturalComponents.Length > 0 ? ["Architectural components"] : [])
+            ];
+
+            // A single-module repository can still have meaningful code-container
+            // and logical architecture graphs. Prefer the most informative
+            // available semantic projection without conflating its identity model.
+            var preferredProjection = architecturalComponents.Length > 0
                 ? "Architectural components"
-                : "Build modules";
+                : codeContainers.Count > 0
+                    ? "Code containers"
+                    : "Build modules";
 
             if (!GraphProjectionOptions.Contains(GraphProjection, StringComparer.OrdinalIgnoreCase)
                 || (!_hasUserSelectedProjection
@@ -144,27 +174,52 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                 GraphProjection = preferredProjection;
             }
 
-            _activeNodes = GraphProjection == "Architectural components"
-                ? _context?.ProductionComponents
+            _activeNodes = GraphProjection switch
+            {
+                "Architectural components" => architecturalComponents
+                    .Select(component => new GraphNode(
+                        component.Id,
+                        component.Name,
+                        string.IsNullOrWhiteSpace(component.Role) ? "Unclassified" : component.Role))
+                    .ToArray(),
+                "Code containers" => codeContainers
                     .Select(component => new GraphNode(
                         component.Id,
                         component.QualifiedName,
                         component.ComponentKind))
-                    .ToArray() ?? []
-                : [];
+                    .ToArray(),
+                _ => buildModules
+                    .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+                    .Select(module => new GraphNode(
+                        module.Path,
+                        module.Name,
+                        string.IsNullOrWhiteSpace(module.Type) ? module.ProjectKind : module.Type))
+                    .ToArray()
+            };
 
-            _activeRelations = GraphProjection == "Architectural components"
-                ? componentDependencies.Select(dependency => new GraphRelation(
+            _activeRelations = GraphProjection switch
+            {
+                "Architectural components" => architecturalDependencies.Select(dependency => new GraphRelation(
                     dependency.SourceComponentId,
                     dependency.TargetComponentId,
                     dependency.SourceComponentName,
                     dependency.TargetComponentName,
-                    "Package",
-                    "Package",
+                    _activeNodes.FirstOrDefault(node => node.Id == dependency.SourceComponentId)?.Group ?? "Unclassified",
+                    _activeNodes.FirstOrDefault(node => node.Id == dependency.TargetComponentId)?.Group ?? "Unclassified",
                     dependency.DependencyType,
                     string.Join(", ", dependency.EvidenceFiles),
-                    dependency.RelationshipCount)).ToArray()
-                : buildDependencies.Select(dependency => new GraphRelation(
+                    dependency.RelationshipCount)).ToArray(),
+                "Code containers" => codeContainerDependencies.Select(dependency => new GraphRelation(
+                    dependency.SourceComponentId,
+                    dependency.TargetComponentId,
+                    dependency.SourceComponentName,
+                    dependency.TargetComponentName,
+                    _context?.ArchitectureComponents.FirstOrDefault(component => component.Id == dependency.SourceComponentId)?.ComponentKind ?? "Unclassified",
+                    _context?.ArchitectureComponents.FirstOrDefault(component => component.Id == dependency.TargetComponentId)?.ComponentKind ?? "Unclassified",
+                    dependency.DependencyType,
+                    string.Join(", ", dependency.EvidenceFiles),
+                    dependency.RelationshipCount)).ToArray(),
+                _ => buildDependencies.Select(dependency => new GraphRelation(
                     string.IsNullOrWhiteSpace(dependency.SourceProjectPath) ? dependency.Source : dependency.SourceProjectPath,
                     string.IsNullOrWhiteSpace(dependency.TargetProjectPath) ? dependency.Target : dependency.TargetProjectPath,
                     dependency.Source,
@@ -173,12 +228,20 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     dependency.TargetLayer,
                     dependency.DependencyType,
                     dependency.File,
-                    1)).ToArray();
+                    1)).ToArray()
+            };
 
-            TestRelationshipCount = GraphProjection == "Architectural components"
-                ? _context?.TestComponentDependencies.Sum(dependency => dependency.RelationshipCount) ?? 0
-                : _context?.TestDependencies.Count ?? 0;
+            TestRelationshipCount = GraphProjection switch
+            {
+                "Architectural components" => _context?.TestArchitecturalComponentDependencies.Sum(dependency => dependency.RelationshipCount) ?? 0,
+                "Code containers" => (_context?.TestComponentDependencies.Sum(dependency => dependency.RelationshipCount) ?? 0)
+                    + (_context?.ArchitectureComponentInternalDependencies
+                        .Where(dependency => dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase))
+                        .Sum(dependency => dependency.RelationshipCount) ?? 0),
+                _ => _context?.TestDependencies.Count ?? 0
+            };
 
+            OnPropertyChanged(nameof(ProjectionDescription));
             LayerFilters = ["All", .. _activeRelations
                 .SelectMany(relation => new[] { relation.SourceLayer, relation.TargetLayer })
                 .Where(layer => !string.IsNullOrWhiteSpace(layer))

@@ -156,14 +156,22 @@ public sealed class GradleBuildModelTests
 
             var sharedRoot = Path.Combine(root, "src", "main", "shared");
             var testKotlinRoot = Path.Combine(root, "src", "test", "customKotlin");
+            var generatedKspRoot = Path.Combine(root, "build", "generated", "ksp", "main", "kotlin");
+            var generatedKaptRoot = Path.Combine(root, "build", "generated", "source", "kaptKotlin", "test");
             Directory.CreateDirectory(Path.Combine(sharedRoot, "sample"));
             Directory.CreateDirectory(Path.Combine(testKotlinRoot, "sample"));
+            Directory.CreateDirectory(Path.Combine(generatedKspRoot, "sample"));
+            Directory.CreateDirectory(Path.Combine(generatedKaptRoot, "sample"));
             File.WriteAllText(Path.Combine(sharedRoot, "sample", "JavaContract.java"),
                 "package sample; public interface JavaContract {}");
             File.WriteAllText(Path.Combine(sharedRoot, "sample", "KotlinService.kt"),
                 "package sample\nclass KotlinService : JavaContract");
             File.WriteAllText(Path.Combine(testKotlinRoot, "sample", "KotlinServiceTest.kt"),
                 "package sample\nclass KotlinServiceTest");
+            File.WriteAllText(Path.Combine(generatedKspRoot, "sample", "GeneratedKsp.kt"),
+                "package sample\nclass GeneratedKsp");
+            File.WriteAllText(Path.Combine(generatedKaptRoot, "sample", "GeneratedKapt.kt"),
+                "package sample\nclass GeneratedKapt");
 
             var context = ProjectArchitectureContextDetector.Detect(root);
             var module = Assert.Single(context.Modules);
@@ -192,6 +200,18 @@ public sealed class GradleBuildModelTests
             var testRoot = Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == testKotlinRoot);
             Assert.True(testRoot.ContainsKotlinSources);
             Assert.Equal(ProjectSourceRootOwnership.Test, testRoot.Ownership);
+
+            var generatedKspSourceRoot = Assert.Single(model.SourceRoots,
+                sourceRoot => sourceRoot.Directory == generatedKspRoot);
+            Assert.True(generatedKspSourceRoot.IsGenerated);
+            Assert.True(generatedKspSourceRoot.ContainsKotlinSources);
+            Assert.Equal(ProjectSourceRootOwnership.Production, generatedKspSourceRoot.Ownership);
+
+            var generatedKaptSourceRoot = Assert.Single(model.SourceRoots,
+                sourceRoot => sourceRoot.Directory == generatedKaptRoot);
+            Assert.True(generatedKaptSourceRoot.IsGenerated);
+            Assert.True(generatedKaptSourceRoot.ContainsKotlinSources);
+            Assert.Equal(ProjectSourceRootOwnership.Test, generatedKaptSourceRoot.Ownership);
             Assert.True(model.IsComplete);
         }
         finally

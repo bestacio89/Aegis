@@ -177,8 +177,8 @@ finally {
     if ($null -ne $process) {
         $process.Dispose()
     }
-    if (-not [string]::IsNullOrWhiteSpace($compilationOutputDirectory)
-        -and (Test-Path -LiteralPath $compilationOutputDirectory)) {
+    if (-not [string]::IsNullOrWhiteSpace($compilationOutputDirectory) -and
+        (Test-Path -LiteralPath $compilationOutputDirectory)) {
         Remove-Item -LiteralPath $compilationOutputDirectory -Recurse -Force
     }
     if (Test-Path -LiteralPath $manifestPath) {

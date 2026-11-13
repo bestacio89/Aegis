@@ -24,6 +24,12 @@ public sealed class AnalysisDiagnostic
     /// <summary>Provider-reported severity, when available.</summary>
     public string? Severity { get; init; }
 
+    /// <summary>One-based source line reported by the analyzer, when available.</summary>
+    public int? Line { get; init; }
+
+    /// <summary>One-based source column reported by the analyzer, when available.</summary>
+    public int? Column { get; init; }
+
     public string Message { get; init; } = string.Empty;
 
     public string? Target { get; init; }

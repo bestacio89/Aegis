@@ -310,10 +310,21 @@ private class KotlinSemanticCollector(
         override fun visitConstructorCall(expression: IrConstructorCall) {
             val sourceId = owners.lastOrNull()
             val target = expression.symbol.owner
-            val targetId = functionId(target)
-            addExternalFunctionIfNeeded(targetId, target)
+            val targetClass = target.parent as? IrClass
+            val isAnnotation = targetClass?.kind?.name == "ANNOTATION_CLASS"
+            val targetId = if (isAnnotation && targetClass != null) classId(targetClass) else functionId(target)
+            if (isAnnotation && targetClass != null) {
+                addExternalTypeIfNeeded(
+                    targetId,
+                    targetClass.fqNameWhenAvailable?.asString() ?: targetClass.name.asString(),
+                    true,
+                    targetClass.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
+                )
+            } else {
+                addExternalFunctionIfNeeded(targetId, target)
+            }
             if (sourceId != null)
-                addRelationship(sourceId, targetId, 4, expression.startOffset, currentFile)
+                addRelationship(sourceId, targetId, if (isAnnotation) 7 else 4, expression.startOffset, currentFile)
             expression.acceptChildrenVoid(this)
         }
     }

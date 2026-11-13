@@ -361,7 +361,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             {
                 SelectedGraphNode = null;
                 graphDependencies = baseDependencies;
-                        BuildGraph(graphDependencies, null);
+                BuildGraph(graphDependencies, null);
             }
             else
             {

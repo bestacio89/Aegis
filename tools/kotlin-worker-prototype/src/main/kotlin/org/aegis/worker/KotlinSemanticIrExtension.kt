@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
 import org.jetbrains.kotlin.ir.declarations.IrFile
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationWithVisibility
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrProperty
@@ -18,7 +19,7 @@ import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
-import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
+import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import java.nio.file.Files
 import java.nio.file.Path
@@ -48,8 +49,7 @@ private class KotlinSemanticCollector(
 ) {
     private val symbols = LinkedHashMap<String, JsonObject>()
     private val relationships = LinkedHashMap<String, JsonObject>()
-    private val propertyAccessors = HashMap<String, String>()
-    private val declarationIds = HashMap<IrElement, String>()
+    private val propertyAccessors = HashMap<Any, String>()
 
     fun collect(module: IrModuleFragment) {
         module.acceptChildrenVoid(DeclarationCollector())
@@ -70,7 +70,7 @@ private class KotlinSemanticCollector(
         return result
     }
 
-    private inner class DeclarationCollector : IrElementVisitorVoid {
+    private inner class DeclarationCollector : IrVisitorVoid() {
         private var currentFile: IrFile? = null
         private val owners = ArrayDeque<String>()
 
@@ -87,7 +87,6 @@ private class KotlinSemanticCollector(
 
         override fun visitClass(declaration: IrClass) {
             val id = classId(declaration)
-            declarationIds[declaration] = id
             addSymbol(
                 id = id,
                 name = declaration.name.asString(),
@@ -112,7 +111,7 @@ private class KotlinSemanticCollector(
                 declaration = declaration,
                 containingSymbolId = owners.lastOrNull()
             )
-            declaration.getter?.let { propertyAccessors[it.symbol.toString()] = id }
+            declaration.getter?.let { propertyAccessors[it.symbol] = id }
             declaration.setter?.let { propertyAccessors[it.symbol.toString()] = id }
             owners.addLast(id)
             declaration.acceptChildrenVoid(this)
@@ -180,14 +179,14 @@ private class KotlinSemanticCollector(
             symbol.addProperty("isTestCode", false)
             symbol.addProperty(
                 "isPublic",
-                declaration.visibility == DescriptorVisibilities.PUBLIC
+                isPublic(declaration)
             )
             symbol.add("provenance", provenance(file, offset))
             symbols[id] = symbol
         }
     }
 
-    private inner class RelationshipCollector : IrElementVisitorVoid {
+    private inner class RelationshipCollector : IrVisitorVoid() {
         private var currentFile: IrFile? = null
         private val owners = ArrayDeque<String>()
 
@@ -210,7 +209,7 @@ private class KotlinSemanticCollector(
                 val targetId = "kotlin:type:$targetName"
                 val targetIsInterface = moduleClassKinds[targetName] == "INTERFACE"
                 addExternalTypeIfNeeded(targetId, targetName, targetIsInterface)
-                addRelationship(sourceId, targetId, if (targetIsInterface) 3 else 2, declaration.startOffset)
+                addRelationship(sourceId, targetId, if (targetIsInterface) 3 else 2, declaration.startOffset, currentFile)
             }
             declaration.acceptChildrenVoid(this)
             owners.removeLast()
@@ -238,14 +237,15 @@ private class KotlinSemanticCollector(
             val sourceId = owners.lastOrNull()
             val target = expression.symbol.owner
             val targetId = functionId(target)
-            val propertyId = propertyAccessors[expression.symbol.toString()]
+            val propertyId = propertyAccessors[expression.symbol]
             addExternalFunctionIfNeeded(targetId, target)
             if (sourceId != null) {
                 addRelationship(
                     sourceId,
                     propertyId ?: targetId,
                     if (propertyId == null) 4 else 5,
-                    expression.startOffset
+                    expression.startOffset,
+                    currentFile
                 )
             }
             expression.acceptChildrenVoid(this)
@@ -257,7 +257,7 @@ private class KotlinSemanticCollector(
             val targetId = functionId(target)
             addExternalFunctionIfNeeded(targetId, target)
             if (sourceId != null)
-                addRelationship(sourceId, targetId, 4, expression.startOffset)
+                addRelationship(sourceId, targetId, 4, expression.startOffset, currentFile)
             expression.acceptChildrenVoid(this)
         }
     }
@@ -307,8 +307,7 @@ private class KotlinSemanticCollector(
         symbols[id] = symbol
     }
 
-    private fun addRelationship(sourceId: String, targetId: String, kind: Int, offset: Int) {
-        val file = currentFile
+    private fun addRelationship(sourceId: String, targetId: String, kind: Int, offset: Int, file: IrFile?) {
         val key = "$sourceId|$kind|$targetId|$file|$offset"
         if (relationships.containsKey(key)) return
         val relationship = JsonObject()
@@ -345,11 +344,26 @@ private class KotlinSemanticCollector(
 
     private fun functionId(declaration: IrFunction): String {
         val name = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
-        val parameters = declaration.valueParameters.joinToString(",") { it.type.classFqName?.asString() ?: it.type.toString() }
-        val receiver = declaration.extensionReceiverParameter?.type?.classFqName?.asString()
-        val signature = listOfNotNull(receiver, parameters).joinToString("|")
+        val parameters = when (declaration) {
+            is IrSimpleFunction -> declaration.valueParameters
+            is IrConstructor -> declaration.valueParameters
+            else -> emptyList()
+        }
+        val receiver = (declaration as? IrSimpleFunction)
+            ?.extensionReceiverParameter
+            ?.type
+            ?.let(::typeIdentity)
+        val parameterTypes = parameters.joinToString(",") { typeIdentity(it.type) }
+        val signature = listOfNotNull(receiver, parameterTypes.takeIf(String::isNotEmpty))
+            .joinToString("|")
         return "kotlin:function:$name($signature)"
     }
+
+    private fun typeIdentity(type: org.jetbrains.kotlin.ir.types.IrType): String =
+        type.classFqName?.asString() ?: type.toString()
+
+    private fun isPublic(declaration: IrDeclaration): Boolean =
+        (declaration as? IrDeclarationWithVisibility)?.visibility == DescriptorVisibilities.PUBLIC
 
     private val moduleClassKinds: Map<String, String>
         get() = symbols.values.associate { symbol ->

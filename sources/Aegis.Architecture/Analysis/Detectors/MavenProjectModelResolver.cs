@@ -908,7 +908,9 @@ internal static class MavenProjectModelResolver
         string projectFile,
         IReadOnlyCollection<string> files,
         IReadOnlyDictionary<string, string> properties,
-        ICollection<AnalysisDiagnostic> diagnostics)
+        ICollection<AnalysisDiagnostic> diagnostics,
+        IReadOnlyCollection<string> kotlinMainSourceDirectories,
+        IReadOnlyCollection<string> kotlinTestSourceDirectories)
     {
         var projectDirectory = Path.GetDirectoryName(projectFile)!;
         var roots = new Dictionary<string, ProjectSourceRoot>(PathComparer);
@@ -925,8 +927,48 @@ internal static class MavenProjectModelResolver
             var containsJava = files.Any(file =>
                 Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
                 && IsSameOrDescendantPath(file, fullDirectory));
-            if (!containsJava && !includeWhenEmpty)
+            var containsKotlin = files.Any(file =>
+                Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
+                && IsSameOrDescendantPath(file, fullDirectory));
+            if (!containsJava && !containsKotlin && !includeWhenEmpty)
                 return;
+
+            var languages = new List<string>();
+            if (containsJava)
+                languages.Add("Java");
+            if (containsKotlin)
+                languages.Add("Kotlin");
+
+            if (roots.TryGetValue(fullDirectory, out var existing))
+            {
+                if (existing.Ownership != ownership && existing.Ownership != ProjectSourceRootOwnership.Unknown)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "MavenSourceRootOwnershipConflict",
+                        "Source root '" + fullDirectory
+                        + "' is assigned to conflicting source sets; ownership remains unknown.",
+                        evidenceFile));
+                    ownership = ProjectSourceRootOwnership.Unknown;
+                }
+                else if (existing.Ownership == ProjectSourceRootOwnership.Unknown)
+                {
+                    ownership = ProjectSourceRootOwnership.Unknown;
+                }
+
+                languages = existing.Languages
+                    .Concat(languages)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                containsJava |= existing.ContainsJavaSources;
+                generated |= existing.IsGenerated;
+                origin = existing.Origin == ProjectSourceRootOrigin.Explicit
+                    || origin == ProjectSourceRootOrigin.Explicit
+                    ? ProjectSourceRootOrigin.Explicit
+                    : existing.Origin == ProjectSourceRootOrigin.GeneratedConvention
+                      || origin == ProjectSourceRootOrigin.GeneratedConvention
+                        ? ProjectSourceRootOrigin.GeneratedConvention
+                        : ProjectSourceRootOrigin.Conventional;
+            }
 
             roots[fullDirectory] = new ProjectSourceRoot
             {
@@ -935,6 +977,7 @@ internal static class MavenProjectModelResolver
                 Origin = origin,
                 IsGenerated = generated,
                 ContainsJavaSources = containsJava,
+                Languages = languages,
                 EvidenceFile = evidenceFile
             };
         }
@@ -943,6 +986,12 @@ internal static class MavenProjectModelResolver
             ProjectSourceRootOwnership.Production, ProjectSourceRootOrigin.Conventional,
             false, projectFile, false);
         AddRoot(Path.Combine(projectDirectory, "src", "test", "java"),
+            ProjectSourceRootOwnership.Test, ProjectSourceRootOrigin.Conventional,
+            false, projectFile, false);
+        AddRoot(Path.Combine(projectDirectory, "src", "main", "kotlin"),
+            ProjectSourceRootOwnership.Production, ProjectSourceRootOrigin.Conventional,
+            false, projectFile, false);
+        AddRoot(Path.Combine(projectDirectory, "src", "test", "kotlin"),
             ProjectSourceRootOwnership.Test, ProjectSourceRootOrigin.Conventional,
             false, projectFile, false);
 
@@ -961,7 +1010,7 @@ internal static class MavenProjectModelResolver
             {
                 diagnostics.Add(Diagnostic(
                     "MavenSourceRootNotStaticallyResolved",
-                    $"The configured {elementName} contains an unresolved property expression.",
+                    "The configured " + elementName + " contains an unresolved property expression.",
                     projectFile));
                 continue;
             }
@@ -976,8 +1025,35 @@ internal static class MavenProjectModelResolver
                 true);
         }
 
+        foreach (var directory in kotlinMainSourceDirectories)
+        {
+            var isConventional = PathsEqual(
+                directory, Path.Combine(projectDirectory, "src", "main", "kotlin"));
+            AddRoot(
+                directory,
+                ProjectSourceRootOwnership.Production,
+                isConventional ? ProjectSourceRootOrigin.Conventional : ProjectSourceRootOrigin.Explicit,
+                directory.Contains("generated", StringComparison.OrdinalIgnoreCase),
+                projectFile,
+                !isConventional);
+        }
+
+        foreach (var directory in kotlinTestSourceDirectories)
+        {
+            var isConventional = PathsEqual(
+                directory, Path.Combine(projectDirectory, "src", "test", "kotlin"));
+            AddRoot(
+                directory,
+                ProjectSourceRootOwnership.Test,
+                isConventional ? ProjectSourceRootOrigin.Conventional : ProjectSourceRootOrigin.Explicit,
+                directory.Contains("generated", StringComparison.OrdinalIgnoreCase),
+                projectFile,
+                !isConventional);
+        }
+
         foreach (var sourceFile in files.Where(file =>
-                     Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)))
+                     Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)))
         {
             var relative = Path.GetRelativePath(projectDirectory, sourceFile)
                 .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -996,9 +1072,9 @@ internal static class MavenProjectModelResolver
                 continue;
 
             var rootLength = Math.Min(relative.Length, targetIndex + 3);
-            var root = Path.Combine(projectDirectory,
+            var generatedRoot = Path.Combine(projectDirectory,
                 Path.Combine(relative.Take(rootLength).ToArray()));
-            AddRoot(root, ownership, ProjectSourceRootOrigin.GeneratedConvention,
+            AddRoot(generatedRoot, ownership, ProjectSourceRootOrigin.GeneratedConvention,
                 true, projectFile, false);
         }
 

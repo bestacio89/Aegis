@@ -923,6 +923,17 @@ internal static class GradleBuildModelResolver
                     line, @"\bjava\s*\.\s*(?:srcDir|srcDirs|setSrcDirs)\b",
                     RegexOptions.CultureInvariant)));
 
+            // Groovy permits java { srcDir file('...') }. Preserve this
+            // established literal form even when nested-block extraction
+            // cannot isolate the inner java block.
+            foreach (Match fileNotation in Regex.Matches(
+                         body,
+                         @"\bsrcDir\s+(?:file|files)\s*\(\s*['""](?<path>[^'""]+)['""]\s*\)",
+                         RegexOptions.CultureInvariant))
+            {
+                statements.Add("srcDir(\"" + fileNotation.Groups["path"].Value + "\")");
+            }
+
             var directories = new HashSet<string>(PathComparer);
             foreach (var line in statements)
             {

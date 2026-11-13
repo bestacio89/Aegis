@@ -932,7 +932,7 @@ internal static class GradleBuildModelResolver
         ICollection<AnalysisDiagnostic> diagnostics)
     {
         var statements = new List<string>();
-        var kotlinBlockMatch = Regex.Match(sourceSetBody, @"\\bkotlin\\s*\\{", RegexOptions.CultureInvariant);
+        var kotlinBlockMatch = Regex.Match(sourceSetBody, @"\bkotlin\s*\{", RegexOptions.CultureInvariant);
         if (kotlinBlockMatch.Success)
         {
             var opening = sourceSetBody.IndexOf('{', kotlinBlockMatch.Index);
@@ -943,14 +943,14 @@ internal static class GradleBuildModelResolver
 
         statements.AddRange(sourceSetBody.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Where(line => Regex.IsMatch(
-                line, @"\\bkotlin\\s*\\.\\s*(?:srcDir|srcDirs|setSrcDirs)\\b",
+                line, @"\bkotlin\s*\.\s*(?:srcDir|srcDirs|setSrcDirs)\b",
                 RegexOptions.CultureInvariant)));
 
         var directories = new HashSet<string>(PathComparer);
         foreach (var line in statements)
         {
             var hasSourceDirectoryDeclaration = Regex.IsMatch(
-                line, @"(?:\\bkotlin\\s*\\.\\s*)?(?:srcDir|srcDirs|setSrcDirs)\\b",
+                line, @"(?:\bkotlin\s*\.\s*)?(?:srcDir|srcDirs|setSrcDirs)\b",
                 RegexOptions.CultureInvariant);
             if (!hasSourceDirectoryDeclaration)
                 continue;
@@ -961,7 +961,7 @@ internal static class GradleBuildModelResolver
                 .ToArray();
             var hasSupportedDeclaration = Regex.IsMatch(
                 line,
-                @"(?:\\bkotlin\\s*\\.\\s*)?(?:srcDir|srcDirs|setSrcDirs)\\s*(?:\\(|=|\\+=|\\s+|$)",
+                @"(?:\bkotlin\s*\.\s*)?(?:srcDir|srcDirs|setSrcDirs)\s*(?:\(|=|\+=|\s+|$)",
                 RegexOptions.CultureInvariant);
 
             if (!hasSupportedDeclaration || quotedValues.Length == 0)
@@ -1030,7 +1030,7 @@ internal static class GradleBuildModelResolver
             {
                 if (escaped)
                     escaped = false;
-                else if (current == '\\')
+                else if (current == '\')
                     escaped = true;
                 else if (current == quote)
                     inString = false;
@@ -1274,7 +1274,7 @@ internal static class GradleBuildModelResolver
             if (inString)
             {
                 if (escaped) escaped = false;
-                else if (current == '\\') escaped = true;
+                else if (current == '\') escaped = true;
                 else if (current == quote) inString = false;
                 continue;
             }
@@ -1336,7 +1336,7 @@ internal static class GradleBuildModelResolver
             {
                 if (escaped)
                     escaped = false;
-                else if (current == '\\')
+                else if (current == '\')
                     escaped = true;
                 else if (current == quote)
                     inString = false;

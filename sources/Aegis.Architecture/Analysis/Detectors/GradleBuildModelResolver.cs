@@ -1441,16 +1441,42 @@ internal static class GradleBuildModelResolver
             var directory = Path.GetFullPath(Path.Combine(
                 modulePath,
                 Path.Combine(relative.Take(rootLength).ToArray())));
-            roots[directory] = new ProjectSourceRoot
+            AddSourceRoot(
+                directory,
+                ownership,
+                ProjectSourceRootOrigin.GeneratedConvention,
+                isGenerated: true,
+                generatedLanguage: "Java");
+        }
+
+        foreach (var sourceFile in DiscoverGeneratedKotlinFiles(modulePath, diagnostics))
+        {
+            if (!TryResolveGeneratedKotlinRoot(
+                    modulePath, sourceFile, out var directory, out var ownership))
             {
-                Directory = directory,
-                Ownership = ownership,
-                Origin = ProjectSourceRootOrigin.GeneratedConvention,
-                IsGenerated = true,
-                ContainsJavaSources = true,
-                Languages = ["Java"],
-                EvidenceFile = buildFile
-            };
+                diagnostics.Add(Diagnostic(
+                    "GradleGeneratedKotlinSourceOwnershipUnknown",
+                    "Generated Kotlin source '" + sourceFile
+                    + "' does not match a supported generated-source layout and remains unclassified.",
+                    sourceFile));
+                continue;
+            }
+
+            if (ownership == ProjectSourceRootOwnership.Unknown)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleGeneratedKotlinSourceOwnershipUnknown",
+                    "Generated Kotlin source '" + sourceFile
+                    + "' is under a generated directory without an identifiable source-set owner.",
+                    sourceFile));
+            }
+
+            AddSourceRoot(
+                directory,
+                ownership,
+                ProjectSourceRootOrigin.GeneratedConvention,
+                isGenerated: true,
+                generatedLanguage: "Kotlin");
         }
 
         return roots.Values
@@ -1462,6 +1488,181 @@ internal static class GradleBuildModelResolver
     /// Inspects only Gradle's generated Java source subtree. These files remain
     /// excluded from repository-wide governed-file analysis and file counts.
     /// </summary>
+    private static IReadOnlyCollection<string> DiscoverGeneratedKotlinFiles(
+        string modulePath,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        const int maximumFiles = 50_000;
+        const int maximumDepth = 64;
+        var generatedDirectories = new[]
+        {
+            Path.Combine(modulePath, "build", "generated", "ksp"),
+            Path.Combine(modulePath, "build", "generated", "source", "kaptKotlin"),
+            Path.Combine(modulePath, "build", "generated", "sources")
+        };
+        var result = new HashSet<string>(PathComparer);
+
+        foreach (var generatedDirectory in generatedDirectories)
+        {
+            if (!Directory.Exists(generatedDirectory))
+                continue;
+
+            var root = Path.GetFullPath(generatedDirectory);
+            try
+            {
+                if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+                    continue;
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleGeneratedKotlinSourceScanFailed",
+                    "Generated Kotlin source directory '" + root + "' could not be inspected: " + exception.Message,
+                    root));
+                continue;
+            }
+
+            var pending = new Stack<(string Directory, int Depth)>();
+            pending.Push((root, 0));
+            while (pending.Count > 0)
+            {
+                var (currentDirectory, depth) = pending.Pop();
+                if (depth > maximumDepth)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleGeneratedKotlinSourceDepthLimitReached",
+                        "Generated Kotlin source discovery reached its maximum directory depth.",
+                        currentDirectory));
+                    continue;
+                }
+
+                try
+                {
+                    foreach (var file in Directory.EnumerateFiles(currentDirectory, "*.kt", SearchOption.TopDirectoryOnly))
+                    {
+                        var attributes = File.GetAttributes(file);
+                        if ((attributes & FileAttributes.ReparsePoint) != 0)
+                            continue;
+
+                        var fullPath = Path.GetFullPath(file);
+                        if (!IsSameOrDescendantPath(fullPath, root))
+                            continue;
+
+                        result.Add(fullPath);
+                        if (result.Count >= maximumFiles)
+                        {
+                            diagnostics.Add(Diagnostic(
+                                "GradleGeneratedKotlinSourceLimitReached",
+                                "Generated Kotlin source discovery reached its 50,000-file safety limit.",
+                                root));
+                            return result.OrderBy(path => path, PathComparer).ToArray();
+                        }
+                    }
+
+                    foreach (var directory in Directory.EnumerateDirectories(currentDirectory, "*", SearchOption.TopDirectoryOnly))
+                    {
+                        if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                            continue;
+
+                        pending.Push((directory, depth + 1));
+                    }
+                }
+                catch (Exception exception) when (
+                    exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleGeneratedKotlinSourceScanFailed",
+                        "Generated Kotlin source directory '" + currentDirectory
+                        + "' could not be enumerated: " + exception.Message,
+                        currentDirectory));
+                }
+            }
+        }
+
+        return result.OrderBy(path => path, PathComparer).ToArray();
+    }
+
+    private static bool TryResolveGeneratedKotlinRoot(
+        string modulePath,
+        string sourceFile,
+        out string root,
+        out ProjectSourceRootOwnership ownership)
+    {
+        var relative = Path.GetRelativePath(modulePath, sourceFile)
+            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        root = string.Empty;
+        ownership = ProjectSourceRootOwnership.Unknown;
+
+        if (relative.Length < 4
+            || !relative[0].Equals("build", StringComparison.OrdinalIgnoreCase)
+            || !relative[1].Equals("generated", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var sourceSetIndex = -1;
+        var generatorRootLength = 3;
+        if (relative[2].Equals("ksp", StringComparison.OrdinalIgnoreCase))
+        {
+            sourceSetIndex = 3;
+        }
+        else if (relative.Length >= 5
+                 && relative[2].Equals("source", StringComparison.OrdinalIgnoreCase)
+                 && relative[3].Equals("kaptKotlin", StringComparison.OrdinalIgnoreCase))
+        {
+            sourceSetIndex = 4;
+            generatorRootLength = 4;
+        }
+        else if (relative[2].Equals("sources", StringComparison.OrdinalIgnoreCase))
+        {
+            generatorRootLength = 3;
+            foreach (var candidateIndex in new[] { 5, 4 })
+            {
+                if (candidateIndex < relative.Length
+                    && IsKnownGeneratedSourceSet(relative[candidateIndex]))
+                {
+                    sourceSetIndex = candidateIndex;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            return false;
+        }
+
+        if (sourceSetIndex >= 0 && sourceSetIndex < relative.Length
+            && IsKnownGeneratedSourceSet(relative[sourceSetIndex]))
+        {
+            ownership = relative[sourceSetIndex].Equals("main", StringComparison.OrdinalIgnoreCase)
+                ? ProjectSourceRootOwnership.Production
+                : ProjectSourceRootOwnership.Test;
+            var rootLength = sourceSetIndex + 1;
+            if (rootLength < relative.Length
+                && relative[rootLength].Equals("kotlin", StringComparison.OrdinalIgnoreCase))
+            {
+                rootLength++;
+            }
+
+            root = Path.GetFullPath(Path.Combine(
+                modulePath,
+                Path.Combine(relative.Take(rootLength).ToArray())));
+            return IsSameOrDescendantPath(root, modulePath);
+        }
+
+        root = Path.GetFullPath(Path.Combine(
+            modulePath,
+            Path.Combine(relative.Take(Math.Min(relative.Length, generatorRootLength)).ToArray())));
+        return IsSameOrDescendantPath(root, modulePath);
+    }
+
+    private static bool IsKnownGeneratedSourceSet(string sourceSetName) =>
+        sourceSetName.Equals("main", StringComparison.OrdinalIgnoreCase)
+        || sourceSetName.Equals("test", StringComparison.OrdinalIgnoreCase)
+        || sourceSetName.Equals("integrationTest", StringComparison.OrdinalIgnoreCase)
+        || sourceSetName.Equals("testFixtures", StringComparison.OrdinalIgnoreCase);
+
     private static IReadOnlyCollection<string> DiscoverGeneratedJavaFiles(
         string modulePath,
         ICollection<AnalysisDiagnostic> diagnostics)

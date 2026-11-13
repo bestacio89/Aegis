@@ -178,6 +178,12 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             var architecturalComponents = _context?.ArchitecturalComponents
                 .Where(component => component.ProductionSymbolCount > 0)
                 .ToArray() ?? [];
+            var codeContainersById = codeContainers
+                .GroupBy(component => component.Id, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var architecturalComponentsById = architecturalComponents
+                .GroupBy(component => component.Id, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
             var projectionOptions = new List<string> { "Build modules" };
             if (codeContainers.Count > 0)
@@ -232,8 +238,8 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     dependency.TargetComponentId,
                     dependency.SourceComponentName,
                     dependency.TargetComponentName,
-                    _activeNodes.FirstOrDefault(node => node.Id == dependency.SourceComponentId)?.Group ?? "Unclassified",
-                    _activeNodes.FirstOrDefault(node => node.Id == dependency.TargetComponentId)?.Group ?? "Unclassified",
+                    architecturalComponentsById.GetValueOrDefault(dependency.SourceComponentId)?.Role ?? "Unclassified",
+                    architecturalComponentsById.GetValueOrDefault(dependency.TargetComponentId)?.Role ?? "Unclassified",
                     dependency.RelationshipKinds.Count > 0
                         ? string.Join(", ", dependency.RelationshipKinds.Select(kind => kind.ToString()).Distinct(StringComparer.OrdinalIgnoreCase))
                         : "Semantic dependency",
@@ -244,8 +250,8 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     dependency.TargetComponentId,
                     dependency.SourceComponentName,
                     dependency.TargetComponentName,
-                    _context?.ArchitectureComponents.FirstOrDefault(component => component.Id == dependency.SourceComponentId)?.ComponentKind ?? "Unclassified",
-                    _context?.ArchitectureComponents.FirstOrDefault(component => component.Id == dependency.TargetComponentId)?.ComponentKind ?? "Unclassified",
+                    codeContainersById.GetValueOrDefault(dependency.SourceComponentId)?.ComponentKind ?? "Unclassified",
+                    codeContainersById.GetValueOrDefault(dependency.TargetComponentId)?.ComponentKind ?? "Unclassified",
                     dependency.DependencyType,
                     string.Join(", ", dependency.EvidenceFiles),
                     dependency.RelationshipCount)).ToArray(),

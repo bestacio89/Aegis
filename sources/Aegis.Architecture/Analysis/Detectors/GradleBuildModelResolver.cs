@@ -14,6 +14,10 @@ internal static class GradleBuildModelResolver
         @"^\s*id\s*(?:\(\s*['""](?<kotlin>[^'""]+)['""]\s*\)|['""](?<groovy>[^'""]+)['""])\s*(?:version\s*['""](?<version>[^'""]+)['""])?",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex KotlinDslPluginDeclaration = new(
+        @"^\s*kotlin\s*\(\s*['""](?<plugin>[^'""]+)['""]\s*\)\s*(?:version\s*['""](?<version>[^'""]+)['""])?",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex PluginAlias = new(
         @"^\s*alias\s*\(\s*libs\.plugins\.(?<alias>[A-Za-z0-9_.-]+)\s*\)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -191,22 +195,46 @@ internal static class GradleBuildModelResolver
                 continue;
             }
 
-            var match = PluginDeclaration.Match(line);
-            if (match.Success)
+            var kotlinDslMatch = KotlinDslPluginDeclaration.Match(line);
+            if (kotlinDslMatch.Success)
             {
-                var id = match.Groups["kotlin"].Success
-                    ? match.Groups["kotlin"].Value
-                    : match.Groups["groovy"].Value;
+                var version = kotlinDslMatch.Groups["version"].Success
+                    ? kotlinDslMatch.Groups["version"].Value
+                    : null;
+                if (line.Contains("version", StringComparison.Ordinal)
+                    && string.IsNullOrWhiteSpace(version))
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleKotlinPluginVersionNotStaticallyResolved",
+                        "The Kotlin Gradle plugin version uses a dynamic or unsupported expression.",
+                        buildFile));
+                }
+
                 result.Add(new GradleBuildModel.Plugin(
-                    id,
-                    match.Groups["version"].Success ? match.Groups["version"].Value : null,
+                    "org.jetbrains.kotlin." + kotlinDslMatch.Groups["plugin"].Value,
+                    version,
                     true));
             }
-            else if (line.Contains("id(", StringComparison.Ordinal)
-                     || line.Contains("alias(", StringComparison.Ordinal))
+            else
             {
-                diagnostics.Add(Diagnostic("GradlePluginDeclarationNotStatic",
-                    "A plugin declaration uses an unsupported or dynamic expression.", buildFile));
+                var match = PluginDeclaration.Match(line);
+                if (match.Success)
+                {
+                    var id = match.Groups["kotlin"].Success
+                        ? match.Groups["kotlin"].Value
+                        : match.Groups["groovy"].Value;
+                    result.Add(new GradleBuildModel.Plugin(
+                        id,
+                        match.Groups["version"].Success ? match.Groups["version"].Value : null,
+                        true));
+                }
+                else if (line.Contains("id(", StringComparison.Ordinal)
+                         || line.Contains("alias(", StringComparison.Ordinal)
+                         || line.Contains("kotlin(", StringComparison.Ordinal))
+                {
+                    diagnostics.Add(Diagnostic("GradlePluginDeclarationNotStatic",
+                        "A plugin declaration uses an unsupported or dynamic expression.", buildFile));
+                }
             }
         }
 

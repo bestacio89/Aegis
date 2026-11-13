@@ -225,7 +225,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                 _ => buildModules
                     .Where(module => !string.IsNullOrWhiteSpace(module.Path))
                     .Select(module => new GraphNode(
-                        module.Path,
+                        Path.GetFullPath(module.Path),
                         module.Name,
                         string.IsNullOrWhiteSpace(module.Type) ? module.ProjectKind : module.Type))
                     .ToArray()

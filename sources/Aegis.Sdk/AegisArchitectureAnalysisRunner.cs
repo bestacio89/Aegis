@@ -185,6 +185,7 @@ public sealed class AegisArchitectureAnalysisRunner
                 Report(progress, 7, "Semantic analysis", "Analysing Java project modules");
                 await _javaSemanticAnalysis.AnalyzeAsync(context, token)
                     .ConfigureAwait(false);
+                SemanticAnalysisPipeline.ProjectArchitectureComponents(context);
             }
 
             token.ThrowIfCancellationRequested();

@@ -692,9 +692,24 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         private boolean isTestPath(Path file) {
             Path normalized = file.toAbsolutePath().normalize();
             if (testSourceRoots.stream().anyMatch(normalized::startsWith)) return true;
-            String value = file.toString().replace('\\', '/').toLowerCase(Locale.ROOT);
-            return value.contains("/src/test/") || value.contains("/src/it/")
-                || value.contains("/test/") || value.contains("/tests/");
+            if (!normalized.startsWith(projectRoot)) return false;
+
+            Path relative = projectRoot.relativize(normalized);
+            if (relative.getNameCount() >= 2
+                && relative.getName(0).toString().equalsIgnoreCase("src")) {
+                String sourceSet = relative.getName(1).toString();
+                if (sourceSet.equalsIgnoreCase("test") || sourceSet.equalsIgnoreCase("it")) {
+                    return true;
+                }
+            }
+
+            if (relative.getNameCount() > 0) {
+                String rootDirectory = relative.getName(0).toString();
+                return rootDirectory.equalsIgnoreCase("test")
+                    || rootDirectory.equalsIgnoreCase("tests");
+            }
+
+            return false;
         }
 
         private boolean isGeneratedPath(Path file) {

@@ -88,6 +88,10 @@
                         Text="{Binding ProjectionDescription}"
                         Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
                         Margin="0,6,12,0" TextWrapping="Wrap" MaxWidth="900" />
+                    <TextBlock
+                        Text="{Binding ClassificationCoverageSummary}"
+                        Foreground="{StaticResource Brush.TextMuted}" FontSize="10"
+                        Margin="0,5,12,0" TextWrapping="Wrap" MaxWidth="900" />
                 </StackPanel>
                 <Border Grid.Column="1" Background="{StaticResource Brush.PanelElevated}"
                         BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"

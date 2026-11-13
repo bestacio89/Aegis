@@ -1224,6 +1224,7 @@ internal static class GradleBuildModelResolver
                 Origin = ProjectSourceRootOrigin.GeneratedConvention,
                 IsGenerated = true,
                 ContainsJavaSources = true,
+                Languages = ["Java"],
                 EvidenceFile = buildFile
             };
         }

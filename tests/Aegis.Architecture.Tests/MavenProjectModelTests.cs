@@ -236,8 +236,8 @@ public sealed class MavenProjectModelTests
             Assert.Equal("2.3", model.KotlinLanguageVersion);
             Assert.Equal("2.2", model.KotlinApiVersion);
             Assert.Equal("17", model.KotlinJvmTarget);
-            Assert.Contains(model.KotlinMainSourceDirectoryExpressions, "src/parent-config-kotlin");
-            Assert.Contains(model.KotlinTestSourceDirectoryExpressions, "src/parent-config-test-kotlin");
+            Assert.Contains("src/parent-config-kotlin", model.KotlinMainSourceDirectoryExpressions);
+            Assert.Contains("src/parent-config-test-kotlin", model.KotlinTestSourceDirectoryExpressions);
             Assert.Equal(
                 ProjectSourceRootOwnership.Production,
                 Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == mainRoot).Ownership);

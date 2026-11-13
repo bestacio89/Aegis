@@ -604,6 +604,13 @@ class KotlinSemanticCollector(
     private fun addExternalPropertyIfNeeded(id: String, declaration: IrProperty) {
         if (symbols.containsKey(id)) return
 
+        if (declaration.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) {
+            declaration.backingField?.let { field ->
+                addExternalFieldIfNeeded(id, field)
+                return
+            }
+        }
+
         val containingClass = declaration.parent as? IrClass
         val containingSymbolId = containingClass?.let(::classId)
         if (containingClass != null && containingSymbolId != null) {
@@ -674,7 +681,8 @@ class KotlinSemanticCollector(
         symbol.addProperty("containerKind", "Package")
         symbol.addProperty(
             "language",
-            if (declaration.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) "Java" else "Kotlin"
+            if (declaration.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
+                || containingClass?.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) "Java" else "Kotlin"
         )
         symbol.addProperty("projectPath", projectPath)
         symbol.add("filePath", com.google.gson.JsonNull.INSTANCE)
@@ -1011,6 +1019,10 @@ class KotlinSemanticCollector(
         declaration: IrProperty,
         containingSymbolId: String? = null
     ): String {
+        if (declaration.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) {
+            declaration.backingField?.let { return fieldId(it) }
+        }
+
         val accessor = declaration.getter ?: declaration.setter
         val receiver = accessor?.parameters
             ?.firstOrNull { it.kind == IrParameterKind.ExtensionReceiver }

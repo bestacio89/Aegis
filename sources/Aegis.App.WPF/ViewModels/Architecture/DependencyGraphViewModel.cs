@@ -158,6 +158,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
                 .ToArray() ?? [];
 
+            var buildModules = _context?.ProductionModules ?? [];
             var codeContainers = _context?.ProductionComponents ?? [];
             var classifiedCodeContainerIds = (_context?.ArchitecturalComponentMemberships ?? [])
                 .Where(membership =>
@@ -215,7 +216,13 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                         component.QualifiedName,
                         component.ComponentKind))
                     .ToArray(),
-                _ => []
+                _ => buildModules
+                    .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+                    .Select(module => new GraphNode(
+                        module.Path,
+                        module.Name,
+                        string.IsNullOrWhiteSpace(module.Type) ? module.ProjectKind : module.Type))
+                    .ToArray()
             };
 
             _activeRelations = GraphProjection switch

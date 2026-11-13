@@ -172,9 +172,8 @@ public sealed class MavenProjectModelTests
         var root = CreateTemporaryDirectory();
         try
         {
-            var parentDirectory = Path.Combine(root, "parent");
+            var parentDirectory = root;
             var childDirectory = Path.Combine(root, "child");
-            Directory.CreateDirectory(parentDirectory);
             Directory.CreateDirectory(childDirectory);
 
             File.WriteAllText(Path.Combine(parentDirectory, "pom.xml"), """
@@ -184,7 +183,7 @@ public sealed class MavenProjectModelTests
                   <artifactId>kotlin-parent</artifactId>
                   <version>1.0.0</version>
                   <packaging>pom</packaging>
-                  <modules><module>../child</module></modules>
+                  <modules><module>child</module></modules>
                   <properties><kotlin.version>2.4.21</kotlin.version></properties>
                   <build>
                     <plugins>
@@ -216,7 +215,7 @@ public sealed class MavenProjectModelTests
                     <groupId>org.example</groupId>
                     <artifactId>kotlin-parent</artifactId>
                     <version>1.0.0</version>
-                    <relativePath>../parent/pom.xml</relativePath>
+                    <relativePath>../pom.xml</relativePath>
                   </parent>
                   <artifactId>kotlin-child</artifactId>
                 </project>

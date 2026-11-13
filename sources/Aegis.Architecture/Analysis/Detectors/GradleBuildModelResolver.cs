@@ -149,6 +149,46 @@ internal static class GradleBuildModelResolver
 
             var testTasks = ParseTestTasks(source, sourceSets);
             var sourceRoots = DiscoverSourceRoots(module.Path, files, sourceSets, buildFile, diagnostics);
+            var kotlinJvmPlugins = plugins
+                .Where(plugin => plugin.Id is "org.jetbrains.kotlin.jvm" or "org.jetbrains.kotlin.android")
+                .ToArray();
+            var kotlinPluginVersions = kotlinJvmPlugins
+                .Select(plugin => plugin.Version)
+                .Where(version => !string.IsNullOrWhiteSpace(version))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (kotlinJvmPlugins.Length > 0 && kotlinPluginVersions.Length == 0)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleKotlinPluginVersionNotStaticallyResolved",
+                    "The Kotlin JVM plugin is present but its compiler version could not be resolved statically.",
+                    buildFile));
+            }
+            else if (kotlinPluginVersions.Length > 1)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleKotlinPluginVersionConflict",
+                    "The Kotlin JVM plugins declare conflicting compiler versions.",
+                    buildFile));
+            }
+
+            if (plugins.Any(plugin => plugin.Id == "org.jetbrains.kotlin.multiplatform"))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleKotlinMultiplatformTargetNotStaticallyResolved",
+                    "Kotlin Multiplatform targets are not treated as JVM source roots until target-specific source-set resolution is available.",
+                    buildFile));
+            }
+
+            foreach (var plugin in plugins.Where(plugin =>
+                         plugin.Id.StartsWith("org.jetbrains.kotlin.plugin.", StringComparison.Ordinal)
+                         || plugin.Id is "org.jetbrains.kotlin.kapt" or "com.google.devtools.ksp"))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleKotlinCompilerPluginNotExecuted",
+                    $"Kotlin compiler plugin '{plugin.Id}' is not executed by Aegis. Plugin-generated or transformed semantics may be incomplete.",
+                    buildFile));
+            }
 
             var model = new GradleBuildModel
             {
@@ -162,6 +202,7 @@ internal static class GradleBuildModelResolver
                 TestTasks = testTasks,
                 SourceRoots = sourceRoots,
                 JavaToolchainVersion = toolchain,
+                KotlinPluginVersion = kotlinPluginVersions.Length == 1 ? kotlinPluginVersions[0] : null,
                 Diagnostics = diagnostics,
                 IsComplete = diagnostics.Count == 0
             };

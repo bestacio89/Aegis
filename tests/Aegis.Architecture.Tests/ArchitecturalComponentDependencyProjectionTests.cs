@@ -125,7 +125,8 @@ public sealed class ArchitecturalComponentDependencyProjectionTests
 
         SemanticArchitectureComponentDetector.Analyze(context);
 
-        var edge = Assert.Single(context.ArchitectureComponentDependencies);
+        var edge = Assert.Single(context.ArchitectureComponentInternalDependencies);
+        Assert.Empty(context.ArchitectureComponentDependencies);
         Assert.True(edge.IsInternal);
         Assert.Equal(edge.SourceComponentId, edge.TargetComponentId);
         Assert.Equal("service-calls-validator",

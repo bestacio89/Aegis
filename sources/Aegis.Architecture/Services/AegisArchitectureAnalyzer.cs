@@ -249,6 +249,9 @@ public sealed class AegisArchitectureAnalyzer
                 ["ArchitectureClassificationDiagnosticCount"] =
                     context.ArchitectureClassificationDiagnostics.Count,
 
+                ["CodeContainerInternalDependencyCount"] =
+                    context.ArchitectureComponentInternalDependencies.Count,
+
                 ["ArchitecturalComponentDependencyCount"] =
                     context.ArchitecturalComponentDependencies.Count,
 

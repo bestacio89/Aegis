@@ -38,6 +38,7 @@ internal static class SemanticArchitectureComponentDetector
 
         context.ArchitectureComponentDependencies.RemoveAll(dependency =>
             dependency.DependencyType.Equals(DependencyType, StringComparison.OrdinalIgnoreCase));
+        context.ArchitectureComponentInternalDependencies.Clear();
 
         // Semantic runs are already scoped to a build module. Their ProjectPath
         // is the authoritative owner identity; the discovered module inventory
@@ -221,11 +222,17 @@ internal static class SemanticArchitectureComponentDetector
             }
         }
 
+        var projectedEdges = edges
+            .Select(pair => pair.Value.ToContext(pair.Key.Scope))
+            .OrderBy(edge => edge.SourceComponentName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(edge => edge.TargetComponentName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(edge => edge.Scope, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         context.ArchitectureComponentDependencies.AddRange(
-            edges.Select(pair => pair.Value.ToContext(pair.Key.Scope))
-                .OrderBy(edge => edge.SourceComponentName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(edge => edge.TargetComponentName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(edge => edge.Scope, StringComparer.OrdinalIgnoreCase));
+            projectedEdges.Where(edge => !edge.IsInternal));
+        context.ArchitectureComponentInternalDependencies.AddRange(
+            projectedEdges.Where(edge => edge.IsInternal));
 
         var sourceSymbolCount = semanticRuns.Sum(run => run.Symbols.Count(IsProjectSourceSymbol));
         var componentSymbolCount = semanticRuns.Sum(run => run.Symbols.Count(symbol =>

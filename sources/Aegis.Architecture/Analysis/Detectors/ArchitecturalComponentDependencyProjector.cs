@@ -15,7 +15,11 @@ internal static class ArchitecturalComponentDependencyProjector
         context.ArchitecturalComponentDependencies.Clear();
         context.ArchitecturalDependencyProjectionDiagnostics.Clear();
 
-        if (context.ArchitectureComponentDependencies.Count == 0)
+        var codeContainerDependencies = context.ArchitectureComponentDependencies
+            .Concat(context.ArchitectureComponentInternalDependencies)
+            .ToArray();
+
+        if (codeContainerDependencies.Length == 0)
             return;
 
         var components = context.ArchitecturalComponents
@@ -34,7 +38,7 @@ internal static class ArchitecturalComponentDependencyProjector
 
         var aggregates = new Dictionary<DependencyKey, DependencyAccumulator>();
 
-        foreach (var dependency in context.ArchitectureComponentDependencies
+        foreach (var dependency in codeContainerDependencies
                      .OrderBy(edge => edge.SourceComponentId, StringComparer.Ordinal)
                      .ThenBy(edge => edge.TargetComponentId, StringComparer.Ordinal)
                      .ThenBy(edge => edge.Scope, StringComparer.Ordinal))

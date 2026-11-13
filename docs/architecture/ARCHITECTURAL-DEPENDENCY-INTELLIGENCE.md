@@ -44,7 +44,7 @@ Current language semantics are intentionally different:
 - TypeScript/JavaScript generally use modules.
 - Other providers can supply their own container kind.
 
-The detector preserves production and test scopes separately and now retains relationships internal to the same language-level code container as explicit self-edges. Each edge carries exact semantic run/relationship references. This ensures the higher-level projection can preserve both code-container-internal relationships and dependencies that collapse between different code containers inside one logical architectural component.
+The detector preserves production and test scopes separately and now retains relationships internal to the same language-level code container in a separate internal-dependency collection, leaving the existing inter-container graph free of self-loop clutter. Each edge carries exact semantic run/relationship references. This ensures the higher-level projection can preserve both code-container-internal relationships and dependencies that collapse between different code containers inside one logical architectural component.
 
 ### WPF graph and ledger
 
@@ -130,7 +130,7 @@ The first release can introduce explicit mappings and observed graph aggregation
 - Keep build-module edges as a separate evidence kind/filter. Do not silently merge build declarations, compiler-resolved relationships and runtime integrations into one undifferentiated edge count.
 - Preserve source relationship IDs so every aggregate architectural edge can be traced back to exact semantic evidence.
 - Preserve production and test scope separately.
-- Preserve the original code-container edges under each logical aggregate for drill-down; preserve all source relationship references and counts.
+- Preserve the original code-container edges under each logical aggregate for drill-down; preserve all source relationship references and counts. Keep same-container dependencies in a separate evidence collection so existing graph consumers retain their inter-container semantics.
 - Inter-component edges appear as ordinary logical edges. Relationships that collapse inside one logical component remain as explicit internal logical edges with `IsInternal = true`; they are not deleted.
 - Code-container dependencies whose endpoints are unclassified or have ambiguous memberships are excluded from the logical graph with coverage-affecting projection diagnostics.
 - Cycles must be evaluated independently at code-container and logical architecture levels.

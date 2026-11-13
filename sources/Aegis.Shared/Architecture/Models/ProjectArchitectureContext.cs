@@ -180,6 +180,13 @@ public sealed class ProjectArchitectureContext
     public List<ArchitectureComponentDependencyContext> ArchitectureComponentDependencies { get; set; } = [];
 
     /// <summary>
+    /// Semantic relationships whose source and target are within the same
+    /// language-level code container. Kept separate from the inter-container
+    /// graph so existing graph consumers do not gain self-loop edges.
+    /// </summary>
+    public List<ArchitectureComponentDependencyContext> ArchitectureComponentInternalDependencies { get; set; } = [];
+
+    /// <summary>
     /// Logical architectural components classified from language-level code containers.
     /// This projection is additive and does not replace the existing code-container model.
     /// </summary>
@@ -474,6 +481,7 @@ public sealed class ProjectArchitectureContext
             ProductionArchitectureComponentCount = ProductionComponents.Count,
             TestArchitectureComponentCount = TestComponents.Count,
             ArchitectureComponentDependencyCount = ArchitectureComponentDependencies.Count,
+            ArchitectureComponentInternalDependencyCount = ArchitectureComponentInternalDependencies.Count,
             ProductionComponentDependencyCount = ProductionComponentDependencies.Count,
             TestComponentDependencyCount = TestComponentDependencies.Count,
             ArchitecturalComponentCount = ArchitecturalComponents.Count,

@@ -166,25 +166,31 @@ internal static class GradleBuildModelResolver
             var testTasks = ParseTestTasks(source, sourceSets);
             var sourceRoots = DiscoverSourceRoots(module.Path, files, sourceSets, buildFile, diagnostics);
             var kotlinJvmPlugins = plugins
-                .Where(plugin => plugin.Id is "org.jetbrains.kotlin.jvm" or "org.jetbrains.kotlin.android")
+                .Where(plugin => plugin.Id == "org.jetbrains.kotlin.jvm")
                 .ToArray();
-            var kotlinPluginVersions = kotlinJvmPlugins
+            var kotlinAndroidPlugins = plugins
+                .Where(plugin => plugin.Id == "org.jetbrains.kotlin.android")
+                .ToArray();
+            var kotlinCompilerPlugins = kotlinJvmPlugins
+                .Concat(kotlinAndroidPlugins)
+                .ToArray();
+            var kotlinPluginVersions = kotlinCompilerPlugins
                 .Select(plugin => plugin.Version)
                 .Where(version => !string.IsNullOrWhiteSpace(version))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
-            if (kotlinJvmPlugins.Length > 0 && kotlinPluginVersions.Length == 0)
+            if (kotlinCompilerPlugins.Length > 0 && kotlinPluginVersions.Length == 0)
             {
                 diagnostics.Add(Diagnostic(
                     "GradleKotlinPluginVersionNotStaticallyResolved",
-                    "The Kotlin JVM plugin is present but its compiler version could not be resolved statically.",
+                    "The Kotlin plugin is present but its compiler version could not be resolved statically.",
                     buildFile));
             }
             else if (kotlinPluginVersions.Length > 1)
             {
                 diagnostics.Add(Diagnostic(
                     "GradleKotlinPluginVersionConflict",
-                    "The Kotlin JVM plugins declare conflicting compiler versions.",
+                    "The Kotlin plugins declare conflicting compiler versions.",
                     buildFile));
             }
 
@@ -195,12 +201,19 @@ internal static class GradleBuildModelResolver
                     "Kotlin Multiplatform targets are not treated as JVM source roots until target-specific source-set resolution is available.",
                     buildFile));
             }
+            else if (kotlinAndroidPlugins.Length > 0)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleKotlinAndroidTargetNotSupported",
+                    "Android Kotlin source analysis is not enabled until Android variants, SDK classpaths and source-set ownership are modelled.",
+                    buildFile));
+            }
             else if (sourceRoots.Any(sourceRoot => sourceRoot.ContainsKotlinSources)
                      && kotlinJvmPlugins.Length == 0)
             {
                 diagnostics.Add(Diagnostic(
                     "GradleKotlinJvmPluginNotDetected",
-                    "Kotlin source files were discovered, but a statically resolved Kotlin JVM or Android plugin was not found.",
+                    "Kotlin source files were discovered, but a statically resolved Kotlin JVM plugin was not found.",
                     buildFile));
             }
 

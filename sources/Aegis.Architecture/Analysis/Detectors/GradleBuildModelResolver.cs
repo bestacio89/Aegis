@@ -928,7 +928,17 @@ internal static class GradleBuildModelResolver
                 var javaOpening = body.IndexOf('{', javaBlockMatch.Index);
                 var javaBody = ExtractBlockAt(body, javaOpening);
                 if (javaBody is not null)
+                {
                     statements.AddRange(javaBody.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+                }
+                else
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleCustomSourceSetNotStaticallyResolved",
+                        "Java source directories for source set '" + name
+                        + "' use a nested block that could not be isolated safely.",
+                        buildFile));
+                }
             }
 
             statements.AddRange(body.Split('\n', StringSplitOptions.RemoveEmptyEntries)
@@ -936,12 +946,13 @@ internal static class GradleBuildModelResolver
                     line, @"\bjava\s*\.\s*(?:srcDir|srcDirs|setSrcDirs)\b",
                     RegexOptions.CultureInvariant)));
 
-            // Groovy permits java { srcDir file('...') }. Preserve this
-            // established literal form even when nested-block extraction
-            // cannot isolate the inner java block.
+            // Only parse Groovy file(...) notation from statements already
+            // identified as Java-owned. Scanning the complete source-set body
+            // would also capture nested kotlin/resources srcDir declarations.
+            var javaStatements = string.Join('\n', statements);
             foreach (Match fileNotation in Regex.Matches(
-                         body,
-                         @"\bsrcDir\s+(?:file|files)\s*\(\s*['""](?<path>[^'""]+)['""]\s*\)",
+                         javaStatements,
+                         @"(?:\bjava\s*\.\s*)?srcDir\s+(?:file|files)\s*\(\s*['""](?<path>[^'""]+)['""]\s*\)",
                          RegexOptions.CultureInvariant))
             {
                 statements.Add("srcDir(\"" + fileNotation.Groups["path"].Value + "\")");

@@ -282,6 +282,113 @@ public sealed class GradleBuildModelTests
     }
 
     [Fact]
+    public void Detect_keeps_groovy_kotlin_and_java_file_source_directories_separate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleGroovyKotlin_{Guid.NewGuid():N}");
+        var mainKotlinRoot = Path.Combine(root, "src", "main", "customKotlin");
+        var testKotlinRoot = Path.Combine(root, "src", "test", "customKotlin");
+        var mainJavaRoot = Path.Combine(root, "src", "main", "customJava");
+        var testJavaRoot = Path.Combine(root, "src", "test", "customJava");
+        var mainResourcesRoot = Path.Combine(root, "src", "main", "resources");
+        var testResourcesRoot = Path.Combine(root, "src", "test", "resources");
+
+        foreach (var directory in new[]
+        {
+            Path.Combine(mainKotlinRoot, "sample"),
+            Path.Combine(testKotlinRoot, "sample"),
+            Path.Combine(mainJavaRoot, "sample"),
+            Path.Combine(testJavaRoot, "sample"),
+            mainResourcesRoot,
+            testResourcesRoot
+        })
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle"),
+                "rootProject.name = 'groovy-kotlin-sample'");
+            File.WriteAllText(Path.Combine(root, "build.gradle"), """
+                plugins {
+                    id 'org.jetbrains.kotlin.jvm' version '2.4.21'
+                }
+                sourceSets {
+                    main {
+                        java {
+                            srcDir file('src/main/customJava')
+                        }
+                        kotlin {
+                            srcDir file('src/main/customKotlin')
+                        }
+                        resources {
+                            srcDir file('src/main/resources')
+                        }
+                    }
+                    test {
+                        java {
+                            srcDir file('src/test/customJava')
+                        }
+                        kotlin {
+                            srcDir file('src/test/customKotlin')
+                        }
+                        resources {
+                            srcDir file('src/test/resources')
+                        }
+                    }
+                }
+                """);
+            File.WriteAllText(Path.Combine(mainKotlinRoot, "sample", "ProductionType.kt"),
+                "package sample\nclass ProductionType");
+            File.WriteAllText(Path.Combine(testKotlinRoot, "sample", "ProductionTypeTest.kt"),
+                "package sample\nclass ProductionTypeTest");
+            File.WriteAllText(Path.Combine(mainJavaRoot, "sample", "JavaType.java"),
+                "package sample; public class JavaType {}");
+            File.WriteAllText(Path.Combine(testJavaRoot, "sample", "JavaTypeTest.java"),
+                "package sample; public class JavaTypeTest {}");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(
+                module.GradleBuildModel);
+            var mainSourceSet = Assert.Single(model.SourceSets, sourceSet => sourceSet.Name == "main");
+            var testSourceSet = Assert.Single(model.SourceSets, sourceSet => sourceSet.Name == "test");
+
+            Assert.Contains(mainKotlinRoot, mainSourceSet.KotlinSourceDirectories);
+            Assert.DoesNotContain(mainKotlinRoot, mainSourceSet.JavaSourceDirectories);
+            Assert.Contains(testKotlinRoot, testSourceSet.KotlinSourceDirectories);
+            Assert.DoesNotContain(testKotlinRoot, testSourceSet.JavaSourceDirectories);
+
+            Assert.Contains(mainJavaRoot, mainSourceSet.JavaSourceDirectories);
+            Assert.DoesNotContain(mainJavaRoot, mainSourceSet.KotlinSourceDirectories);
+            Assert.Contains(testJavaRoot, testSourceSet.JavaSourceDirectories);
+            Assert.DoesNotContain(testJavaRoot, testSourceSet.KotlinSourceDirectories);
+
+            Assert.DoesNotContain(model.SourceSets, sourceSet => sourceSet.Name == "resources");
+            Assert.DoesNotContain(model.SourceRoots,
+                sourceRoot => sourceRoot.Directory == mainResourcesRoot || sourceRoot.Directory == testResourcesRoot);
+
+            var productionKotlinRoot = Assert.Single(model.SourceRoots,
+                sourceRoot => sourceRoot.Directory == mainKotlinRoot);
+            Assert.True(productionKotlinRoot.ContainsKotlinSources);
+            Assert.False(productionKotlinRoot.ContainsJavaSources);
+            Assert.Equal(ProjectSourceRootOwnership.Production, productionKotlinRoot.Ownership);
+
+            var testKotlinSourceRoot = Assert.Single(model.SourceRoots,
+                sourceRoot => sourceRoot.Directory == testKotlinRoot);
+            Assert.True(testKotlinSourceRoot.ContainsKotlinSources);
+            Assert.False(testKotlinSourceRoot.ContainsJavaSources);
+            Assert.Equal(ProjectSourceRootOwnership.Test, testKotlinSourceRoot.Ownership);
+
+            Assert.True(model.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_does_not_claim_android_kotlin_as_jvm_semantic_support()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisGradleAndroidKotlin_{Guid.NewGuid():N}");

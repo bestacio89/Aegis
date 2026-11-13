@@ -314,6 +314,8 @@ internal static class SemanticArchitectureComponentDetector
         private readonly HashSet<string> _relationshipIds = new(StringComparer.Ordinal);
         private readonly HashSet<SemanticRelationshipKind> _relationshipKinds = [];
         private readonly HashSet<string> _evidenceFiles = new(PathComparer);
+        private int _resolvedRelationshipCount;
+        private int _partiallyResolvedRelationshipCount;
 
         public EdgeAccumulator(SymbolComponent source, SymbolComponent target)
         {
@@ -327,6 +329,11 @@ internal static class SemanticArchitectureComponentDetector
                 return;
 
             _relationshipKinds.Add(relationship.Kind);
+            if (relationship.ResolutionStatus == SemanticResolutionStatus.Resolved)
+                _resolvedRelationshipCount++;
+            else if (relationship.ResolutionStatus == SemanticResolutionStatus.PartiallyResolved)
+                _partiallyResolvedRelationshipCount++;
+
             foreach (var file in relationship.Provenance
                          .Select(provenance => provenance.FilePath)
                          .Where(file => !string.IsNullOrWhiteSpace(file)))
@@ -338,12 +345,14 @@ internal static class SemanticArchitectureComponentDetector
         public ArchitectureComponentDependencyContext ToContext(string scope) => new()
         {
             SourceComponentId = _source.ComponentId,
-            SourceComponentName = $"{_source.ModuleName} · {_source.ComponentName}",
+            SourceComponentName = GetComponentLabel(_source),
             TargetComponentId = _target.ComponentId,
-            TargetComponentName = $"{_target.ModuleName} · {_target.ComponentName}",
+            TargetComponentName = GetComponentLabel(_target),
             Scope = scope,
             DependencyType = DependencyType,
             RelationshipCount = _relationshipIds.Count,
+            ResolvedRelationshipCount = _resolvedRelationshipCount,
+            PartiallyResolvedRelationshipCount = _partiallyResolvedRelationshipCount,
             RelationshipKinds = _relationshipKinds.OrderBy(kind => kind).ToList(),
             EvidenceFiles = _evidenceFiles.OrderBy(file => file, PathComparer).ToList()
         };

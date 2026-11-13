@@ -348,7 +348,7 @@ private class KotlinSemanticCollector(
         if (file == null || offset < 0) return result
         val item = JsonObject()
         item.addProperty("analyzerId", "kotlin-k2-ir")
-        item.addProperty("source", "Compiler")
+        item.addProperty("source", 2)
         item.addProperty("filePath", file.fileEntry.name)
         item.addProperty("startLine", file.fileEntry.getLineNumber(offset) + 1)
         item.addProperty("startColumn", file.fileEntry.getColumnNumber(offset) + 1)

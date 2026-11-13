@@ -13,6 +13,7 @@ import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.declarations.IrTypeAlias
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.declarations.IrParameterKind
@@ -90,6 +91,20 @@ internal class KotlinSemanticCollector(
             owners.addLast(id)
             declaration.acceptChildrenVoid(this)
             owners.removeLast()
+        }
+
+        override fun visitTypeAlias(declaration: IrTypeAlias) {
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
+            val qualifiedName = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
+            addSymbol(
+                id = "kotlin:typealias:$qualifiedName",
+                name = declaration.name.asString(),
+                qualifiedName = qualifiedName,
+                kind = 14,
+                declaration = declaration,
+                containingSymbolId = owners.lastOrNull()
+            )
+            declaration.acceptChildrenVoid(this)
         }
 
         override fun visitProperty(declaration: IrProperty) {
@@ -435,6 +450,7 @@ internal class KotlinSemanticCollector(
             else -> "Class"
         }
         is IrProperty -> "Property"
+        is IrTypeAlias -> "TypeAlias"
         is IrConstructor -> "Constructor"
         is IrSimpleFunction -> "Function"
         else -> declaration.javaClass.simpleName

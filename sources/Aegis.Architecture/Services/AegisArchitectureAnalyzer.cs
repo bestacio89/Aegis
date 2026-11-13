@@ -97,12 +97,6 @@ public sealed class AegisArchitectureAnalyzer
                 context,
                 token);
 
-        if (context.DiscoveryDiagnostics.Count > 0)
-        {
-            report.Diagnostics.AddRange(context.DiscoveryDiagnostics);
-            report.Metrics.AssessmentComplete = false;
-        }
-
         EnrichReportContext(
             report,
             context);

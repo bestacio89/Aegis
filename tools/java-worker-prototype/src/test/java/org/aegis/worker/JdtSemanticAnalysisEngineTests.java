@@ -232,6 +232,30 @@ final class JdtSemanticAnalysisEngineTests {
         }
     }
 
+    @Test
+    void does_not_classify_production_sources_as_tests_because_of_ancestor_or_package_names() throws Exception {
+        Path project = Files.createDirectories(workspace.resolve("tests").resolve("project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("src/main/java/com/test"));
+        Path source = sourceRoot.resolve("Service.java");
+        Files.writeString(source, "package com.test; public final class Service {}");
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("projectPath", project.toString());
+        payload.add("sourceRoots", paths(project.resolve("src/main/java")));
+        payload.add("sourceFiles", paths(source));
+        payload.add("classpathEntries", new JsonArray());
+        payload.addProperty("includeTestCode", false);
+        payload.addProperty("includeGeneratedCode", false);
+
+        JsonObject result = new JdtSemanticAnalysisEngine().analyze(payload);
+
+        assertEquals(2, result.get("status").getAsInt());
+        assertEquals(1, result.get("analyzedFileCount").getAsInt());
+        assertEquals(0, result.get("skippedFileCount").getAsInt());
+        assertTrue(result.getAsJsonArray("symbols").asList().stream().anyMatch(item ->
+            item.getAsJsonObject().get("qualifiedName").getAsString().equals("com.test.Service")));
+    }
+
     private static void deleteRecursively(Path directory) throws IOException {
         try (var paths = Files.walk(directory)) {
             paths.sorted(Comparator.reverseOrder()).forEach(path -> {

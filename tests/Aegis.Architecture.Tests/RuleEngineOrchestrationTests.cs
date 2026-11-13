@@ -111,6 +111,8 @@ public sealed class RuleEngineOrchestrationTests
         Assert.Equal(12, diagnostic.Line);
         Assert.Equal(8, diagnostic.Column);
         Assert.True(diagnostic.AffectsCoverage);
+        Assert.Equal(1, report.SemanticDiagnosticCount);
+        Assert.Equal(1, report.CoverageAffectingDiagnosticCount);
         Assert.False(report.Metrics.AssessmentComplete);
     }
 

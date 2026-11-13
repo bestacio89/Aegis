@@ -163,7 +163,7 @@ public sealed class CircularDependencyEvaluator
         result.Metadata["Cycle"] =
             string.Join(" -> ", cycle.Select(GetCycleNodeLabel));
         result.Metadata["GraphLevel"] =
-            Context?.ProductionComponents.Count > 0
+            (Context?.ProductionComponents.Count ?? 0) > 0
                 ? "ArchitecturalComponents"
                 : "BuildModules";
 

@@ -6,6 +6,7 @@ import com.google.gson.JsonObject
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
+import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
 import org.jetbrains.kotlin.ir.declarations.IrFile
@@ -205,7 +206,9 @@ private class KotlinSemanticCollector(
             declaration.superTypes.forEach { superType ->
                 val targetName = superType.classFqName?.asString() ?: return@forEach
                 val targetId = "kotlin:type:$targetName"
-                val targetIsInterface = moduleClassKinds[targetName] == "INTERFACE"
+                val targetIsInterface = symbols.values.any { symbol ->
+                    symbol.get("qualifiedName").asString() == targetName && symbol.get("kind").asInt == 5
+                }
                 addExternalTypeIfNeeded(targetId, targetName, targetIsInterface)
                 addRelationship(sourceId, targetId, if (targetIsInterface) 3 else 2, declaration.startOffset, currentFile)
             }
@@ -361,9 +364,4 @@ private class KotlinSemanticCollector(
     private fun isPublic(declaration: IrDeclaration): Boolean =
         (declaration as? IrDeclarationWithVisibility)?.visibility == DescriptorVisibilities.PUBLIC
 
-    private val moduleClassKinds: Map<String, String>
-        get() = symbols.values.associate { symbol ->
-            symbol.get("qualifiedName").asString() to
-                if (symbol.get("kind").asInt == 5) "INTERFACE" else "CLASS"
-        }
 }

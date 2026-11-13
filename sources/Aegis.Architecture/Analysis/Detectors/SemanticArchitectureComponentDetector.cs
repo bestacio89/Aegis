@@ -82,7 +82,7 @@ internal static class SemanticArchitectureComponentDetector
                     .Where(symbol =>
                         !string.IsNullOrWhiteSpace(symbol.Id)
                         && !string.IsNullOrWhiteSpace(symbol.FilePath)
-                        && (string.Equals(symbol.ContainerKind, "Package", StringComparison.OrdinalIgnoreCase)
+                        && (!string.IsNullOrWhiteSpace(symbol.ContainerKind)
                             || !string.IsNullOrWhiteSpace(symbol.ContainerName)))
                     .Select(symbol =>
                     {
@@ -101,7 +101,7 @@ internal static class SemanticArchitectureComponentDetector
                             componentKind,
                             module.Name,
                             modulePath,
-                            symbol.Language,
+                            run.Language,
                             Path.GetFullPath(symbol.FilePath!),
                             symbol.IsTestCode);
                     });
@@ -226,7 +226,9 @@ internal static class SemanticArchitectureComponentDetector
         var semanticRuns = context.SemanticAnalysisRuns.Where(IsUsableSemanticRun).ToArray();
         var sourceSymbolCount = semanticRuns.Sum(run => run.Symbols.Count(IsProjectSourceSymbol));
         var componentSymbolCount = semanticRuns.Sum(run => run.Symbols.Count(symbol =>
-            IsProjectSourceSymbol(symbol) && !string.IsNullOrWhiteSpace(symbol.ContainerName)));
+            IsProjectSourceSymbol(symbol)
+                && (!string.IsNullOrWhiteSpace(symbol.ContainerKind)
+                    || !string.IsNullOrWhiteSpace(symbol.ContainerName))));
         var candidateRelationshipCount = semanticRuns.Sum(run => run.Relationships.Count(relationship =>
             ComponentRelationshipKinds.Contains(relationship.Kind)
             && (relationship.ResolutionStatus is SemanticResolutionStatus.Resolved

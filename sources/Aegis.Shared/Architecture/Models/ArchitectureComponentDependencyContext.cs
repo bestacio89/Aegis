@@ -30,6 +30,12 @@ public sealed class ArchitectureComponentDependencyContext
     /// <summary>Relationships with a usable target but incomplete resolution evidence.</summary>
     public int PartiallyResolvedRelationshipCount { get; init; }
 
+    /// <summary>
+    /// Exact source evidence references. A relationship ID is scoped to its
+    /// semantic run, so both values are required to resolve the original record.
+    /// </summary>
+    public List<SemanticRelationshipReference> ContributingRelationships { get; init; } = [];
+
     public List<SemanticRelationshipKind> RelationshipKinds { get; init; } = [];
 
     public List<string> EvidenceFiles { get; init; } = [];

@@ -179,6 +179,14 @@ internal static class GradleBuildModelResolver
                     "Kotlin Multiplatform targets are not treated as JVM source roots until target-specific source-set resolution is available.",
                     buildFile));
             }
+            else if (sourceRoots.Any(sourceRoot => sourceRoot.ContainsKotlinSources)
+                     && kotlinJvmPlugins.Length == 0)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleKotlinJvmPluginNotDetected",
+                    "Kotlin source files were discovered, but a statically resolved Kotlin JVM or Android plugin was not found.",
+                    buildFile));
+            }
 
             foreach (var plugin in plugins.Where(plugin =>
                          plugin.Id.StartsWith("org.jetbrains.kotlin.plugin.", StringComparison.Ordinal)

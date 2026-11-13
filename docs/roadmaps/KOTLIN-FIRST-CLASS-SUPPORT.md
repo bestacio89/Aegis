@@ -266,9 +266,9 @@ Production and test source roots, classpaths, symbols and relationships must rem
 
 ---
 
-## K0 status — accepted
+## K0 status — compiler boundary validated; semantic completeness audit in progress
 
-The isolated Kotlin compiler/worker proof, including the follow-up semantic audit, is accepted at validated head `82c53830c12b24a785c8be9f8fb39f4f0893dffe`. The Kotlin worker workflow passed on both `ubuntu-latest` and `windows-latest`, including the packaged runtime probe.
+The isolated Kotlin 2.4.21 K2 compiler/IR worker boundary is validated at head `1263` (full commit recorded in the PR history). The Kotlin worker workflow passed on both `ubuntu-latest` and `windows-latest`, including the packaged runtime probe. This validates the worker protocol and existing extraction fixtures, but a deeper IR audit found semantic reference forms not yet represented. K0 remains open until those are implemented and tested.
 
 Validated in K0:
 
@@ -278,12 +278,29 @@ Validated in K0:
 - Lambda bodies are traversed without emitting synthetic lambda declarations, so calls inside callbacks are attributed to their enclosing source declaration.
 - Property reads and writes resolve to their source property without duplicate synthetic accessor symbols; external Java callables retain package and containing-type identity.
 - Compiler errors remain explicit diagnostics and never produce a completed analysis.
+- Callable references (`::function`), property references (`::property`), class references (`::class`), direct field access, enum-entry references, constructor references and constructor delegation are K0 closure items; they are not yet claimed as covered.
 - Bounded source manifests (16 MiB / 50,000 files), source-root collections, JSONL frames and response size.
 - Process handshake, analysis, bounded-heap execution and graceful shutdown.
 - Private runtime package with pinned dependencies, CycloneDX SBOM, and a packaged-JAR smoke test on Linux and Windows.
 - Automated one-top-level-type-per-Kotlin-file and filename-matching enforcement.
 
 K0 validates the compiler boundary and private worker packaging. It does **not** claim that the .NET host adapter, build-system source ownership, process supervision or cross-language graph identity are integrated; those remain K1–K3 work.
+
+## K1 status — accepted
+
+K1 build/source ownership is accepted at validated head `1263fcc1b448d50d41b86717667fe8e6d0dbb736`. The four required workflows passed on that exact head: Kotlin semantic worker (Linux and Windows), Java semantic worker (Linux and Windows), WPF build validation, and non-WPF quality gates including all test projects and production builds.
+
+Validated in K1:
+
+- Gradle Kotlin plugin metadata and Kotlin/JVM module recognition.
+- Kotlin source-set discovery across Kotlin and Groovy DSL forms, including conventional and custom source directories and `by getting` declarations.
+- Separate production and test source-root ownership, including custom roots.
+- Maven Kotlin plugin version and compiler-option extraction, including language/API versions and JVM target.
+- Maven `sourceDirs`, `testSourceDirs` and execution-specific source directories.
+- Parent POM Kotlin plugin configuration inheritance. Raw source-directory expressions are retained and resolved against the child module's effective properties, so child property overrides are honored.
+- Explicit partial diagnostics when parent and child both declare source-directory lists and Maven's full XML merge behavior cannot be reproduced exactly.
+
+K1 does not execute Maven or Gradle, and it does not yet compile Kotlin from the .NET host. Those are K2/K3 responsibilities.
 
 ## 7. Phases and acceptance checkpoints
 

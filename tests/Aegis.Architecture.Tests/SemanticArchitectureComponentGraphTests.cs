@@ -72,6 +72,12 @@ public sealed class SemanticArchitectureComponentGraphTests
             Assert.Equal(2, context.ProductionComponents.Count);
             var edge = Assert.Single(context.ProductionComponentDependencies);
             Assert.Equal(1, edge.RelationshipCount);
+            var relationshipReference = Assert.Single(edge.ContributingRelationships);
+            Assert.Contains(context.SemanticAnalysisRuns, run =>
+                run.RunId == relationshipReference.RunId
+                && run.Relationships.Any(relationship =>
+                    relationship.Id == relationshipReference.RelationshipId));
+            Assert.Equal(0, edge.UnreferencedRelationshipCount);
             Assert.Contains(applicationFile, edge.EvidenceFiles);
             Assert.Equal(
                 "sample.application",
@@ -183,6 +189,9 @@ public sealed class SemanticArchitectureComponentGraphTests
 
         var edge = Assert.Single(context.ProductionComponentDependencies);
         Assert.Equal(1, edge.RelationshipCount);
+        Assert.Equal("python-run", Assert.Single(edge.ContributingRelationships).RunId);
+        Assert.Equal("python-service-uses-domain", edge.ContributingRelationships[0].RelationshipId);
+        Assert.Equal(0, edge.UnreferencedRelationshipCount);
         Assert.Equal(0, edge.ResolvedRelationshipCount);
         Assert.Equal(1, edge.PartiallyResolvedRelationshipCount);
         Assert.Equal("application", context.ProductionComponents
@@ -192,6 +201,73 @@ public sealed class SemanticArchitectureComponentGraphTests
         Assert.Contains(applicationFile, edge.EvidenceFiles);
     }
 
+
+    [Fact]
+    public void Counts_relationships_without_provider_ids_and_exposes_the_traceability_gap()
+    {
+        var projectPath = Path.Combine(Path.GetTempPath(), $"aegis-unreferenced-graph-{Guid.NewGuid():N}");
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "sample-java",
+            RootPath = projectPath,
+            Language = "Java",
+            SemanticAnalysisRuns =
+            [
+                new SemanticAnalysisRun
+                {
+                    RunId = "java-run",
+                    Language = "Java",
+                    EngineId = "jdt-test-provider",
+                    ProjectPath = projectPath,
+                    Status = SemanticAnalysisStatus.Completed,
+                    Symbols =
+                    [
+                        new SemanticSymbol
+                        {
+                            Id = "source-type",
+                            Name = "OrderService",
+                            QualifiedName = "sample.application.OrderService",
+                            ContainerName = "sample.application",
+                            ContainerKind = "Package",
+                            Language = "Java",
+                            ProjectPath = projectPath,
+                            FilePath = Path.Combine(projectPath, "OrderService.java"),
+                            Origin = SemanticSymbolOrigin.Source
+                        },
+                        new SemanticSymbol
+                        {
+                            Id = "target-type",
+                            Name = "Order",
+                            QualifiedName = "sample.domain.Order",
+                            ContainerName = "sample.domain",
+                            ContainerKind = "Package",
+                            Language = "Java",
+                            ProjectPath = projectPath,
+                            FilePath = Path.Combine(projectPath, "Order.java"),
+                            Origin = SemanticSymbolOrigin.Source
+                        }
+                    ],
+                    Relationships =
+                    [
+                        new SemanticRelationship
+                        {
+                            SourceSymbolId = "source-type",
+                            TargetSymbolId = "target-type",
+                            Kind = SemanticRelationshipKind.References,
+                            ResolutionStatus = SemanticResolutionStatus.Resolved
+                        }
+                    ]
+                }
+            ]
+        };
+
+        SemanticArchitectureComponentDetector.Analyze(context);
+
+        var edge = Assert.Single(context.ProductionComponentDependencies);
+        Assert.Equal(1, edge.RelationshipCount);
+        Assert.Empty(edge.ContributingRelationships);
+        Assert.Equal(1, edge.UnreferencedRelationshipCount);
+    }
 
     [Fact]
     public void Uses_csharp_build_projects_as_architectural_components_instead_of_namespaces()

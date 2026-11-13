@@ -86,8 +86,8 @@ public sealed class ArchitectureDependencyCycleAnalyzerTests
             ],
             ArchitecturalComponentDependencies =
             [
-                Edge("logical-a", "logical-b", "Production", "run-1", "logical-ab"),
-                Edge("logical-b", "logical-a", "Production", "run-1", "logical-ba")
+                ArchitecturalEdge("logical-a", "logical-b", "Production", "run-1", "logical-ab"),
+                ArchitecturalEdge("logical-b", "logical-a", "Production", "run-1", "logical-ba")
             ]
         };
 
@@ -122,4 +122,28 @@ public sealed class ArchitectureDependencyCycleAnalyzerTests
                 }
             ]
         };
+    private static ArchitecturalComponentDependencyContext ArchitecturalEdge(
+        string source,
+        string target,
+        string scope,
+        string runId,
+        string relationshipId) =>
+        new()
+        {
+            SourceComponentId = source,
+            SourceComponentName = source,
+            TargetComponentId = target,
+            TargetComponentName = target,
+            Scope = scope,
+            RelationshipCount = 1,
+            ContributingRelationships =
+            [
+                new SemanticRelationshipReference
+                {
+                    RunId = runId,
+                    RelationshipId = relationshipId
+                }
+            ]
+        };
+
 }

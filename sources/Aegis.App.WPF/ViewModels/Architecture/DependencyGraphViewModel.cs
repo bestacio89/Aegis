@@ -140,7 +140,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
             var codeContainerDependencies = (_context?.ProductionComponentDependencies ?? [])
                 .Concat((_context?.ArchitectureComponentInternalDependencies ?? [])
-                    .Where(dependency => dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase)))
+                    .Where(dependency => string.Equals(dependency.Scope, "Production", StringComparison.OrdinalIgnoreCase)))
                 .Where(dependency =>
                     !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
                     && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
@@ -206,7 +206,9 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     dependency.TargetComponentName,
                     _activeNodes.FirstOrDefault(node => node.Id == dependency.SourceComponentId)?.Group ?? "Unclassified",
                     _activeNodes.FirstOrDefault(node => node.Id == dependency.TargetComponentId)?.Group ?? "Unclassified",
-                    dependency.DependencyType,
+                    dependency.RelationshipKinds.Count > 0
+                        ? string.Join(", ", dependency.RelationshipKinds.Select(kind => kind.ToString()).Distinct(StringComparer.OrdinalIgnoreCase))
+                        : "Semantic dependency",
                     string.Join(", ", dependency.EvidenceFiles),
                     dependency.RelationshipCount)).ToArray(),
                 "Code containers" => codeContainerDependencies.Select(dependency => new GraphRelation(
@@ -236,7 +238,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                 "Architectural components" => _context?.TestArchitecturalComponentDependencies.Sum(dependency => dependency.RelationshipCount) ?? 0,
                 "Code containers" => (_context?.TestComponentDependencies.Sum(dependency => dependency.RelationshipCount) ?? 0)
                     + (_context?.ArchitectureComponentInternalDependencies
-                        .Where(dependency => dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase))
+                        .Where(dependency => string.Equals(dependency.Scope, "Test", StringComparison.OrdinalIgnoreCase))
                         .Sum(dependency => dependency.RelationshipCount) ?? 0),
                 _ => _context?.TestDependencies.Count ?? 0
             };

@@ -63,6 +63,8 @@ class KotlinWorkerProcessIntegrationTests {
         var compilationOutput: Path? = null
         var oversizedManifest: Path? = null
         var oversizedByteManifest: Path? = null
+        var brokenManifest: Path? = null
+        var brokenCompilationOutput: Path? = null
         try {
             val writer = BufferedWriter(OutputStreamWriter(process.outputStream, StandardCharsets.UTF_8))
             val reader = BufferedReader(InputStreamReader(process.inputStream, StandardCharsets.UTF_8))
@@ -155,6 +157,49 @@ class KotlinWorkerProcessIntegrationTests {
                     .contains("16777216-byte limit")
             )
 
+            val brokenSourceRoot = workspace.resolve("broken/src/main/kotlin")
+            val brokenSource = brokenSourceRoot.resolve("sample/BrokenProbe.kt")
+            Files.createDirectories(brokenSource.parent)
+            Files.writeString(
+                brokenSource,
+                """
+                package sample
+
+                class BrokenProbe {
+                    fun run(): String = missingDependency()
+                }
+                """.trimIndent()
+            )
+            brokenManifest = Files.createTempFile("aegis-kotlin-source-manifest-broken-", ".json")
+            Files.writeString(
+                brokenManifest,
+                JsonArray().apply { add(brokenSource.toAbsolutePath().toString()) }.toString()
+            )
+            writer.write(
+                request(
+                    "compiler-error-recovery",
+                    "analyze",
+                    analysisPayload(workspace, brokenSourceRoot, brokenManifest, standardLibraryPath)
+                ).toString()
+            )
+            writer.newLine()
+            writer.flush()
+            val recoveryAnalysis = readResponse(executor, reader)
+            assertEquals("ok", recoveryAnalysis.get("status").asString)
+            val recoveryResult = recoveryAnalysis.getAsJsonObject("result")
+            assertNotEquals(2, recoveryResult.get("status").asInt)
+            assertTrue(
+                recoveryResult.getAsJsonArray("diagnostics").any { diagnostic ->
+                    diagnostic.asJsonObject.get("severity").asString == "Error"
+                        && diagnostic.asJsonObject.get("message").asString
+                            .contains("unresolved reference", ignoreCase = true)
+                },
+                "Compiler errors must remain explicit diagnostics and must not produce a completed analysis."
+            )
+            recoveryResult.get("compilationOutputDirectory")?.takeIf { !it.isJsonNull }?.asString?.let {
+                brokenCompilationOutput = Path.of(it)
+            }
+
             writer.write(request("shutdown", "shutdown").toString())
             writer.newLine()
             writer.flush()
@@ -168,6 +213,8 @@ class KotlinWorkerProcessIntegrationTests {
             Files.deleteIfExists(manifest)
             oversizedManifest?.let(Files::deleteIfExists)
             oversizedByteManifest?.let(Files::deleteIfExists)
+            brokenManifest?.let(Files::deleteIfExists)
+            brokenCompilationOutput?.let(::deleteRecursively)
         }
     }
 

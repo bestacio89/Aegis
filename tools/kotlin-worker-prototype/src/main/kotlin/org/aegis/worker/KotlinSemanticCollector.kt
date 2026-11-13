@@ -81,7 +81,7 @@ class KotlinSemanticCollector(
 
         override fun visitClass(declaration: IrClass) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val id = classId(declaration)
+            val id = classId(declaration, owners.lastOrNull())
             val symbolKind = when (declaration.kind.name) {
                 "INTERFACE" -> 5
                 "ENUM_CLASS" -> 7
@@ -117,7 +117,7 @@ class KotlinSemanticCollector(
 
         override fun visitProperty(declaration: IrProperty) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val id = propertyId(declaration)
+            val id = propertyId(declaration, owners.lastOrNull())
             addSymbol(
                 id = id,
                 name = declaration.name.asString(),
@@ -139,7 +139,7 @@ class KotlinSemanticCollector(
                 declaration.acceptChildrenVoid(this)
                 return
             }
-            val id = functionId(declaration)
+            val id = functionId(declaration, owners.lastOrNull())
             addSymbol(
                 id = id,
                 name = declaration.name.asString(),
@@ -155,7 +155,7 @@ class KotlinSemanticCollector(
 
         override fun visitConstructor(declaration: IrConstructor) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val id = functionId(declaration)
+            val id = functionId(declaration, owners.lastOrNull())
             addSymbol(
                 id = id,
                 name = "<init>",
@@ -243,7 +243,7 @@ class KotlinSemanticCollector(
 
         override fun visitClass(declaration: IrClass) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val sourceId = classId(declaration)
+            val sourceId = classId(declaration, owners.lastOrNull())
             owners.addLast(sourceId)
             addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.superTypes.forEach { superType ->
@@ -274,7 +274,7 @@ class KotlinSemanticCollector(
 
         override fun visitProperty(declaration: IrProperty) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val sourceId = propertyId(declaration)
+            val sourceId = propertyId(declaration, owners.lastOrNull())
             owners.addLast(sourceId)
             addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.acceptChildrenVoid(this)
@@ -287,7 +287,7 @@ class KotlinSemanticCollector(
                 declaration.acceptChildrenVoid(this)
                 return
             }
-            val sourceId = functionId(declaration)
+            val sourceId = functionId(declaration, owners.lastOrNull())
             owners.addLast(sourceId)
             addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.acceptChildrenVoid(this)
@@ -296,7 +296,7 @@ class KotlinSemanticCollector(
 
         override fun visitConstructor(declaration: IrConstructor) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val sourceId = functionId(declaration)
+            val sourceId = functionId(declaration, owners.lastOrNull())
             owners.addLast(sourceId)
             addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.acceptChildrenVoid(this)
@@ -460,8 +460,29 @@ class KotlinSemanticCollector(
         return result
     }
 
-    private fun classId(declaration: IrClass): String =
-        "kotlin:type:${declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()}"
+    private fun classId(
+        declaration: IrClass,
+        containingSymbolId: String? = null
+    ): String {
+        val qualifiedName = declaration.fqNameWhenAvailable?.asString()
+            ?: localDeclarationName(declaration, containingSymbolId)
+        return "kotlin:type:$qualifiedName"
+    }
+
+    private fun localDeclarationName(
+        declaration: IrDeclaration,
+        containingSymbolId: String?
+    ): String {
+        val owner = containingSymbolId ?: parentSymbolId(declaration) ?: projectPath
+        val offset = declaration.startOffset.takeIf { it >= 0 }?.toString() ?: "unknown"
+        return "$owner::${declaration.name.asString()}@$offset"
+    }
+
+    private fun parentSymbolId(declaration: IrDeclaration): String? = when (val parent = declaration.parent) {
+        is IrClass -> classId(parent)
+        is IrFunction -> functionId(parent)
+        else -> null
+    }
 
     private fun receiverType(declaration: IrDeclaration): String? = when (declaration) {
         is IrFunction -> declaration.parameters
@@ -524,18 +545,27 @@ class KotlinSemanticCollector(
         else -> declaration.javaClass.simpleName
     }
 
-    private fun propertyId(declaration: IrProperty): String {
+    private fun propertyId(
+        declaration: IrProperty,
+        containingSymbolId: String? = null
+    ): String {
         val accessor = declaration.getter ?: declaration.setter
         val receiver = accessor?.parameters
             ?.firstOrNull { it.kind == IrParameterKind.ExtensionReceiver }
             ?.type
             ?.let(::typeIdentity)
         val receiverIdentity = receiver?.let { "($it)" }.orEmpty()
-        return "kotlin:property:${declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()}$receiverIdentity"
+        val name = declaration.fqNameWhenAvailable?.asString()
+            ?: localDeclarationName(declaration, containingSymbolId)
+        return "kotlin:property:$name$receiverIdentity"
     }
 
-    private fun functionId(declaration: IrFunction): String {
-        val name = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
+    private fun functionId(
+        declaration: IrFunction,
+        containingSymbolId: String? = null
+    ): String {
+        val name = declaration.fqNameWhenAvailable?.asString()
+            ?: localDeclarationName(declaration, containingSymbolId)
         val parameters = declaration.parameters
         val receiver = parameters.firstOrNull { it.kind == IrParameterKind.ExtensionReceiver }
             ?.type

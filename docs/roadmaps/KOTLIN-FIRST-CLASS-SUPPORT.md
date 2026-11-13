@@ -4,11 +4,11 @@
 
 **Objective:** Deliver production-grade Kotlin semantic analysis in Aegis, using the same evidence discipline and phase governance established for Java.
 
-**Execution sequence:** K0 analysis and engine proof → K1 build/source ownership → K2 semantic worker → K3 JVM interoperability and dependency projection → K4 framework intelligence → K5 test architecture → K6 representative validation and production readiness.
+**Execution sequence:** K0 analysis and engine proof → K1 build/source ownership → K2 semantic worker integration → K3 JVM interoperability and dependency projection → K4 framework intelligence → K5 test architecture → K6 JVM production validation → K7 Android support → K8 Kotlin Multiplatform support and target-specific validation.
 
 **Delivery model:** One umbrella pull request against develop, implemented in small responsibility-based commits. The PR remains open until mandatory acceptance gates pass. A phase is not complete because its code has merely been committed.
 
-**Initial scope:** Kotlin/JVM projects using Maven and Gradle, including mixed Java/Kotlin modules. Kotlin Multiplatform, Kotlin/Native, Kotlin/JS and Kotlin/Wasm are outside the first production checkpoint. Android/JVM source analysis is a candidate extension; it must not be claimed complete until Android source-set and SDK dependency handling are validated.
+**Initial implementation baseline:** Kotlin/JVM projects using Maven and Gradle, including mixed Java/Kotlin modules. Android and Kotlin Multiplatform are required deliverables in this workstream, not optional extensions; they have dedicated K7/K8 acceptance gates. The JVM baseline must not be described as complete Android or Multiplatform support.
 
 ---
 
@@ -139,8 +139,9 @@ Create a dedicated Kotlin worker rather than adding Kotlin compiler dependencies
 - Startup and request timeouts, cancellation, process-tree termination and bounded diagnostics.
 - No execution of Maven/Gradle scripts or application code.
 - No project-supplied compiler plugins or annotation processors.
-- Temporary compiler outputs, if required for Java interop, must be created under a worker-owned temporary directory and cleaned up deterministically.
+- Temporary compiler outputs must be created in a host-selected, worker-validated temporary directory. The host retains usable class outputs only for downstream Kotlin-test/JDT binding and removes the entire temporary directory on completion, cancellation or failure.
 - Compiler output must not be written into the scanned repository.
+- The Kotlin worker reuses the packaged Java 21 runtime while keeping its compiler and library dependency set isolated and pinned.
 
 ### .NET integration
 
@@ -150,7 +151,9 @@ Add Kotlin-specific implementations behind the existing shared boundaries:
 - KotlinSemanticAnalysisAdapter : ISemanticAnalysisAdapter.
 - KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjectAnalyzer.
 - A Kotlin classpath resolver using explicit module/build evidence and local artifact caches only.
+- A shared JVM source-root resolver so Java and Kotlin use the same ownership and project-dependency rules.
 - Dependency-injection registration integrated with the existing semantic pipeline.
+- Kotlin compilation outputs represented as transient semantic artifacts, excluded from report serialization and cleaned by the pipeline after downstream Java analysis.
 
 Do not fork the shared coordinator, semantic run contract, relationship projection, architecture graph or ledger.
 
@@ -211,9 +214,11 @@ Mixed JVM modules are a required design concern, not a later cosmetic enhancemen
 
 The Kotlin compiler must receive the module's owned Java source roots as Java source inputs for semantic resolution, plus only the explicitly resolved classpath entries. Java source files are binding inputs; they must not be counted as Kotlin analyzed files.
 
+Kotlin production output is compiled before its test scope; usable production output is included in the test classpath. Kotlin module analysis follows project dependency order so dependent modules can consume already-produced outputs.
+
 ### Java references to Kotlin
 
-The preferred path is to produce Kotlin JVM class outputs in a worker-owned temporary directory, then pass those outputs as explicit classpath inputs to JDT for the Java source analysis. This must be proven in K0/K3 with:
+The preferred path is to produce Kotlin JVM class outputs in a host-owned temporary directory, retain them as transient compilation artifacts, then pass those outputs as explicit classpath inputs to JDT for Java source analysis. The semantic pipeline orders Kotlin before Java and performs deterministic artifact cleanup after all analyzers complete. This must be proven in K2/K3 with:
 
 - Kotlin classes and interfaces.
 - Top-level functions and file facades.
@@ -263,13 +268,15 @@ Production and test source roots, classpaths, symbols and relationships must rem
 
 ## K0 status — accepted
 
-The isolated Kotlin compiler/worker proof is accepted at commit `7b397819e1c436e2a4ecb684517c7510022059c2`. The Kotlin worker workflow passed on both `ubuntu-latest` and `windows-latest`, including the packaged runtime probe.
+The isolated Kotlin compiler/worker proof, including the follow-up semantic audit, is accepted at validated head `82c53830c12b24a785c8be9f8fb39f4f0893dffe`. The Kotlin worker workflow passed on both `ubuntu-latest` and `windows-latest`, including the packaged runtime probe.
 
 Validated in K0:
 
 - Pinned Kotlin 2.4.21 K2 compiler and IR extraction for classes, interfaces, enums, annotation classes, type aliases, data classes, functions, constructors, properties, extension functions/properties, inheritance, implementation, calls, property reads and annotation use.
 - External Java source roots are available to Kotlin compilation; the integration fixture also proves Java compilation can consume Kotlin output when the Java source dependencies are compiled.
-- Stable relationship IDs aggregate repeated call-site provenance without embedding source offsets in identity.
+- Stable relationship IDs aggregate repeated call-site provenance without embedding source offsets in identity; local declaration identity uses normalized lexical source context rather than line offsets or traversal ordinals.
+- Lambda bodies are traversed without emitting synthetic lambda declarations, so calls inside callbacks are attributed to their enclosing source declaration.
+- Property reads and writes resolve to their source property without duplicate synthetic accessor symbols; external Java callables retain package and containing-type identity.
 - Compiler errors remain explicit diagnostics and never produce a completed analysis.
 - Bounded source manifests (16 MiB / 50,000 files), source-root collections, JSONL frames and response size.
 - Process handshake, analysis, bounded-heap execution and graceful shutdown.
@@ -296,6 +303,7 @@ K0 validates the compiler boundary and private worker packaging. It does **not**
 - Add Kotlin Gradle source-set and Maven plugin/source-root discovery.
 - Capture Kotlin compiler/plugin version, JVM target, language/API version and declared dependencies.
 - Preserve module ownership, production/test separation, generated roots and dynamic-configuration diagnostics.
+- Model inherited Kotlin Maven plugin source directories and compiler options from parent POMs without resolving inherited relative paths against the wrong module.
 - Add Gradle Kotlin DSL and Groovy DSL, Maven, multi-module and mixed Java/Kotlin fixtures.
 
 **Acceptance:** Kotlin modules and roots are correctly discovered; no build scripts execute; unresolved build metadata is visible; Java regression suite remains green.
@@ -356,7 +364,7 @@ Use representative repositories/corpora for:
 Validate discovery, source ownership, semantic resolution and diagnostics, Java interoperability, framework evidence, architecture graphs/ledger/reports, test separation, performance, memory, worker reliability and existing Java/non-JVM regression gates.
 
 **Final acceptance:**
-- All mandatory fixture and representative-project tests pass.
+- All mandatory Kotlin/JVM, Android and Multiplatform fixture and representative-project tests pass for the target families claimed as supported.
 - All required CI workflows pass on the exact PR head.
 - Supported compiler versions and known limitations are documented.
 - No critical unresolved correctness defects remain.
@@ -364,7 +372,27 @@ Validate discovery, source ownership, semantic resolution and diagnostics, Java 
 
 ---
 
-## 8. Checkpoint governance and commit discipline
+### K7 — Android Kotlin support
+
+- Model Android Gradle Plugin versions, Kotlin Android plugin IDs and the newer Android/Kotlin plugin integration without executing Gradle.
+- Discover Android main, unit-test, instrumentation-test, flavor and variant source sets, including Java/Kotlin mixed roots.
+- Resolve compile SDK and the matching `android.jar` from statically available SDK configuration (`local.properties`, configured SDK environment and explicit build metadata); report missing or ambiguous SDK evidence.
+- Model variant-specific dependencies and generated source roots. KAPT/KSP outputs are consumed only when already materialized or explicitly declared; processors are never executed by Aegis.
+- Validate Jetpack Compose source usage and generated/compiler-plugin limitations separately from ordinary Kotlin/JVM semantics.
+
+**Acceptance:** Representative Android application and library fixtures cover debug/release, product flavors, unit tests, androidTest, Java/Kotlin interop, Android SDK symbols and Compose. Variant classpaths and source ownership are accurate; missing SDK/generated-code evidence remains explicitly partial.
+
+### K8 — Kotlin Multiplatform support
+
+- Model Kotlin Multiplatform plugin versions, target declarations and the complete source-set `dependsOn` graph.
+- Distinguish `commonMain/commonTest`, intermediate shared sets and target-specific source sets; preserve source-set ownership and avoid counting shared source declarations once per target.
+- Resolve `expect`/`actual` declarations and their relationships with exact source/run provenance.
+- Introduce target-specific semantic compilation paths for JVM/Android, Kotlin/Native, Kotlin/JS and Kotlin/Wasm. A JVM worker must never claim semantic coverage for a non-JVM target.
+- Model target-specific dependencies, platform SDK/toolchain requirements and generated source evidence. Unsupported targets remain explicit partial/unsupported results rather than silently disappearing.
+
+**Acceptance:** Multiplatform fixtures cover common, intermediate and platform source sets; source-set dependency edges; expect/actual pairs; and each target family claimed as supported. Every configured target is either analyzed by a validated backend or reported as unsupported with an explicit coverage gap.
+
+## 9. Checkpoint governance and commit discipline
 
 Every phase must have written scope and implementation tasks, automated tests and explicit acceptance criteria, exact-head CI evidence, known limitations and outstanding risks, and a decision to proceed, remediate or revise scope.
 
@@ -376,7 +404,7 @@ Every commit body must explain context, implementation, architectural rationale,
 
 Keep commits grouped by responsibility, normally 3–20 files, and avoid unrelated changes. Do not weaken existing gates, suppress failures, execute project build scripts, add unbounded dependencies, or claim support based on parser recognition alone.
 
-**Final principle:** Aegis reports what the compiler proves, distinguishes inferred evidence, and exposes what it cannot determine.
+**Final principle:** Aegis reports what the compiler proves, distinguishes inferred evidence, and exposes what it cannot determine. Android and Multiplatform support are not inferred from Kotlin/JVM recognition; each target family must pass its own acceptance gate.
 
 ## Cross-language identity constraint
 

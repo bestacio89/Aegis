@@ -24,6 +24,12 @@ public sealed class ArchitectureComponentDependencyContext
 
     public int RelationshipCount { get; init; }
 
+    /// <summary>Relationships resolved completely by the semantic provider.</summary>
+    public int ResolvedRelationshipCount { get; init; }
+
+    /// <summary>Relationships with a usable target but incomplete resolution evidence.</summary>
+    public int PartiallyResolvedRelationshipCount { get; init; }
+
     public List<SemanticRelationshipKind> RelationshipKinds { get; init; } = [];
 
     public List<string> EvidenceFiles { get; init; } = [];

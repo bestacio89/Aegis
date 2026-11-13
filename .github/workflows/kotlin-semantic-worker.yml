@@ -13,8 +13,14 @@ permissions:
 
 jobs:
   kotlin-semantic-worker:
-    name: Kotlin K2 semantic extraction
-    runs-on: ubuntu-latest
+    name: Kotlin K2 semantic extraction (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -27,5 +33,20 @@ jobs:
           cache: maven
           cache-dependency-path: tools/kotlin-worker-prototype/pom.xml
 
-      - name: Verify Kotlin semantic worker
+      - name: Verify Kotlin worker and private runtime package
         run: mvn --batch-mode --no-transfer-progress -f tools/kotlin-worker-prototype/pom.xml verify
+
+      - name: Probe packaged Kotlin worker process
+        shell: pwsh
+        run: ./tools/kotlin-worker-prototype/packaging/Probe-PackagedWorker.ps1 -JavaExecutable java -WorkerJar ./tools/kotlin-worker-prototype/target/runtime/kotlin-worker.jar -LibrariesDirectory ./tools/kotlin-worker-prototype/target/runtime/lib
+
+      - name: Upload private runtime and SBOM
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-kotlin-worker-${{ matrix.os }}
+          path: |
+            tools/kotlin-worker-prototype/target/runtime/**
+            tools/kotlin-worker-prototype/target/bom.json
+          if-no-files-found: warn
+          retention-days: 14

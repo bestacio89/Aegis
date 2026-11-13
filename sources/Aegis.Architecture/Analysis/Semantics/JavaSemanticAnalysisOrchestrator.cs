@@ -61,13 +61,38 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
             });
         }
 
+        if (modules.Count == 0
+            && (context.Language.Equals("Java", StringComparison.OrdinalIgnoreCase)
+                || context.Modules.Any(module => module.Languages.Any(language =>
+                    language.Equals("Java", StringComparison.OrdinalIgnoreCase)))))
+        {
+            context.DiscoveryDiagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = "JavaModulesNotSelected",
+                Component = nameof(JavaSemanticAnalysisOrchestrator),
+                Message = "Java was detected, but no Java module with an owned source scope could be selected for semantic analysis.",
+                Target = context.RootPath,
+                AffectsCoverage = true
+            });
+        }
+
         foreach (var module in modules)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var sourceRoots = ResolveSourceRoots(module);
             if (sourceRoots.Count == 0)
+            {
+                context.DiscoveryDiagnostics.Add(new AnalysisDiagnostic
+                {
+                    Code = "JavaSourceRootsNotFound",
+                    Component = nameof(JavaSemanticAnalysisOrchestrator),
+                    Message = "The Java module has no existing source roots; no source files could be analysed.",
+                    Target = module.Path,
+                    AffectsCoverage = true
+                });
                 continue;
+            }
 
             // Unknown source ownership cannot be split safely. Preserve the
             // established combined analysis until discovery can classify it.
@@ -131,7 +156,17 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
             sourceRoots,
             context.DiscoveryDiagnostics);
         if (sourceFiles.Count == 0)
+        {
+            context.DiscoveryDiagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = "JavaSourceFilesNotFound",
+                Component = nameof(JavaSemanticAnalysisOrchestrator),
+                Message = $"The { (includeTestCode ? "test" : "production") } source scope contains no Java files.",
+                Target = module.Path,
+                AffectsCoverage = true
+            });
             return;
+        }
 
         var classpath = _classpathResolver.Resolve(module, context.Modules, includeTestCode);
         var request = new SemanticAnalysisRequest
@@ -143,7 +178,11 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
             BuildSystem = module.BuildSystem.ToString(),
             SourceFiles = sourceFiles,
             SourceRoots = sourceRoots.Select(root => root.Directory).ToArray(),
-            ReferencedSourceRoots = ResolveReferencedSourceRoots(module, context, includeTestDependencies),
+            ReferencedSourceRoots = ResolveReferencedSourceRoots(module, context, includeTestDependencies)
+                .Concat(includeTestCode ? ResolveOwnProductionSourceRoots(module, context) : [])
+                .Distinct(PathComparer)
+                .OrderBy(path => path, PathComparer)
+                .ToArray(),
             TestSourceRoots = includeTestCode
                 ? (module.IsTestProject || module.IsTestSupport
                     ? sourceRoots.Select(root => root.Directory).ToArray()
@@ -197,6 +236,24 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         // An aggregator with child modules must not recursively absorb their
         // sources just because repository-level language detection saw Java.
         return hasOwnedJavaRoots || (hasJavaLanguage && !ownsNestedModules);
+    }
+
+    private static IReadOnlyList<string> ResolveOwnProductionSourceRoots(
+        ProjectModuleContext module,
+        ProjectArchitectureContext context)
+    {
+        if (module.IsTestProject || module.IsTestSupport)
+            return Array.Empty<string>();
+
+        var workspaceRoot = Path.GetFullPath(context.RootPath);
+        return ResolveSourceRoots(module)
+            .Where(root => root.ContainsJavaSources
+                && root.Ownership == ProjectSourceRootOwnership.Production
+                && IsSameOrDescendantPath(Path.GetFullPath(root.Directory), workspaceRoot))
+            .Select(root => Path.GetFullPath(root.Directory))
+            .Distinct(PathComparer)
+            .OrderBy(path => path, PathComparer)
+            .ToArray();
     }
 
     private static IReadOnlyList<string> ResolveReferencedSourceRoots(

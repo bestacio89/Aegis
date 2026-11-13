@@ -84,7 +84,7 @@
         <artifactId>maven-jar-plugin</artifactId>
         <version>3.4.2</version>
         <configuration>
-          <archive><manifest><mainClass>org.aegis.worker.KotlinWorkerMainKt</mainClass></manifest></archive>
+          <archive><manifest><mainClass>org.aegis.worker.KotlinWorkerMain</mainClass></manifest></archive>
         </configuration>
       </plugin>
     </plugins>

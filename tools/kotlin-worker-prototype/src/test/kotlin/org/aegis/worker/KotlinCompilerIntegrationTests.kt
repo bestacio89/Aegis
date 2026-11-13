@@ -147,6 +147,9 @@ class KotlinCompilerIntegrationTests {
 
             assertTrue(symbols.any { it.get("qualifiedName").asString == "sample.Service" })
             assertTrue(symbols.any { it.get("qualifiedName").asString == "sample.User" })
+            val userSymbol = symbols.single { it.get("qualifiedName").asString == "sample.User" }
+            assertEquals("DataClass", userSymbol.get("declarationKind").asString)
+            assertTrue(userSymbol.getAsJsonArray("modifiers").any { it.asString == "data" })
             assertTrue(symbols.any {
                 it.get("kind").asInt == 8 &&
                     it.get("qualifiedName").asString == "sample.Audited"
@@ -154,7 +157,8 @@ class KotlinCompilerIntegrationTests {
             assertTrue(symbols.any {
                 it.get("kind").asInt == 14 &&
                     it.get("qualifiedName").asString == "sample.UserIdentifier" &&
-                    it.get("declarationKind").asString == "TypeAlias"
+                    it.get("declarationKind").asString == "TypeAlias" &&
+                    it.get("expandedType").asString == "kotlin.String"
             }, "Kotlin type aliases must remain explicit source declarations after IR generation.")
             assertTrue(symbols.any {
                 it.get("kind").asInt == 12 &&
@@ -165,6 +169,17 @@ class KotlinCompilerIntegrationTests {
                 .map { it.get("id").asString }
                 .distinct()
             assertEquals(2, extensionPropertyIds.size, "Extension property identity must include the receiver type.")
+            val extensionPropertyReceivers = symbols
+                .filter { it.get("kind").asInt == 12 && it.get("qualifiedName").asString == "sample.label" }
+                .map { it.get("receiverType").asString }
+                .toSet()
+            assertEquals(setOf("sample.User", "kotlin.String"), extensionPropertyReceivers)
+            assertTrue(symbols.any {
+                it.get("kind").asInt == 11 &&
+                    it.get("qualifiedName").asString == "sample.label" &&
+                    it.get("declarationKind").asString == "ExtensionFunction" &&
+                    it.get("receiverType").asString == "sample.User"
+            })
             assertFalse(
                 symbols.any {
                     it.get("qualifiedName").asString.startsWith("sample.User.")

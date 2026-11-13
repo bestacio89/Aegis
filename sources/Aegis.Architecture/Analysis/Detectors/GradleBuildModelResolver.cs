@@ -1053,7 +1053,50 @@ internal static class GradleBuildModelResolver
 
             foreach (var value in quotedValues)
             {
-                if (value.Length == 0 || value.Contains('
+                if (value.Length == 0 || value.Contains('$') || value.Contains('{'))
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleCustomSourceSetNotStaticallyResolved",
+                        "Kotlin source directory '" + value + "' for source set '" + sourceSetName
+                        + "' is dynamic or empty.",
+                        buildFile));
+                    continue;
+                }
+
+                string directory;
+                try
+                {
+                    directory = Path.GetFullPath(Path.Combine(modulePath, value));
+                }
+                catch (Exception exception) when (
+                    exception is ArgumentException or NotSupportedException or PathTooLongException)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleCustomSourceSetPathInvalid",
+                        "Kotlin source directory '" + value + "' for source set '" + sourceSetName
+                        + "' is invalid: " + exception.Message,
+                        buildFile));
+                    continue;
+                }
+
+                if (!IsSameOrDescendantPath(directory, analysisRoot))
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleCustomSourceSetOutsideAnalysisRoot",
+                        "Kotlin source directory '" + value + "' for source set '" + sourceSetName
+                        + "' resolves outside the analyzed repository and is not attached.",
+                        buildFile));
+                    continue;
+                }
+
+                directories.Add(directory);
+            }
+        }
+
+        return directories.ToList();
+    }
+
+    private static List<GradleBuildModel.SourceSet> MergeSourceSets(
         IReadOnlyCollection<GradleBuildModel.SourceSet> conventional,
         IReadOnlyCollection<GradleBuildModel.SourceSet> explicitSourceSets)
     {
@@ -1082,6 +1125,7 @@ internal static class GradleBuildModelResolver
                     .Concat(explicitSourceSet.ExplicitKotlinSourceDirectories ?? [])
                     .Distinct(PathComparer)
                     .ToList();
+
                 result[explicitSourceSet.Name] = new GradleBuildModel.SourceSet(
                     existing.Name,
                     javaDirectories,

@@ -30,6 +30,12 @@ internal static class SemanticArchitectureComponentDetector
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        var semanticRuns = context.SemanticAnalysisRuns
+            .Where(IsUsableSemanticRun)
+            .ToArray();
+        if (semanticRuns.Length == 0)
+            return;
+
         context.ArchitectureComponentDependencies.RemoveAll(dependency =>
             dependency.DependencyType.Equals(DependencyType, StringComparison.OrdinalIgnoreCase));
 
@@ -67,13 +73,11 @@ internal static class SemanticArchitectureComponentDetector
             };
         }
 
-        var semanticLanguages = context.SemanticAnalysisRuns
-            .Where(IsUsableSemanticRun)
+        var semanticLanguages = semanticRuns
             .Select(run => run.Language)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var symbolComponents = context.SemanticAnalysisRuns
-            .Where(IsUsableSemanticRun)
+        var symbolComponents = semanticRuns
             .SelectMany(run =>
             {
                 var module = ResolveModule(run.ProjectPath, run.Language);
@@ -171,7 +175,7 @@ internal static class SemanticArchitectureComponentDetector
 
         var edges = new Dictionary<EdgeKey, EdgeAccumulator>();
 
-        foreach (var run in context.SemanticAnalysisRuns.Where(IsUsableSemanticRun))
+        foreach (var run in semanticRuns)
         {
             var sourceModule = ResolveModule(run.ProjectPath, run.Language);
 
@@ -223,7 +227,6 @@ internal static class SemanticArchitectureComponentDetector
                 .ThenBy(edge => edge.TargetComponentName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(edge => edge.Scope, StringComparer.OrdinalIgnoreCase));
 
-        var semanticRuns = context.SemanticAnalysisRuns.Where(IsUsableSemanticRun).ToArray();
         var sourceSymbolCount = semanticRuns.Sum(run => run.Symbols.Count(IsProjectSourceSymbol));
         var componentSymbolCount = semanticRuns.Sum(run => run.Symbols.Count(symbol =>
             IsProjectSourceSymbol(symbol)

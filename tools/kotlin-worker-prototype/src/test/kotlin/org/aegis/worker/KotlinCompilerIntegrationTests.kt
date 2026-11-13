@@ -53,6 +53,7 @@ class KotlinCompilerIntegrationTests {
             """
             package sample
 
+            import interop.JavaContract
             import interop.JavaRepository
 
             interface Executable {

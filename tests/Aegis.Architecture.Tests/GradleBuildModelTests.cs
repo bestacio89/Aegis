@@ -136,6 +136,13 @@ public sealed class GradleBuildModelTests
                 plugins {
                     kotlin("jvm") version "2.4.21"
                 }
+                kotlin {
+                    compilerOptions {
+                        languageVersion.set(KotlinVersion.fromVersion("2.4"))
+                        apiVersion.set(KotlinVersion.fromVersion("2.4"))
+                        jvmTarget.set(JvmTarget.JVM_21)
+                    }
+                }
                 sourceSets {
                     main {
                         java.srcDir("src/main/shared")
@@ -163,6 +170,9 @@ public sealed class GradleBuildModelTests
             var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
 
             Assert.Equal("2.4.21", model.KotlinPluginVersion);
+            Assert.Equal("2.4", model.KotlinLanguageVersion);
+            Assert.Equal("2.4", model.KotlinApiVersion);
+            Assert.Equal("21", model.KotlinJvmTarget);
             Assert.Contains(model.Plugins, plugin =>
                 plugin.Id == "org.jetbrains.kotlin.jvm" && plugin.Version == "2.4.21");
             Assert.Contains(model.SourceSets, sourceSet =>

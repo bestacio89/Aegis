@@ -66,7 +66,7 @@ class KotlinCompilerIntegrationTests {
 
             typealias UserIdentifier = String
 
-            data class User(val id: UserIdentifier)
+            data class User(var id: UserIdentifier)
 
             class Service(private val repository: JavaRepository) : Executable, JavaContract {
                 override fun execute() {
@@ -104,6 +104,10 @@ class KotlinCompilerIntegrationTests {
             fun List<String>.select(): String = first()
 
             fun readId(user: User): String = user.id
+
+            fun writeId(user: User, value: String) {
+                user.id = value
+            }
 
             fun firstLocalScope() {
                 class Local
@@ -289,6 +293,18 @@ class KotlinCompilerIntegrationTests {
                     it.get("targetSymbolId").asString == "kotlin:property:sample.User.id"
             }, "A Kotlin property read must resolve to the property declaration.")
             assertTrue(relationships.any {
+                it.get("kind").asInt == 5 &&
+                    it.get("sourceSymbolId").asString == "kotlin:function:sample.writeId(sample.User,kotlin.String)" &&
+                    it.get("targetSymbolId").asString == "kotlin:property:sample.User.id"
+            }, "A Kotlin property write must retain a reference to the property declaration.")
+            assertFalse(
+                symbols.any {
+                    it.get("kind").asInt == 9 &&
+                        it.get("qualifiedName").asString == "sample.User.id"
+                },
+                "Property accessors must not be emitted as duplicate function symbols."
+            )
+            assertTrue(relationships.any {
                 it.get("kind").asInt == 4 &&
                     it.get("targetSymbolId").asString.contains("sample.label")
             }, "An extension call must resolve to its extension declaration.")
@@ -299,10 +315,19 @@ class KotlinCompilerIntegrationTests {
                 .distinct()
             assertEquals(2, overloadIds.size, "Overloaded functions need distinct deterministic identities.")
 
-            assertTrue(symbols.any {
+            val externalJavaLoad = symbols.single {
                 it.get("language").asString == "Java" &&
-                    it.get("qualifiedName").asString.contains("JavaRepository")
-            }, "Kotlin analysis must preserve the language identity of Java source targets.")
+                    it.get("qualifiedName").asString == "interop.JavaRepository.load"
+            }
+            assertEquals("interop", externalJavaLoad.get("containerName").asString)
+            assertEquals("Package", externalJavaLoad.get("containerKind").asString)
+            assertEquals(
+                "kotlin:type:interop.JavaRepository",
+                externalJavaLoad.get("containingSymbolId").asString
+            )
+            assertTrue(symbols.any {
+                it.get("id").asString == externalJavaLoad.get("containingSymbolId").asString
+            }, "External callable owners must be represented as normalized type symbols.")
 
             verifyJavaCanConsumeKotlinOutput(workspace, destination, stdlibPath)
         } finally {
@@ -311,6 +336,96 @@ class KotlinCompilerIntegrationTests {
             if (previousProject == null) System.clearProperty("aegis.kotlin.semantic.project")
             else System.setProperty("aegis.kotlin.semantic.project", previousProject)
             workspace.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `local declaration identities remain stable when source line offsets change`() {
+        val workspace = Files.createTempDirectory("aegis-kotlin-local-identities-")
+        val source = workspace.resolve("LocalDeclarations.kt")
+        val firstOutput = workspace.resolve("first-semantic.json")
+        val secondOutput = workspace.resolve("second-semantic.json")
+        val firstClasses = workspace.resolve("first-classes")
+        val secondClasses = workspace.resolve("second-classes")
+        val sourceText = """
+            package sample
+
+            fun outer() {
+                class LocalType
+                fun localFunction(value: String): LocalType = LocalType()
+                localFunction("value")
+            }
+        """.trimIndent()
+
+        try {
+            Files.writeString(source, sourceText)
+            val first = compileLocalDeclarationFixture(workspace, source, firstOutput, firstClasses)
+            val firstIds = first.getAsJsonArray("symbols")
+                .map { it.asJsonObject }
+                .filter { it.get("name").asString in setOf("LocalType", "localFunction") }
+                .map { it.get("id").asString }
+                .sorted()
+
+            Files.writeString(source, "\n\n\n" + sourceText)
+            val second = compileLocalDeclarationFixture(workspace, source, secondOutput, secondClasses)
+            val secondIds = second.getAsJsonArray("symbols")
+                .map { it.asJsonObject }
+                .filter { it.get("name").asString in setOf("LocalType", "localFunction") }
+                .map { it.get("id").asString }
+                .sorted()
+
+            assertEquals(2, firstIds.size)
+            assertEquals(firstIds, secondIds)
+            assertTrue(firstIds.none { it.contains("@") }, "Local declaration IDs must not encode source offsets.")
+        } finally {
+            workspace.toFile().deleteRecursively()
+        }
+    }
+
+    private fun compileLocalDeclarationFixture(
+        workspace: Path,
+        source: Path,
+        evidence: Path,
+        destination: Path
+    ): com.google.gson.JsonObject {
+        Files.createDirectories(destination)
+        val pluginPath = Path.of(
+            KotlinWorkerPluginRegistrar::class.java.protectionDomain.codeSource.location.toURI()
+        ).toString()
+        val stdlibPath = Path.of(
+            Unit::class.java.protectionDomain.codeSource.location.toURI()
+        ).toString()
+        val arguments = K2JVMCompilerArguments().apply {
+            this.destination = destination.toString()
+            this.classpath = stdlibPath
+            this.noStdlib = true
+            this.noReflect = true
+            this.jvmTarget = "21"
+            this.languageVersion = "2.4"
+            this.apiVersion = "2.4"
+            this.moduleName = "local-identity-fixture"
+            this.pluginClasspaths = arrayOf(pluginPath)
+            this.freeArgs = listOf(source.toString())
+        }
+
+        val previousOutput = System.getProperty("aegis.kotlin.semantic.output")
+        val previousProject = System.getProperty("aegis.kotlin.semantic.project")
+        try {
+            System.setProperty("aegis.kotlin.semantic.output", evidence.toString())
+            System.setProperty("aegis.kotlin.semantic.project", workspace.toString())
+            val messages = PrintingMessageCollector(
+                System.err,
+                MessageRenderer.PLAIN_RELATIVE_PATHS,
+                false
+            )
+            val exitCode = K2JVMCompiler().exec(messages, Services.EMPTY, arguments)
+            assertEquals(ExitCode.OK, exitCode)
+            return JsonParser.parseString(Files.readString(evidence)).asJsonObject
+        } finally {
+            if (previousOutput == null) System.clearProperty("aegis.kotlin.semantic.output")
+            else System.setProperty("aegis.kotlin.semantic.output", previousOutput)
+            if (previousProject == null) System.clearProperty("aegis.kotlin.semantic.project")
+            else System.setProperty("aegis.kotlin.semantic.project", previousProject)
         }
     }
 

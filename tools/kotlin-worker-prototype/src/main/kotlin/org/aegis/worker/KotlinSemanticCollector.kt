@@ -17,6 +17,7 @@ import org.jetbrains.kotlin.ir.declarations.IrTypeAlias
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.declarations.IrParameterKind
+import org.jetbrains.kotlin.ir.declarations.IrPackageFragment
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrStarProjection
@@ -33,6 +34,7 @@ import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.ArrayDeque
+import java.util.IdentityHashMap
 import java.util.LinkedHashMap
 
 internal @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -44,6 +46,8 @@ class KotlinSemanticCollector(
     private val symbols = LinkedHashMap<String, JsonObject>()
     private val relationships = LinkedHashMap<String, JsonObject>()
     private val propertyAccessors = HashMap<Any, String>()
+    private val localDeclarationIds = IdentityHashMap<IrDeclaration, String>()
+    private val localDeclarationOccurrences = HashMap<String, Int>()
 
     fun collect(module: IrModuleFragment) {
         module.acceptChildrenVoid(DeclarationCollector())
@@ -264,7 +268,8 @@ class KotlinSemanticCollector(
                     targetId,
                     targetName,
                     targetIsInterface,
-                    targetClass?.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
+                    targetClass?.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB,
+                    targetClass
                 )
                 addRelationship(sourceId, targetId, relationshipKind, declaration.startOffset, currentFile)
             }
@@ -308,7 +313,9 @@ class KotlinSemanticCollector(
             val target = expression.symbol.owner
             val targetId = functionId(target)
             val propertyId = propertyAccessors[expression.symbol]
-            addExternalFunctionIfNeeded(targetId, target)
+            if (propertyId == null) {
+                addExternalFunctionIfNeeded(targetId, target)
+            }
             if (sourceId != null) {
                 addRelationship(
                     sourceId,
@@ -358,7 +365,8 @@ class KotlinSemanticCollector(
                 targetId,
                 qualifiedName,
                 true,
-                annotationClass.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
+                annotationClass.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB,
+                annotationClass
             )
             addRelationship(sourceId, targetId, 7, annotation.startOffset, file)
         }
@@ -366,13 +374,28 @@ class KotlinSemanticCollector(
 
     private fun addExternalFunctionIfNeeded(id: String, declaration: IrFunction) {
         if (symbols.containsKey(id)) return
+
+        val containingClass = declaration.parent as? IrClass
+        val containingSymbolId = containingClass?.let(::classId)
+        if (containingClass != null && containingSymbolId != null) {
+            val qualifiedName = containingClass.fqNameWhenAvailable?.asString() ?: containingSymbolId
+            addExternalTypeIfNeeded(
+                containingSymbolId,
+                qualifiedName,
+                containingClass.kind.name in setOf("INTERFACE", "ANNOTATION_CLASS"),
+                containingClass.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB,
+                containingClass
+            )
+        }
+
         val name = if (declaration is IrConstructor) "<init>" else declaration.name.asString()
+        val visibility = (declaration as? IrDeclarationWithVisibility)?.visibility?.name
         val symbol = JsonObject()
         symbol.addProperty("id", id)
         symbol.addProperty("kind", if (declaration is IrConstructor) 10 else 9)
         symbol.addProperty("name", name)
         symbol.addProperty("qualifiedName", declaration.fqNameWhenAvailable?.asString() ?: id)
-        symbol.addProperty("containerName", declaration.parent.toString())
+        symbol.addProperty("containerName", packageName(declaration))
         symbol.addProperty("containerKind", "Package")
         symbol.addProperty(
             "language",
@@ -382,10 +405,20 @@ class KotlinSemanticCollector(
         symbol.add("filePath", com.google.gson.JsonNull.INSTANCE)
         symbol.add("startLine", com.google.gson.JsonNull.INSTANCE)
         symbol.add("startColumn", com.google.gson.JsonNull.INSTANCE)
-        symbol.add("containingSymbolId", com.google.gson.JsonNull.INSTANCE)
+        symbol.addProperty("containingSymbolId", containingSymbolId)
         symbol.addProperty("origin", 3)
         symbol.addProperty("isTestCode", isTestCode)
-        symbol.addProperty("isPublic", declaration.visibility.name == "public")
+        symbol.addProperty("isPublic", visibility == "public")
+        symbol.addProperty("visibility", visibility?.replaceFirstChar(Char::uppercase) ?: "Unknown")
+        symbol.addProperty(
+            "declarationKind",
+            when {
+                declaration is IrConstructor -> "Constructor"
+                receiverType(declaration) != null -> "ExtensionFunction"
+                else -> "Function"
+            }
+        )
+        symbol.addProperty("receiverType", receiverType(declaration))
         symbol.add("provenance", JsonArray())
         symbols[id] = symbol
     }
@@ -394,25 +427,37 @@ class KotlinSemanticCollector(
         id: String,
         qualifiedName: String,
         isInterface: Boolean,
-        isJava: Boolean
+        isJava: Boolean,
+        declaration: IrClass? = null
     ) {
         if (symbols.containsKey(id)) return
+
+        val containingClass = declaration?.parent as? IrClass
+        val visibility = declaration?.visibility?.name
         val symbol = JsonObject()
         symbol.addProperty("id", id)
         symbol.addProperty("kind", if (isInterface) 5 else 4)
         symbol.addProperty("name", qualifiedName.substringAfterLast('.'))
         symbol.addProperty("qualifiedName", qualifiedName)
-        symbol.addProperty("containerName", qualifiedName.substringBeforeLast('.', ""))
+        symbol.addProperty(
+            "containerName",
+            declaration?.let(::packageName) ?: qualifiedName.substringBeforeLast('.', "")
+        )
         symbol.addProperty("containerKind", "Package")
         symbol.addProperty("language", if (isJava) "Java" else "Kotlin")
         symbol.addProperty("projectPath", projectPath)
         symbol.add("filePath", com.google.gson.JsonNull.INSTANCE)
         symbol.add("startLine", com.google.gson.JsonNull.INSTANCE)
         symbol.add("startColumn", com.google.gson.JsonNull.INSTANCE)
-        symbol.add("containingSymbolId", com.google.gson.JsonNull.INSTANCE)
+        symbol.addProperty("containingSymbolId", containingClass?.let(::classId))
         symbol.addProperty("origin", 3)
         symbol.addProperty("isTestCode", isTestCode)
-        symbol.addProperty("isPublic", true)
+        symbol.addProperty("isPublic", visibility == "public")
+        symbol.addProperty("visibility", visibility?.replaceFirstChar(Char::uppercase) ?: "Unknown")
+        symbol.addProperty(
+            "declarationKind",
+            declaration?.let(::declarationKind) ?: if (isInterface) "Interface" else "Class"
+        )
         symbol.add("provenance", JsonArray())
         symbols[id] = symbol
     }
@@ -465,19 +510,37 @@ class KotlinSemanticCollector(
         containingSymbolId: String? = null
     ): String {
         val qualifiedName = declaration.fqNameWhenAvailable?.asString()
-            ?: localDeclarationName(declaration, containingSymbolId)
+            ?: localDeclarationName(declaration, containingSymbolId, "type")
         return "kotlin:type:$qualifiedName"
     }
 
     private fun localDeclarationName(
         declaration: IrDeclaration,
-        containingSymbolId: String?
+        containingSymbolId: String?,
+        declarationKind: String,
+        signature: String = ""
     ): String {
+        localDeclarationIds[declaration]?.let { return it }
+
         val owner = containingSymbolId ?: parentSymbolId(declaration) ?: projectPath
-        val offset = declaration.startOffset.takeIf { it >= 0 }?.toString() ?: "unknown"
-        val declarationName = (declaration as? IrDeclarationWithName)?.name?.asString()
+        val name = (declaration as? IrDeclarationWithName)?.name?.asString()
             ?: declaration.javaClass.simpleName
-        return "$owner::$declarationName@$offset"
+        val occurrenceKey = "$owner|$declarationKind|$name|$signature"
+        val occurrence = localDeclarationOccurrences[occurrenceKey] ?: 0
+        localDeclarationOccurrences[occurrenceKey] = occurrence + 1
+
+        val identity = "$owner::$declarationKind:$name#$occurrence"
+        localDeclarationIds[declaration] = identity
+        return identity
+    }
+
+    private fun packageName(declaration: IrDeclaration): String {
+        var parent = declaration.parent
+        while (parent is IrDeclaration) {
+            parent = parent.parent
+        }
+
+        return (parent as? IrPackageFragment)?.fqName?.asString().orEmpty()
     }
 
     private fun parentSymbolId(declaration: IrDeclaration): String? = when (val parent = declaration.parent) {
@@ -558,7 +621,7 @@ class KotlinSemanticCollector(
             ?.let(::typeIdentity)
         val receiverIdentity = receiver?.let { "($it)" }.orEmpty()
         val name = declaration.fqNameWhenAvailable?.asString()
-            ?: localDeclarationName(declaration, containingSymbolId)
+            ?: localDeclarationName(declaration, containingSymbolId, "property", receiver.orEmpty())
         return "kotlin:property:$name$receiverIdentity"
     }
 
@@ -566,8 +629,6 @@ class KotlinSemanticCollector(
         declaration: IrFunction,
         containingSymbolId: String? = null
     ): String {
-        val name = declaration.fqNameWhenAvailable?.asString()
-            ?: localDeclarationName(declaration, containingSymbolId)
         val parameters = declaration.parameters
         val receiver = parameters.firstOrNull { it.kind == IrParameterKind.ExtensionReceiver }
             ?.type
@@ -578,6 +639,13 @@ class KotlinSemanticCollector(
         val suspendMarker = if ((declaration as? IrSimpleFunction)?.isSuspend == true) "suspend" else null
         val signature = listOfNotNull(receiver, parameterTypes.takeIf(String::isNotEmpty), suspendMarker)
             .joinToString("|")
+        val name = declaration.fqNameWhenAvailable?.asString()
+            ?: localDeclarationName(
+                declaration,
+                containingSymbolId,
+                if (declaration is IrConstructor) "constructor" else "function",
+                signature
+            )
         return "kotlin:function:$name($signature)"
     }
 

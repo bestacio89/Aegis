@@ -461,7 +461,11 @@ class KotlinSemanticCollector(
 
         override fun visitClassReference(expression: IrClassReference) {
             val sourceId = owners.lastOrNull()
-            val target = expression.symbol.owner
+            val target = expression.symbol.owner as? IrClass
+            if (target == null) {
+                expression.acceptChildrenVoid(this)
+                return
+            }
             val targetId = classId(target)
             val qualifiedName = target.fqNameWhenAvailable?.asString() ?: targetId
             addExternalTypeIfNeeded(

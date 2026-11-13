@@ -61,7 +61,10 @@ public sealed class SemanticArchitectureComponentGraphTests
                 new EmptyClasspathResolver(),
                 NullLogger<JavaSemanticAnalysisOrchestrator>.Instance);
 
-            await orchestrator.AnalyzeAsync(context);
+            var pipeline = new SemanticAnalysisPipeline(
+                [orchestrator],
+                NullLogger<SemanticAnalysisPipeline>.Instance);
+            await pipeline.AnalyzeAsync(context);
 
             Assert.Equal(2, context.SemanticAnalysisRuns.Count);
             Assert.All(context.SemanticAnalysisRuns, run =>

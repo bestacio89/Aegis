@@ -25,6 +25,12 @@ public sealed class GradleBuildModel
 
     public string? KotlinPluginVersion { get; init; }
 
+    public string? KotlinLanguageVersion { get; init; }
+
+    public string? KotlinApiVersion { get; init; }
+
+    public string? KotlinJvmTarget { get; init; }
+
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];
 
     public bool IsComplete { get; init; }

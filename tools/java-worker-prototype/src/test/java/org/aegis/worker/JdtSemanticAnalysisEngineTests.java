@@ -256,6 +256,30 @@ final class JdtSemanticAnalysisEngineTests {
             item.getAsJsonObject().get("qualifiedName").getAsString().equals("com.test.Service")));
     }
 
+    @Test
+    void does_not_classify_production_sources_as_generated_because_of_ancestor_or_package_names() throws Exception {
+        Path project = Files.createDirectories(workspace.resolve("generated").resolve("project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("src/main/java/com/generated"));
+        Path source = sourceRoot.resolve("Service.java");
+        Files.writeString(source, "package com.generated; public final class Service {}");
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("projectPath", project.toString());
+        payload.add("sourceRoots", paths(project.resolve("src/main/java")));
+        payload.add("sourceFiles", paths(source));
+        payload.add("classpathEntries", new JsonArray());
+        payload.addProperty("includeTestCode", false);
+        payload.addProperty("includeGeneratedCode", false);
+
+        JsonObject result = new JdtSemanticAnalysisEngine().analyze(payload);
+
+        assertEquals(2, result.get("status").getAsInt());
+        assertEquals(1, result.get("analyzedFileCount").getAsInt());
+        assertEquals(0, result.get("skippedFileCount").getAsInt());
+        assertTrue(result.getAsJsonArray("symbols").asList().stream().anyMatch(item ->
+            item.getAsJsonObject().get("qualifiedName").getAsString().equals("com.generated.Service")));
+    }
+
     private static void deleteRecursively(Path directory) throws IOException {
         try (var paths = Files.walk(directory)) {
             paths.sorted(Comparator.reverseOrder()).forEach(path -> {

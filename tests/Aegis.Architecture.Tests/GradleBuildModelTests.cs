@@ -124,6 +124,73 @@ public sealed class GradleBuildModelTests
     }
 
     [Fact]
+    public void Detect_resolves_kotlin_jvm_plugin_and_mixed_kotlin_source_roots()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleKotlin_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"kotlin-sample\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    kotlin("jvm") version "2.4.21"
+                }
+                sourceSets {
+                    main {
+                        java.srcDir("src/main/shared")
+                        kotlin.srcDir("src/main/shared")
+                    }
+                    test {
+                        kotlin.srcDir("src/test/customKotlin")
+                    }
+                }
+                """);
+
+            var sharedRoot = Path.Combine(root, "src", "main", "shared");
+            var testKotlinRoot = Path.Combine(root, "src", "test", "customKotlin");
+            Directory.CreateDirectory(Path.Combine(sharedRoot, "sample"));
+            Directory.CreateDirectory(Path.Combine(testKotlinRoot, "sample"));
+            File.WriteAllText(Path.Combine(sharedRoot, "sample", "JavaContract.java"),
+                "package sample; public interface JavaContract {}");
+            File.WriteAllText(Path.Combine(sharedRoot, "sample", "KotlinService.kt"),
+                "package sample\nclass KotlinService : JavaContract");
+            File.WriteAllText(Path.Combine(testKotlinRoot, "sample", "KotlinServiceTest.kt"),
+                "package sample\nclass KotlinServiceTest");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.Equal("2.4.21", model.KotlinPluginVersion);
+            Assert.Contains(model.Plugins, plugin =>
+                plugin.Id == "org.jetbrains.kotlin.jvm" && plugin.Version == "2.4.21");
+            Assert.Contains(model.SourceSets, sourceSet =>
+                sourceSet.Name == "main" && sourceSet.KotlinSourceDirectories!.Contains(sharedRoot));
+            Assert.Contains(model.SourceSets, sourceSet =>
+                sourceSet.Name == "test" && sourceSet.KotlinSourceDirectories!.Contains(testKotlinRoot));
+
+            var mixedRoot = Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == sharedRoot);
+            Assert.True(mixedRoot.ContainsJavaSources);
+            Assert.True(mixedRoot.ContainsKotlinSources);
+            Assert.True(mixedRoot.ContainsLanguage("Java"));
+            Assert.True(mixedRoot.ContainsLanguage("Kotlin"));
+            Assert.Equal(
+                ProjectSourceRootOwnership.Production,
+                mixedRoot.Ownership);
+
+            var testRoot = Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == testKotlinRoot);
+            Assert.True(testRoot.ContainsKotlinSources);
+            Assert.Equal(ProjectSourceRootOwnership.Test, testRoot.Ownership);
+            Assert.True(model.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_expands_catalog_bundles_and_resolves_rich_version_constraints()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisGradleRichCatalog_{Guid.NewGuid():N}");

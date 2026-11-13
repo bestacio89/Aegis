@@ -102,6 +102,16 @@ public sealed class RuleEvaluationStats
         = new Dictionary<string, string>(
             StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Difference between registered rules and the mutually exclusive accounting
+    /// categories: supported applicable, unsupported, disabled by policy, and
+    /// not applicable. Not-evaluated rules are a subset of supported applicable.
+    /// Zero means every registered rule has exactly one classification.
+    /// </summary>
+    public int RuleAccountingDifference =>
+        RulesRegistered
+        - (RulesApplicable + RulesUnsupported + RulesDisabledByPolicy + RulesNotApplicable.Count);
+
     public IReadOnlyList<RuleCheckBucket> CheckBuckets { get; init; }
         = Array.Empty<RuleCheckBucket>();
 

@@ -744,13 +744,19 @@ class KotlinSemanticCollector(
     }
 
     private fun fieldTargetId(declaration: IrField): String {
-        val propertyId = backingFieldProperties[declaration.symbol]
-            ?: declaration.correspondingPropertySymbol?.owner?.let(::propertyId)
-        if (propertyId != null) {
-            declaration.correspondingPropertySymbol?.owner?.let {
-                addExternalPropertyIfNeeded(propertyId, it)
-            }
-            return propertyId
+        backingFieldProperties[declaration.symbol]?.let { return it }
+
+        if (declaration.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) {
+            val id = fieldId(declaration)
+            addExternalFieldIfNeeded(id, declaration)
+            return id
+        }
+
+        val externalProperty = declaration.correspondingPropertySymbol?.owner
+        if (externalProperty != null) {
+            val id = propertyId(externalProperty)
+            addExternalPropertyIfNeeded(id, externalProperty)
+            return id
         }
 
         val id = fieldId(declaration)

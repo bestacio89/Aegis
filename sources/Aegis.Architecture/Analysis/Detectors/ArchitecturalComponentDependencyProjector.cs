@@ -1,3 +1,4 @@
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Architecture.Analysis.Detectors;

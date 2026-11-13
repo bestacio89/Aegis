@@ -206,9 +206,7 @@ private class KotlinSemanticCollector(
             declaration.superTypes.forEach { superType ->
                 val targetName = superType.classFqName?.asString() ?: return@forEach
                 val targetId = "kotlin:type:$targetName"
-                val targetIsInterface = symbols.values.any { symbol ->
-                    symbol.get("qualifiedName").asString() == targetName && symbol.get("kind").asInt == 5
-                }
+                val targetIsInterface = isInterfaceType(targetName)
                 addExternalTypeIfNeeded(targetId, targetName, targetIsInterface)
                 addRelationship(sourceId, targetId, if (targetIsInterface) 3 else 2, declaration.startOffset, currentFile)
             }
@@ -284,6 +282,16 @@ private class KotlinSemanticCollector(
         symbol.addProperty("isPublic", declaration.visibility == DescriptorVisibilities.PUBLIC)
         symbol.add("provenance", JsonArray())
         symbols[id] = symbol
+    }
+
+    private fun isInterfaceType(qualifiedName: String): Boolean {
+        for (symbol in this@KotlinSemanticCollector.symbols.values) {
+            if (symbol.get("qualifiedName").asString() == qualifiedName
+                && symbol.get("kind").asInt == 5) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun addExternalTypeIfNeeded(id: String, qualifiedName: String, isInterface: Boolean) {

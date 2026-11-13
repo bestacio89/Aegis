@@ -37,6 +37,10 @@ class KotlinCompilerIntegrationTests {
                 public String load() {
                     return "loaded";
                 }
+
+                public String getDisplayName() {
+                    return "display";
+                }
             }
             """.trimIndent()
         )
@@ -141,6 +145,8 @@ class KotlinCompilerIntegrationTests {
             }
 
             fun readJavaField(repository: JavaRepository): String = repository.label
+
+            fun readJavaBeanProperty(repository: JavaRepository): String = repository.displayName
 
             class ReferenceTarget() {
                 @JvmField var directField: String = ""
@@ -405,6 +411,21 @@ class KotlinCompilerIntegrationTests {
                         it.get("targetSymbolId").asString == "kotlin:field:interop.JavaRepository.label"
                 },
                 "Java field reads from Kotlin must remain explicit references."
+            )
+
+            val externalJavaBeanProperty = symbols.single {
+                it.get("kind").asInt == 12 &&
+                    it.get("qualifiedName").asString == "interop.JavaRepository.displayName" &&
+                    it.get("language").asString == "Java"
+            }
+            assertEquals("Property", externalJavaBeanProperty.get("declarationKind").asString)
+            assertTrue(
+                relationships.any {
+                    it.get("kind").asInt == 5 &&
+                        it.get("sourceSymbolId").asString.startsWith("kotlin:function:sample.readJavaBeanProperty(") &&
+                        it.get("targetSymbolId").asString == "kotlin:property:interop.JavaRepository.displayName"
+                },
+                "JavaBean getter access from Kotlin must remain a property reference."
             )
             assertTrue(
                 symbols.any {

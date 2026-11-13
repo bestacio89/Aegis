@@ -79,7 +79,8 @@ public sealed class CircularDependencyEvaluator
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var componentAnalysisComplete = requiredLanguages.Count > 0
             && requiredLanguages.SetEquals(analyzedLanguages)
-            && semanticRuns.All(run => run.IsComplete)
+            && semanticRuns.All(run => run.IsComplete
+                && !run.Diagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
             && !context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
 
         if (!useComponentGraph && context.ProductionDependencies.Count == 0)

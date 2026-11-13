@@ -174,8 +174,9 @@ The Relationship Ledger should add a relationship-level filter and expose the un
 - Add typed logical component and membership contracts.
 - Added shared contracts and additive project-context collections.
 - Added a versioned JSON loader for `.aegis/architecture-map.json`, including schema, mapping and metadata validation.
-- Added deterministic exact/prefix/module matching, language/module scoping, ambiguity diagnostics, conservative role-segment inference and explicit unclassified memberships.
+- Added deterministic exact/prefix/module matching, language/module scoping, ambiguity diagnostics, conservative role-segment inference and explicit unclassified memberships. Convention-derived components are scoped by build-module identity to avoid collapsing unrelated modules into one role bucket.
 - Integrated classification into both the full semantic pipeline and the Java compatibility path.
+- Projected classification diagnostics and coverage counts into the architecture report so configuration and inference uncertainty is visible to report consumers.
 - Added tests for serialization compatibility, exact override, longest-prefix selection, segment boundaries, module mapping, ambiguity, conservative inference and configuration loading.
 - Status: implementation committed; exact-head CI validation pending.
 - Implement configuration parsing/validation for explicit mappings.

@@ -110,7 +110,10 @@ public static class ArchitecturalComponentClassifier
 
             if (inference.Role is not null)
             {
-                var componentId = $"convention:{inference.Role}";
+                var componentId = CreateConventionComponentId(
+                    codeComponent,
+                    context.RootPath,
+                    inference.Role);
                 var componentName = ToDisplayName(inference.Role);
                 AddMembership(
                     context,
@@ -464,6 +467,49 @@ public static class ArchitecturalComponentClassifier
             MatchedIdentity = component.QualifiedName,
             Explanation = explanation
         };
+
+    private static string CreateConventionComponentId(
+        ArchitectureComponentContext component,
+        string projectRoot,
+        string role)
+    {
+        var moduleIdentity = component.BuildModuleName;
+
+        if (!string.IsNullOrWhiteSpace(component.BuildModulePath)
+            && !string.IsNullOrWhiteSpace(projectRoot))
+        {
+            try
+            {
+                var rootPath = Path.GetFullPath(projectRoot);
+                var modulePath = Path.GetFullPath(component.BuildModulePath, rootPath);
+                var relativePath = Path.GetRelativePath(rootPath, modulePath);
+                var parentPrefix = $"..{Path.DirectorySeparatorChar}";
+
+                if (!relativePath.Equals(".", StringComparison.Ordinal)
+                    && !relativePath.Equals("..", StringComparison.Ordinal)
+                    && !relativePath.StartsWith(parentPrefix, PathComparison))
+                {
+                    moduleIdentity = relativePath;
+                }
+            }
+            catch (ArgumentException)
+            {
+                // Fall back to the stable discovered module name.
+            }
+            catch (NotSupportedException)
+            {
+                // Fall back to the stable discovered module name.
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(moduleIdentity))
+            moduleIdentity = "root";
+
+        var normalizedModuleIdentity = Uri.EscapeDataString(
+            moduleIdentity.Replace('\\', '/').ToLowerInvariant());
+
+        return $"convention:{normalizedModuleIdentity}:{role}";
+    }
 
     private static string ToDisplayName(string role) =>
         role.Length == 0 ? role : char.ToUpperInvariant(role[0]) + role[1..];

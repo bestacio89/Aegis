@@ -157,6 +157,27 @@ public sealed class AegisArchitectureAnalyzer
 
         report.TotalFilesScanned =
             context.FileCount;
+
+        report.Diagnostics.RemoveAll(diagnostic =>
+            string.Equals(diagnostic.Source, "ArchitectureClassification", StringComparison.Ordinal));
+
+        foreach (var diagnostic in context.ArchitectureClassificationDiagnostics)
+        {
+            report.Diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = diagnostic.Code,
+                Component = nameof(ArchitecturalComponentClassifier),
+                Source = "ArchitectureClassification",
+                Severity = diagnostic.Severity,
+                Message = diagnostic.Message,
+                Target = diagnostic.Target
+                    ?? diagnostic.CodeComponentId
+                    ?? diagnostic.MappingId,
+                Language = diagnostic.Language,
+                ProjectPath = diagnostic.ModulePath,
+                AffectsCoverage = diagnostic.AffectsCoverage
+            });
+        }
     }
 
 
@@ -164,6 +185,11 @@ public sealed class AegisArchitectureAnalyzer
     private static ArchitectureEvaluatorResult BuildContextFact(
         ProjectArchitectureContext context)
     {
+        var classifiedCodeContainerCount = context.ArchitecturalComponentMemberships.Count(
+            membership => membership.ArchitecturalComponentId is not null);
+        var unclassifiedCodeContainerCount = context.ArchitecturalComponentMemberships.Count
+            - classifiedCodeContainerCount;
+
         return new ArchitectureEvaluatorResult(
             "ProjectContextFact",
             context.RootPath)
@@ -192,7 +218,19 @@ public sealed class AegisArchitectureAnalyzer
                     context.DiscoveryDiagnostics.Count,
 
                 ["ExcludedPathEntryCount"] =
-                    context.ExcludedEntriesByReason.Values.Sum()
+                    context.ExcludedEntriesByReason.Values.Sum(),
+
+                ["ArchitecturalComponentCount"] =
+                    context.ArchitecturalComponents.Count,
+
+                ["ClassifiedCodeContainerCount"] =
+                    classifiedCodeContainerCount,
+
+                ["UnclassifiedCodeContainerCount"] =
+                    unclassifiedCodeContainerCount,
+
+                ["ArchitectureClassificationDiagnosticCount"] =
+                    context.ArchitectureClassificationDiagnostics.Count
             },
 
             Metadata =

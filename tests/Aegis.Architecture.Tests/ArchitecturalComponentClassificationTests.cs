@@ -136,7 +136,7 @@ public sealed class ArchitecturalComponentClassificationTests
 
         ArchitecturalComponentClassifier.Classify(context);
 
-        Assert.Equal("convention:domain",
+        Assert.Equal("convention:sample:domain",
             context.ArchitecturalComponentMemberships.Single(item => item.CodeComponentId == "domain")
                 .ArchitecturalComponentId);
         Assert.Null(context.ArchitecturalComponentMemberships.Single(item => item.CodeComponentId == "ordinary")
@@ -145,6 +145,49 @@ public sealed class ArchitecturalComponentClassificationTests
             .ArchitecturalComponentId);
         Assert.Contains(context.ArchitectureClassificationDiagnostics,
             diagnostic => diagnostic.Code == "ArchitectureClassificationConflictingConventions");
+    }
+
+    [Fact]
+    public void Convention_inference_keeps_same_role_in_distinct_build_modules_separate()
+    {
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "sample",
+            RootPath = "/workspace",
+            ArchitectureComponents =
+            [
+                new ArchitectureComponentContext
+                {
+                    Id = "sales-domain",
+                    Name = "domain",
+                    QualifiedName = "sales.domain",
+                    Language = "Java",
+                    ComponentKind = "Package",
+                    BuildModuleName = "sales",
+                    BuildModulePath = "/workspace/modules/sales",
+                    ProductionSymbolCount = 2
+                },
+                new ArchitectureComponentContext
+                {
+                    Id = "inventory-domain",
+                    Name = "domain",
+                    QualifiedName = "inventory.domain",
+                    Language = "Java",
+                    ComponentKind = "Package",
+                    BuildModuleName = "inventory",
+                    BuildModulePath = "/workspace/modules/inventory",
+                    ProductionSymbolCount = 3
+                }
+            ]
+        };
+
+        ArchitecturalComponentClassifier.Classify(context);
+
+        Assert.Equal(2, context.ArchitecturalComponents.Count);
+        Assert.Equal(2, context.ArchitecturalComponentMemberships
+            .Select(membership => membership.ArchitecturalComponentId)
+            .Distinct(StringComparer.Ordinal)
+            .Count());
     }
 
     [Fact]

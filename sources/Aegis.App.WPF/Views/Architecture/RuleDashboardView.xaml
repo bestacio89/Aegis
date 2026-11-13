@@ -97,7 +97,7 @@
                 <TextBlock Text="{Binding RegisteredRules}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
             </Border>
             <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">
-              <StackPanel><TextBlock Text="IN SCOPE" Style="{StaticResource Text.Eyebrow}"/>
+              <StackPanel><TextBlock Text="SUPPORTED APPLICABLE" Style="{StaticResource Text.Eyebrow}"/>
                 <TextBlock Text="{Binding InScopeRules}" Style="{StaticResource Text.KpiValue}" FontSize="22"/></StackPanel>
             </Border>
             <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="72">

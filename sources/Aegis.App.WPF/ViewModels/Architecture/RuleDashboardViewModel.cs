@@ -172,6 +172,13 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
             return "Rule accounting evidence is unavailable for this report.";
 
         var details = new List<string>();
+        if (stats.RuleAccountingDifference != 0)
+        {
+            details.Add(
+                $"Rule accounting discrepancy: {stats.RuleAccountingDifference:+#;-#;0} " +
+                "registered rule(s) are not reconciled by the reported status categories.");
+        }
+
         details.AddRange(stats.UnsupportedRuleReasons
             .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .Take(3)

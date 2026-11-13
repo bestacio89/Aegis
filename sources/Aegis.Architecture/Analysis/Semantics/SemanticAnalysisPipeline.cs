@@ -81,8 +81,61 @@ public sealed class SemanticAnalysisPipeline
             }
         }
 
+        RecordMissingLanguageAnalyzers(context);
         ProjectArchitectureComponents(context);
         ModuleRoleDetector.Analyze(context.Modules);
+    }
+
+    private void RecordMissingLanguageAnalyzers(ProjectArchitectureContext context)
+    {
+        var registeredLanguages = _analyzers
+            .Select(analyzer => analyzer.Language)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var discoveredLanguages = context.ProductionModules
+            .SelectMany(module => module.Languages)
+            .Append(context.Language)
+            .Where(language => !string.IsNullOrWhiteSpace(language)
+                && !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var language in discoveredLanguages)
+        {
+            if (registeredLanguages.Contains(language)
+                || context.SemanticAnalysisRuns.Any(run =>
+                    run.Language.Equals(language, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            context.SemanticAnalysisRuns.Add(new SemanticAnalysisRun
+            {
+                RunId = Guid.NewGuid().ToString("N"),
+                Language = language,
+                EngineId = nameof(SemanticAnalysisPipeline),
+                ProjectPath = context.RootPath,
+                Status = SemanticAnalysisStatus.Unsupported,
+                StartedAtUtc = now,
+                CompletedAtUtc = now,
+                Diagnostics =
+                [
+                    new AnalysisDiagnostic
+                    {
+                        Code = "SemanticProjectAnalyzerNotRegistered",
+                        Component = nameof(SemanticAnalysisPipeline),
+                        Message = $"No semantic project analyzer is registered for discovered language '{language}'.",
+                        Target = context.RootPath,
+                        AffectsCoverage = true
+                    }
+                ]
+            });
+
+            _logger.LogWarning(
+                "No semantic project analyzer is registered for discovered language {Language} in {ProjectPath}.",
+                language,
+                context.RootPath);
+        }
     }
 
     /// <summary>

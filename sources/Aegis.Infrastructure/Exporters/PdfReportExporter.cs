@@ -296,15 +296,14 @@ public sealed class PdfReportExporter : IReportExporter
         {
             // RulesNotEvaluated already contains supported, applicable rules only.
             // Unsupported rules are accounted for in their own status category.
-            var supportedRulesNotEvaluated = stats.RulesNotEvaluated.Count;
-
             AddRow(table, L(language, "Rules Registered", "Règles Enregistrées"), stats.RulesRegistered.ToString());
             AddRow(table, L(language, "Supported Rules Applicable", "Règles Applicables Prises en Charge"), stats.RulesApplicable.ToString());
             AddRow(table, L(language, "Rules Evaluated / Applicable", "Règles Évaluées / Applicables"), $"{stats.RulesEvaluated} / {stats.RulesApplicable} ({stats.EvaluationCoverage:0.0}%)");
             AddRow(table, L(language, "Registry-wide Rule Evaluation Coverage", "Couverture sur les règles enregistrées"), $"{stats.RegisteredRuleEvaluationCoverage:0.0}%");
-            AddRow(table, L(language, "Rules Not Evaluated", "Règles Non Évaluées"), stats.RulesNotEvaluated.Count.ToString());
-            AddRow(table, L(language, "Supported Rules Not Evaluated", "Règles Prises en Charge Non Évaluées"), supportedRulesNotEvaluated.ToString());
+            AddRow(table, L(language, "Applicable Rules Not Evaluated", "Règles Applicables Non Évaluées"), stats.RulesNotEvaluated.Count.ToString());
+            AddRow(table, L(language, "Not Applicable Rules", "Règles Non Applicables"), stats.RulesNotApplicable.Count.ToString());
             AddRow(table, L(language, "Unsupported Rules", "Règles Non Prises en Charge"), stats.RulesUnsupported.ToString());
+            AddRow(table, L(language, "Disabled by Policy Rules", "Règles Désactivées par la Politique"), stats.RulesDisabledByPolicy.ToString());
             AddRow(table, L(language, "Rule Evaluation Coverage", "Couverture d'Évaluation des Règles"), metrics is { HasCoverageEvidence: true } ? $"{stats.EvaluationCoverage:P1}" : "N/A");
             AddRow(table, L(language, "Total Diagnostics", "Diagnostics Totaux"), report.Diagnostics.Count.ToString());
             AddRow(table, L(language, "Semantic Diagnostics", "Diagnostics Sémantiques"), report.SemanticDiagnosticCount.ToString());

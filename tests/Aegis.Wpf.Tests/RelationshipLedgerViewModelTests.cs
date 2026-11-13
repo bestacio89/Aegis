@@ -1,3 +1,7 @@
+using System;
+using System.Linq;
+using System.Threading;
+using Xunit;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Wpf.ViewModels.Architecture;
 

@@ -556,6 +556,7 @@ public sealed class GradleBuildModelTests
 
             Assert.Contains(model.SourceSets, sourceSet =>
                 sourceSet.Name == "integrationTest" && sourceSet.IsTest);
+            Assert.DoesNotContain(model.SourceSets, sourceSet => sourceSet.Name == "ava");
             Assert.Contains(model.SourceSets, sourceSet =>
                 sourceSet.Name == "benchmark" && !sourceSet.IsTest);
             Assert.True(

@@ -26,6 +26,9 @@ public interface IEvaluator : IScopedDependency
     /// </summary>
     string[] SupportedFrameworks { get; }
 
+    /// <summary>Semantic evidence capabilities that must be available before this evaluator runs.</summary>
+    IReadOnlyCollection<string> RequiredSemanticCapabilities => Array.Empty<string>();
+
     /// <summary>
     /// Indicates whether this evaluator is currently enabled.
     /// Can be toggled dynamically via the active <see cref="AegisArchitecturePolicy"/>.

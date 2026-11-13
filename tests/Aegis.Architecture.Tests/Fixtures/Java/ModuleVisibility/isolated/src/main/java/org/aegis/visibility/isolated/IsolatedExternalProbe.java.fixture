@@ -1,0 +1,7 @@
+package org.aegis.visibility.isolated;
+
+import org.springframework.context.ApplicationContext;
+
+public interface IsolatedExternalProbe {
+    ApplicationContext context();
+}

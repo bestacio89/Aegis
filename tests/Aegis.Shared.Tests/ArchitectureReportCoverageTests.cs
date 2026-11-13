@@ -45,6 +45,36 @@ public sealed class ArchitectureReportCoverageTests
     }
 
     [Fact]
+    public void Rule_evaluation_coverage_uses_applicable_rules_and_reports_registry_coverage_separately()
+    {
+        var stats = new RuleEvaluationStats
+        {
+            RulesRegistered = 76,
+            RulesApplicable = 32,
+            RulesEvaluated = 17
+        };
+
+        Assert.Equal(53.125, stats.EvaluationCoverage, 3);
+        Assert.Equal(Math.Round(17.0 / 76.0 * 100.0, 2), stats.RegisteredRuleEvaluationCoverage, 2);
+    }
+
+    [Fact]
+    public void Rule_accounting_reconciles_registered_rules_without_double_counting_not_evaluated_rules()
+    {
+        var stats = new RuleEvaluationStats
+        {
+            RulesRegistered = 76,
+            RulesApplicable = 32,
+            RulesEvaluated = 17,
+            RulesUnsupported = 21,
+            RulesNotApplicable = Enumerable.Range(1, 23).Select(index => $"RULE-{index}").ToArray(),
+            RulesNotEvaluated = Enumerable.Range(1, 15).Select(index => $"UNEVALUATED-{index}").ToArray()
+        };
+
+        Assert.Equal(0, stats.RuleAccountingDifference);
+    }
+
+    [Fact]
     public void Zero_applicable_rules_do_not_report_full_evaluation_coverage()
     {
         var stats = new RuleEvaluationStats

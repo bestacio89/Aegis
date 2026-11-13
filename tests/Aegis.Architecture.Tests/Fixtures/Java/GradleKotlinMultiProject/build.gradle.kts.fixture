@@ -1,0 +1,18 @@
+plugins {
+    java
+}
+
+group = "org.aegis.fixture"
+version = "1.0.0"
+
+subprojects {
+    apply(plugin = "java")
+
+    extensions.configure<JavaPluginExtension> {
+        toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    }
+
+    configurations.create("contractTestImplementation") {
+        extendsFrom(configurations.testImplementation.get())
+    }
+}

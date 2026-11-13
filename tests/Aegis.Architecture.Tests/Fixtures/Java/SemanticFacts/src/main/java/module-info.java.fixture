@@ -1,0 +1,5 @@
+module org.aegis.semanticfacts {
+    requires java.base;
+    exports org.aegis.facts.domain;
+    exports org.aegis.facts.application;
+}

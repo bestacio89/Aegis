@@ -282,6 +282,8 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
         var moduleCount = 0;
         var filesWithComponents = 0;
         var filesWithModules = 0;
+        var syntaxDiagnosticCount = 0;
+        var templateDiagnosticCount = 0;
 
         var diagnostics = GetStringArray(
             root,
@@ -465,6 +467,68 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
                     Metrics = metrics,
                     Metadata = metadata
                 });
+
+            // The Node analyzer returns file-level TypeScript parse diagnostics.
+            // Preserve each diagnostic as a traceable evaluator fact instead of
+            // hiding it in project-summary metadata.
+            var syntaxDiagnostics = GetProperty(file, "syntaxDiagnostics");
+            if (syntaxDiagnostics is { ValueKind: JsonValueKind.Array })
+            {
+                foreach (var diagnostic in syntaxDiagnostics.Value.EnumerateArray())
+                {
+                    if (diagnostic.ValueKind != JsonValueKind.Object)
+                        continue;
+
+                    syntaxDiagnosticCount++;
+                    results.Add(CreateDiagnosticResult(
+                        filePath,
+                        diagnostic,
+                        "TypeScriptSyntax"));
+                }
+            }
+
+            // Angular template diagnostics are nested under their owning
+            // component. Keep the component and declared external template
+            // reference so the report can identify the affected source.
+            foreach (var component in components)
+            {
+                var templateDiagnostics = GetProperty(
+                    component,
+                    "templateDiagnostics");
+
+                if (templateDiagnostics is not { ValueKind: JsonValueKind.Array })
+                    continue;
+
+                var componentName = GetComponentName(component);
+                var templateUrl = GetString(component, "templateUrl");
+
+                foreach (var diagnostic in templateDiagnostics.Value.EnumerateArray())
+                {
+                    if (diagnostic.ValueKind != JsonValueKind.Object)
+                        continue;
+
+                    templateDiagnosticCount++;
+                    results.Add(CreateDiagnosticResult(
+                        filePath,
+                        diagnostic,
+                        "AngularTemplate",
+                        componentName,
+                        templateUrl));
+                }
+            }
+
+            metadata["TypeScriptSyntaxDiagnosticCount"] =
+                GetProperty(file, "syntaxDiagnostics") is { ValueKind: JsonValueKind.Array } syntaxArray
+                    ? syntaxArray.GetArrayLength().ToString(CultureInfo.InvariantCulture)
+                    : "0";
+            metadata["AngularTemplateDiagnosticCount"] =
+                components.Sum(component =>
+                {
+                    var diagnosticsElement = GetProperty(component, "templateDiagnostics");
+                    return diagnosticsElement is { ValueKind: JsonValueKind.Array }
+                        ? diagnosticsElement.Value.GetArrayLength()
+                        : 0;
+                }).ToString(CultureInfo.InvariantCulture);
         }
 
         var summary = new ArchitectureEvaluatorResult(
@@ -514,6 +578,13 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
             summary.Metadata["DeclaredAngularVersion"] = angularVersion;
         }
 
+        summary.Metadata["TypeScriptSyntaxDiagnosticCount"] =
+            syntaxDiagnosticCount.ToString(CultureInfo.InvariantCulture);
+        summary.Metadata["AngularTemplateDiagnosticCount"] =
+            templateDiagnosticCount.ToString(CultureInfo.InvariantCulture);
+        summary.Metadata["DiagnosticsPresent"] =
+            (syntaxDiagnosticCount + templateDiagnosticCount > 0).ToString();
+
         if (diagnostics.Count > 0)
         {
             summary.Metadata["AnalyzerDiagnostics"] =
@@ -539,6 +610,47 @@ public sealed class AngularEvaluator : BaseArchitectureEvaluator
             status);
 
         return results;
+    }
+
+    private ArchitectureEvaluatorResult CreateDiagnosticResult(
+        string sourceFile,
+        JsonElement diagnostic,
+        string diagnosticType,
+        string? componentName = null,
+        string? templateUrl = null)
+    {
+        var result = new ArchitectureEvaluatorResult(
+            Name,
+            sourceFile)
+        {
+            Category = "FrontendDiagnostic",
+            Metadata =
+            {
+                [BaseArchitectureEvaluator.FilePathMetadataKey] = sourceFile,
+                [BaseArchitectureEvaluator.EvaluationScopeMetadataKey] =
+                    BaseArchitectureEvaluator.FileScope,
+                ["Framework"] = FrameworkName,
+                ["Language"] = LanguageName,
+                ["DiagnosticType"] = diagnosticType,
+                ["DiagnosticCode"] =
+                    GetString(diagnostic, "code") ?? "Unknown",
+                ["DiagnosticMessage"] =
+                    LimitText(
+                        GetString(diagnostic, "message") ?? "No diagnostic message was provided.",
+                        4_000),
+                ["DiagnosticLine"] =
+                    GetInt(diagnostic, "line")?.ToString(CultureInfo.InvariantCulture)
+                    ?? "Unknown"
+            }
+        };
+
+        if (!string.IsNullOrWhiteSpace(componentName))
+            result.Metadata["ComponentName"] = componentName;
+
+        if (!string.IsNullOrWhiteSpace(templateUrl))
+            result.Metadata["TemplateUrl"] = templateUrl;
+
+        return result;
     }
 
     private async Task<AnalyzerExecutionResult> ExecuteAnalyzerAsync(

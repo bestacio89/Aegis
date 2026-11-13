@@ -100,16 +100,21 @@ public sealed class RuleEngine
             context.ProjectName);
 
         var facts = new List<ArchitectureEvaluatorResult>();
-        var diagnostics = context.DiscoveryDiagnostics.ToList();
+        var semanticDiagnostics = CreateSemanticAnalysisDiagnostics(
+            context.SemanticAnalysisRuns);
+        var discoveryDiagnostics = context.DiscoveryDiagnostics.ToList();
         var scopes = DiscoverProjectScopes(
             projectPath,
             context,
-            diagnostics);
+            discoveryDiagnostics);
 
-        // Rule applicability must see the same discovery evidence that is
-        // preserved in the report. Otherwise a failed module discovery could
-        // be mistaken for proof that a candidate pattern is absent.
-        context.DiscoveryDiagnostics = diagnostics.ToList();
+        // Rule applicability must see discovery evidence, not semantic-provider
+        // diagnostics. Keep those channels distinct while preserving both in
+        // the finalized report.
+        context.DiscoveryDiagnostics = discoveryDiagnostics.ToList();
+        var diagnostics = discoveryDiagnostics
+            .Concat(semanticDiagnostics)
+            .ToList();
 
         var executions = new List<(IEvaluator Evaluator, string Path, ProjectArchitectureContext Context)>();
 
@@ -127,9 +132,15 @@ public sealed class RuleEngine
             if (repositoryWide)
             {
                 if (SupportsContext(evaluator, context))
-                    executions.Add((evaluator, projectPath, context));
+                {
+                    if (HasRequiredSemanticCapabilities(evaluator, context, projectPath, diagnostics))
+                        executions.Add((evaluator, projectPath, context));
+                }
                 else
+                {
                     LogUnsupported(evaluator, context);
+                }
+
                 continue;
             }
 
@@ -140,7 +151,8 @@ public sealed class RuleEngine
                     continue;
 
                 matchedScope = true;
-                executions.Add((evaluator, scope.Path, scope.Context));
+                if (HasRequiredSemanticCapabilities(evaluator, scope.Context, scope.Path, diagnostics))
+                    executions.Add((evaluator, scope.Path, scope.Context));
             }
 
             if (!matchedScope)
@@ -350,15 +362,27 @@ public sealed class RuleEngine
                     || status.Equals("CompletedWithDiagnostics", StringComparison.OrdinalIgnoreCase));
         });
 
+        var semanticDiagnosticCount = diagnostics.Count(diagnostic =>
+            string.Equals(diagnostic.Source, "SemanticAnalysis", StringComparison.Ordinal));
+        var discoveryDiagnosticCount = discoveryDiagnostics.Count;
+
         _logger.LogInformation(
             "Aegis scan completed. Violations={Violations}, Checks={Checks}, " +
-            "RulesEvaluated={Evaluated}/{Registered}, PipelineDiagnostics={PipelineDiagnostics}, " +
-            "ConfigurationDiagnostics={ConfigurationDiagnostics}, IncompleteFacts={IncompleteFacts}",
+            "RulesEvaluated={Evaluated}/{Applicable} supported applicable ({Coverage:0.0}%); " +
+            "RegisteredRules={Registered}, RegistryEvaluationCoverage={RegistryCoverage:0.0}%; " +
+            "AnalysisDiagnostics={AnalysisDiagnostics}, DiscoveryDiagnostics={DiscoveryDiagnostics}, " +
+            "SemanticDiagnostics={SemanticDiagnostics}, ConfigurationDiagnostics={ConfigurationDiagnostics}, " +
+            "IncompleteFacts={IncompleteFacts}",
             report.TotalViolations,
             outcome.Stats.ChecksPerformed,
             outcome.Stats.RulesEvaluated,
+            outcome.Stats.RulesApplicable,
+            outcome.Stats.EvaluationCoverage,
             outcome.Stats.RulesRegistered,
+            outcome.Stats.RegisteredRuleEvaluationCoverage,
             diagnostics.Count,
+            discoveryDiagnosticCount,
+            semanticDiagnosticCount,
             configurationDiagnosticCount,
             incompleteFactCount);
 
@@ -385,6 +409,59 @@ public sealed class RuleEngine
             null);
 
         return report;
+    }
+
+    private static List<AnalysisDiagnostic> CreateSemanticAnalysisDiagnostics(
+        IEnumerable<SemanticAnalysisRun> runs)
+    {
+        var diagnostics = new List<AnalysisDiagnostic>();
+
+        foreach (var run in runs)
+        {
+            foreach (var diagnostic in run.Diagnostics)
+            {
+                diagnostics.Add(new AnalysisDiagnostic
+                {
+                    Code = diagnostic.Code,
+                    Component = string.IsNullOrWhiteSpace(diagnostic.Component)
+                        ? run.EngineId
+                        : diagnostic.Component,
+                    Source = "SemanticAnalysis",
+                    Language = run.Language,
+                    EngineId = run.EngineId,
+                    RunId = run.RunId,
+                    ProjectPath = run.ProjectPath,
+                    Severity = diagnostic.Severity,
+                    Line = diagnostic.Line,
+                    Column = diagnostic.Column,
+                    Message = diagnostic.Message,
+                    Target = diagnostic.Target,
+                    ExceptionType = diagnostic.ExceptionType,
+                    AffectsCoverage = diagnostic.AffectsCoverage,
+                    Timestamp = diagnostic.Timestamp
+                });
+            }
+
+            if (!run.IsComplete && !run.Diagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
+            {
+                diagnostics.Add(new AnalysisDiagnostic
+                {
+                    Code = "SemanticAnalysisIncomplete",
+                    Component = run.EngineId,
+                    Source = "SemanticAnalysis",
+                    Language = run.Language,
+                    EngineId = run.EngineId,
+                    RunId = run.RunId,
+                    ProjectPath = run.ProjectPath,
+                    Message = $"Semantic analysis for {run.Language} ended with status '{run.Status}' without a coverage-affecting diagnostic.",
+                    Target = run.ProjectPath,
+                    AffectsCoverage = true,
+                    Timestamp = run.CompletedAtUtc ?? DateTimeOffset.UtcNow
+                });
+            }
+        }
+
+        return diagnostics;
     }
 
     private static void AppendEvaluatorDiagnostics(
@@ -522,6 +599,7 @@ public sealed class RuleEngine
                 // Otherwise project-scoped evaluators lose cross-project
                 // references and misclassify layer relationships as absent.
                 moduleContext.Modules = rootContext.Modules;
+                moduleContext.SemanticAnalysisRuns = rootContext.SemanticAnalysisRuns;
                 moduleContext.Layers = rootContext.Layers;
                 moduleContext.Dependencies = rootContext.Dependencies;
                 moduleContext.Boundaries = rootContext.Boundaries;
@@ -581,18 +659,26 @@ public sealed class RuleEngine
         IEvaluator evaluator,
         ProjectArchitectureContext context)
     {
-        if (!SupportsLanguage(evaluator, context.Language))
+        if (!SupportsLanguage(evaluator, context))
         {
             return false;
         }
 
-        // A repository context may contain several valid framework signals.
-        // The primary framework is descriptive, not an exclusive allow-list.
+        // Framework identity is module-owned. The context's primary framework
+        // remains descriptive and must not hide additional frameworks in mixed modules.
         var frameworks = new List<string>();
         if (!string.IsNullOrWhiteSpace(context.Framework))
             frameworks.Add(context.Framework);
         if (context.DetectedFrameworks is not null)
             frameworks.AddRange(context.DetectedFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+        var exactModules = context.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .Where(module => PathsEqual(module.Path, context.RootPath))
+            .ToArray();
+        IEnumerable<ProjectModuleContext> relevantModules = exactModules.Length > 0 ? exactModules : context.Modules;
+        foreach (var module in relevantModules)
+            frameworks.AddRange(module.Frameworks.Where(value => !string.IsNullOrWhiteSpace(value)));
 
         if (frameworks.Count == 0)
             return SupportsFramework(evaluator, context.Framework);
@@ -603,15 +689,144 @@ public sealed class RuleEngine
 
     private static bool SupportsLanguage(
         IEvaluator evaluator,
-        string language)
+        ProjectArchitectureContext context)
     {
-        return evaluator.SupportedLanguages.Contains(
-                   "*",
-                   StringComparer.OrdinalIgnoreCase)
-               ||
-               evaluator.SupportedLanguages.Contains(
-                   language,
-                   StringComparer.OrdinalIgnoreCase);
+        if (evaluator.SupportedLanguages.Contains("*", StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        return GetLanguagesForScope(context, context.RootPath).Any(language =>
+            evaluator.SupportedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private bool HasRequiredSemanticCapabilities(
+        IEvaluator evaluator,
+        ProjectArchitectureContext context,
+        string evaluationPath,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        var required = evaluator.RequiredSemanticCapabilities
+            .Where(capability => !string.IsNullOrWhiteSpace(capability))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (required.Length == 0)
+            return true;
+
+        var matchingModules = context.Modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .Where(module => PathsEqual(module.Path, evaluationPath)
+                || (!context.Modules.Any(candidate => PathsEqual(candidate.Path, evaluationPath))
+                    && IsSameOrDescendantPath(module.Path, evaluationPath)))
+            .ToArray();
+
+        var scopes = matchingModules.Length == 0
+            ? new[] { (Path: evaluationPath, Languages: GetLanguagesForScope(context, evaluationPath)) }
+            : matchingModules.Select(module => (
+                Path: module.Path,
+                Languages: (IReadOnlyCollection<string>)(module.Languages.Count == 0
+                    ? GetLanguagesForScope(context, evaluationPath).ToArray()
+                    : module.Languages.ToArray()))).ToArray();
+
+        var missingByScope = new List<string>();
+        foreach (var scope in scopes)
+        {
+            var languages = scope.Languages
+                .Where(language => evaluator.SupportedLanguages.Contains("*", StringComparer.OrdinalIgnoreCase)
+                    || evaluator.SupportedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (languages.Length == 0)
+            {
+                missingByScope.Add($"Unknown ({Path.GetFileName(scope.Path)}): {string.Join(", ", required)}");
+                continue;
+            }
+
+            foreach (var language in languages)
+            {
+                var available = context.SemanticAnalysisRuns
+                    .Where(run => PathsEqual(run.ProjectPath, scope.Path))
+                    .Where(run => run.Language.Equals(language, StringComparison.OrdinalIgnoreCase))
+                    .Where(run => run.Status is Aegis.Shared.Architecture.Enums.SemanticAnalysisStatus.Completed
+                        or Aegis.Shared.Architecture.Enums.SemanticAnalysisStatus.PartiallyCompleted)
+                    .SelectMany(run => run.Capabilities)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var missing = required.Where(capability => !available.Contains(capability)).ToArray();
+                if (missing.Length > 0)
+                    missingByScope.Add($"{language} ({Path.GetFileName(scope.Path)}): {string.Join(", ", missing)}");
+            }
+        }
+
+        if (missingByScope.Count == 0)
+            return true;
+
+        diagnostics.Add(new AnalysisDiagnostic
+        {
+            Code = "EvaluatorSemanticCapabilitiesUnavailable",
+            Component = evaluator.Name,
+            Message = $"Evaluator '{evaluator.Name}' was not executed because required semantic evidence is unavailable: {string.Join("; ", missingByScope)}.",
+            Target = evaluationPath,
+            AffectsCoverage = true
+        });
+
+        _logger.LogWarning(
+            "Evaluator {Evaluator} was not executed for {ProjectPath}; required semantic capabilities are unavailable: {MissingCapabilities}.",
+            evaluator.Name,
+            evaluationPath,
+            string.Join("; ", missingByScope));
+
+        return false;
+    }
+
+    private static IReadOnlyCollection<string> GetLanguagesForScope(
+        ProjectArchitectureContext context,
+        string scopePath)
+    {
+        var module = context.Modules.FirstOrDefault(candidate =>
+            !string.IsNullOrWhiteSpace(candidate.Path)
+            && PathsEqual(candidate.Path, scopePath));
+
+        var languages = module?.Languages
+            .Where(language => !string.IsNullOrWhiteSpace(language))
+            .ToList() ?? [];
+
+        if (!string.IsNullOrWhiteSpace(context.Language)
+            && !context.Language.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
+            && !languages.Contains(context.Language, StringComparer.OrdinalIgnoreCase))
+        {
+            languages.Add(context.Language);
+        }
+
+        return languages;
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        return string.Equals(
+            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            comparison);
+    }
+
+    private static bool IsSameOrDescendantPath(string candidate, string parent)
+    {
+        var normalizedCandidate = Path.GetFullPath(candidate);
+        var normalizedParent = Path.GetFullPath(parent)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        return string.Equals(
+                normalizedCandidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                normalizedParent,
+                comparison)
+            || normalizedCandidate.StartsWith(normalizedParent + Path.DirectorySeparatorChar, comparison);
     }
 
     private static bool SupportsFramework(

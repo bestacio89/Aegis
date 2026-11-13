@@ -108,8 +108,10 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
 
             var stats = report.EvaluationStats;
             RegisteredRules = stats is null ? "n/a" : stats.RulesRegistered.ToString("N0");
-            InScopeRules = stats is null ? "n/a" : (stats.RulesApplicable + stats.RulesUnsupported).ToString("N0");
-            EvaluatedRules = stats is null ? "n/a" : stats.RulesEvaluated.ToString("N0");
+            InScopeRules = stats is null ? "n/a" : stats.RulesApplicable.ToString("N0");
+            EvaluatedRules = stats is null
+                ? "n/a"
+                : $"{stats.RulesEvaluated:N0} / {stats.RulesApplicable:N0} ({stats.EvaluationCoverage:0.0}%)";
             NotEvaluatedRules = stats is null ? "n/a" : stats.RulesNotEvaluated.Count.ToString("N0");
             NotApplicableRules = stats is null ? "n/a" : stats.RulesNotApplicable.Count.ToString("N0");
             UnsupportedRules = stats is null ? "n/a" : stats.RulesUnsupported.ToString("N0");
@@ -170,6 +172,13 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
             return "Rule accounting evidence is unavailable for this report.";
 
         var details = new List<string>();
+        if (stats.RuleAccountingDifference != 0)
+        {
+            details.Add(
+                $"Rule accounting discrepancy: {stats.RuleAccountingDifference:+#;-#;0} " +
+                "registered rule(s) are not reconciled by the reported status categories.");
+        }
+
         details.AddRange(stats.UnsupportedRuleReasons
             .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .Take(3)

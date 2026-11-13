@@ -1,0 +1,5 @@
+package org.aegis.diagnostics;
+
+public final class MissingSymbol {
+    private MissingPort missingPort;
+}

@@ -1,0 +1,11 @@
+package org.aegis.visibility.consumer;
+
+import org.aegis.visibility.support.TestSupport;
+
+public final class ConsumerTest {
+    private final TestSupport support;
+
+    public ConsumerTest(TestSupport support) {
+        this.support = support;
+    }
+}

@@ -15,7 +15,14 @@ internal static class ModuleDetector
     private static readonly string[] ProjectManifestNames =
     [
         "package.json",
-        "pom.xml"
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "settings.gradle",
+        "settings.gradle.kts",
+        "pyproject.toml",
+        "setup.py",
+        "requirements.txt"
     ];
 
     public static void Analyze(
@@ -59,6 +66,7 @@ internal static class ModuleDetector
                 Path = modulePath,
                 ProjectFile = primaryProjectFile,
                 ProjectFiles = projectFiles,
+                BuildSystem = ResolveBuildSystem(projectFiles, files, modulePath),
                 Type = DetectModuleType(context.RootPath, modulePath, moduleName)
             };
 
@@ -72,10 +80,24 @@ internal static class ModuleDetector
             if (packageManifest is not null)
                 PopulateNodeMetadata(module, packageManifest);
 
-            var pomManifest = projectFiles.FirstOrDefault(file =>
-                Path.GetFileName(file).Equals("pom.xml", StringComparison.OrdinalIgnoreCase));
-            if (pomManifest is not null)
-                PopulateMavenMetadata(module, pomManifest);
+            var pythonManifest = projectFiles.FirstOrDefault(file =>
+                Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("setup.py", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("requirements.txt", StringComparison.OrdinalIgnoreCase));
+            if (pythonManifest is not null)
+                PopulatePythonMetadata(module, projectFiles);
+
+            if (module.BuildSystem == Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Maven)
+            {
+                var pomManifest = projectFiles.FirstOrDefault(
+                    LanguageAndBuildDetector.IsMavenManifest);
+                if (pomManifest is not null)
+                    PopulateMavenMetadata(module, pomManifest);
+            }
+            else if (module.BuildSystem == Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Gradle)
+            {
+                PopulateGradleMetadata(module);
+            }
 
             if (module.IsTestProject
                 || string.Equals(
@@ -139,7 +161,13 @@ internal static class ModuleDetector
                 .ToList();
         }
 
+        MavenProjectModelResolver.Analyze(context, files);
+        GradleProjectModelResolver.Analyze(context, files);
+        GradleBuildModelResolver.Analyze(context, files);
+
         PopulateOwnedLanguages(context.Modules, files);
+        NormalizeJvmProjectMetadata(context.Modules);
+        ModuleRoleDetector.Analyze(context.Modules);
     }
 
     private static void PopulateOwnedLanguages(
@@ -304,6 +332,7 @@ internal static class ModuleDetector
         {
             var package = JsonNode.Parse(File.ReadAllText(packageFile))?.AsObject();
             var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var runtimeDependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var key in new[]
                      {
@@ -317,37 +346,67 @@ internal static class ModuleDetector
                     continue;
 
                 foreach (var dependency in group)
+                {
                     dependencies.Add(dependency.Key);
+                    if (!key.Equals("devDependencies", StringComparison.OrdinalIgnoreCase))
+                        runtimeDependencies.Add(dependency.Key);
+                }
             }
 
-            if (dependencies.Contains("@angular/core")
-                || dependencies.Contains("@angular/cli"))
-                AddFramework(module, "Angular");
-            if (dependencies.Contains("react"))
-                AddFramework(module, "React");
-            if (dependencies.Contains("vue"))
-                AddFramework(module, "Vue");
+            var hasAngular = dependencies.Contains("@angular/core")
+                || dependencies.Contains("@angular/cli");
+            var hasReact = dependencies.Contains("react");
+            var hasVue = dependencies.Contains("vue");
+            var hasNext = dependencies.Contains("next");
+            var hasNuxt = dependencies.Contains("nuxt");
 
-            if (module.Frameworks.Count == 0)
-                AddFramework(module, "Node.js");
+            if (hasAngular)
+                AddFramework(module, "Angular");
+            if (hasReact)
+                AddFramework(module, "React");
+            if (hasVue)
+                AddFramework(module, "Vue");
+            if (hasNext)
+                AddFramework(module, "Next.js");
+            if (hasNuxt)
+                AddFramework(module, "Nuxt");
+
+            var backendFrameworks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["express"] = "Express",
+                ["@nestjs/core"] = "NestJS",
+                ["fastify"] = "Fastify",
+                ["koa"] = "Koa",
+                ["@hapi/hapi"] = "Hapi",
+                ["hono"] = "Hono"
+            };
+
+            var backendFrameworksDetected = backendFrameworks
+                .Where(entry => runtimeDependencies.Contains(entry.Key))
+                .Select(entry => entry.Value)
+                .ToArray();
+
+            foreach (var framework in backendFrameworksDetected)
+                AddFramework(module, framework);
+
+            var hasFrontend = hasAngular || hasReact || hasVue || hasNext || hasNuxt;
+            var hasBackend = backendFrameworksDetected.Length > 0 || hasNext || hasNuxt;
+            module.IsWebProject = hasFrontend || hasBackend;
+            module.IsExecutable = hasBackend;
 
             if (module.ProjectKind == "Unknown")
             {
-                module.ProjectKind = module.Frameworks.Any(framework =>
-                    framework is "Angular" or "React" or "Vue")
-                    ? "FrontendApplication"
-                    : "NodePackage";
-            }
-
-            if (module.Framework is null)
-            {
-                module.Framework = module.Frameworks.Count switch
+                module.ProjectKind = (hasFrontend, hasBackend) switch
                 {
-                    0 => null,
-                    1 => module.Frameworks[0],
-                    _ => "Multi-Framework"
+                    (true, true) => "FullStackApplication",
+                    (true, false) => "FrontendApplication",
+                    (false, true) => "BackendApplication",
+                    _ => "NodePackage"
                 };
             }
+
+            if (module.Frameworks.Count == 0)
+                AddFramework(module, "Node.js");
 
             if (string.IsNullOrWhiteSpace(module.Name)
                 || module.Name.Equals("package", StringComparison.OrdinalIgnoreCase))
@@ -368,6 +427,174 @@ internal static class ModuleDetector
                 : module.ProjectKind;
         }
     }
+
+    private static void PopulatePythonMetadata(
+        ProjectModuleContext module,
+        IReadOnlyCollection<string> projectFiles)
+    {
+        if (module.ProjectKind == "Unknown")
+            module.ProjectKind = "PythonProject";
+
+        var requirementsFile = projectFiles.FirstOrDefault(file =>
+            Path.GetFileName(file).Equals("requirements.txt", StringComparison.OrdinalIgnoreCase));
+        if (requirementsFile is null)
+            return;
+
+        try
+        {
+            var dependencies = File.ReadLines(requirementsFile)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0 && !line.StartsWith('#') && !line.StartsWith('-'))
+                .Select(line => line.Split(
+                    ['[', '=', '<', '>', '!', '~', ';', ' ', '@'],
+                    StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!.Replace('_', '-').ToLowerInvariant())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var backendFrameworks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["django"] = "Django",
+                ["fastapi"] = "FastAPI",
+                ["flask"] = "Flask",
+                ["starlette"] = "Starlette",
+                ["sanic"] = "Sanic",
+                ["aiohttp"] = "aiohttp",
+                ["tornado"] = "Tornado"
+            };
+
+            var frontendFrameworks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["streamlit"] = "Streamlit",
+                ["dash"] = "Dash",
+                ["gradio"] = "Gradio",
+                ["panel"] = "Panel"
+            };
+
+            var detectedBackend = backendFrameworks
+                .Where(entry => dependencies.Contains(entry.Key))
+                .Select(entry => entry.Value)
+                .ToArray();
+            var detectedFrontend = frontendFrameworks
+                .Where(entry => dependencies.Contains(entry.Key))
+                .Select(entry => entry.Value)
+                .ToArray();
+
+            foreach (var framework in detectedBackend.Concat(detectedFrontend))
+                AddFramework(module, framework);
+
+            var hasBackend = detectedBackend.Length > 0;
+            var hasFrontend = detectedFrontend.Length > 0;
+            var existingBackend = module.ProjectKind is "BackendApplication" or "FullStackApplication";
+            var existingFrontend = module.ProjectKind is "FrontendApplication" or "FullStackApplication";
+
+            if (hasBackend || hasFrontend)
+            {
+                module.ProjectKind = (hasFrontend || existingFrontend, hasBackend || existingBackend) switch
+                {
+                    (true, true) => "FullStackApplication",
+                    (true, false) => "FrontendApplication",
+                    (false, true) => "BackendApplication",
+                    _ => module.ProjectKind
+                };
+                module.IsWebProject = true;
+                module.IsExecutable = true;
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            // Unreadable dependency files do not invalidate module ownership.
+        }
+    }
+
+    private static void NormalizeJvmProjectMetadata(
+        IReadOnlyCollection<ProjectModuleContext> modules)
+    {
+        foreach (var module in modules)
+        {
+            var hasKotlin = module.Languages.Contains("Kotlin", StringComparer.OrdinalIgnoreCase);
+            if (!hasKotlin)
+                continue;
+
+            var hasJava = module.Languages.Contains("Java", StringComparer.OrdinalIgnoreCase);
+            AddFramework(module, "Kotlin");
+
+            if (!hasJava)
+            {
+                module.Frameworks.RemoveAll(framework =>
+                    framework.Equals("Java", StringComparison.OrdinalIgnoreCase));
+                module.ProjectKind = module.ProjectKind == "JavaProject"
+                    ? "KotlinProject"
+                    : module.ProjectKind;
+            }
+            else if (module.ProjectKind == "JavaProject")
+            {
+                module.ProjectKind = "MixedJvmProject";
+            }
+
+            module.Framework = module.Frameworks.Count switch
+            {
+                0 => null,
+                1 => module.Frameworks[0],
+                _ => "Multi-Framework"
+            };
+        }
+    }
+
+    private static void PopulateGradleMetadata(ProjectModuleContext module)
+    {
+        module.ProjectKind = "JavaProject";
+        module.Framework = "Java";
+        AddFramework(module, "Java");
+    }
+
+    private static Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem ResolveBuildSystem(
+        IReadOnlyCollection<string> projectFiles,
+        IReadOnlyCollection<string> allFiles,
+        string modulePath)
+    {
+        var buildSystems = new List<Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem>();
+
+        if (projectFiles.Any(file => file.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
+            buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.DotNet);
+        if (projectFiles.Any(LanguageAndBuildDetector.IsMavenManifest))
+            buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Maven);
+        if (projectFiles.Any(LanguageAndBuildDetector.IsGradleManifest))
+            buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Gradle);
+        if (projectFiles.Any(file =>
+                Path.GetFileName(file).Equals("package.json", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (HasOwnedManifest(allFiles, modulePath, "pnpm-lock.yaml"))
+                buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Pnpm);
+            else if (HasOwnedManifest(allFiles, modulePath, "yarn.lock"))
+                buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Yarn);
+            else
+                buildSystems.Add(Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Npm);
+        }
+
+        if (projectFiles.Any(file =>
+                Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("setup.py", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("requirements.txt", StringComparison.OrdinalIgnoreCase)))
+        {
+            buildSystems.Add(HasOwnedManifest(allFiles, modulePath, "poetry.lock")
+                ? Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Poetry
+                : Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Pip);
+        }
+
+        return buildSystems.Count == 1
+            ? buildSystems[0]
+            : Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Unknown;
+    }
+
+    private static bool HasOwnedManifest(
+        IReadOnlyCollection<string> files,
+        string modulePath,
+        string manifestName) =>
+        files.Any(file =>
+            Path.GetFileName(file).Equals(manifestName, StringComparison.OrdinalIgnoreCase)
+            && IsSameOrDescendantPath(file, modulePath));
 
     private static void PopulateMavenMetadata(
         ProjectModuleContext module,
@@ -427,7 +654,13 @@ internal static class ModuleDetector
             return 0;
         if (name.Equals("pom.xml", StringComparison.OrdinalIgnoreCase))
             return 1;
-        return 2;
+        if (name.Equals("build.gradle", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase))
+            return 2;
+        if (name.Equals("settings.gradle", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("settings.gradle.kts", StringComparison.OrdinalIgnoreCase))
+            return 3;
+        return 4;
     }
 
     private static string ResolveModuleName(string projectFile, string modulePath)
@@ -468,6 +701,23 @@ internal static class ModuleDetector
             {
                 // The manifest evaluator owns malformed or unreadable Maven diagnostics.
             }
+        }
+
+        var manifestName = Path.GetFileName(projectFile);
+        if (manifestName.Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
+            || manifestName.Equals("setup.py", StringComparison.OrdinalIgnoreCase)
+            || manifestName.Equals("requirements.txt", StringComparison.OrdinalIgnoreCase))
+        {
+            return Path.GetFileName(modulePath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar));
+        }
+
+        if (LanguageAndBuildDetector.IsGradleManifest(projectFile))
+        {
+            return Path.GetFileName(modulePath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar));
         }
 
         return Path.GetFileNameWithoutExtension(projectFile);
@@ -645,9 +895,11 @@ internal static class ModuleDetector
         {
             ".cs" => "C#",
             ".java" => "Java",
+            ".kt" => "Kotlin",
+            ".kts" when !LanguageAndBuildDetector.IsGradleManifest(file) => "Kotlin",
             ".py" => "Python",
-            ".ts" or ".tsx" => "TypeScript",
-            ".js" or ".jsx" => "JavaScript",
+            ".ts" or ".tsx" or ".mts" or ".cts" => "TypeScript",
+            ".js" or ".jsx" or ".mjs" or ".cjs" => "JavaScript",
             _ => "Unknown"
         };
     }

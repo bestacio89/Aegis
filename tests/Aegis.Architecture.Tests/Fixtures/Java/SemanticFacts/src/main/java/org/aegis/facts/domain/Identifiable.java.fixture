@@ -1,0 +1,5 @@
+package org.aegis.facts.domain;
+
+public interface Identifiable<ID> {
+    ID id();
+}

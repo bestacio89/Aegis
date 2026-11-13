@@ -1,8 +1,12 @@
+using Aegis.Shared.Architecture.Enums;
+
 namespace Aegis.Shared.Architecture.Models;
 
 /// <summary>
-/// Describes one independently discovered project or package inside a repository.
-/// Project identity and technology are kept separate from its inferred architecture layer.
+/// Describes one independently discovered build-system unit inside a repository.
+/// Examples include a .NET project, Maven module, Gradle project, npm workspace,
+/// or Python distribution. Its build identity is distinct from language-native
+/// architectural components such as Java and Python packages.
 /// </summary>
 public sealed class ProjectModuleContext
 {
@@ -14,6 +18,9 @@ public sealed class ProjectModuleContext
 
     public List<string> ProjectFiles { get; set; } = [];
 
+    /// <summary>Build system owning this project module, independent of the repository aggregate.</summary>
+    public ArchitectureBuildSystem BuildSystem { get; set; } = ArchitectureBuildSystem.Unknown;
+
     /// <summary>Semantic architecture layer inferred from the module identity.</summary>
     public string? Type { get; set; }
 
@@ -24,9 +31,27 @@ public sealed class ProjectModuleContext
 
     public List<string> Frameworks { get; set; } = [];
 
+    /// <summary>Framework observations attributed to this project module.</summary>
+    public List<FrameworkEvidence> FrameworkEvidence { get; set; } = [];
+
+    /// <summary>Statically interpreted Maven model; null for non-Maven projects.</summary>
+    public MavenProjectModel? MavenModel { get; set; }
+
+    /// <summary>Static Gradle settings/project graph; populated on the build root module.</summary>
+    public GradleProjectModel? GradleModel { get; set; }
+
+    /// <summary>Statically interpreted Gradle build declarations for this project module.</summary>
+    public GradleBuildModel? GradleBuildModel { get; set; }
+
+    /// <summary>Module-owned source roots with explicit production/test ownership and provenance.</summary>
+    public List<ProjectSourceRoot> SourceRoots { get; set; } = [];
+
     public List<string> TargetFrameworks { get; set; } = [];
 
     public List<string> Languages { get; set; } = [];
+
+    /// <summary>Evidence-based architectural responsibilities owned by this module.</summary>
+    public List<ProjectModuleRole> Roles { get; set; } = [];
 
     public bool IsTestProject { get; set; }
 

@@ -1,0 +1,13 @@
+package org.aegis.fixture.gradle;
+
+import java.util.ServiceLoader;
+
+public final class ReflectiveExtension {
+    public Object create(String implementation) throws ReflectiveOperationException {
+        return Class.forName(implementation).getDeclaredConstructor().newInstance();
+    }
+
+    public long providers() {
+        return ServiceLoader.load(Extension.class).stream().count();
+    }
+}

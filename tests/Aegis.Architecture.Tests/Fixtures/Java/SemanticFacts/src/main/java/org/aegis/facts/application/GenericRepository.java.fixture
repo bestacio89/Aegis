@@ -1,0 +1,11 @@
+package org.aegis.facts.application;
+
+import java.util.List;
+
+public interface GenericRepository<T> {
+    List<T> findAll();
+
+    default boolean supportsPaging() {
+        return true;
+    }
+}

@@ -21,4 +21,10 @@
   <ItemGroup>
     <ProjectReference Include="../../sources/Aegis.Architecture/Aegis.Architecture.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Fixtures/Java/**/*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

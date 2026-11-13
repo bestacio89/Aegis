@@ -1,0 +1,7 @@
+package org.aegis.visibility.support;
+
+public final class TestSupport {
+    public String fixtureName() {
+        return "test-support";
+    }
+}

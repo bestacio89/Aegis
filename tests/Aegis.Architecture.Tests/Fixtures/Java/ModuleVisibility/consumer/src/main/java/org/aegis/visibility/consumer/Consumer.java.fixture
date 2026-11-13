@@ -1,0 +1,15 @@
+package org.aegis.visibility.consumer;
+
+import org.aegis.visibility.api.VisibleApi;
+
+public final class Consumer {
+    private final VisibleApi api;
+
+    public Consumer(VisibleApi api) {
+        this.api = api;
+    }
+
+    public String read() {
+        return api.value();
+    }
+}

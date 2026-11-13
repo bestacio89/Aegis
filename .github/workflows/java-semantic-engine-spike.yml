@@ -1,0 +1,330 @@
+name: Java semantic engine evaluation (manual)
+
+# Historical parser comparison; run manually only. Eclipse JDT is the selected engine.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: java-semantic-engine-evaluation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare-semantic-engines:
+    name: Compare JDT and JavaParser on shared fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Spring Petclinic snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: spring-projects/spring-petclinic
+          ref: 500158f732419217507c7656904b8e6aa1bcc0d6
+          path: representative-projects/spring-petclinic
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout pinned Quarkus quickstart snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: quarkusio/quarkus-quickstarts
+          ref: b3e90af5f60b94a1acb14736be97e34127f079ec
+          path: representative-projects/quarkus-quickstarts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout pinned Micronaut starter snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: micronaut-projects/micronaut-starter
+          ref: 987728468ed839a8350e70d00d94da2cf272f5a9
+          path: representative-projects/micronaut-starter
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify Maven
+        run: mvn --version
+
+      - name: Prepare result directory
+        run: mkdir -p artifacts/classpaths
+
+      - name: Verify patched Guava dependency resolution
+        run: |
+          mvn --batch-mode --no-transfer-progress \
+            -f tools/java-semantic-spike/pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:tree \
+            -Dincludes=com.google.guava:guava \
+            | tee artifacts/guava-dependency-tree.txt
+          grep -F 'com.google.guava:guava:jar:33.8.0-jre' artifacts/guava-dependency-tree.txt
+
+      - name: Generate and verify CycloneDX dependency SBOM
+        run: |
+          mvn --batch-mode --no-transfer-progress \
+            -f tools/java-semantic-spike/pom.xml \
+            org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeBom \
+            -DoutputFormat=json \
+            -Dcyclonedx.skipAttach=true
+          cp tools/java-semantic-spike/target/bom.json artifacts/java-semantic-spike-bom.json
+          cp tools/java-semantic-spike/target/bom.json artifacts/bom.json
+          jq -e '.components[] | select(.name == "org.eclipse.jdt.core" and .version == "3.47.0")' artifacts/java-semantic-spike-bom.json > /dev/null
+          jq -e '.components[] | select(.name == "javaparser-symbol-solver-core" and .version == "3.28.2")' artifacts/java-semantic-spike-bom.json > /dev/null
+          jq -e '.components[] | select(.name == "guava" and .version == "33.8.0-jre")' artifacts/java-semantic-spike-bom.json > /dev/null
+
+      - name: Generate and verify candidate-specific CycloneDX SBOMs
+        run: |
+          mvn --batch-mode --no-transfer-progress \
+            -f tools/java-semantic-spike/candidate-sboms/jdt/pom.xml \
+            org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeBom \
+            -DoutputFormat=json -Dcyclonedx.skipAttach=true
+          cp tools/java-semantic-spike/candidate-sboms/jdt/target/bom.json artifacts/jdt-candidate-bom.json
+
+          mvn --batch-mode --no-transfer-progress \
+            -f tools/java-semantic-spike/candidate-sboms/javaparser/pom.xml \
+            org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeBom \
+            -DoutputFormat=json -Dcyclonedx.skipAttach=true
+          cp tools/java-semantic-spike/candidate-sboms/javaparser/target/bom.json artifacts/javaparser-candidate-bom.json
+
+          jq -e '.components | length == 19' artifacts/jdt-candidate-bom.json > /dev/null
+          jq -e '.components | all(.[]; (.licenses // []) | length > 0)' artifacts/jdt-candidate-bom.json > /dev/null
+          jq -e '.components[] | select(.name == "org.eclipse.jdt.core" and .version == "3.47.0")' artifacts/jdt-candidate-bom.json > /dev/null
+          jq -e 'all(.components[]; .name != "javaparser-symbol-solver-core")' artifacts/jdt-candidate-bom.json > /dev/null
+
+          jq -e '.components | length == 10' artifacts/javaparser-candidate-bom.json > /dev/null
+          jq -e '.components | all(.[]; (.licenses // []) | length > 0)' artifacts/javaparser-candidate-bom.json > /dev/null
+          jq -e '.components[] | select(.name == "javaparser-symbol-solver-core" and .version == "3.28.2")' artifacts/javaparser-candidate-bom.json > /dev/null
+          jq -e '.components[] | select(.name == "guava" and .version == "33.8.0-jre")' artifacts/javaparser-candidate-bom.json > /dev/null
+          jq -e 'all(.components[]; .name != "org.eclipse.jdt.core")' artifacts/javaparser-candidate-bom.json > /dev/null
+
+      - name: Verify Eclipse JDT semantic worker
+        run: mvn --batch-mode --no-transfer-progress -f tools/java-worker-prototype/pom.xml verify
+
+      - name: Generate and verify Java worker protocol SBOM
+        run: |
+          mvn --batch-mode --no-transfer-progress \
+            -f tools/java-worker-prototype/pom.xml \
+            org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeBom \
+            -DoutputFormat=json -Dcyclonedx.skipAttach=true
+          cp tools/java-worker-prototype/target/bom.json artifacts/java-worker-prototype.cdx.json
+          jq -e '.components | length >= 20' artifacts/java-worker-prototype.cdx.json > /dev/null
+          jq -e '.components[] | select(.name == "gson" and .version == "2.13.2")' artifacts/java-worker-prototype.cdx.json > /dev/null
+          jq -e '.components[] | select(.name == "org.eclipse.jdt.core" and .version == "3.47.0")' artifacts/java-worker-prototype.cdx.json > /dev/null
+          jq -e '.components | all(.[]; (.licenses // []) | length > 0)' artifacts/java-worker-prototype.cdx.json > /dev/null
+          jq -e 'all(.components[]; .name != "javaparser-core" and .name != "javaparser-symbol-solver-core")' artifacts/java-worker-prototype.cdx.json > /dev/null
+
+      - name: Scan Java worker protocol SBOM with OSV
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/src" ghcr.io/google/osv-scanner:v2.7.1 \
+            scan -L /src/artifacts/java-worker-prototype.cdx.json \
+            --format json \
+            --output-file /src/artifacts/java-worker-prototype-osv-report.json
+
+      - name: Scan candidate dependency SBOM with OSV
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/src" ghcr.io/google/osv-scanner:v2.7.1 \
+            scan -L /src/artifacts/bom.json \
+            --format json \
+            --output-file /src/artifacts/osv-vulnerability-report.json
+
+      - name: Validate engine-neutral semantic fact oracle
+        run: |
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-validation \
+            -Dexec.args="tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv"
+
+      - name: Validate normalized semantic diagnostic corpus
+        run: |
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-validation \
+            -Dexec.args="tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-diagnostics.tsv"
+
+      - name: Run pinned representative project matrix
+        run: bash tools/java-semantic-spike/run-representative-project-matrix.sh
+
+      - name: Compare representative-project semantic facts
+        run: bash tools/java-semantic-spike/run-representative-semantic-facts.sh
+
+      - name: Verify representative classpath snapshots are retained independently
+        shell: bash
+        run: |
+          for project in spring-petclinic quarkus-getting-started micronaut-starter-aws-cdk; do
+            for source_set in main test; do
+              snapshot="artifacts/representative-projects/matrix-classpaths/$project-$source_set.txt"
+              test -s "$snapshot" || { echo "Missing matrix classpath snapshot: $snapshot" >&2; exit 1; }
+            done
+            snapshot="artifacts/representative-projects/fact-classpaths/$project.txt"
+            test -s "$snapshot" || { echo "Missing semantic-fact classpath snapshot: $snapshot" >&2; exit 1; }
+          done
+
+      - name: Compare Eclipse JDT normalized diagnostics
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-benchmark \
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-diagnostics.tsv" \
+            | tee artifacts/jdt-semantic-diagnostics.jsonl
+
+      - name: Compare JavaParser normalized diagnostics
+        if: always()
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-diagnostic-benchmark \
+            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-diagnostics.tsv --report-only" \
+            | tee artifacts/javaparser-semantic-diagnostics.jsonl
+
+      - name: Compare Eclipse JDT semantic facts
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-benchmark \
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv --report-only" \
+            | tee artifacts/jdt-semantic-facts.jsonl
+
+      - name: Compare JavaParser semantic facts
+        if: always()
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-fact-benchmark \
+            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/semantic-facts.tsv --report-only" \
+            | tee artifacts/javaparser-semantic-facts.jsonl
+
+      - name: Resolve controlled external classpath
+        run: |
+          mvn --batch-mode --no-transfer-progress \
+            -f tools/java-semantic-spike/classpath-pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=test \
+            -Dmdep.outputFile="${{ github.workspace }}/artifacts/external-classpath.txt"
+
+      - name: Run Eclipse JDT (source-only)
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java" \
+            | tee artifacts/jdt-source-only.jsonl
+
+      - name: Run JavaParser (source-only)
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
+            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java" \
+            | tee artifacts/javaparser-source-only.jsonl
+
+      - name: Run Eclipse JDT (controlled external classpath)
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java artifacts/external-classpath.txt" \
+            | tee artifacts/jdt-external-classpath.jsonl
+
+      - name: Run JavaParser (controlled external classpath)
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java \
+            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java artifacts/external-classpath.txt" \
+            | tee artifacts/javaparser-external-classpath.jsonl
+
+      - name: Resolve module-owned consumer compile classpath
+        run: |
+          mvn --batch-mode --no-transfer-progress -f tools/java-semantic-spike/classpaths/consumer-pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=compile -Dmdep.outputFile="${{ github.workspace }}/artifacts/classpaths/consumer.txt"
+
+      - name: Resolve module-owned consumer test classpath
+        run: |
+          mvn --batch-mode --no-transfer-progress -f tools/java-semantic-spike/classpaths/consumer-test-pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=compile -Dmdep.outputFile="${{ github.workspace }}/artifacts/classpaths/consumer-test.txt"
+
+      - name: Resolve runtime-only artifact evidence
+        run: |
+          mvn --batch-mode --no-transfer-progress -f tools/java-semantic-spike/classpaths/runtime-pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=runtime -Dmdep.outputFile="${{ github.workspace }}/artifacts/classpaths/runtime.txt"
+
+      - name: Resolve dependency-conflict mediation fixture
+        run: |
+          mvn --batch-mode --no-transfer-progress -f tools/java-semantic-spike/classpaths/conflict-pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=compile -Dmdep.outputFile="${{ github.workspace }}/artifacts/classpaths/conflict.txt"
+
+      - name: Run Eclipse JDT module visibility checks
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@module-visibility \
+            -Dexec.args="jdt tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/module-visibility.properties artifacts/classpaths" \
+            | tee artifacts/jdt-module-visibility.jsonl
+
+      - name: Run JavaParser module visibility checks
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@module-visibility \
+            -Dexec.args="javaparser tests/Aegis.Architecture.Tests/Fixtures/Java tools/java-semantic-spike/module-visibility.properties artifacts/classpaths" \
+            | tee artifacts/javaparser-module-visibility.jsonl
+
+      - name: Resolve semantic spike runtime classpath
+        run: |
+          mvn --batch-mode --no-transfer-progress \
+            -f tools/java-semantic-spike/pom.xml \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+            -DincludeScope=runtime \
+            -Dmdep.outputFile="${{ github.workspace }}/artifacts/spike-runtime-classpath.txt"
+
+      - name: Run repeatable isolated performance and memory comparison
+        run: |
+          set -o pipefail
+          mvn --quiet -f tools/java-semantic-spike/pom.xml compile exec:java@semantic-performance-benchmark \
+            -Dexec.args="tests/Aegis.Architecture.Tests/Fixtures/Java artifacts/external-classpath.txt artifacts/spike-runtime-classpath.txt 2 7 artifacts/performance.jsonl" \
+            | tee artifacts/performance-console.jsonl
+
+      - name: Upload comparison results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-semantic-engine-spike
+          path: artifacts/
+          if-no-files-found: warn
+
+  probe-private-runtime:
+    name: Probe minimized Java runtime packaging (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_suffix: windows
+          - os: ubuntu-latest
+            artifact_suffix: linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify Maven
+        run: mvn --version
+
+      - name: Build and exercise private Java runtime package
+        shell: pwsh
+        run: ./tools/java-semantic-spike/packaging/Probe-PrivateRuntime.ps1
+
+      - name: Upload private runtime packaging evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-semantic-private-runtime-${{ matrix.artifact_suffix }}
+          path: artifacts/private-runtime-probe/
+          if-no-files-found: warn
+          retention-days: 7

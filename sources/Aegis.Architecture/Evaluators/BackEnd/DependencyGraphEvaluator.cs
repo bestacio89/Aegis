@@ -61,17 +61,36 @@ public sealed class DependencyGraphEvaluator
         }
 
         var relations = context.ProductionDependencies.ToList();
+        var componentRelations = context.ProductionComponentDependencies;
 
         AegisDiagnostics.Report(
             Name,
             DiagnosticLevel.Trace,
-            $"Evaluating dependency graph with {relations.Count} relations.");
+            $"Evaluating dependency graph with {relations.Count} build-module relation(s) and {componentRelations.Count} semantic component relation(s).");
 
-        EvaluateLayerCoupling(results, relations, token);
+        if (context.ProductionComponents.Count > 0)
+        {
+            // The language-native component graph is the primary architectural
+            // graph when providers can identify its nodes. Build-module edges
+            // remain available for separate layer-level coupling evidence.
+            if (relations.Count > 0)
+            {
+                EvaluateLayerCoupling(results, relations, token);
+                token.ThrowIfCancellationRequested();
+            }
 
-        token.ThrowIfCancellationRequested();
-
-        EvaluateGraphSummary(results, relations, token);
+            EvaluateComponentGraphSummary(results, componentRelations, token);
+        }
+        else if (relations.Count > 0)
+        {
+            EvaluateLayerCoupling(results, relations, token);
+            token.ThrowIfCancellationRequested();
+            EvaluateGraphSummary(results, relations, token);
+        }
+        else
+        {
+            EvaluateGraphSummary(results, relations, token);
+        }
 
         AegisDiagnostics.Report(
             Name,
@@ -145,6 +164,97 @@ public sealed class DependencyGraphEvaluator
 
             results.Add(result);
         }
+    }
+
+    private void EvaluateComponentGraphSummary(
+        List<ArchitectureEvaluatorResult> results,
+        IReadOnlyCollection<ArchitectureComponentDependencyContext> relations,
+        CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+
+        if (Context is not { } context)
+            return;
+
+        var nodes = context.ProductionComponents
+            .Select(component => component.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var nodeSet = nodes.ToHashSet(StringComparer.Ordinal);
+        var observedEdges = relations
+            .Where(relation => nodeSet.Contains(relation.SourceComponentId)
+                && nodeSet.Contains(relation.TargetComponentId))
+            .ToArray();
+
+        var distinctEdges = observedEdges
+            .Select(relation => (relation.SourceComponentId, relation.TargetComponentId))
+            .Distinct()
+            .Count();
+
+        var outgoingCounts = nodes
+            .Select(node => observedEdges
+                .Where(relation => relation.SourceComponentId == node)
+                .Select(relation => relation.TargetComponentId)
+                .Distinct(StringComparer.Ordinal)
+                .Count())
+            .ToArray();
+
+        var result = CreateAggregateResult("DependencyGraphSummary");
+        result.ProjectName = context.ProjectName;
+        result.Language = context.Language;
+        result.Framework = context.Framework;
+        result.DetectionConfidence = context.Confidence;
+
+        result.Metrics["TotalRelations"] = observedEdges.Sum(relation => relation.RelationshipCount);
+        result.Metrics["AverageDependencies"] = outgoingCounts.Length == 0
+            ? 0
+            : outgoingCounts.Average();
+
+        result.Metadata["GraphLevel"] = "ArchitecturalComponents";
+        result.Metadata["GraphHasRelations"] = (observedEdges.Length > 0).ToString().ToLowerInvariant();
+        result.Metadata["MeasurementMethod"] =
+            "Provider-resolved semantic relationships aggregated between language-native architectural components; build-module dependencies are reported separately.";
+        result.Metadata["GraphNodeCount"] = nodes.Length.ToString();
+        result.Metadata["GraphEdgeCount"] = distinctEdges.ToString();
+        var requiredLanguages = context.ProductionModules
+            .SelectMany(module => module.Languages)
+            .Append(context.Language)
+            .Where(language => !string.IsNullOrWhiteSpace(language)
+                && !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var semanticRuns = context.SemanticAnalysisRuns
+            .Where(run => requiredLanguages.Contains(run.Language))
+            .ToArray();
+        var analyzedLanguages = semanticRuns
+            .Select(run => run.Language)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var analysisComplete = requiredLanguages.Count > 0
+            && requiredLanguages.SetEquals(analyzedLanguages)
+            && semanticRuns.All(run => run.IsComplete
+                && !run.Diagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
+            && !context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
+        result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
+
+        if (nodes.Length > 1 && analysisComplete)
+        {
+            var possibleDirectedEdges = (double)nodes.Length * (nodes.Length - 1);
+            result.Metrics["DependencyGraphDensity"] = distinctEdges / possibleDirectedEdges;
+            result.Metadata["GraphDensityDefinition"] =
+                "Distinct observed directed non-self architectural component edges divided by n*(n-1); this measures the observed graph and does not imply exhaustive semantic coverage.";
+            result.Metadata["GraphDensityStatus"] = distinctEdges > 0
+                ? "MeasuredOnObservedEdges"
+                : "MeasuredZeroEdgesWithCompleteAnalysis";
+        }
+        else
+        {
+            result.Metadata["GraphDensityStatus"] = nodes.Length < 2
+                ? "Unavailable: fewer than two distinct architectural components."
+                : "Unavailable: semantic analysis is incomplete.";
+        }
+
+        results.Add(result);
     }
 
     private void EvaluateGraphSummary(

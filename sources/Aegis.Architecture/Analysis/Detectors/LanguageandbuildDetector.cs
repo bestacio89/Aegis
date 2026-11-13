@@ -1,66 +1,154 @@
-﻿using Aegis.Shared.Architecture.Enums;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Architecture.Analysis.Detectors;
 
 internal static class LanguageAndBuildDetector
 {
-    public static void Analyze(ProjectArchitectureContext ctx, List<string> files)
+    public static void Analyze(ProjectArchitectureContext context, List<string> files)
     {
-        // A solution file alone is not proof of a conventional .NET project:
-        // Unity commonly generates IDE solution files around its own source tree.
-        // A real project manifest is the stronger build-system signal.
-        if (files.Any(f => f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(files);
+
+        if (files.Any(file => file.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
         {
-            ctx.Language = "C#";
-            ctx.BuildSystem = ArchitectureBuildSystem.DotNet;
+            context.Language = "C#";
+            context.BuildSystem = ArchitectureBuildSystem.DotNet;
         }
-        else if (files.Any(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)))
+        else if (files.Any(file => Path.GetExtension(file).Equals(".cs", StringComparison.OrdinalIgnoreCase)))
         {
-            // Unity and other source-only C# projects may not commit generated
-            // .csproj files. Detect the language from source files independently
-            // of whether a conventional .NET build manifest exists.
-            ctx.Language = "C#";
-            ctx.BuildSystem = ArchitectureBuildSystem.Unknown;
+            context.Language = "C#";
+            context.BuildSystem = ArchitectureBuildSystem.Unknown;
         }
-        else if (files.Any(f => f.EndsWith(".java") || f.Contains("pom.xml")))
+        else if (HasKotlinSourceEvidence(files))
         {
-            ctx.Language = "Java";
-            ctx.BuildSystem = ArchitectureBuildSystem.Maven;
+            context.Language = "Kotlin";
+            context.BuildSystem = ResolveJvmBuildSystem(files);
         }
-        else if (files.Any(f => f.EndsWith(".py") || f.Contains("setup.py") || f.Contains("pyproject.toml")))
+        else if (HasJavaEvidence(files))
         {
-            ctx.Language = "Python";
-            ctx.BuildSystem = ArchitectureBuildSystem.Pip;
+            context.Language = "Java";
+            context.BuildSystem = ResolveJavaBuildSystem(files);
         }
-        else if (files.Any(f => f.EndsWith(".ts") || f.EndsWith(".tsx") || f.EndsWith(".js")))
+        else if (files.Any(file =>
+                     Path.GetExtension(file).Equals(".py", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetFileName(file).Equals("setup.py", StringComparison.OrdinalIgnoreCase)
+                      || Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetFileName(file).Equals("requirements.txt", StringComparison.OrdinalIgnoreCase)))
         {
-            ctx.Language = "TypeScript/JavaScript";
-            if (files.Any(f => f.EndsWith("package.json"))) ctx.BuildSystem = ArchitectureBuildSystem.Npm;
-            else ctx.BuildSystem = ArchitectureBuildSystem.Unknown;
+            context.Language = "Python";
+            context.BuildSystem = ResolvePythonBuildSystem(files);
         }
-        else if (files.Any(f => f.EndsWith(".go")))
+        else if (files.Any(file =>
+                     Path.GetExtension(file).Equals(".ts", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".tsx", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".mts", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".cts", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".js", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".jsx", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".mjs", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetExtension(file).Equals(".cjs", StringComparison.OrdinalIgnoreCase)))
         {
-            ctx.Language = "Go";
-            ctx.BuildSystem = ArchitectureBuildSystem.GoMod;
+            context.Language = "TypeScript/JavaScript";
+            context.BuildSystem = ResolveNodeBuildSystem(files);
         }
-        else if (files.Any(f => f.EndsWith(".rs") || f.Contains("Cargo.toml")))
+        else if (files.Any(file => Path.GetExtension(file).Equals(".go", StringComparison.OrdinalIgnoreCase)))
         {
-            ctx.Language = "Rust";
-            ctx.BuildSystem = ArchitectureBuildSystem.Cargo;
+            context.Language = "Go";
+            context.BuildSystem = ArchitectureBuildSystem.GoMod;
+        }
+        else if (files.Any(file =>
+                     Path.GetExtension(file).Equals(".rs", StringComparison.OrdinalIgnoreCase)
+                     || Path.GetFileName(file).Equals("Cargo.toml", StringComparison.OrdinalIgnoreCase)))
+        {
+            context.Language = "Rust";
+            context.BuildSystem = ArchitectureBuildSystem.Cargo;
         }
         else
         {
-            ctx.Language = "Unknown";
-            ctx.BuildSystem = ArchitectureBuildSystem.Unknown;
+            context.Language = "Unknown";
+            context.BuildSystem = ArchitectureBuildSystem.Unknown;
         }
 
-        ctx.InferenceHistory.Add(new ArchitectureInferenceTrace
+        context.InferenceHistory.Add(new ArchitectureInferenceTrace
         {
             Key = "Language",
-            Value = ctx.Language,
+            Value = context.Language,
             Source = ArchitectureInferenceSource.FileSystem,
-            Confidence = ctx.Language == "Unknown" ? 0.4 : 0.95
+            Confidence = context.Language == "Unknown" ? 0.4 : 0.95
         });
+
+        context.InferenceHistory.Add(new ArchitectureInferenceTrace
+        {
+            Key = "BuildSystem",
+            Value = context.BuildSystem.ToString(),
+            Source = ArchitectureInferenceSource.FileSystem,
+            Confidence = context.BuildSystem == ArchitectureBuildSystem.Unknown ? 0.4 : 0.95
+        });
+    }
+
+    private static bool HasKotlinSourceEvidence(IReadOnlyCollection<string> files) =>
+        files.Any(file =>
+            Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
+            || (Path.GetExtension(file).Equals(".kts", StringComparison.OrdinalIgnoreCase)
+                && !IsGradleManifest(file)));
+
+    private static ArchitectureBuildSystem ResolveJvmBuildSystem(
+        IReadOnlyCollection<string> files)
+    {
+        var hasMaven = files.Any(IsMavenManifest);
+        var hasGradle = files.Any(IsGradleManifest);
+
+        return (hasMaven, hasGradle) switch
+        {
+            (true, false) => ArchitectureBuildSystem.Maven,
+            (false, true) => ArchitectureBuildSystem.Gradle,
+            _ => ArchitectureBuildSystem.Unknown
+        };
+    }
+
+    private static bool HasJavaEvidence(IReadOnlyCollection<string> files) =>
+        files.Any(file =>
+            Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
+            || IsMavenManifest(file)
+            || IsGradleManifest(file));
+
+    private static ArchitectureBuildSystem ResolveJavaBuildSystem(
+        IReadOnlyCollection<string> files) =>
+        ResolveJvmBuildSystem(files);
+
+    private static ArchitectureBuildSystem ResolvePythonBuildSystem(
+        IReadOnlyCollection<string> files) =>
+        files.Any(file => Path.GetFileName(file).Equals("poetry.lock", StringComparison.OrdinalIgnoreCase))
+            ? ArchitectureBuildSystem.Poetry
+            : ArchitectureBuildSystem.Pip;
+
+    private static ArchitectureBuildSystem ResolveNodeBuildSystem(
+        IReadOnlyCollection<string> files)
+    {
+        if (!files.Any(file =>
+                Path.GetFileName(file).Equals("package.json", StringComparison.OrdinalIgnoreCase)))
+        {
+            return ArchitectureBuildSystem.Unknown;
+        }
+
+        if (files.Any(file => Path.GetFileName(file).Equals("pnpm-lock.yaml", StringComparison.OrdinalIgnoreCase)))
+            return ArchitectureBuildSystem.Pnpm;
+        if (files.Any(file => Path.GetFileName(file).Equals("yarn.lock", StringComparison.OrdinalIgnoreCase)))
+            return ArchitectureBuildSystem.Yarn;
+
+        return ArchitectureBuildSystem.Npm;
+    }
+
+    internal static bool IsMavenManifest(string file) =>
+        Path.GetFileName(file).Equals("pom.xml", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsGradleManifest(string file)
+    {
+        var name = Path.GetFileName(file);
+        return name.Equals("build.gradle", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("settings.gradle", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("settings.gradle.kts", StringComparison.OrdinalIgnoreCase);
     }
 }

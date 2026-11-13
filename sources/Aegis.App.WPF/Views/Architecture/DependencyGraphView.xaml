@@ -114,7 +114,7 @@
             </Border>
             <Border Style="{StaticResource Card.Kpi}" Width="Auto" Height="Auto" MinHeight="76">
                 <StackPanel>
-                    <TextBlock Text="ARCHITECTURE LAYERS" Style="{StaticResource Text.Eyebrow}" />
+                    <TextBlock Text="{Binding GroupingLabel}" Style="{StaticResource Text.Eyebrow}" />
                     <TextBlock Text="{Binding LayerCount}" Style="{StaticResource Text.KpiValue}" FontSize="24" />
                 </StackPanel>
             </Border>
@@ -130,6 +130,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="190" />
+                <ColumnDefinition Width="190" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
@@ -139,14 +140,22 @@
                      Foreground="{StaticResource Brush.TextPrimary}"
                      BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
                      VerticalContentAlignment="Center" />
-            <ComboBox Grid.Column="1" ItemsSource="{Binding LayerFilters}"
+            <ComboBox Grid.Column="1" ItemsSource="{Binding GraphProjectionOptions}"
+                      SelectedItem="{Binding GraphProjection, Mode=TwoWay}"
+                      MinHeight="38" Margin="0,0,10,0" Padding="8,4"
+                      Background="{StaticResource Brush.PanelElevated}"
+                      Foreground="{StaticResource Brush.TextPrimary}"
+                      BorderBrush="{StaticResource Brush.Line}"
+                      VerticalContentAlignment="Center"
+                      ToolTip="Choose between build-module and semantic architectural-component graphs" />
+            <ComboBox Grid.Column="2" ItemsSource="{Binding LayerFilters}"
                       SelectedItem="{Binding SelectedLayer, Mode=TwoWay}"
                       MinHeight="38" Margin="0,0,10,0" Padding="8,4"
                       Background="{StaticResource Brush.PanelElevated}"
                       Foreground="{StaticResource Brush.TextPrimary}"
                       BorderBrush="{StaticResource Brush.Line}"
                       VerticalContentAlignment="Center" />
-            <Button Grid.Column="2" Content="Clear filters"
+            <Button Grid.Column="3" Content="Clear filters"
                     Command="{Binding ClearFiltersCommand}"
                     Padding="14,8" MinHeight="38"
                     Background="{StaticResource Brush.PanelElevated}"

@@ -69,6 +69,82 @@ public sealed class FrontendAnalyzerContractTests
     }
 
     [Fact]
+    public async Task AngularEvaluator_preserves_typescript_and_template_diagnostics_as_traceable_facts()
+    {
+        using var project = new TemporaryProject();
+        project.Write("src/app.component.ts", "export class AppComponent {}");
+        var analyzerPath = project.Write(
+            "frontend-analyzer.mjs",
+            """
+            console.log(JSON.stringify({
+              status: "completed",
+              filesAnalyzed: 1,
+              files: [
+                {
+                  path: "src/app.component.ts",
+                  syntaxDiagnostics: [
+                    {
+                      code: 1005,
+                      message: "A closing brace was expected.",
+                      line: 12
+                    }
+                  ],
+                  components: [
+                    {
+                      name: "AppComponent",
+                      templateUrl: "./app.component.html",
+                      templateDiagnostics: [
+                        {
+                          code: "AEG-FE-TEMPLATE-PARSE",
+                          message: "Unexpected closing tag.",
+                          line: 4
+                        }
+                      ]
+                    }
+                  ],
+                  modules: []
+                }
+              ]
+            }));
+            """);
+
+        using var environment = new FrontendAnalyzerEnvironment(analyzerPath);
+        var evaluator = new AngularEvaluator(
+            NullLogger<AngularEvaluator>.Instance,
+            Options.Create(new AegisArchitecturePolicy()));
+
+        var results = (await evaluator.EvaluateAsync(
+            project.Root,
+            CreateContext(project, "TypeScript", "Angular"))).ToArray();
+
+        var diagnostics = results
+            .Where(result => result.Category == "FrontendDiagnostic")
+            .ToArray();
+
+        Assert.Equal(2, diagnostics.Length);
+        Assert.Contains(diagnostics, result =>
+            result.Metadata["DiagnosticType"] == "TypeScriptSyntax"
+            && result.Metadata["DiagnosticCode"] == "1005"
+            && result.Metadata["DiagnosticLine"] == "12"
+            && result.Metadata["FilePath"].EndsWith(
+                "src/app.component.ts",
+                StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(diagnostics, result =>
+            result.Metadata["DiagnosticType"] == "AngularTemplate"
+            && result.Metadata["DiagnosticCode"] == "AEG-FE-TEMPLATE-PARSE"
+            && result.Metadata["DiagnosticLine"] == "4"
+            && result.Metadata["ComponentName"] == "AppComponent"
+            && result.Metadata["TemplateUrl"] == "./app.component.html");
+        Assert.All(diagnostics, result => Assert.Empty(result.Metrics));
+
+        var summary = Assert.Single(results, result =>
+            result.Category == "FrontendSummary");
+        Assert.Equal("1", summary.Metadata["TypeScriptSyntaxDiagnosticCount"]);
+        Assert.Equal("1", summary.Metadata["AngularTemplateDiagnosticCount"]);
+        Assert.Equal("True", summary.Metadata["DiagnosticsPresent"]);
+    }
+
+    [Fact]
     public async Task AngularEvaluator_scores_noncompliant_selector_and_complex_component()
     {
         using var project = new TemporaryProject();

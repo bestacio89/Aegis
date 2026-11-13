@@ -1,0 +1,8 @@
+package org.aegis.diagnostics;
+
+public final class SyntaxBroken {
+    public int calculate() {
+        int value = ;
+        return value;
+    }
+}

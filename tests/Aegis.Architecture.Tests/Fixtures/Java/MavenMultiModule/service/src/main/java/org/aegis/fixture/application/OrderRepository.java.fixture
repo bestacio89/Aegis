@@ -1,0 +1,8 @@
+package org.aegis.fixture.application;
+
+import java.util.Optional;
+import org.aegis.fixture.domain.Order;
+
+public interface OrderRepository {
+    Optional<Order> findById(String id);
+}

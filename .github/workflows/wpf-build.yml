@@ -27,6 +27,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Package Eclipse JDT worker and private runtime
+        uses: ./.github/actions/package-java-worker
+
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:

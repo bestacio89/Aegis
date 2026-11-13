@@ -1,4 +1,5 @@
 ﻿using Aegis.Architecture.Aggregation;
+using Aegis.Architecture.Analysis.Semantics;
 using Aegis.Architecture.Evaluators.Naming.Analysis;
 using Aegis.Architecture.Evaluators.Naming.Policies;
 using Aegis.Architecture.RuleEngines;
@@ -18,6 +19,7 @@ public static class DependencyInjection
     ILogger? logger = null)
     {
         services.AddScopedDependencies(a => a.FullName?.StartsWith("Aegis") ?? false);
+        services.AddJavaSemanticAnalysis();
 
         services.AddMissingArchitectureEvaluators();
 

@@ -10,6 +10,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -43,7 +44,71 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Margin="0,4,0,10">
+        <Border Grid.Row="1" Style="{StaticResource Card.Structural}" Margin="0,0,0,10" Padding="14">
+            <StackPanel>
+                <TextBlock Text="APPLICATION INTEGRATIONS" Style="{StaticResource Text.Eyebrow}"
+                           Foreground="{StaticResource Brush.AccentStructural}" />
+                <TextBlock Text="Declare runtime relationships between modules when build metadata cannot establish them, such as an Angular client consuming an ASP.NET Core API. These declarations remain separate from detected build dependencies."
+                           Foreground="{StaticResource Brush.TextMuted}" FontSize="11"
+                           Margin="0,5,0,10" TextWrapping="Wrap" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.2*" />
+                        <ColumnDefinition Width="1.2*" />
+                        <ColumnDefinition Width="1.1*" />
+                        <ColumnDefinition Width="1.1*" />
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ComboBox Grid.Column="0" ItemsSource="{Binding IntegrationModules}"
+                              SelectedItem="{Binding SelectedIntegrationSource, Mode=TwoWay}"
+                              DisplayMemberPath="Name" MinHeight="34" Margin="0,0,6,0" ToolTip="Source module" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding IntegrationModules}"
+                              SelectedItem="{Binding SelectedIntegrationTarget, Mode=TwoWay}"
+                              DisplayMemberPath="Name" MinHeight="34" Margin="0,0,6,0" ToolTip="Target module" />
+                    <ComboBox Grid.Column="2" ItemsSource="{Binding IntegrationPatterns}"
+                              SelectedItem="{Binding SelectedIntegrationPattern, Mode=TwoWay}"
+                              MinHeight="34" Margin="0,0,6,0" />
+                    <ComboBox Grid.Column="3" ItemsSource="{Binding IntegrationProtocols}"
+                              SelectedItem="{Binding SelectedIntegrationProtocol, Mode=TwoWay}"
+                              MinHeight="34" Margin="0,0,6,0" />
+                    <TextBox Grid.Column="4" Text="{Binding IntegrationNotes, UpdateSourceTrigger=PropertyChanged}"
+                             MinHeight="34" Padding="8,6" Margin="0,0,6,0"
+                             VerticalContentAlignment="Center" ToolTip="Optional endpoint or rationale" />
+                    <Button Grid.Column="5" Content="Add integration"
+                            Command="{Binding AddApplicationIntegrationCommand}"
+                            Style="{StaticResource Button.Primary}" MinHeight="34" Padding="12,6" />
+                </Grid>
+                <DataGrid ItemsSource="{Binding ApplicationIntegrations}"
+                          SelectedItem="{Binding SelectedApplicationIntegration, Mode=TwoWay}"
+                          AutoGenerateColumns="False" IsReadOnly="True"
+                          CanUserAddRows="False" CanUserDeleteRows="False"
+                          HeadersVisibility="Column" Height="112" Margin="0,10,0,0"
+                          Style="{StaticResource Grid.Ledger}"
+                          ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}"
+                          RowStyle="{StaticResource Grid.LedgerRow}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Source" Binding="{Binding SourceModuleName}" Width="*" />
+                        <DataGridTextColumn Header="Target" Binding="{Binding TargetModuleName}" Width="*" />
+                        <DataGridTextColumn Header="Interaction" Binding="{Binding InteractionPattern}" Width="140" />
+                        <DataGridTextColumn Header="Protocol" Binding="{Binding Protocol}" Width="110" />
+                        <DataGridTextColumn Header="Origin" Binding="{Binding EvidenceOrigin}" Width="110" />
+                        <DataGridTextColumn Header="Endpoint status" Binding="{Binding EndpointResolutionStatus}" Width="120" />
+                        <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="2*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+                <DockPanel Margin="0,8,0,0">
+                    <TextBlock Text="{Binding IntegrationStatus}" Foreground="{StaticResource Brush.TextMuted}"
+                               FontSize="11" VerticalAlignment="Center" />
+                    <Button DockPanel.Dock="Right" Content="Remove selected"
+                            Command="{Binding RemoveApplicationIntegrationCommand}" Padding="10,5" MinHeight="28"
+                            Background="{StaticResource Brush.PanelElevated}" Foreground="{StaticResource Brush.TextPrimary}"
+                            BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" />
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="2" Margin="0,4,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="170" />
@@ -86,7 +151,7 @@
                 BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" />
         </Grid>
 
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="2.1*" />
                 <ColumnDefinition Width="10" />
@@ -113,13 +178,15 @@
                     ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}"
                     RowStyle="{StaticResource Grid.LedgerRow}">
                     <DataGrid.Columns>
+                        <DataGridTextColumn Header="Level" Binding="{Binding RelationshipLevel}" Width="135" />
                         <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
-                        <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="125" />
-                        <DataGridTextColumn Header="Direction / type" Binding="{Binding DependencyType}" Width="125" />
+                        <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="110" />
+                        <DataGridTextColumn Header="Direction / type" Binding="{Binding DependencyType}" Width="155" />
+                        <DataGridTextColumn Header="Relations" Binding="{Binding RelationshipCount}" Width="75" />
                         <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" Width="90" />
-                        <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="125" />
+                        <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="110" />
                         <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="*" />
-                        <DataGridTextColumn Header="Evidence file" Binding="{Binding File}" Width="1.4*" />
+                        <DataGridTextColumn Header="Evidence file(s)" Binding="{Binding File}" Width="1.4*" />
                     </DataGrid.Columns>
                     </DataGrid>
                     <Border Background="{StaticResource Brush.PanelElevated}" Padding="24"
@@ -161,8 +228,10 @@
                         <StackPanel>
                             <TextBlock Text="RELATIONSHIP DETAILS" Style="{StaticResource Text.Eyebrow}"
                                        Foreground="{StaticResource Brush.AccentStructural}" />
+                            <TextBlock Text="{Binding SelectedDependency.RelationshipLevel, TargetNullValue='Relationship level'}"
+                                       Foreground="{StaticResource Brush.TextMuted}" FontSize="11" Margin="0,5,0,0" />
                             <TextBlock Text="{Binding SelectedDependency.Source, TargetNullValue='Select a relationship'}"
-                                       FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,5,0,0" />
+                                       FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,3,0,0" />
                             <TextBlock Text="{Binding SelectedDependency.Target, StringFormat='→  {0}', TargetNullValue='Select a row in the ledger'}"
                                        Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
                                        TextWrapping="Wrap" Margin="0,4,0,0" />
@@ -170,6 +239,9 @@
                     </Border>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="16,4,16,16">
+                            <TextBlock Text="RELATIONSHIP COUNT" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.RelationshipCount, TargetNullValue='Not supplied'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
                             <TextBlock Text="SOURCE LAYER" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.SourceLayer, TargetNullValue='Not classified'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" TextWrapping="Wrap" />
@@ -195,7 +267,7 @@
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12"
                                        TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
                             <TextBlock
-                                Text="The ledger preserves the detector's individual records. It does not aggregate repeated source-target pairs or infer architectural intent."
+                                Text="Build-module dependencies and compiler-resolved component relationships are shown as distinct evidence levels. Component rows aggregate repeated semantic relationships and retain their count and source files."
                                 Foreground="{StaticResource Brush.TextMuted}" FontSize="11"
                                 TextWrapping="Wrap" Margin="0,16,0,0" />
                         </StackPanel>

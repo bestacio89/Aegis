@@ -1,0 +1,8 @@
+package org.aegis.fixture.generated;
+
+// Representative Gradle annotation-processor output.
+public final class CommandMapperImpl {
+    public String mapKey(org.aegis.fixture.gradle.Command command) {
+        return command.key();
+    }
+}

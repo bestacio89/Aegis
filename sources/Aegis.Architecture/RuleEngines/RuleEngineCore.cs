@@ -171,6 +171,10 @@ public sealed class RuleEngineCore
         var factsWithoutMatchingScopedMetrics = 0;
         var factsWithMetricsAtWrongScope = 0;
         var factsWithKnownMetricsWithoutEligibleRule = 0;
+        var wrongScopeMetricDetails =
+            new Dictionary<
+                (string Producer, string RuleId, string MetricKey, string ActualScope, string RequiredScope),
+                (int Count, List<string> SampleTargets)>();
 
         foreach (var fact in factList)
         {
@@ -242,6 +246,29 @@ public sealed class RuleEngineCore
                 // an incompatible scope for diagnostics, but never evaluate it.
                 if ((rule.Scope == RuleEvaluationScope.Project) != isProjectFact)
                 {
+                    var actualScope = isProjectFact ? "Project" : "File";
+                    var requiredScope = rule.Scope.ToString();
+                    var key = (
+                        fact.Source,
+                        rule.Id,
+                        metricKey,
+                        actualScope,
+                        requiredScope);
+
+                    var aggregate = wrongScopeMetricDetails.GetValueOrDefault(
+                        key,
+                        (0, []));
+
+                    aggregate.Count++;
+                    if (aggregate.SampleTargets.Count < 3
+                        && !aggregate.SampleTargets.Contains(
+                            fact.Target,
+                            StringComparer.OrdinalIgnoreCase))
+                    {
+                        aggregate.SampleTargets.Add(fact.Target);
+                    }
+
+                    wrongScopeMetricDetails[key] = aggregate;
                     continue;
                 }
 
@@ -426,6 +453,24 @@ public sealed class RuleEngineCore
         }
 
         var totalChecks = checksPassed + checksViolated;
+
+        foreach (var mismatch in wrongScopeMetricDetails.OrderBy(
+                     entry => entry.Key.Producer,
+                     StringComparer.OrdinalIgnoreCase)
+                 .ThenBy(entry => entry.Key.RuleId, StringComparer.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "Metric scope mismatch: Producer={Evaluator}; Rule={RuleId}; " +
+                "Metric={MetricKey}; ActualScope={ActualScope}; RequiredScope={RequiredScope}; " +
+                "Observations={ObservationCount}; SampleTargets={SampleTargets}",
+                mismatch.Key.Producer,
+                mismatch.Key.RuleId,
+                mismatch.Key.MetricKey,
+                mismatch.Key.ActualScope,
+                mismatch.Key.RequiredScope,
+                mismatch.Value.Count,
+                string.Join(", ", mismatch.Value.SampleTargets));
+        }
 
         var rulesNotEvaluated = applicableRules
             .Where(rule => !evaluatedRuleIds.Contains(rule.Id))
@@ -639,17 +684,31 @@ public sealed class RuleEngineCore
             }
         }
 
-        var supportedCoverage = stats.RulesApplicable > 0
-            ? (double)stats.RulesEvaluated / stats.RulesApplicable * 100.0
-            : 0.0;
+        if (stats.RuleAccountingDifference != 0)
+        {
+            _logger.LogWarning(
+                "Rule accounting is inconsistent: Registered={Registered}; " +
+                "Applicable={Applicable}; Unsupported={Unsupported}; " +
+                "DisabledByPolicy={Disabled}; NotApplicable={NotApplicable}; " +
+                "Difference={Difference}.",
+                stats.RulesRegistered,
+                stats.RulesApplicable,
+                stats.RulesUnsupported,
+                stats.RulesDisabledByPolicy,
+                stats.RulesNotApplicable.Count,
+                stats.RuleAccountingDifference);
+        }
 
         _logger.LogInformation(
             "RuleEngineCore processed {Facts} facts: {Violations} violations; " +
             "{Checks} checks ({Passed} passed, {Violated} violated); " +
-            "{Evaluated}/{Registered} registered rules evaluated; " +
-            "{SupportedEvaluated}/{SupportedApplicable} supported applicable rules evaluated " +
-            "({SupportedCoverage:0.0}% of supported rules; {Coverage:0.0}% overall applicable coverage); " +
-            "{NotApplicable} not applicable; {NotEvaluated} not evaluated; " +
+            "{Evaluated}/{Applicable} supported applicable rules evaluated " +
+            "({ApplicableCoverage:0.0}% applicable coverage); " +
+            "{Evaluated}/{Registered} registered rules evaluated " +
+            "({RegisteredCoverage:0.0}% registry-wide coverage); " +
+            "{Unsupported} unsupported; {Disabled} disabled by policy; " +
+            "{NotApplicable} not applicable; {NotEvaluated} supported applicable rules not evaluated; " +
+            "RuleAccountingDifference={RuleAccountingDifference}; " +
             "{ProjectSummaries} project summaries processed; " +
             "{NonFiniteSkipped} non-finite metrics skipped; " +
             "{InvalidThresholds} invalid thresholds skipped; " +
@@ -663,13 +722,16 @@ public sealed class RuleEngineCore
             checksPassed,
             checksViolated,
             stats.RulesEvaluated,
-            stats.RulesRegistered,
-            stats.RulesEvaluated,
             stats.RulesApplicable,
-            supportedCoverage,
             stats.EvaluationCoverage,
+            stats.RulesEvaluated,
+            stats.RulesRegistered,
+            stats.RegisteredRuleEvaluationCoverage,
+            stats.RulesUnsupported,
+            stats.RulesDisabledByPolicy,
             stats.RulesNotApplicable.Count,
             stats.RulesNotEvaluated.Count,
+            stats.RuleAccountingDifference,
             projectSummaryFacts,
             skippedNonFiniteMetrics,
             skippedInvalidThresholds,

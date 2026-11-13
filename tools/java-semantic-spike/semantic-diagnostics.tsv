@@ -1,0 +1,8 @@
+case_id	category	severity	fixture_path	source_level	trigger	symbol	declared_artifact
+JDIAG-001	syntax-error	error	SemanticDiagnostics/src/main/java/org/aegis/diagnostics/SyntaxBroken.java.fixture	21	parse-malformed-source		
+JDIAG-002	compiler-error	error	SemanticDiagnostics/src/main/java/org/aegis/diagnostics/TypeMismatch.java.fixture	21	type-check-invalid-assignment		
+JDIAG-003	unresolved-symbol	error	SemanticDiagnostics/src/main/java/org/aegis/diagnostics/MissingSymbol.java.fixture	21	absent-from-source-and-declared-dependencies	org.aegis.diagnostics.MissingPort	
+JDIAG-004	incomplete-environment	error	SemanticDiagnostics/src/main/java/org/aegis/diagnostics/MissingDependency.java.fixture	21	omitted-declared-artifact:org.springframework:spring-context	org.springframework.context.ApplicationContext	org.springframework:spring-context
+JDIAG-005	unsupported-construct	error	SemanticDiagnostics/src/main/java/org/aegis/diagnostics/RecordPatternProbe.java.fixture	17	java-21-record-pattern-at-source-level-17		
+JDIAG-006	warning	warning	SemanticDiagnostics/src/main/java/org/aegis/diagnostics/DeprecatedUse.java.fixture	21	deprecated-type-use		
+JDIAG-007	infrastructure-failure	error	-	21	missing-input-path		

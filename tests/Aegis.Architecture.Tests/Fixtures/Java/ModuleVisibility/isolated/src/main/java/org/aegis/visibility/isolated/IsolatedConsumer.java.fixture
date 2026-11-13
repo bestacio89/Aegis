@@ -1,0 +1,11 @@
+package org.aegis.visibility.isolated;
+
+import org.aegis.visibility.api.VisibleApi;
+
+public final class IsolatedConsumer {
+    private final VisibleApi api;
+
+    public IsolatedConsumer(VisibleApi api) {
+        this.api = api;
+    }
+}

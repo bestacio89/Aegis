@@ -77,13 +77,19 @@ public sealed class MarkdownReportExporter : IReportExporter
             md.AppendLine($"| Total Violations | {report.TotalViolations} |");
             md.AppendLine($"| Registered Rules | {report.EvaluationStats?.RulesRegistered.ToString() ?? "N/A"} |");
             md.AppendLine($"| Supported Applicable Rules | {report.EvaluationStats?.RulesApplicable.ToString() ?? "N/A"} |");
-            md.AppendLine($"| Supported Rules Evaluated | {report.EvaluationStats?.RulesEvaluated.ToString() ?? "N/A"} |");
-            md.AppendLine($"| Rules Not Evaluated | {report.EvaluationStats?.RulesNotEvaluated.Count.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Supported Rules Evaluated / Applicable | {(report.EvaluationStats is null ? "N/A" : $"{report.EvaluationStats.RulesEvaluated} / {report.EvaluationStats.RulesApplicable} ({report.EvaluationStats.EvaluationCoverage:0.0}%)")} |");
+            md.AppendLine($"| Registry-wide Rule Evaluation Coverage | {(report.EvaluationStats is null ? "N/A" : $"{report.EvaluationStats.RegisteredRuleEvaluationCoverage:0.0}%")} |");
             md.AppendLine($"| Assessed Health Index | {(report.Metrics.HasAssessmentEvidence ? $"{report.Metrics.ProjectHealthIndex:0.00}%" : "N/A")} |");
             md.AppendLine($"| Coverage-Adjusted Diagnostic | {(report.Metrics.HasCoverageEvidence ? $"{report.Metrics.CoverageAdjustedHealthIndex:0.00}%" : "N/A")} |");
             md.AppendLine($"| Rule Evaluation Coverage | {(report.Metrics.HasCoverageEvidence ? $"{report.Metrics.RuleEvaluationCoverage:0.00}%" : "N/A")} |");
-            md.AppendLine($"| Supported Rules Not Evaluated | {(report.EvaluationStats is null ? "N/A" : Math.Max(0, report.EvaluationStats.RulesNotEvaluated.Count - report.EvaluationStats.RulesUnsupported).ToString())} |");
+            md.AppendLine($"| Applicable Rules Not Evaluated | {report.EvaluationStats?.RulesNotEvaluated.Count.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Not Applicable Rules | {report.EvaluationStats?.RulesNotApplicable.Count.ToString() ?? "N/A"} |");
             md.AppendLine($"| Unsupported Rules | {report.EvaluationStats?.RulesUnsupported.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Disabled by Policy Rules | {report.EvaluationStats?.RulesDisabledByPolicy.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Rule Accounting Difference | {report.EvaluationStats?.RuleAccountingDifference.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Total Diagnostics | {report.Diagnostics.Count} |");
+            md.AppendLine($"| Semantic Diagnostics | {report.SemanticDiagnosticCount} |");
+            md.AppendLine($"| Coverage-affecting Diagnostics | {report.CoverageAffectingDiagnosticCount} |");
             md.AppendLine($"| Assessment Complete | {(report.Metrics.AssessmentComplete ? "Yes" : "No")} |");
 
             md.AppendLine();

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Franz.Common.Logging;
 using Aegis.Architecture.Evaluators;
+using Aegis.Architecture.Analysis.Semantics;
 using Aegis.Architecture.RuleEngines;
 
 namespace Aegis.Sdk;
@@ -11,6 +12,7 @@ public static class DependencyBootstrapper
     {
        
         // Core components
+        services.AddJavaSemanticAnalysis();
         services.AddScoped<RuleEngine>();
         services.AddScoped<RuleEngineCore>();
         services.AddScoped<AegisArchitectureAnalysisRunner>();

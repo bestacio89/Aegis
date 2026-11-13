@@ -50,6 +50,12 @@ public sealed class AegisArchitectureReport
     /// </summary>
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];
 
+    public int SemanticDiagnosticCount => Diagnostics.Count(diagnostic =>
+        string.Equals(diagnostic.Source, "SemanticAnalysis", StringComparison.Ordinal));
+
+    public int CoverageAffectingDiagnosticCount => Diagnostics.Count(diagnostic =>
+        diagnostic.AffectsCoverage);
+
     // 🧮 Derived counts
     public int TotalFilesScanned { get; set; }
     public int TotalFacts => Facts.Count;
@@ -180,6 +186,9 @@ public sealed class AegisArchitectureReport
         $"CoverageAdjustedDiagnostic: {(Metrics.HasCoverageEvidence ? $"{Metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A")}; " +
         $"RuleCoverage: {(Metrics.HasCoverageEvidence ? $"{Metrics.RuleEvaluationCoverage:0.##}%" : "N/A")}; " +
         $"RuleCapability: {(EvaluationStats is not null ? $"{Metrics.RuleCapabilityCoverage:0.##}%" : "N/A")}; " +
+        $"Diagnostics: {Diagnostics.Count} ({SemanticDiagnosticCount} semantic; " +
+        $"{CoverageAffectingDiagnosticCount} coverage-affecting); " +
+        $"RuleAccountingDifference: {EvaluationStats?.RuleAccountingDifference.ToString() ?? "N/A"}; " +
         $"AssessmentComplete: {Metrics.AssessmentComplete}.";
 
     // 🧩 Export-friendly DTO (AI / report writer)
@@ -195,6 +204,13 @@ public sealed class AegisArchitectureReport
         TotalFiles = TotalFilesScanned,
         TotalViolations,
         ComplianceScores,
+        RuleAccountingDifference = EvaluationStats?.RuleAccountingDifference,
+        DiagnosticSummary = new
+        {
+            Total = Diagnostics.Count,
+            Semantic = SemanticDiagnosticCount,
+            CoverageAffecting = CoverageAffectingDiagnosticCount
+        },
         TopViolations = Results
             .GroupBy(r => r.RuleId)
             .Select(g => new

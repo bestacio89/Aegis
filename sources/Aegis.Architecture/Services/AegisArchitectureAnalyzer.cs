@@ -2,6 +2,7 @@
 
 using Aegis.Architecture.Analysis;
 using Aegis.Architecture.RuleEngines;
+using Aegis.Architecture.Analysis.Semantics;
 using Aegis.Shared.Architecture.Models;
 using Microsoft.Extensions.Logging;
 
@@ -27,14 +28,23 @@ public sealed class AegisArchitectureAnalyzer
 {
     private readonly RuleEngine _ruleEngine;
     private readonly ILogger<AegisArchitectureAnalyzer> _logger;
+    private readonly JavaSemanticAnalysisOrchestrator? _semanticAnalysisOrchestrator;
+    private readonly SemanticAnalysisPipeline? _semanticAnalysisPipeline;
 
 
     public AegisArchitectureAnalyzer(
         RuleEngine ruleEngine,
-        ILogger<AegisArchitectureAnalyzer> logger)
+        ILogger<AegisArchitectureAnalyzer> logger,
+        JavaSemanticAnalysisOrchestrator? semanticAnalysisOrchestrator = null,
+        SemanticAnalysisPipeline? semanticAnalysisPipeline = null)
     {
+        ArgumentNullException.ThrowIfNull(ruleEngine);
+        ArgumentNullException.ThrowIfNull(logger);
+
         _ruleEngine = ruleEngine;
         _logger = logger;
+        _semanticAnalysisOrchestrator = semanticAnalysisOrchestrator;
+        _semanticAnalysisPipeline = semanticAnalysisPipeline;
     }
 
 
@@ -70,17 +80,27 @@ public sealed class AegisArchitectureAnalyzer
 
 
 
+        if (_semanticAnalysisPipeline is not null)
+        {
+            await _semanticAnalysisPipeline.AnalyzeAsync(context, token)
+                .ConfigureAwait(false);
+        }
+        else if (_semanticAnalysisOrchestrator is not null)
+        {
+            await _semanticAnalysisOrchestrator.AnalyzeAsync(context, token)
+                .ConfigureAwait(false);
+
+            // The Java orchestrator supplies raw semantic evidence. Keep
+            // architectural component projection in the shared provider-neutral
+            // pipeline even when the compatibility fallback is used.
+            SemanticAnalysisPipeline.ProjectArchitectureComponents(context);
+        }
+
         var report =
             await _ruleEngine.RunAsync(
                 projectPath,
                 context,
                 token);
-
-        if (context.DiscoveryDiagnostics.Count > 0)
-        {
-            report.Diagnostics.AddRange(context.DiscoveryDiagnostics);
-            report.Metrics.AssessmentComplete = false;
-        }
 
         EnrichReportContext(
             report,

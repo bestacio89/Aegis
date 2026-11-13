@@ -34,15 +34,23 @@ internal static class DependencyDetector
                 StringComparison.OrdinalIgnoreCase)))
             AnalyzeJava(ctx, files, dependencies);
 
+        if (files.Any(file =>
+                Path.GetFileName(file).Equals("build.gradle", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase)))
+            AnalyzeGradle(ctx, dependencies);
+
 
         ctx.DetectedDependencies =
             dependencies.ToList();
 
         // Package manifests populate DetectedDependencies only. Internal
-        // architecture edges come from explicit project references, never from
-        // package names or package versions.
+        // architecture edges come from explicit project references or build-tool
+        // project dependencies, never from third-party package coordinates.
         if (includeProjectReferences && ctx.Modules.Count > 0)
+        {
             AnalyzeDotNetProjectReferences(ctx, files);
+            JavaProjectDependencyDetector.Analyze(ctx);
+        }
     }
 
 
@@ -240,42 +248,26 @@ internal static class DependencyDetector
 
 
     private static void AnalyzeJava(
-        ProjectArchitectureContext ctx,
+        ProjectArchitectureContext context,
         List<string> files,
         HashSet<string> dependencies)
     {
-        foreach (var file in files.Where(
-                     x => x.EndsWith(
-                         "pom.xml",
-                         StringComparison.OrdinalIgnoreCase)))
+        foreach (var evidence in context.DependencyEvidence.Where(dependency =>
+                     dependency.Ecosystem.Equals("Maven", StringComparison.OrdinalIgnoreCase)))
         {
-            try
-            {
-                var xml =
-                    File.ReadAllText(file);
+            dependencies.Add(evidence.Name);
+        }
+    }
 
 
-                foreach (Match match in Regex.Matches(
-                             xml,
-                             @"<artifactId>(.*?)</artifactId>"))
-                {
-                    if (match.Groups.Count <= 1)
-                        continue;
-
-
-                    var dependency =
-                        match.Groups[1].Value;
-
-
-                    dependencies.Add(dependency);
-
-
-                }
-            }
-            catch
-            {
-                // Ignore unreadable Maven files
-            }
+    private static void AnalyzeGradle(
+        ProjectArchitectureContext context,
+        HashSet<string> dependencies)
+    {
+        foreach (var evidence in context.DependencyEvidence.Where(dependency =>
+                     dependency.Ecosystem.Equals("Gradle", StringComparison.OrdinalIgnoreCase)))
+        {
+            dependencies.Add(evidence.Name);
         }
     }
 

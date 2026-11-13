@@ -64,7 +64,10 @@ public sealed class ProjectArchitectureContext
     // ===============================================================
 
     /// <summary>
-    /// Detected modules/projects/packages.
+    /// Build-system units discovered in the repository (for example .csproj,
+    /// Maven modules, Gradle projects, npm workspaces, or Python distributions).
+    /// These are build/deployment boundaries and are not assumed to be the
+    /// primary architectural organisation unit for every language.
     /// </summary>
     public List<ProjectModuleContext> Modules { get; set; } = new();
 
@@ -153,6 +156,64 @@ public sealed class ProjectArchitectureContext
     /// Evaluators consume this graph instead of discovering dependencies.
     /// </summary>
     public List<ArchitectureDependencyContext> Dependencies { get; set; } = new();
+
+    /// <summary>
+    /// Language-level architectural components projected from semantic declarations.
+    /// These are intentionally distinct from independently buildable project modules.
+    /// </summary>
+    public List<ArchitectureComponentContext> ArchitectureComponents { get; set; } = [];
+
+    /// <summary>Components with production declarations; includes isolated packages.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitectureComponentContext> ProductionComponents =>
+        ArchitectureComponents.Where(component => component.ProductionSymbolCount > 0).ToArray();
+
+    /// <summary>Components containing test declarations.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitectureComponentContext> TestComponents =>
+        ArchitectureComponents.Where(component => component.TestSymbolCount > 0).ToArray();
+
+    /// <summary>
+    /// Semantic dependencies between language-level architectural components.
+    /// Build-module dependency edges remain in <see cref="Dependencies"/>.
+    /// </summary>
+    public List<ArchitectureComponentDependencyContext> ArchitectureComponentDependencies { get; set; } = [];
+
+    /// <summary>Production-only semantic component dependencies.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitectureComponentDependencyContext> ProductionComponentDependencies =>
+        ArchitectureComponentDependencies
+            .Where(dependency => dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+    /// <summary>Test-only semantic component dependencies retained as separate evidence.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitectureComponentDependencyContext> TestComponentDependencies =>
+        ArchitectureComponentDependencies
+            .Where(dependency => dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+    /// <summary>Runtime integrations, distinct from compile-time/build dependency edges.</summary>
+    public List<ArchitectureIntegrationContext> ApplicationIntegrations { get; set; } = [];
+
+    /// <summary>
+    /// Declared, resolved, or observed package/build dependencies. This inventory
+    /// is separate from internal project-to-project architecture graph edges.
+    /// </summary>
+    public List<ArchitectureDependencyEvidence> DependencyEvidence { get; set; } = [];
+
+    /// <summary>
+    /// Framework and technology observations with project attribution and provenance.
+    /// Existing string framework projections remain for compatibility.
+    /// </summary>
+    public List<FrameworkEvidence> FrameworkEvidence { get; set; } = [];
+
+    /// <summary>
+    /// Semantic-analysis attempts performed for this repository or its modules.
+    /// An empty collection means no semantic run has been recorded; it does not
+    /// imply that semantic analysis completed successfully.
+    /// </summary>
+    public List<SemanticAnalysisRun> SemanticAnalysisRuns { get; set; } = [];
 
     /// <summary>
     /// Production-to-production relationships used to describe the deployed
@@ -361,8 +422,20 @@ public sealed class ProjectArchitectureContext
 
             BoundaryCount = Boundaries.Count,
             DependencyCount = Dependencies.Count,
+            ApplicationIntegrationCount = ApplicationIntegrations.Count,
             ProductionDependencyCount = ProductionDependencies.Count,
             TestDependencyCount = TestDependencies.Count,
+            ArchitectureComponentCount = ArchitectureComponents.Count,
+            ProductionArchitectureComponentCount = ProductionComponents.Count,
+            TestArchitectureComponentCount = TestComponents.Count,
+            ArchitectureComponentDependencyCount = ArchitectureComponentDependencies.Count,
+            ProductionComponentDependencyCount = ProductionComponentDependencies.Count,
+            TestComponentDependencyCount = TestComponentDependencies.Count,
+            DependencyEvidenceCount = DependencyEvidence.Count,
+            FrameworkEvidenceCount = FrameworkEvidence.Count,
+            SemanticAnalysisRunCount = SemanticAnalysisRuns.Count,
+            CompletedSemanticAnalysisRunCount = SemanticAnalysisRuns.Count(
+                run => run.IsComplete),
 
             Confidence,
             DetectionStrategy,

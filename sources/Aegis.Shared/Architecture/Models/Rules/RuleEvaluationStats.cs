@@ -102,6 +102,16 @@ public sealed class RuleEvaluationStats
         = new Dictionary<string, string>(
             StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Difference between registered rules and the mutually exclusive accounting
+    /// categories: supported applicable, unsupported, disabled by policy, and
+    /// not applicable. Not-evaluated rules are a subset of supported applicable.
+    /// Zero means every registered rule has exactly one classification.
+    /// </summary>
+    public int RuleAccountingDifference =>
+        RulesRegistered
+        - (RulesApplicable + RulesUnsupported + RulesDisabledByPolicy + RulesNotApplicable.Count);
+
     public IReadOnlyList<RuleCheckBucket> CheckBuckets { get; init; }
         = Array.Empty<RuleCheckBucket>();
 
@@ -129,6 +139,14 @@ public sealed class RuleEvaluationStats
     /// Percentage of registered rules for which the engine has a supported producer contract.
     /// This is an engine capability measure, not project-specific evaluation coverage.
     /// </summary>
+    /// <summary>
+    /// Percentage of all registered rules that received at least one completed evaluation.
+    /// This is a registry-wide diagnostic measure, not project applicability coverage.
+    /// </summary>
+    public double RegisteredRuleEvaluationCoverage => RulesRegistered <= 0
+        ? 0.0
+        : Math.Clamp((double)RulesEvaluated / RulesRegistered * 100.0, 0.0, 100.0);
+
     public double RuleCapabilityCoverage
     {
         get

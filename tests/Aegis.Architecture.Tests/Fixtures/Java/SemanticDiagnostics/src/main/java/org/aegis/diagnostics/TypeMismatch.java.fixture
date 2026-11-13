@@ -1,0 +1,8 @@
+package org.aegis.diagnostics;
+
+public final class TypeMismatch {
+    public String value() {
+        String result = 42;
+        return result;
+    }
+}

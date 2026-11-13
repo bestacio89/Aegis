@@ -13,6 +13,19 @@
     </Content>
   </ItemGroup>
 
+  <PropertyGroup>
+    <JavaWorkerPackageDirectory Condition="'$(JavaWorkerPackageDirectory)' == ''">$(MSBuildProjectDirectory)\..\..\artifacts\java-worker-package</JavaWorkerPackageDirectory>
+  </PropertyGroup>
+
+  <ItemGroup Condition="Exists('$(JavaWorkerPackageDirectory)\Java\worker\classes\org\aegis\worker\WorkerMain.class')">
+    <Content Include="$(JavaWorkerPackageDirectory)\Java\**\*">
+      <Link>Java\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <TargetPath>Java\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Franz.Common.Logging" Version="2.2.17" />
     <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="10.0.9" />

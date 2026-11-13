@@ -1,0 +1,12 @@
+package org.aegis.fixture.gradle;
+
+import org.junit.jupiter.api.Test;
+
+class HandlerTest {
+    @Test
+    void genericHandlerIsDiscoverable() {
+        new Handler<Command>(new CommandStore<Command>() {
+            public java.util.List<Command> loadAll() { return java.util.List.of(); }
+        });
+    }
+}

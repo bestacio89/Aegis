@@ -41,7 +41,7 @@ internal static class FrameworkDetector
                 break;
 
             case "Java":
-                DetectJavaFramework(ctx, files, deps);
+                deps.UnionWith(ctx.DetectedDependencies);
                 break;
 
             case "Python":
@@ -52,6 +52,10 @@ internal static class FrameworkDetector
                 DetectNodeFramework(ctx, files, deps);
                 break;
         }
+
+        // Java modules can coexist with another primary repository language.
+        // Classify them independently from module-owned build dependency evidence.
+        DetectJavaFrameworks(ctx);
 
         // Discover frontend frameworks independently of the repository's primary
         // language. A C# web API and an Angular/React client are separate technology
@@ -283,6 +287,12 @@ internal static class FrameworkDetector
             context.DetectedFrameworks.Add(framework);
     }
 
+    private static void AddFramework(ProjectModuleContext module, string framework)
+    {
+        if (!module.Frameworks.Contains(framework, StringComparer.OrdinalIgnoreCase))
+            module.Frameworks.Add(framework);
+    }
+
     private static string SafeReadText(string path)
     {
         try { return File.ReadAllText(path); }
@@ -290,13 +300,101 @@ internal static class FrameworkDetector
         catch (UnauthorizedAccessException) { return string.Empty; }
     }
 
-    private static void DetectJavaFramework(ProjectArchitectureContext ctx, List<string> files, HashSet<string> deps)
+    private static void DetectJavaFrameworks(ProjectArchitectureContext context)
     {
-        if (files.Any(f => f.Contains("spring", StringComparison.OrdinalIgnoreCase)))
-            ctx.Framework = "Spring Boot";
-        else if (deps.Any(d => d.Contains("hibernate"))) ctx.Framework = "Hibernate";
-        else ctx.Framework = "Java SE";
+        foreach (var module in context.Modules.Where(module =>
+                     module.BuildSystem is Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Maven
+                         or Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Gradle
+                     || module.Languages.Contains("Java", StringComparer.OrdinalIgnoreCase)))
+        {
+            var dependencies = context.DependencyEvidence.Where(dependency =>
+                    PathsEqual(dependency.SourceProjectPath, module.Path)
+                    && dependency.Ecosystem is "Maven" or "Gradle")
+                .ToArray();
+
+            var frameworks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var dependency in dependencies)
+            {
+                var separator = dependency.Name.IndexOf(':');
+                if (separator <= 0 || separator == dependency.Name.Length - 1)
+                    continue;
+
+                var group = dependency.Name[..separator];
+                var artifact = dependency.Name[(separator + 1)..];
+
+                if (group.Equals("org.springframework.boot", StringComparison.OrdinalIgnoreCase)
+                    && artifact.StartsWith("spring-boot", StringComparison.OrdinalIgnoreCase))
+                {
+                    frameworks.Add("Spring Boot");
+                }
+                else if (group.Equals("org.springframework", StringComparison.OrdinalIgnoreCase)
+                         && artifact.StartsWith("spring-", StringComparison.OrdinalIgnoreCase))
+                {
+                    frameworks.Add("Spring Framework");
+                }
+                else if (group.Equals("io.quarkus", StringComparison.OrdinalIgnoreCase))
+                {
+                    frameworks.Add("Quarkus");
+                }
+                else if (group.Equals("io.micronaut", StringComparison.OrdinalIgnoreCase))
+                {
+                    frameworks.Add("Micronaut");
+                }
+                else if ((group.Equals("org.hibernate", StringComparison.OrdinalIgnoreCase)
+                          || group.Equals("org.hibernate.orm", StringComparison.OrdinalIgnoreCase))
+                         && artifact.StartsWith("hibernate-", StringComparison.OrdinalIgnoreCase))
+                {
+                    frameworks.Add("Hibernate");
+                }
+                else if (group.StartsWith("jakarta.", StringComparison.OrdinalIgnoreCase)
+                         || group.Equals("jakarta", StringComparison.OrdinalIgnoreCase))
+                {
+                    frameworks.Add("Jakarta EE");
+                }
+            }
+
+            foreach (var framework in frameworks)
+            {
+                AddFramework(module, framework);
+                AddFramework(context, framework);
+            }
+
+            // Keep all detected framework signals on the module, while selecting
+            // a deterministic primary identity for repository aggregation.
+            module.Framework = frameworks
+                .OrderBy(GetJavaFrameworkPriority)
+                .ThenBy(framework => framework, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault() ?? "Java SE";
+        }
+
+        if (string.Equals(context.Language, "Java", StringComparison.OrdinalIgnoreCase)
+            && !context.Modules.Any(module =>
+                module.BuildSystem is Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Maven
+                    or Aegis.Shared.Architecture.Enums.ArchitectureBuildSystem.Gradle
+                || module.Languages.Contains("Java", StringComparer.OrdinalIgnoreCase)))
+        {
+            context.Framework ??= "Java SE";
+        }
     }
+
+    private static int GetJavaFrameworkPriority(string framework) => framework switch
+    {
+        "Spring Boot" => 0,
+        "Quarkus" => 1,
+        "Micronaut" => 2,
+        "Jakarta EE" => 3,
+        "Spring Framework" => 4,
+        "Hibernate" => 5,
+        _ => int.MaxValue
+    };
+
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(
+            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal);
 
     private static void DetectPythonFramework(ProjectArchitectureContext ctx, List<string> files, HashSet<string> deps)
     {

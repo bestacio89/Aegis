@@ -1,0 +1,17 @@
+name: Package Eclipse JDT worker and private Java runtime
+description: Build, verify and package the isolated Eclipse JDT worker with a minimized Java 21 runtime.
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Java 21
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+        cache: maven
+        cache-dependency-path: tools/java-worker-prototype/pom.xml
+
+    - name: Package Eclipse JDT worker and private runtime
+      shell: pwsh
+      run: ./tools/java-worker-prototype/packaging/Package-Worker.ps1 -OutputDirectory artifacts/java-worker-package

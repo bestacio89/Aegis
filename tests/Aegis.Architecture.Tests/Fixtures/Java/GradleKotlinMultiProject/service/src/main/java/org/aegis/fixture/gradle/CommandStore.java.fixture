@@ -1,0 +1,7 @@
+package org.aegis.fixture.gradle;
+
+import java.util.List;
+
+public interface CommandStore<T extends Command> {
+    List<T> loadAll();
+}

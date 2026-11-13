@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Nodes;
 using Aegis.Architecture.Analysis;
+using Aegis.Architecture.Analysis.Semantics;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Infrastructure.Data;
 using Aegis.Infrastructure.Persistence;
@@ -34,6 +35,8 @@ public sealed class AegisArchitectureAnalysisRunner
     private readonly IReadOnlyDictionary<string, IReportExporter> _exporters;
     private readonly AegisArchitecturePolicy _configuredPolicy;
     private readonly ILogger<AegisArchitectureAnalysisRunner> _logger;
+    private readonly JavaSemanticAnalysisOrchestrator? _javaSemanticAnalysis;
+    private readonly SemanticAnalysisPipeline? _semanticAnalysisPipeline;
 
     public AegisArchitectureAnalysisRunner(
         RuleEngine engine,
@@ -43,7 +46,9 @@ public sealed class AegisArchitectureAnalysisRunner
         IReportRepository customReportRepo,
         IEnumerable<IReportExporter> exporters,
         IOptions<AegisArchitecturePolicy> policyOptions,
-        ILogger<AegisArchitectureAnalysisRunner> logger)
+        ILogger<AegisArchitectureAnalysisRunner> logger,
+        JavaSemanticAnalysisOrchestrator? javaSemanticAnalysis = null,
+        SemanticAnalysisPipeline? semanticAnalysisPipeline = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(ruleResultRepo);
@@ -61,6 +66,8 @@ public sealed class AegisArchitectureAnalysisRunner
         _customReportRepo = customReportRepo;
         _configuredPolicy = policyOptions.Value;
         _logger = logger;
+        _javaSemanticAnalysis = javaSemanticAnalysis;
+        _semanticAnalysisPipeline = semanticAnalysisPipeline;
 
         var exporterList = exporters.ToList();
 
@@ -166,6 +173,20 @@ public sealed class AegisArchitectureAnalysisRunner
                 context.Framework,
                 context.DomainType,
                 context.Layer);
+
+            if (_semanticAnalysisPipeline is not null)
+            {
+                Report(progress, 7, "Semantic analysis", "Running registered language analyzers");
+                await _semanticAnalysisPipeline.AnalyzeAsync(context, token)
+                    .ConfigureAwait(false);
+            }
+            else if (_javaSemanticAnalysis is not null)
+            {
+                Report(progress, 7, "Semantic analysis", "Analysing Java project modules");
+                await _javaSemanticAnalysis.AnalyzeAsync(context, token)
+                    .ConfigureAwait(false);
+                SemanticAnalysisPipeline.ProjectArchitectureComponents(context);
+            }
 
             token.ThrowIfCancellationRequested();
 

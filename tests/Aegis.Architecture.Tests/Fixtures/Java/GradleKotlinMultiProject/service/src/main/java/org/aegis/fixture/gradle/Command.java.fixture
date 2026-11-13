@@ -1,0 +1,5 @@
+package org.aegis.fixture.gradle;
+
+public interface Command {
+    String key();
+}

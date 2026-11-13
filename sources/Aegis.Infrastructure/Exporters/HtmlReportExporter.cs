@@ -190,8 +190,16 @@ td {
                 report.EvaluationStats?.RulesApplicable.ToString() ?? "N/A");
 
             AddRow(html,
-                "Supported Rules Evaluated",
-                report.EvaluationStats?.RulesEvaluated.ToString() ?? "N/A");
+                "Supported Rules Evaluated / Applicable",
+                report.EvaluationStats is null
+                    ? "N/A"
+                    : $"{report.EvaluationStats.RulesEvaluated} / {report.EvaluationStats.RulesApplicable} ({report.EvaluationStats.EvaluationCoverage:0.0}%)");
+
+            AddRow(html,
+                "Registry-wide Rule Evaluation Coverage",
+                report.EvaluationStats is null
+                    ? "N/A"
+                    : $"{report.EvaluationStats.RegisteredRuleEvaluationCoverage:0.0}%");
 
             AddRow(html,
                 "Rules Not Evaluated",
@@ -216,14 +224,36 @@ td {
                     : "N/A");
 
             AddRow(html,
-                "Supported Rules Not Evaluated",
-                report.EvaluationStats is null
-                    ? "N/A"
-                    : Math.Max(0, report.EvaluationStats.RulesNotEvaluated.Count - report.EvaluationStats.RulesUnsupported).ToString());
+                "Applicable Rules Not Evaluated",
+                report.EvaluationStats?.RulesNotEvaluated.Count.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Not Applicable Rules",
+                report.EvaluationStats?.RulesNotApplicable.Count.ToString() ?? "N/A");
 
             AddRow(html,
                 "Unsupported Rules",
                 report.EvaluationStats?.RulesUnsupported.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Disabled by Policy Rules",
+                report.EvaluationStats?.RulesDisabledByPolicy.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Rule Accounting Difference",
+                report.EvaluationStats?.RuleAccountingDifference.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Total Diagnostics",
+                report.Diagnostics.Count.ToString());
+
+            AddRow(html,
+                "Semantic Diagnostics",
+                report.SemanticDiagnosticCount.ToString());
+
+            AddRow(html,
+                "Coverage-affecting Diagnostics",
+                report.CoverageAffectingDiagnosticCount.ToString());
 
             AddRow(html,
                 "Assessment Complete",

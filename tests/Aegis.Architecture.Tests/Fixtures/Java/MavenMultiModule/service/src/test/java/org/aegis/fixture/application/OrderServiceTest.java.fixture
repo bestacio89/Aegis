@@ -1,0 +1,12 @@
+package org.aegis.fixture.application;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+class OrderServiceTest {
+    @Test
+    void serviceCanBeConstructed() {
+        assertNotNull(new OrderService(id -> java.util.Optional.empty()));
+        Class<?> testAnnotationType = Test.class;
+    }
+}

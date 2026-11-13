@@ -455,9 +455,9 @@ public sealed class SemanticArchitectureComponentGraphTests
         }
     }
 
-    private sealed class EmptyClasspathResolver : IJavaClasspathResolver
+    private sealed class EmptyClasspathResolver : IJvmClasspathResolver
     {
-        public JavaClasspathResolution Resolve(
+        public JvmClasspathResolution Resolve(
             ProjectModuleContext module,
             IReadOnlyCollection<ProjectModuleContext> projectModules,
             bool includeTestCode) =>

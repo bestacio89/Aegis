@@ -157,6 +157,17 @@ Add Kotlin-specific implementations behind the existing shared boundaries:
 
 Do not fork the shared coordinator, semantic run contract, relationship projection, architecture graph or ledger.
 
+### JVM host execution and artifact lifecycle
+
+The K2 host must treat compiler outputs as transient execution artifacts, not report data:
+
+- A host-created temporary root is passed to the worker and validated before the compiler writes anything. The worker never writes into the scanned repository.
+- Each worker result may contain a successful JVM classes directory and the owning temporary root. Both paths are validated as descendants of the host-created root before registration.
+- A per-invocation `SemanticAnalysisExecutionContext` owns artifacts and cleanup roots. It is created by the pipeline, passed to project analyzers, and disposed after all analyzers finish, including exception and cancellation paths.
+- The Kotlin adapter returns semantic evidence plus optional language-neutral artifact metadata. It does not attach filesystem paths to `SemanticAnalysisRun` or serialize them into reports.
+- The Kotlin orchestrator uses production output for its test compilation. The Java orchestrator may consume the same-module production output after Kotlin has run. K3 extends this to dependent modules and test-support outputs.
+- Only outputs from a completed compiler run with complete required inputs are eligible as classpath artifacts. Partial outputs remain available for cleanup but are not used to claim resolved edges.
+
 ### Shared source-root model
 
 Generalize source-root evidence so it records the languages actually present in a root, while retaining a compatibility path for existing Java consumers during migration.
@@ -266,41 +277,27 @@ Production and test source roots, classpaths, symbols and relationships must rem
 
 ---
 
-## K0 status — compiler boundary validated; semantic completeness audit in progress
+## K0 status — accepted
 
-The isolated Kotlin 2.4.21 K2 compiler/IR worker boundary is validated at head `1263fcc1b448d50d41b86717667fe8e6d0dbb736` (full commit recorded in the PR history). The Kotlin worker workflow passed on both `ubuntu-latest` and `windows-latest`, including the packaged runtime probe. This validates the worker protocol and existing extraction fixtures, but a deeper IR audit found semantic reference forms not yet represented. K0 remains open until those are implemented and tested.
+K0 is accepted at exact head `c9ada0289a230347f898902a2a88c2964655b22f`. All four required workflows passed on that exact commit: Kotlin semantic worker (Linux and Windows), Java semantic worker (Linux and Windows), WPF build validation, and non-WPF quality gates including all test projects and production builds.
 
 Validated in K0:
 
-- Pinned Kotlin 2.4.21 K2 compiler and IR extraction for classes, interfaces, enums, annotation classes, type aliases, data classes, functions, constructors, properties, extension functions/properties, inheritance, implementation, calls, property reads and annotation use.
-- External Java source roots are available to Kotlin compilation; the integration fixture also proves Java compilation can consume Kotlin output when the Java source dependencies are compiled.
+- Pinned Kotlin 2.4.21 K2 compiler and pre-lowering IR extraction for classes, interfaces, enums, annotation classes, type aliases, data classes, functions, constructors, properties, extension functions/properties, inheritance, implementation, calls, property reads/writes and annotation use.
+- External Java source roots are available to Kotlin compilation; compiler output is materialized in a temporary classes directory and can be consumed by a Java compilation fixture.
 - Stable relationship IDs aggregate repeated call-site provenance without embedding source offsets in identity; local declaration identity uses normalized lexical source context rather than line offsets or traversal ordinals.
 - Lambda bodies are traversed without emitting synthetic lambda declarations, so calls inside callbacks are attributed to their enclosing source declaration.
-- Property reads and writes resolve to their source property without duplicate synthetic accessor symbols; external Java callables retain package and containing-type identity.
+- Kotlin property reads/writes resolve to their source property without duplicate synthetic accessor symbols.
+- Java interop preserves declaration semantics: Java public fields accessed through Kotlin property syntax remain Field symbols; JavaBean synthetic property syntax resolves to the underlying getter method.
+- Constructors have a distinct semantic identity namespace from ordinary functions. Constructor references and secondary-constructor delegation retain constructor identity.
+- Callable references (`::function`), property references (`::property`), class references (`::class`), direct field access, enum-entry references, object references, constructor references and constructor delegation are covered by compiler integration assertions.
 - Compiler errors remain explicit diagnostics and never produce a completed analysis.
-- Callable references (`::function`), property references (`::property`), class references (`::class`), direct field access, enum-entry references, constructor references and constructor delegation are K0 closure items; they are not yet claimed as covered.
 - Bounded source manifests (16 MiB / 50,000 files), source-root collections, JSONL frames and response size.
 - Process handshake, analysis, bounded-heap execution and graceful shutdown.
 - Private runtime package with pinned dependencies, CycloneDX SBOM, and a packaged-JAR smoke test on Linux and Windows.
 - Automated one-top-level-type-per-Kotlin-file and filename-matching enforcement.
 
-K0 validates the compiler boundary and private worker packaging. It does **not** claim that the .NET host adapter, build-system source ownership, process supervision or cross-language graph identity are integrated; those remain K1–K3 work.
-
-## K1 status — accepted
-
-K1 build/source ownership is accepted at validated head `1263fcc1b448d50d41b86717667fe8e6d0dbb736`. The four required workflows passed on that exact head: Kotlin semantic worker (Linux and Windows), Java semantic worker (Linux and Windows), WPF build validation, and non-WPF quality gates including all test projects and production builds.
-
-Validated in K1:
-
-- Gradle Kotlin plugin metadata and Kotlin/JVM module recognition.
-- Kotlin source-set discovery across Kotlin and Groovy DSL forms, including conventional and custom source directories and `by getting` declarations.
-- Separate production and test source-root ownership, including custom roots.
-- Maven Kotlin plugin version and compiler-option extraction, including language/API versions and JVM target.
-- Maven `sourceDirs`, `testSourceDirs` and execution-specific source directories.
-- Parent POM Kotlin plugin configuration inheritance. Raw source-directory expressions are retained and resolved against the child module's effective properties, so child property overrides are honored.
-- Explicit partial diagnostics when parent and child both declare source-directory lists and Maven's full XML merge behavior cannot be reproduced exactly.
-
-K1 does not execute Maven or Gradle, and it does not yet compile Kotlin from the .NET host. Those are K2/K3 responsibilities.
+K0 validates the compiler boundary and private worker packaging. It does **not** claim that the .NET host adapter, production/test orchestration, host-owned artifact lifecycle or cross-language graph identity are integrated; those remain K2–K3 work.
 
 ## 7. Phases and acceptance checkpoints
 
@@ -325,16 +322,21 @@ K1 does not execute Maven or Gradle, and it does not yet compile Kotlin from the
 
 **Acceptance:** Kotlin modules and roots are correctly discovered; no build scripts execute; unresolved build metadata is visible; Java regression suite remains green.
 
-### K2 — Kotlin semantic worker and adapter
+### K2 — Kotlin semantic host integration
 
-- Implement the versioned worker and compiler extraction.
-- Emit normalized symbols, relationships, diagnostics and provenance.
-- Cover classes, interfaces, objects, companion objects, data/value/sealed classes, enums, annotations, constructors, member/top-level functions, properties, extension declarations and type aliases.
-- Cover calls, constructor calls, inheritance, implementation, property access and annotation usage.
-- Preserve generated/source distinctions and compiler recovery status.
-- Integrate through the existing coordinator and semantic pipeline.
+- Refactor process supervision into a shared `JvmWorkerProcess` used by both the JDT and Kotlin clients. Keep worker launch arguments and payload mapping provider-specific; do not duplicate timeout, cancellation, framing, handshake, process-tree termination or shutdown logic.
+- Generalize `IJavaClasspathResolver` / `LocalJavaClasspathResolver` into JVM-scoped classpath resolution and reuse the same explicit Maven/Gradle dependency evidence and local-cache policy for Kotlin.
+- Extract a shared `JvmSourceRootResolver` for language-specific source roots, production/test ownership, module boundaries, referenced Java roots, safe file enumeration and discovery diagnostics. Refactor Java to consume it with regression coverage.
+- Add `KotlinWorkerOptions`, `IKotlinWorkerClient`, `KotlinSemanticAnalysisAdapter` and `KotlinSemanticAnalysisOrchestrator` behind the existing coordinator and project-analyzer contracts.
+- Keep Kotlin compiler request/response DTOs private to the Kotlin adapter. Map worker status, diagnostics, source provenance and capabilities into the shared semantic contracts; compiler and IR types never cross the worker boundary.
+- Introduce a per-pipeline-invocation semantic execution context for transient compilation artifacts. It must be concurrency-safe, excluded from report serialization, and responsible for cleanup in a `finally`/async-disposal path.
+- The Kotlin orchestrator analyses production before test. A successful production output is an explicit classpath input to the test pass. Failed or partial compiler output is never treated as a resolved dependency.
+- Feed module-owned Java source roots to Kotlin as binding-only inputs. Do not count Java files as Kotlin analyzed files.
+- Order Kotlin before Java in the shared JVM pipeline so the Java analyzer can consume successful Kotlin production outputs. Cross-module dependency ordering and canonical cross-language graph identity remain K3.
+- Package the Kotlin worker and pinned libraries alongside the existing private Java 21 runtime. Include its SBOM/notices in the deployment package and copy the worker into WPF/CLI output without adding Kotlin compiler dependencies to the .NET application.
+- Recognize Android, Multiplatform, JS, Wasm and Native targets but do not route them through the JVM worker; emit explicit unsupported-target diagnostics until K7/K8.
 
-**Acceptance:** Semantic fixture corpus passes; recovered/unresolved references are never marked resolved; worker lifecycle and resource limits pass on Windows and Linux.
+**Acceptance:** A packaged Kotlin/JVM worker is invoked through the production .NET semantic pipeline on Windows and Linux. Production/test scopes remain distinct; test analysis binds to successful production output; Java source binding works; temporary artifacts are cleaned on success, failure and cancellation; Java regression tests remain green; unsupported platforms are not misreported as JVM.
 
 ### K3 — JVM interoperability and graph projection
 

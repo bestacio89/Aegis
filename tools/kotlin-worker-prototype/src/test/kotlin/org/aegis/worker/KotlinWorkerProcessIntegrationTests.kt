@@ -52,6 +52,8 @@ class KotlinWorkerProcessIntegrationTests {
             ?: System.getProperty("java.class.path")
         val process = ProcessBuilder(
             javaExecutable.toString(),
+            "-Xms64m",
+            "-Xmx1024m",
             "-cp",
             classpath,
             "org.aegis.worker.KotlinWorkerMain"
@@ -59,6 +61,7 @@ class KotlinWorkerProcessIntegrationTests {
 
         val executor = Executors.newSingleThreadExecutor()
         var compilationOutput: Path? = null
+        var oversizedManifest: Path? = null
         try {
             val writer = BufferedWriter(OutputStreamWriter(process.outputStream, StandardCharsets.UTF_8))
             val reader = BufferedReader(InputStreamReader(process.inputStream, StandardCharsets.UTF_8))
@@ -85,6 +88,33 @@ class KotlinWorkerProcessIntegrationTests {
             compilationOutput = Path.of(result.get("compilationOutputDirectory").asString)
             assertTrue(Files.isDirectory(compilationOutput), "The worker must retain JVM output for the host interop phase.")
 
+            oversizedManifest = Files.createTempFile("aegis-kotlin-source-manifest-oversized-", ".json")
+            Files.writeString(
+                oversizedManifest,
+                JsonArray().apply {
+                    repeat(50_001) { add(source.toAbsolutePath().toString()) }
+                }.toString()
+            )
+            writer.write(
+                request(
+                    "oversized-manifest",
+                    "analyze",
+                    analysisPayload(workspace, sourceRoot, oversizedManifest, standardLibraryPath)
+                ).toString()
+            )
+            writer.newLine()
+            writer.flush()
+            val boundedAnalysis = readResponse(executor, reader)
+            assertEquals("ok", boundedAnalysis.get("status").asString)
+            val boundedResult = boundedAnalysis.getAsJsonObject("result")
+            assertEquals(4, boundedResult.get("status").asInt)
+            assertEquals("KotlinWorkerInputInvalid", boundedResult.getAsJsonArray("diagnostics")
+                .first().asJsonObject.get("code").asString)
+            assertTrue(
+                boundedResult.getAsJsonArray("diagnostics").first().asJsonObject.get("message").asString
+                    .contains("50,000-file limit")
+            )
+
             writer.write(request("shutdown", "shutdown").toString())
             writer.newLine()
             writer.flush()
@@ -96,6 +126,7 @@ class KotlinWorkerProcessIntegrationTests {
             compilationOutput?.let(::deleteRecursively)
             deleteRecursively(workspace)
             Files.deleteIfExists(manifest)
+            oversizedManifest?.let(Files::deleteIfExists)
         }
     }
 

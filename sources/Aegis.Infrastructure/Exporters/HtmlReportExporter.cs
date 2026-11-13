@@ -224,14 +224,20 @@ td {
                     : "N/A");
 
             AddRow(html,
-                "Supported Rules Not Evaluated",
-                report.EvaluationStats is null
-                    ? "N/A"
-                    : report.EvaluationStats.RulesNotEvaluated.Count.ToString());
+                "Applicable Rules Not Evaluated",
+                report.EvaluationStats?.RulesNotEvaluated.Count.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Not Applicable Rules",
+                report.EvaluationStats?.RulesNotApplicable.Count.ToString() ?? "N/A");
 
             AddRow(html,
                 "Unsupported Rules",
                 report.EvaluationStats?.RulesUnsupported.ToString() ?? "N/A");
+
+            AddRow(html,
+                "Disabled by Policy Rules",
+                report.EvaluationStats?.RulesDisabledByPolicy.ToString() ?? "N/A");
 
             AddRow(html,
                 "Total Diagnostics",

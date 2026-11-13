@@ -116,6 +116,25 @@ class KotlinWorkerProcessIntegrationTests {
                     .contains("50000-file limit")
             )
 
+            val excessiveRootsPayload = analysisPayload(workspace, sourceRoot, manifest, standardLibraryPath)
+            excessiveRootsPayload.add(
+                "sourceRoots",
+                JsonArray().apply {
+                    repeat(1_025) { add(sourceRoot.toAbsolutePath().toString()) }
+                }
+            )
+            writer.write(request("excessive-roots", "analyze", excessiveRootsPayload).toString())
+            writer.newLine()
+            writer.flush()
+            val excessiveRootsAnalysis = readResponse(executor, reader)
+            assertEquals("ok", excessiveRootsAnalysis.get("status").asString)
+            val excessiveRootsResult = excessiveRootsAnalysis.getAsJsonObject("result")
+            assertEquals(4, excessiveRootsResult.get("status").asInt)
+            assertTrue(
+                excessiveRootsResult.getAsJsonArray("diagnostics").first().asJsonObject.get("message").asString
+                    .contains("source-root limit")
+            )
+
             oversizedByteManifest = Files.createTempFile("aegis-kotlin-source-manifest-bytes-", ".json")
             Files.writeString(oversizedByteManifest, " ".repeat(16 * 1024 * 1024 + 1))
             writer.write(

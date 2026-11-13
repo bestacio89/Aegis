@@ -43,4 +43,6 @@ The probe launches the packaged JAR (not Maven's test classpath), performs a han
 
 The worker extracts semantic evidence from the Kotlin compiler's K2 IR before backend lowering. The IR extension is isolated behind this worker because compiler-plugin APIs are version-sensitive. The host owns source discovery, build metadata, classpath resolution, process supervision, cancellation, timeouts, and mapping into Aegis's language-neutral semantic contracts.
 
+The worker enforces a 16 MiB source-manifest limit, a 50,000-file limit, bounded path collections, and bounded JSON Lines request/response frames. The host must also launch it with a configured JVM heap limit; CI probes use a 1 GiB maximum heap. Compiler cancellation is performed by terminating the supervised worker process, not by interrupting compiler internals.
+
 The worker does not infer architecture from package names. Logical architectural classification remains in Aegis's shared architecture pipeline.

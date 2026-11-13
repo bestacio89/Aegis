@@ -283,6 +283,11 @@ internal static class SemanticArchitectureComponentDetector
         return separator < 0 ? qualifiedName : qualifiedName[(separator + 1)..];
     }
 
+    private static string GetComponentLabel(SymbolComponent component) =>
+        component.ComponentKind.Equals("Project", StringComparison.OrdinalIgnoreCase)
+            ? component.ComponentName
+            : $"{component.ModuleName} · {component.ComponentName}";
+
     private static string NormalizePath(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 

@@ -302,6 +302,7 @@ public sealed class PdfReportExporter : IReportExporter
             AddRow(table, L(language, "Not Applicable Rules", "Règles Non Applicables"), stats.RulesNotApplicable.Count.ToString());
             AddRow(table, L(language, "Unsupported Rules", "Règles Non Prises en Charge"), stats.RulesUnsupported.ToString());
             AddRow(table, L(language, "Disabled by Policy Rules", "Règles Désactivées par la Politique"), stats.RulesDisabledByPolicy.ToString());
+            AddRow(table, L(language, "Rule Accounting Difference", "Écart de Comptabilisation des Règles"), stats.RuleAccountingDifference.ToString());
             AddRow(table, L(language, "Rule Evaluation Coverage", "Couverture d'Évaluation des Règles"), metrics is { HasCoverageEvidence: true } ? $"{stats.EvaluationCoverage:P1}" : "N/A");
             AddRow(table, L(language, "Total Diagnostics", "Diagnostics Totaux"), report.Diagnostics.Count.ToString());
             AddRow(table, L(language, "Semantic Diagnostics", "Diagnostics Sémantiques"), report.SemanticDiagnosticCount.ToString());

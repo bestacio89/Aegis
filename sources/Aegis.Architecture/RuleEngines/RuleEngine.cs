@@ -432,6 +432,8 @@ public sealed class RuleEngine
                     RunId = run.RunId,
                     ProjectPath = run.ProjectPath,
                     Severity = diagnostic.Severity,
+                    Line = diagnostic.Line,
+                    Column = diagnostic.Column,
                     Message = diagnostic.Message,
                     Target = diagnostic.Target,
                     ExceptionType = diagnostic.ExceptionType,

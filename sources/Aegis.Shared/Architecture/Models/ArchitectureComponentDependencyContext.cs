@@ -3,8 +3,9 @@ using Aegis.Shared.Architecture.Enums;
 namespace Aegis.Shared.Architecture.Models;
 
 /// <summary>
-/// An observed compiler-resolved dependency between language-level architectural
-/// components. This graph is independent of build-module dependency edges.
+/// An observed semantic dependency between language-level architectural
+/// components. Provider resolution provenance is retained in the evidence graph,
+/// independently from build-module dependency edges.
 /// </summary>
 public sealed class ArchitectureComponentDependencyContext
 {

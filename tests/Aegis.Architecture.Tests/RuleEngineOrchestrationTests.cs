@@ -91,6 +91,8 @@ public sealed class RuleEngineOrchestrationTests
                                 Message = "The type 'ExternalType' could not be resolved.",
                                 Target = sourcePath,
                                 Severity = "Warning",
+                                Line = 12,
+                                Column = 8,
                                 AffectsCoverage = true
                             }
                         ]
@@ -106,6 +108,8 @@ public sealed class RuleEngineOrchestrationTests
         Assert.Equal(directory.Path, diagnostic.ProjectPath);
         Assert.Equal(sourcePath, diagnostic.Target);
         Assert.Equal("Warning", diagnostic.Severity);
+        Assert.Equal(12, diagnostic.Line);
+        Assert.Equal(8, diagnostic.Column);
         Assert.True(diagnostic.AffectsCoverage);
         Assert.False(report.Metrics.AssessmentComplete);
     }

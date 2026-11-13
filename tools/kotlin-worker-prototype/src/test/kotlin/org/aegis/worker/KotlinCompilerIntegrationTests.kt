@@ -105,6 +105,18 @@ class KotlinCompilerIntegrationTests {
 
             fun readId(user: User): String = user.id
 
+            fun firstLocalScope() {
+                class Local
+                fun localCall(): Local = Local()
+                localCall()
+            }
+
+            fun secondLocalScope() {
+                class Local
+                fun localCall(): Local = Local()
+                localCall()
+            }
+
             fun overload(value: String): String = value
 
             fun overload(value: Int): String = value.toString()
@@ -212,6 +224,18 @@ class KotlinCompilerIntegrationTests {
                 genericExtensionFunctionIds.size,
                 "Generic receiver arguments must participate in extension-function identity."
             )
+
+            val localClassIds = symbols
+                .filter { it.get("kind").asInt == 4 && it.get("name").asString == "Local" }
+                .map { it.get("id").asString }
+                .distinct()
+            assertEquals(2, localClassIds.size, "Local classes must be scoped to their declaring functions.")
+
+            val localFunctionIds = symbols
+                .filter { it.get("kind").asInt == 9 && it.get("name").asString == "localCall" }
+                .map { it.get("id").asString }
+                .distinct()
+            assertEquals(2, localFunctionIds.size, "Local functions must be scoped to their declaring functions.")
 
             assertTrue(symbols.any {
                 it.get("kind").asInt == 9 &&

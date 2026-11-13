@@ -379,7 +379,7 @@ internal static class MavenProjectModelResolver
                 string.Equals(plugin.GroupId, "org.jetbrains.kotlin", StringComparison.Ordinal)
                 && string.Equals(plugin.ArtifactId, "kotlin-maven-plugin", StringComparison.Ordinal));
             var kotlinOptions = ParseKotlinBuildOptions(
-                root, fullPath, properties, diagnostics);
+                root, fullPath, properties, diagnostics, parentModel);
 
             if (kotlinPlugin is not null && string.IsNullOrWhiteSpace(kotlinPlugin.Version))
             {
@@ -390,9 +390,14 @@ internal static class MavenProjectModelResolver
             }
 
             var kotlinLanguageVersion = kotlinOptions.LanguageVersion
+                ?? parentModel?.KotlinLanguageVersion
                 ?? InferKotlinLanguageVersion(kotlinPlugin?.Version);
-            var kotlinApiVersion = kotlinOptions.ApiVersion ?? kotlinLanguageVersion;
-            var kotlinJvmTarget = kotlinOptions.JvmTarget ?? "1.8";
+            var kotlinApiVersion = kotlinOptions.ApiVersion
+                ?? parentModel?.KotlinApiVersion
+                ?? kotlinLanguageVersion;
+            var kotlinJvmTarget = kotlinOptions.JvmTarget
+                ?? parentModel?.KotlinJvmTarget
+                ?? "1.8";
 
             var processorPaths = parentModel?.AnnotationProcessorPaths
                 .Select(dependency => dependency with { IsInherited = true })
@@ -461,7 +466,10 @@ internal static class MavenProjectModelResolver
                 KotlinLanguageVersion = kotlinLanguageVersion,
                 KotlinApiVersion = kotlinApiVersion,
                 KotlinJvmTarget = kotlinJvmTarget,
-                KotlinJdkRelease = kotlinOptions.JdkRelease,
+                KotlinJdkRelease = kotlinOptions.JdkRelease ?? parentModel?.KotlinJdkRelease,
+                KotlinMainSourceDirectoryExpressions = kotlinOptions.MainSourceDirectoryExpressions,
+                KotlinTestSourceDirectoryExpressions = kotlinOptions.TestSourceDirectoryExpressions,
+                KotlinExtensionsEnabled = kotlinOptions.ExtensionsEnabled,
                 AnnotationProcessorPaths = processorPaths,
                 SourceRoots = sourceRoots,
                 ProfileIds = profileIds,
@@ -732,7 +740,8 @@ internal static class MavenProjectModelResolver
         XElement project,
         string projectFile,
         IReadOnlyDictionary<string, string> properties,
-        ICollection<AnalysisDiagnostic> diagnostics)
+        ICollection<AnalysisDiagnostic> diagnostics,
+        MavenProjectModel? parentModel)
     {
         var projectDirectory = Path.GetDirectoryName(projectFile)!;
         var build = Child(project, "build");
@@ -743,10 +752,15 @@ internal static class MavenProjectModelResolver
                 && string.Equals(Value(element, "artifactId"), "kotlin-maven-plugin", StringComparison.Ordinal));
         var configuration = Child(plugin, "configuration");
 
-        var mainDirectories = ParseKotlinSourceDirectories(
-            configuration, "sourceDirs", "sourceDir", projectDirectory, properties, diagnostics, projectFile);
-        var testDirectories = ParseKotlinSourceDirectories(
-            configuration, "testSourceDirs", "testSourceDir", projectDirectory, properties, diagnostics, projectFile);
+        var mainExpressions = ParseKotlinSourceDirectories(
+            configuration, "sourceDirs", "sourceDir", projectDirectory, properties, diagnostics, projectFile).Expressions;
+        var testExpressions = ParseKotlinSourceDirectories(
+            configuration, "testSourceDirs", "testSourceDir", projectDirectory, properties, diagnostics, projectFile).Expressions;
+
+        if (mainExpressions.Count == 0 && parentModel is not null)
+            mainExpressions.AddRange(parentModel.KotlinMainSourceDirectoryExpressions);
+        if (testExpressions.Count == 0 && parentModel is not null)
+            testExpressions.AddRange(parentModel.KotlinTestSourceDirectoryExpressions);
 
         var languageVersion = ResolveKotlinOption(
             configuration, "languageVersion", "kotlin.compiler.languageVersion",
@@ -782,11 +796,11 @@ internal static class MavenProjectModelResolver
                 projectDirectory, properties, diagnostics, projectFile);
 
             if (goals.Contains("test-compile", StringComparer.Ordinal))
-                testDirectories.AddRange(executionSourceDirectories);
+                testExpressions.AddRange(executionSourceDirectories.Expressions);
             else if (goals.Contains("compile", StringComparer.Ordinal))
-                mainDirectories.AddRange(executionSourceDirectories);
+                mainExpressions.AddRange(executionSourceDirectories.Expressions);
 
-            testDirectories.AddRange(executionTestDirectories);
+            testExpressions.AddRange(executionTestDirectories.Expressions);
             languageVersion ??= ResolveKotlinOption(
                 executionConfiguration, "languageVersion", "kotlin.compiler.languageVersion",
                 properties, diagnostics, projectFile);
@@ -800,6 +814,16 @@ internal static class MavenProjectModelResolver
                 executionConfiguration, "jdkRelease", "kotlin.compiler.jdkRelease",
                 properties, diagnostics, projectFile);
         }
+
+        if (mainExpressions.Count == 0)
+            mainExpressions.Add("src/main/kotlin");
+        if (testExpressions.Count == 0)
+            testExpressions.Add("src/test/kotlin");
+
+        var mainDirectories = ResolveKotlinSourceDirectories(
+            mainExpressions, projectDirectory, diagnostics, projectFile);
+        var testDirectories = ResolveKotlinSourceDirectories(
+            testExpressions, projectDirectory, diagnostics, projectFile);
 
         var compilerPlugins = Child(configuration, "compilerPlugins")?.Elements()
             .Where(element => NameIs(element, "plugin"))
@@ -826,8 +850,9 @@ internal static class MavenProjectModelResolver
         if (jvmTarget is null && jdkRelease is not null)
             jvmTarget = jdkRelease;
 
-        var extensionsEnabled = bool.TryParse(Value(plugin, "extensions"), out var extensions)
-            && extensions;
+        var extensionsEnabled = bool.TryParse(Value(plugin, "extensions"), out var localExtensions)
+            ? localExtensions
+            : parentModel?.KotlinExtensionsEnabled ?? false;
         if (jvmTarget is null && extensionsEnabled)
         {
             jvmTarget = properties.GetValueOrDefault("maven.compiler.release")
@@ -836,12 +861,10 @@ internal static class MavenProjectModelResolver
                 jdkRelease = jvmTarget;
         }
 
-        jvmTarget ??= "1.8";
-
-        if (mainDirectories.Count == 0)
-            mainDirectories.Add(Path.Combine(projectDirectory, "src", "main", "kotlin"));
-        if (testDirectories.Count == 0)
-            testDirectories.Add(Path.Combine(projectDirectory, "src", "test", "kotlin"));
+        languageVersion ??= parentModel?.KotlinLanguageVersion;
+        apiVersion ??= parentModel?.KotlinApiVersion;
+        jdkRelease ??= parentModel?.KotlinJdkRelease;
+        jvmTarget ??= parentModel?.KotlinJvmTarget ?? "1.8";
 
         return new KotlinBuildOptions(
             mainDirectories.Distinct(PathComparer).ToList(),
@@ -849,10 +872,13 @@ internal static class MavenProjectModelResolver
             languageVersion,
             apiVersion,
             jvmTarget,
-            jdkRelease);
+            jdkRelease,
+            mainExpressions.Distinct(StringComparer.Ordinal).ToList(),
+            testExpressions.Distinct(StringComparer.Ordinal).ToList(),
+            extensionsEnabled);
     }
 
-    private static List<string> ParseKotlinSourceDirectories(
+    private static KotlinSourceDirectoryCollection ParseKotlinSourceDirectories(
         XElement? configuration,
         string collectionName,
         string itemName,
@@ -861,23 +887,40 @@ internal static class MavenProjectModelResolver
         ICollection<AnalysisDiagnostic> diagnostics,
         string projectFile)
     {
-        var result = new List<string>();
+        var expressions = new List<string>();
         var container = Child(configuration, collectionName);
-        if (container is null)
-            return result;
-
-        foreach (var element in container.Elements().Where(child => NameIs(child, itemName)))
+        if (container is not null)
         {
-            var value = ResolveValue(element.Value.Trim(), properties);
-            if (string.IsNullOrWhiteSpace(value) || PropertyReference.IsMatch(value))
+            foreach (var element in container.Elements().Where(child => NameIs(child, itemName)))
             {
-                diagnostics.Add(Diagnostic(
-                    "MavenKotlinSourceDirectoryNotStaticallyResolved",
-                    "A Kotlin source directory uses an unresolved property or empty value.",
-                    projectFile));
-                continue;
-            }
+                var value = ResolveValue(element.Value.Trim(), properties);
+                if (string.IsNullOrWhiteSpace(value) || PropertyReference.IsMatch(value))
+                {
+                    diagnostics.Add(Diagnostic(
+                        "MavenKotlinSourceDirectoryNotStaticallyResolved",
+                        "A Kotlin source directory uses an unresolved property or empty value.",
+                        projectFile));
+                    continue;
+                }
 
+                expressions.Add(value);
+            }
+        }
+
+        return new KotlinSourceDirectoryCollection(
+            expressions,
+            ResolveKotlinSourceDirectories(expressions, projectDirectory, diagnostics, projectFile));
+    }
+
+    private static List<string> ResolveKotlinSourceDirectories(
+        IEnumerable<string> expressions,
+        string projectDirectory,
+        ICollection<AnalysisDiagnostic> diagnostics,
+        string projectFile)
+    {
+        var result = new List<string>();
+        foreach (var value in expressions)
+        {
             string fullPath;
             try
             {
@@ -1390,7 +1433,14 @@ internal static class MavenProjectModelResolver
         string? LanguageVersion,
         string? ApiVersion,
         string? JvmTarget,
-        string? JdkRelease);
+        string? JdkRelease,
+        List<string> MainSourceDirectoryExpressions,
+        List<string> TestSourceDirectoryExpressions,
+        bool ExtensionsEnabled);
+
+    private sealed record KotlinSourceDirectoryCollection(
+        List<string> Expressions,
+        List<string> ResolvedPaths);
 
     private static AnalysisDiagnostic Diagnostic(string code, string message, string path) =>
         new()

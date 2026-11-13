@@ -48,6 +48,12 @@ public sealed class MavenProjectModel
 
     public string? KotlinJdkRelease { get; init; }
 
+    public List<string> KotlinMainSourceDirectoryExpressions { get; init; } = [];
+
+    public List<string> KotlinTestSourceDirectoryExpressions { get; init; } = [];
+
+    public bool KotlinExtensionsEnabled { get; init; }
+
     public List<Dependency> AnnotationProcessorPaths { get; init; } = [];
 
     public List<ProjectSourceRoot> SourceRoots { get; init; } = [];

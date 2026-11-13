@@ -1042,7 +1042,8 @@ class KotlinSemanticCollector(
                 containingSymbolId,
                 if (declaration is IrConstructor) "constructor" else "function"
             )
-        return "kotlin:function:$name($signature)"
+        val symbolPrefix = if (declaration is IrConstructor) "constructor" else "function"
+        return "kotlin:$symbolPrefix:$name($signature)"
     }
 
     private fun typeIdentity(type: IrType): String {

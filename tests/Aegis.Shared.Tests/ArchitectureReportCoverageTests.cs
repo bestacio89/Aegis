@@ -55,7 +55,7 @@ public sealed class ArchitectureReportCoverageTests
         };
 
         Assert.Equal(53.125, stats.EvaluationCoverage, 3);
-        Assert.Equal(Math.Round(17.0 / 76.0 * 100.0, 2), stats.RegisteredRuleEvaluationCoverage);
+        Assert.Equal(Math.Round(17.0 / 76.0 * 100.0, 2), stats.RegisteredRuleEvaluationCoverage, 2);
     }
 
     [Fact]

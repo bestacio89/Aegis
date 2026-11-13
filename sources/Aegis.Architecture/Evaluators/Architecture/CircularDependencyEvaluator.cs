@@ -61,23 +61,35 @@ public sealed class CircularDependencyEvaluator
             new List<ArchitectureEvaluatorResult>();
 
 
-        if (Context is null || Context.ProductionDependencies.Count == 0)
+        if (Context is not { } context)
+            return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(results);
+
+        var useComponentGraph = context.ProductionComponents.Count > 0;
+        var componentLanguages = context.ProductionComponents
+            .Select(component => component.Language)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var semanticRuns = context.SemanticAnalysisRuns
+            .Where(run => componentLanguages.Contains(run.Language))
+            .ToArray();
+        var componentAnalysisComplete = semanticRuns.Length > 0
+            && semanticRuns.All(run => run.IsComplete)
+            && !context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
+
+        if (!useComponentGraph && context.ProductionDependencies.Count == 0)
         {
-            // An empty dependency model may mean discovery did not run or found no usable
-            // edges. Do not claim a clean cycle check without graph evidence.
+            // Without either a component graph or build-module edges, absence of
+            // cycles is not evidence that a cycle check was completed.
             return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(results);
         }
 
+        var graph = useComponentGraph
+            ? BuildComponentDependencyGraph(context.ProductionComponentDependencies)
+            : BuildDependencyGraph(context.ProductionDependencies);
 
-
-        var graph =
-            BuildDependencyGraph(
-                Context.ProductionDependencies);
-
-
-
-        var cycles =
-            DetectCycles(graph);
+        // Cycles found in partial semantic evidence are still valid findings.
+        // A zero-cycle metric, however, is only emitted when component analysis
+        // completed; otherwise it would turn missing edges into a false pass.
+        var cycles = DetectCycles(graph);
 
 
 
@@ -89,21 +101,26 @@ public sealed class CircularDependencyEvaluator
 
         // Emit completion evidence even when the graph is clean. Otherwise, no finding
         // is indistinguishable from an evaluator that never ran.
-        results.Add(new ArchitectureEvaluatorResult(Name, projectPath)
+        var summary = new ArchitectureEvaluatorResult(Name, projectPath)
         {
             Category = nameof(ArchitectureRuleCategory.Architecture),
-            Metrics = new Dictionary<string, double>
-            {
-                ["CircularDependencyCount"] = cycles.Count
-            },
             Metadata = new Dictionary<string, string>
             {
                 [EvaluationScopeMetadataKey] = ProjectScope,
-                ["AnalysisCompleted"] = "true",
-                ["Language"] = Context.Language,
-                ["Framework"] = Context.Framework ?? "Unknown"
+                ["AnalysisCompleted"] = (!useComponentGraph || componentAnalysisComplete).ToString().ToLowerInvariant(),
+                ["GraphLevel"] = useComponentGraph ? "ArchitecturalComponents" : "BuildModules",
+                ["Language"] = context.Language,
+                ["Framework"] = context.Framework ?? "Unknown"
             }
-        });
+        };
+
+        if (!useComponentGraph || componentAnalysisComplete)
+            summary.Metrics["CircularDependencyCount"] = cycles.Count;
+        else
+            summary.Metadata["IncompleteReason"] =
+                "Semantic component analysis was partial; observed cycles are reported, but a clean cycle count is withheld.";
+
+        results.Add(summary);
 
         AegisDiagnostics.Report(
             Name,
@@ -190,6 +207,31 @@ public sealed class CircularDependencyEvaluator
     }
 
 
+
+    private static Dictionary<string, HashSet<string>> BuildComponentDependencyGraph(
+        IEnumerable<ArchitectureComponentDependencyContext> dependencies)
+    {
+        var graph = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var dependency in dependencies)
+        {
+            if (string.IsNullOrWhiteSpace(dependency.SourceComponentId)
+                || string.IsNullOrWhiteSpace(dependency.TargetComponentId))
+            {
+                continue;
+            }
+
+            if (!graph.TryGetValue(dependency.SourceComponentId, out var targets))
+            {
+                targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                graph[dependency.SourceComponentId] = targets;
+            }
+
+            targets.Add(dependency.TargetComponentId);
+        }
+
+        return graph;
+    }
 
     private static List<List<string>>
         DetectCycles(

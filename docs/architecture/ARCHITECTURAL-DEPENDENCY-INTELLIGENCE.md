@@ -194,7 +194,10 @@ The Relationship Ledger should add a relationship-level filter and expose the un
 - Emit coverage-affecting diagnostics when an edge endpoint is unclassified or has no unique membership.
 - Keep semantic and build evidence categories distinguishable.
 - Add cycle analysis independently at code-container and logical architecture levels.
-- Initial aggregation and evidence-preservation implementation committed; exact-head CI validation pending. Cycle analysis remains outstanding.
+- Initial aggregation and evidence-preservation implementation passed all required workflows on exact PR head `cae3af11f1f7d18858782705d8779b9e90f7c6d6`.
+- Added deterministic, iterative Kosaraju strongly connected component analysis for both graph projections. Production and test scopes are evaluated independently; same-container and logical self-dependencies are retained as single-node cycles.
+- Cycle clusters retain member identities, dependency-edge counts, semantic relationship references and unreferenced evidence counts. An SCC is reported as a cluster, not misrepresented as one concrete cycle path.
+- Cycle-analysis validation is pending on the next exact PR head.
 - Acceptance: projection is lossless with respect to source evidence; package/module projections remain unchanged; cycles can be calculated at both levels.
 
 ### ADI-4 — WPF projections and drill-down
@@ -227,7 +230,7 @@ The Relationship Ledger should add a relationship-level filter and expose the un
 | Internal coupling | Edges within one logical component are retained for drill-down and metrics |
 | Scope | Production and test edges remain separate, including test-support modules |
 | Evidence | Resolved and partially resolved relationships, missing target, multiple provenance files |
-| Cycles | Package-level cycle and architecture-level cycle, including cycles created only by aggregation |
+| Cycles | Multi-node SCCs, self-dependencies, production/test separation, cycles created only by logical aggregation, exact relationship evidence |
 | Languages | Java, Kotlin, Python packages; TypeScript/JavaScript modules; C# projects |
 | Modules | Single-module, multi-module, duplicate/incomplete module inventory |
 | UI | Three projections, empty state, partial analysis, filtering, node/edge selection, drill-down |

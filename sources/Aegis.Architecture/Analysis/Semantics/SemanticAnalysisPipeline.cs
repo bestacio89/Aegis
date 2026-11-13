@@ -157,5 +157,6 @@ public sealed class SemanticAnalysisPipeline
         SemanticArchitectureComponentDetector.Analyze(context);
         ArchitecturalComponentClassifier.Classify(context, configuration);
         ArchitecturalComponentDependencyProjector.Project(context);
+        ArchitectureDependencyCycleAnalyzer.Analyze(context);
     }
 }

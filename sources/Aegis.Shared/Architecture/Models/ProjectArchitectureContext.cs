@@ -209,6 +209,12 @@ public sealed class ProjectArchitectureContext
     /// </summary>
     public List<ArchitecturalDependencyProjectionDiagnostic> ArchitecturalDependencyProjectionDiagnostics { get; set; } = [];
 
+    /// <summary>Strongly connected clusters in the language-level code-container graph.</summary>
+    public List<ArchitectureDependencyCycleContext> ArchitectureComponentCycles { get; set; } = [];
+
+    /// <summary>Strongly connected clusters in the logical architectural component graph.</summary>
+    public List<ArchitectureDependencyCycleContext> ArchitecturalComponentCycles { get; set; } = [];
+
     [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyList<ArchitecturalComponentDependencyContext> ProductionArchitecturalComponentDependencies =>
         ArchitecturalComponentDependencies
@@ -488,6 +494,8 @@ public sealed class ProjectArchitectureContext
             ArchitecturalComponentMembershipCount = ArchitecturalComponentMemberships.Count,
             ArchitectureClassificationDiagnosticCount = ArchitectureClassificationDiagnostics.Count,
             ArchitecturalComponentDependencyCount = ArchitecturalComponentDependencies.Count,
+            ArchitectureComponentCycleCount = ArchitectureComponentCycles.Count,
+            ArchitecturalComponentCycleCount = ArchitecturalComponentCycles.Count,
             ProductionArchitecturalComponentDependencyCount = ProductionArchitecturalComponentDependencies.Count,
             TestArchitecturalComponentDependencyCount = TestArchitecturalComponentDependencies.Count,
             InternalArchitecturalComponentDependencyCount = InternalArchitecturalComponentDependencies.Count,

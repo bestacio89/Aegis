@@ -2,7 +2,6 @@ package org.aegis.worker
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
@@ -28,7 +27,8 @@ import java.nio.file.Path
 import java.util.ArrayDeque
 import java.util.LinkedHashMap
 
-internal class KotlinSemanticCollector(
+internal @OptIn(UnsafeDuringIrConstructionAPI::class)
+class KotlinSemanticCollector(
     private val projectPath: String,
     private val isTestCode: Boolean,
     private val generatedRoots: List<Path>
@@ -184,9 +184,9 @@ internal class KotlinSemanticCollector(
             symbol.addProperty("containerKind", "Package")
             symbol.addProperty("language", "Kotlin")
             symbol.addProperty("projectPath", projectPath)
-            symbol.addProperty("filePath", if (isSource) file?.fileEntry?.name else null)
-            symbol.addProperty("startLine", if (isSource) file?.fileEntry?.getLineNumber(offset)?.plus(1) else null)
-            symbol.addProperty("startColumn", if (isSource) file?.fileEntry?.getColumnNumber(offset)?.plus(1) else null)
+            symbol.addProperty("filePath", if (isSource) file.fileEntry.name else null)
+            symbol.addProperty("startLine", if (isSource) file.fileEntry.getLineNumber(offset) + 1 else null)
+            symbol.addProperty("startColumn", if (isSource) file.fileEntry.getColumnNumber(offset) + 1 else null)
             symbol.addProperty("containingSymbolId", containingSymbolId)
             symbol.addProperty("origin", when {
                 !isSource -> 3
@@ -317,14 +317,15 @@ internal class KotlinSemanticCollector(
             val sourceId = owners.lastOrNull()
             val target = expression.symbol.owner
             val targetClass = target.parent as? IrClass
-            val isAnnotation = targetClass?.kind?.name == "ANNOTATION_CLASS"
-            val targetId = if (isAnnotation && targetClass != null) classId(targetClass) else functionId(target)
-            if (isAnnotation && targetClass != null) {
+            val annotationClass = targetClass?.takeIf { it.kind.name == "ANNOTATION_CLASS" }
+            val isAnnotation = annotationClass != null
+            val targetId = annotationClass?.let(::classId) ?: functionId(target)
+            if (annotationClass != null) {
                 addExternalTypeIfNeeded(
                     targetId,
-                    targetClass.fqNameWhenAvailable?.asString() ?: targetClass.name.asString(),
+                    annotationClass.fqNameWhenAvailable?.asString() ?: annotationClass.name.asString(),
                     true,
-                    targetClass.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
+                    annotationClass.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
                 )
             } else {
                 addExternalFunctionIfNeeded(targetId, target)
@@ -376,7 +377,7 @@ internal class KotlinSemanticCollector(
         symbol.add("containingSymbolId", com.google.gson.JsonNull.INSTANCE)
         symbol.addProperty("origin", 3)
         symbol.addProperty("isTestCode", isTestCode)
-        symbol.addProperty("isPublic", declaration.visibility == DescriptorVisibilities.PUBLIC)
+        symbol.addProperty("isPublic", declaration.visibility.name == "public")
         symbol.add("provenance", JsonArray())
         symbols[id] = symbol
     }
@@ -544,7 +545,7 @@ internal class KotlinSemanticCollector(
         type.toString()
 
     private fun isPublic(declaration: IrDeclaration): Boolean =
-        (declaration as? IrDeclarationWithVisibility)?.visibility == DescriptorVisibilities.PUBLIC
+        (declaration as? IrDeclarationWithVisibility)?.visibility?.name == "public"
 
 }
 

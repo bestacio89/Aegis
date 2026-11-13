@@ -89,11 +89,11 @@ class KotlinCompilerIntegrationTests {
             val String.label: String
                 get() = this
 
-            @JvmName("getUserLabels")
+            @get:JvmName("getUserLabels")
             val List<User>.labels: String
                 get() = joinToString()
 
-            @JvmName("getStringLabels")
+            @get:JvmName("getStringLabels")
             val List<String>.labels: String
                 get() = joinToString()
 

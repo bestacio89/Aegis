@@ -277,6 +277,10 @@
                             <TextBlock Text="{Binding SelectedDependency.EvidenceReferences, TargetNullValue='No exact provider references supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
                                        TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
+                            <TextBlock Text="CONTRIBUTING CODE CONTAINER EDGES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.CodeContainerContributions, TargetNullValue='No lower-level contribution data supplied'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
+                                       TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
                             <TextBlock
                                 Text="Build-module dependencies and compiler-resolved component relationships are shown as distinct evidence levels. Semantic projections aggregate repeated relationships but retain exact run-scoped relationship references, resolution counts, and source files where supplied."
                                 Foreground="{StaticResource Brush.TextMuted}" FontSize="11"

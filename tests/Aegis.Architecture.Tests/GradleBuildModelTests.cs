@@ -558,10 +558,18 @@ public sealed class GradleBuildModelTests
                 sourceSet.Name == "integrationTest" && sourceSet.IsTest);
             Assert.Contains(model.SourceSets, sourceSet =>
                 sourceSet.Name == "benchmark" && !sourceSet.IsTest);
-            Assert.Contains(model.SourceRoots, sourceRoot =>
-                sourceRoot.Directory == Path.Combine(root, "src", "integration", "java")
-                && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Explicit
-                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test);
+            Assert.Contains(
+                model.SourceRoots,
+                sourceRoot => sourceRoot.Directory == Path.Combine(root, "src", "integration", "java")
+                    && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Explicit
+                    && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test,
+                "Source sets: " + string.Join(
+                    " | ",
+                    model.SourceSets.Select(sourceSet =>
+                        $"{sourceSet.Name}: test={sourceSet.IsTest}; java={string.Join(",", sourceSet.JavaSourceDirectories)}"))
+                    + "; diagnostics: " + string.Join(
+                        " | ",
+                        model.Diagnostics.Select(diagnostic => diagnostic.Code + ": " + diagnostic.Message)));
             Assert.True(model.IsComplete);
         }
         finally

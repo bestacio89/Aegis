@@ -394,7 +394,12 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             Scope: {dependency.Scope}
             Source project: {dependency.SourceProjectPath}
             Target project: {dependency.TargetProjectPath}
-            Evidence file: {dependency.File}
+            Evidence files: {dependency.File}
+            Resolved relationships: {dependency.ResolvedRelationshipCount}
+            Partially resolved relationships: {dependency.PartiallyResolvedRelationshipCount}
+            Unreferenced relationships: {dependency.UnreferencedRelationshipCount}
+            Internal dependency: {dependency.IsInternal}
+            Semantic references: {dependency.EvidenceReferences}
             """);
     }
 
@@ -431,7 +436,8 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             || Contains(dependency.Scope, query)
             || Contains(dependency.SourceProjectPath, query)
             || Contains(dependency.TargetProjectPath, query)
-            || Contains(dependency.File, query);
+            || Contains(dependency.File, query)
+            || Contains(dependency.EvidenceReferences, query);
     }
 
     private void RefreshFilter()

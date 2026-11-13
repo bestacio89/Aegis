@@ -7,6 +7,7 @@ import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationWithName
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationWithVisibility
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
@@ -550,8 +551,10 @@ class KotlinSemanticCollector(
 
     private fun typeIdentity(type: IrType): String {
         val simpleType = type as? IrSimpleType ?: return type.toString()
-        val classifierName = simpleType.classOrNull?.owner?.fqNameWhenAvailable?.asString()
-            ?: simpleType.classifier.owner.name.asString()
+        val classifierOwner = simpleType.classifier.owner as? IrDeclarationWithName
+        val classifierName = classifierOwner?.fqNameWhenAvailable?.asString()
+            ?: classifierOwner?.name?.asString()
+            ?: simpleType.classifier.toString()
         val arguments = simpleType.arguments.joinToString(",") { argument ->
             when (argument) {
                 is IrStarProjection -> "*"

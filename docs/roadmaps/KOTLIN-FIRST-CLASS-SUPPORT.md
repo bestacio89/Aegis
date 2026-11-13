@@ -360,3 +360,11 @@ Every commit body must explain context, implementation, architectural rationale,
 Keep commits grouped by responsibility, normally 3–20 files, and avoid unrelated changes. Do not weaken existing gates, suppress failures, execute project build scripts, add unbounded dependencies, or claim support based on parser recognition alone.
 
 **Final principle:** Aegis reports what the compiler proves, distinguishes inferred evidence, and exposes what it cannot determine.
+
+## Cross-language identity constraint
+
+The K2 worker's current symbol IDs are provider-local. For example, a Java type discovered as an external Kotlin IR stub currently receives a Kotlin-worker ID such as `kotlin:type:interop.JavaContract`. The Java worker uses JDT binding keys. Matching the displayed qualified name or the `language` field is not sufficient to prove that two provider records represent the same declaration.
+
+K3 must introduce a normalized JVM interop identity and a collision-aware binder. The identity must account for module/artifact scope, owner binary name, JVM member name, erased JVM descriptor, constructor/static semantics and relevant Kotlin lowering such as extension receivers, property accessors, `@JvmName`, value-class mangling and companion/object bridges. Original provider IDs and run-scoped evidence references remain intact; interop identity is an additional join key, never a replacement for provenance.
+
+Until that binder is implemented, K2's Java source binding proves that Kotlin analysis can resolve Java declarations, but it does not prove that Java and Kotlin worker records are already unified in the shared semantic graph.

@@ -51,6 +51,76 @@ public sealed class AdditionalEvaluatorBehaviorTests
         AssertAllMetricsAreFinite(results);
     }
 
+
+    [Fact]
+    public async Task CircularDependencyEvaluator_detects_cycles_in_language_native_component_graph()
+    {
+        using var project = new TemporaryProject();
+        var context = CreateContext(project, "Java", "Spring Boot");
+        context.ArchitectureComponents.AddRange(
+        [
+            new ArchitectureComponentContext
+            {
+                Id = "java-package:application",
+                Name = "application",
+                QualifiedName = "sample.application",
+                Language = "Java",
+                ComponentKind = "Package",
+                BuildModuleName = "Template",
+                ProductionSymbolCount = 2
+            },
+            new ArchitectureComponentContext
+            {
+                Id = "java-package:domain",
+                Name = "domain",
+                QualifiedName = "sample.domain",
+                Language = "Java",
+                ComponentKind = "Package",
+                BuildModuleName = "Template",
+                ProductionSymbolCount = 2
+            }
+        ]);
+        context.ArchitectureComponentDependencies.AddRange(
+        [
+            new ArchitectureComponentDependencyContext
+            {
+                SourceComponentId = "java-package:application",
+                SourceComponentName = "Template · sample.application",
+                TargetComponentId = "java-package:domain",
+                TargetComponentName = "Template · sample.domain",
+                RelationshipCount = 1
+            },
+            new ArchitectureComponentDependencyContext
+            {
+                SourceComponentId = "java-package:domain",
+                SourceComponentName = "Template · sample.domain",
+                TargetComponentId = "java-package:application",
+                TargetComponentName = "Template · sample.application",
+                RelationshipCount = 1
+            }
+        ]);
+        context.SemanticAnalysisRuns.Add(new SemanticAnalysisRun
+        {
+            Language = "Java",
+            EngineId = "eclipse-jdt",
+            ProjectPath = project.Root,
+            Status = SemanticAnalysisStatus.Completed
+        });
+
+        var results = await Evaluate(project, "CircularDependencyEvaluator", context);
+
+        Assert.Contains(results, result =>
+            result.Metrics.GetValueOrDefault("CircularDependencyViolation") == 1
+            && result.Metadata.GetValueOrDefault("GraphLevel") == "ArchitecturalComponents");
+        var summary = Assert.Single(results, result =>
+            result.Metrics.ContainsKey("CircularDependencyCount"));
+        Assert.Equal(1, summary.Metrics["CircularDependencyCount"]);
+        Assert.Contains("sample.application", results
+            .Single(result => result.Metrics.GetValueOrDefault("CircularDependencyViolation") == 1)
+            .Metadata["Cycle"]);
+        Assert.Equal("true", summary.Metadata["AnalysisCompleted"]);
+    }
+
     [Fact]
     public async Task CircularDependencyEvaluator_detects_a_cycle_in_the_supplied_dependency_graph()
     {
@@ -385,6 +455,15 @@ public sealed class AdditionalEvaluatorBehaviorTests
                 TargetComponentName = "sample.domain",
                 RelationshipCount = 2
             });
+        context.Dependencies.Add(new ArchitectureDependencyContext
+        {
+            Source = "Template",
+            Target = "TemplateChild",
+            SourceLayer = "Application",
+            TargetLayer = "Application",
+            DependencyType = "BuildModule",
+            Scope = "Production"
+        });
         context.SemanticAnalysisRuns.Add(
             new SemanticAnalysisRun
             {

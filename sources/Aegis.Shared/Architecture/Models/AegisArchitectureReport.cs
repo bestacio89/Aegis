@@ -188,6 +188,7 @@ public sealed class AegisArchitectureReport
         $"RuleCapability: {(EvaluationStats is not null ? $"{Metrics.RuleCapabilityCoverage:0.##}%" : "N/A")}; " +
         $"Diagnostics: {Diagnostics.Count} ({SemanticDiagnosticCount} semantic; " +
         $"{CoverageAffectingDiagnosticCount} coverage-affecting); " +
+        $"RuleAccountingDifference: {EvaluationStats?.RuleAccountingDifference.ToString() ?? "N/A"}; " +
         $"AssessmentComplete: {Metrics.AssessmentComplete}.";
 
     // 🧩 Export-friendly DTO (AI / report writer)
@@ -203,6 +204,7 @@ public sealed class AegisArchitectureReport
         TotalFiles = TotalFilesScanned,
         TotalViolations,
         ComplianceScores,
+        RuleAccountingDifference = EvaluationStats?.RuleAccountingDifference,
         DiagnosticSummary = new
         {
             Total = Diagnostics.Count,

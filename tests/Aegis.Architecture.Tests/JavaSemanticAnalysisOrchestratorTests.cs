@@ -759,6 +759,7 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
             Assert.Equal(new[] { Path.GetFullPath(testRoot) }, testRequest.SourceRoots);
             Assert.DoesNotContain(Path.GetFullPath(testSupportRoot), productionRequest.ReferencedSourceRoots);
             Assert.Contains(Path.GetFullPath(testSupportRoot), testRequest.ReferencedSourceRoots);
+            Assert.Contains(Path.GetFullPath(productionRoot), testRequest.ReferencedSourceRoots);
             Assert.Contains("production-classpath.jar", productionRequest.ClasspathEntries);
             Assert.Contains("test-classpath.jar", testRequest.ClasspathEntries);
             Assert.Contains(classpathResolver.Calls, call =>
@@ -772,6 +773,30 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
         {
             Directory.Delete(repository, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task Reports_coverage_diagnostic_when_java_is_detected_but_no_source_root_exists()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "missing-sources",
+            RootPath = repository,
+            Language = "Java"
+        };
+        var orchestrator = new JavaSemanticAnalysisOrchestrator(
+            [new RecordingJavaAdapter()],
+            new EmptyClasspathResolver(),
+            NullLogger<JavaSemanticAnalysisOrchestrator>.Instance);
+
+        await orchestrator.AnalyzeAsync(context);
+
+        var diagnostic = Assert.Single(context.DiscoveryDiagnostics, item =>
+            item.Code == "JavaSourceRootsNotFound");
+        Assert.True(diagnostic.AffectsCoverage);
+        Assert.Equal(repository, diagnostic.Target);
+        Assert.Empty(context.SemanticAnalysisRuns);
     }
 
     private static ProjectModuleContext CreateModule(string name, string path, string sourceRoot) =>

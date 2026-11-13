@@ -437,13 +437,13 @@ class KotlinSemanticCollector(
         override fun visitFunctionReference(expression: IrFunctionReference) {
             val sourceId = owners.lastOrNull()
             val target = expression.symbol.owner
-            val targetProperty = target.correspondingPropertySymbol?.owner
+            val targetProperty = (target as? IrSimpleFunction)?.correspondingPropertySymbol?.owner
             val propertyId = targetProperty?.takeIf {
                 target.origin != IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
             }?.let(::propertyId)
             val targetId = propertyId ?: functionId(target)
             if (propertyId != null) {
-                addExternalPropertyIfNeeded(propertyId, targetProperty)
+                targetProperty?.let { addExternalPropertyIfNeeded(propertyId, it) }
             } else {
                 addExternalFunctionIfNeeded(targetId, target)
             }

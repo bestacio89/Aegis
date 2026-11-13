@@ -752,15 +752,24 @@ internal static class MavenProjectModelResolver
                 && string.Equals(Value(element, "artifactId"), "kotlin-maven-plugin", StringComparison.Ordinal));
         var configuration = Child(plugin, "configuration");
 
-        var mainExpressions = ParseKotlinSourceDirectories(
-            configuration, "sourceDirs", "sourceDir", projectDirectory, properties, diagnostics, projectFile).Expressions;
-        var testExpressions = ParseKotlinSourceDirectories(
-            configuration, "testSourceDirs", "testSourceDir", projectDirectory, properties, diagnostics, projectFile).Expressions;
+        var mainExpressions = ParseKotlinSourceDirectories(configuration, "sourceDirs", "sourceDir");
+        var testExpressions = ParseKotlinSourceDirectories(configuration, "testSourceDirs", "testSourceDir");
 
         if (mainExpressions.Count == 0 && parentModel is not null)
             mainExpressions.AddRange(parentModel.KotlinMainSourceDirectoryExpressions);
+        else if (mainExpressions.Count > 0 && parentModel?.KotlinMainSourceDirectoryExpressions.Count > 0)
+            diagnostics.Add(Diagnostic(
+                "MavenKotlinSourceDirectoryInheritanceMergeNotFullyModeled",
+                "The child POM declares Kotlin sourceDirs while the parent also declares them. Aegis applies the child list as an override; Maven's full XML configuration merge semantics are not inferred.",
+                projectFile));
+
         if (testExpressions.Count == 0 && parentModel is not null)
             testExpressions.AddRange(parentModel.KotlinTestSourceDirectoryExpressions);
+        else if (testExpressions.Count > 0 && parentModel?.KotlinTestSourceDirectoryExpressions.Count > 0)
+            diagnostics.Add(Diagnostic(
+                "MavenKotlinSourceDirectoryInheritanceMergeNotFullyModeled",
+                "The child POM declares Kotlin testSourceDirs while the parent also declares them. Aegis applies the child list as an override; Maven's full XML configuration merge semantics are not inferred.",
+                projectFile));
 
         var languageVersion = ResolveKotlinOption(
             configuration, "languageVersion", "kotlin.compiler.languageVersion",
@@ -789,18 +798,16 @@ internal static class MavenProjectModelResolver
                 continue;
 
             var executionSourceDirectories = ParseKotlinSourceDirectories(
-                executionConfiguration, "sourceDirs", "sourceDir",
-                projectDirectory, properties, diagnostics, projectFile);
+                executionConfiguration, "sourceDirs", "sourceDir");
             var executionTestDirectories = ParseKotlinSourceDirectories(
-                executionConfiguration, "testSourceDirs", "testSourceDir",
-                projectDirectory, properties, diagnostics, projectFile);
+                executionConfiguration, "testSourceDirs", "testSourceDir");
 
             if (goals.Contains("test-compile", StringComparer.Ordinal))
-                testExpressions.AddRange(executionSourceDirectories.Expressions);
+                testExpressions.AddRange(executionSourceDirectories);
             else if (goals.Contains("compile", StringComparer.Ordinal))
-                mainExpressions.AddRange(executionSourceDirectories.Expressions);
+                mainExpressions.AddRange(executionSourceDirectories);
 
-            testExpressions.AddRange(executionTestDirectories.Expressions);
+            testExpressions.AddRange(executionTestDirectories);
             languageVersion ??= ResolveKotlinOption(
                 executionConfiguration, "languageVersion", "kotlin.compiler.languageVersion",
                 properties, diagnostics, projectFile);
@@ -821,9 +828,9 @@ internal static class MavenProjectModelResolver
             testExpressions.Add("src/test/kotlin");
 
         var mainDirectories = ResolveKotlinSourceDirectories(
-            mainExpressions, projectDirectory, diagnostics, projectFile);
+            mainExpressions, projectDirectory, properties, diagnostics, projectFile);
         var testDirectories = ResolveKotlinSourceDirectories(
-            testExpressions, projectDirectory, diagnostics, projectFile);
+            testExpressions, projectDirectory, properties, diagnostics, projectFile);
 
         var compilerPlugins = Child(configuration, "compilerPlugins")?.Elements()
             .Where(element => NameIs(element, "plugin"))
@@ -878,49 +885,39 @@ internal static class MavenProjectModelResolver
             extensionsEnabled);
     }
 
-    private static KotlinSourceDirectoryCollection ParseKotlinSourceDirectories(
+    private static List<string> ParseKotlinSourceDirectories(
         XElement? configuration,
         string collectionName,
-        string itemName,
-        string projectDirectory,
-        IReadOnlyDictionary<string, string> properties,
-        ICollection<AnalysisDiagnostic> diagnostics,
-        string projectFile)
+        string itemName)
     {
-        var expressions = new List<string>();
-        var container = Child(configuration, collectionName);
-        if (container is not null)
-        {
-            foreach (var element in container.Elements().Where(child => NameIs(child, itemName)))
-            {
-                var value = ResolveValue(element.Value.Trim(), properties);
-                if (string.IsNullOrWhiteSpace(value) || PropertyReference.IsMatch(value))
-                {
-                    diagnostics.Add(Diagnostic(
-                        "MavenKotlinSourceDirectoryNotStaticallyResolved",
-                        "A Kotlin source directory uses an unresolved property or empty value.",
-                        projectFile));
-                    continue;
-                }
-
-                expressions.Add(value);
-            }
-        }
-
-        return new KotlinSourceDirectoryCollection(
-            expressions,
-            ResolveKotlinSourceDirectories(expressions, projectDirectory, diagnostics, projectFile));
+        return Child(configuration, collectionName)?.Elements()
+            .Where(element => NameIs(element, itemName))
+            .Select(element => element.Value.Trim())
+            .Where(value => value.Length > 0)
+            .ToList() ?? [];
     }
 
     private static List<string> ResolveKotlinSourceDirectories(
         IEnumerable<string> expressions,
         string projectDirectory,
+        IReadOnlyDictionary<string, string> properties,
         ICollection<AnalysisDiagnostic> diagnostics,
         string projectFile)
     {
         var result = new List<string>();
-        foreach (var value in expressions)
+        foreach (var expression in expressions)
         {
+            var value = ResolveValue(expression, properties);
+            if (string.IsNullOrWhiteSpace(value) || PropertyReference.IsMatch(value))
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenKotlinSourceDirectoryNotStaticallyResolved",
+                    "Kotlin source directory '" + expression
+                    + "' uses an unresolved property or empty value.",
+                    projectFile));
+                continue;
+            }
+
             string fullPath;
             try
             {
@@ -933,7 +930,7 @@ internal static class MavenProjectModelResolver
             {
                 diagnostics.Add(Diagnostic(
                     "MavenKotlinSourceDirectoryInvalid",
-                    "Kotlin source directory '" + value + "' is invalid: " + exception.Message,
+                    "Kotlin source directory '" + expression + "' is invalid: " + exception.Message,
                     projectFile));
                 continue;
             }
@@ -942,7 +939,7 @@ internal static class MavenProjectModelResolver
             {
                 diagnostics.Add(Diagnostic(
                     "MavenKotlinSourceDirectoryOutsideProject",
-                    "Kotlin source directory '" + value + "' resolves outside the analyzed Maven project.",
+                    "Kotlin source directory '" + expression + "' resolves outside the analyzed Maven project.",
                     projectFile));
                 continue;
             }
@@ -1438,9 +1435,6 @@ internal static class MavenProjectModelResolver
         List<string> TestSourceDirectoryExpressions,
         bool ExtensionsEnabled);
 
-    private sealed record KotlinSourceDirectoryCollection(
-        List<string> Expressions,
-        List<string> ResolvedPaths);
 
     private static AnalysisDiagnostic Diagnostic(string code, string message, string path) =>
         new()

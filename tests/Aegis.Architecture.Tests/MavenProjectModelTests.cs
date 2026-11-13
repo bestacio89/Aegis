@@ -183,8 +183,11 @@ public sealed class MavenProjectModelTests
                   <artifactId>kotlin-parent</artifactId>
                   <version>1.0.0</version>
                   <packaging>pom</packaging>
-                  <modules><module>child</module></modules>
-                  <properties><kotlin.version>2.4.21</kotlin.version></properties>
+                  <properties>
+                    <kotlin.version>2.4.21</kotlin.version>
+                    <kotlin.main.source>src/parent-config-kotlin</kotlin.main.source>
+                    <kotlin.test.source>src/parent-config-test-kotlin</kotlin.test.source>
+                  </properties>
                   <build>
                     <plugins>
                       <plugin>
@@ -196,10 +199,10 @@ public sealed class MavenProjectModelTests
                           <apiVersion>2.2</apiVersion>
                           <jvmTarget>17</jvmTarget>
                           <sourceDirs>
-                            <sourceDir>src/parent-config-kotlin</sourceDir>
+                            <sourceDir>${kotlin.main.source}</sourceDir>
                           </sourceDirs>
                           <testSourceDirs>
-                            <testSourceDir>src/parent-config-test-kotlin</testSourceDir>
+                            <testSourceDir>${kotlin.test.source}</testSourceDir>
                           </testSourceDirs>
                         </configuration>
                       </plugin>
@@ -218,11 +221,15 @@ public sealed class MavenProjectModelTests
                     <relativePath>../pom.xml</relativePath>
                   </parent>
                   <artifactId>kotlin-child</artifactId>
+                  <properties>
+                    <kotlin.main.source>src/child-config-kotlin</kotlin.main.source>
+                    <kotlin.test.source>src/child-config-test-kotlin</kotlin.test.source>
+                  </properties>
                 </project>
                 """);
 
-            var mainRoot = Path.Combine(childDirectory, "src", "parent-config-kotlin");
-            var testRoot = Path.Combine(childDirectory, "src", "parent-config-test-kotlin");
+            var mainRoot = Path.Combine(childDirectory, "src", "child-config-kotlin");
+            var testRoot = Path.Combine(childDirectory, "src", "child-config-test-kotlin");
             Directory.CreateDirectory(mainRoot);
             Directory.CreateDirectory(testRoot);
             File.WriteAllText(Path.Combine(mainRoot, "ChildService.kt"), "class ChildService");
@@ -236,8 +243,8 @@ public sealed class MavenProjectModelTests
             Assert.Equal("2.3", model.KotlinLanguageVersion);
             Assert.Equal("2.2", model.KotlinApiVersion);
             Assert.Equal("17", model.KotlinJvmTarget);
-            Assert.Contains("src/parent-config-kotlin", model.KotlinMainSourceDirectoryExpressions);
-            Assert.Contains("src/parent-config-test-kotlin", model.KotlinTestSourceDirectoryExpressions);
+            Assert.Contains("${kotlin.main.source}", model.KotlinMainSourceDirectoryExpressions);
+            Assert.Contains("${kotlin.test.source}", model.KotlinTestSourceDirectoryExpressions);
             Assert.Equal(
                 ProjectSourceRootOwnership.Production,
                 Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == mainRoot).Ownership);

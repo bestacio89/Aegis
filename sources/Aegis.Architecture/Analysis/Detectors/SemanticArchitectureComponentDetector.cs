@@ -195,8 +195,7 @@ internal static class SemanticArchitectureComponentDetector
             {
                 if (!runSymbols.TryGetValue(relationship.SourceSymbolId, out var sourceSymbol)
                     || !symbolComponents.TryGetValue(relationship.SourceSymbolId, out var sourceComponent)
-                    || !symbolComponents.TryGetValue(relationship.TargetSymbolId!, out var targetComponent)
-                    || string.Equals(sourceComponent.ComponentId, targetComponent.ComponentId, StringComparison.Ordinal))
+                    || !symbolComponents.TryGetValue(relationship.TargetSymbolId!, out var targetComponent))
                 {
                     continue;
                 }
@@ -390,6 +389,10 @@ internal static class SemanticArchitectureComponentDetector
             TargetComponentName = GetComponentLabel(_target),
             Scope = scope,
             DependencyType = DependencyType,
+            IsInternal = string.Equals(
+                _source.ComponentId,
+                _target.ComponentId,
+                StringComparison.Ordinal),
             RelationshipCount = _relationshipIds.Count + _unreferencedRelationships.Count,
             ResolvedRelationshipCount = _resolvedRelationshipCount,
             PartiallyResolvedRelationshipCount = _partiallyResolvedRelationshipCount,

@@ -684,17 +684,15 @@ public sealed class RuleEngineCore
             }
         }
 
-        var supportedCoverage = stats.RulesApplicable > 0
-            ? (double)stats.RulesEvaluated / stats.RulesApplicable * 100.0
-            : 0.0;
-
         _logger.LogInformation(
             "RuleEngineCore processed {Facts} facts: {Violations} violations; " +
             "{Checks} checks ({Passed} passed, {Violated} violated); " +
-            "{Evaluated}/{Registered} registered rules evaluated; " +
-            "{SupportedEvaluated}/{SupportedApplicable} supported applicable rules evaluated " +
-            "({SupportedCoverage:0.0}% of supported rules; {Coverage:0.0}% overall applicable coverage); " +
-            "{NotApplicable} not applicable; {NotEvaluated} not evaluated; " +
+            "{Evaluated}/{Applicable} supported applicable rules evaluated " +
+            "({ApplicableCoverage:0.0}% applicable coverage); " +
+            "{Evaluated}/{Registered} registered rules evaluated " +
+            "({RegisteredCoverage:0.0}% registry-wide coverage); " +
+            "{Unsupported} unsupported; {Disabled} disabled by policy; " +
+            "{NotApplicable} not applicable; {NotEvaluated} supported applicable rules not evaluated; " +
             "{ProjectSummaries} project summaries processed; " +
             "{NonFiniteSkipped} non-finite metrics skipped; " +
             "{InvalidThresholds} invalid thresholds skipped; " +
@@ -708,11 +706,13 @@ public sealed class RuleEngineCore
             checksPassed,
             checksViolated,
             stats.RulesEvaluated,
-            stats.RulesRegistered,
-            stats.RulesEvaluated,
             stats.RulesApplicable,
-            supportedCoverage,
             stats.EvaluationCoverage,
+            stats.RulesEvaluated,
+            stats.RulesRegistered,
+            stats.RegisteredRuleEvaluationCoverage,
+            stats.RulesUnsupported,
+            stats.RulesDisabledByPolicy,
             stats.RulesNotApplicable.Count,
             stats.RulesNotEvaluated.Count,
             projectSummaryFacts,

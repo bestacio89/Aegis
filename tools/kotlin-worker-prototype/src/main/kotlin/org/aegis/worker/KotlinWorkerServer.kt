@@ -227,7 +227,7 @@ class KotlinWorkerServer(
     }
 
     private fun trimCarriageReturn(bytes: ByteArray): ByteArray =
-        if (bytes.isNotEmpty() && bytes.last() == CARRIAGE_RETURN)
+        if (bytes.isNotEmpty() && bytes.last() == CARRIAGE_RETURN.toByte())
             bytes.copyOf(bytes.size - 1)
         else
             bytes

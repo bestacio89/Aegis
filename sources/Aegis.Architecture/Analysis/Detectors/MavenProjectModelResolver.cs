@@ -375,6 +375,25 @@ internal static class MavenProjectModelResolver
                 .ToList() ?? [];
             managedPlugins.AddRange(ParsePlugins(root, properties, inherited: false, managed: true));
 
+            var kotlinPlugin = plugins.LastOrDefault(plugin =>
+                string.Equals(plugin.GroupId, "org.jetbrains.kotlin", StringComparison.Ordinal)
+                && string.Equals(plugin.ArtifactId, "kotlin-maven-plugin", StringComparison.Ordinal));
+            var kotlinOptions = ParseKotlinBuildOptions(
+                root, fullPath, properties, diagnostics);
+
+            if (kotlinPlugin is not null && string.IsNullOrWhiteSpace(kotlinPlugin.Version))
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenKotlinPluginVersionNotStaticallyResolved",
+                    "The Kotlin Maven plugin is declared but its compiler version could not be resolved statically.",
+                    fullPath));
+            }
+
+            var kotlinLanguageVersion = kotlinOptions.LanguageVersion
+                ?? InferKotlinLanguageVersion(kotlinPlugin?.Version);
+            var kotlinApiVersion = kotlinOptions.ApiVersion ?? kotlinLanguageVersion;
+            var kotlinJvmTarget = kotlinOptions.JvmTarget ?? "1.8";
+
             var processorPaths = parentModel?.AnnotationProcessorPaths
                 .Select(dependency => dependency with { IsInherited = true })
                 .ToList() ?? [];
@@ -390,7 +409,34 @@ internal static class MavenProjectModelResolver
                     fullPath));
             }
 
-            var sourceRoots = DiscoverSourceRoots(root, fullPath, files, properties, diagnostics);
+            var sourceRoots = DiscoverSourceRoots(
+                root,
+                fullPath,
+                files,
+                properties,
+                diagnostics,
+                kotlinOptions.MainSourceDirectories,
+                kotlinOptions.TestSourceDirectories);
+
+            if (sourceRoots.Any(sourceRoot => sourceRoot.ContainsKotlinSources) && kotlinPlugin is null)
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenKotlinPluginNotDetected",
+                    "Kotlin source files were discovered, but the Kotlin Maven plugin was not declared in the effective build plugins.",
+                    fullPath));
+            }
+
+            if (plugins.Any(plugin =>
+                    string.Equals(plugin.GroupId, "com.google.devtools.ksp", StringComparison.Ordinal)
+                    || string.Equals(plugin.ArtifactId, "kotlin-maven-plugin", StringComparison.Ordinal)
+                       && string.Equals(plugin.GroupId, "org.jetbrains.kotlin", StringComparison.Ordinal)
+                       && plugin.Version is null))
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenKotlinCodeGenerationNotExecuted",
+                    "KSP or an unresolved Kotlin compiler plugin is declared. Aegis does not execute project code-generation plugins; only statically discovered generated sources are considered.",
+                    fullPath));
+            }
 
             var model = new MavenProjectModel
             {
@@ -411,6 +457,10 @@ internal static class MavenProjectModelResolver
                 ManagedDependencies = managed,
                 Plugins = plugins,
                 ManagedPlugins = managedPlugins,
+                KotlinPluginVersion = kotlinPlugin?.Version,
+                KotlinLanguageVersion = kotlinLanguageVersion,
+                KotlinApiVersion = kotlinApiVersion,
+                KotlinJvmTarget = kotlinJvmTarget,
                 AnnotationProcessorPaths = processorPaths,
                 SourceRoots = sourceRoots,
                 ProfileIds = profileIds,
@@ -675,6 +725,182 @@ internal static class MavenProjectModelResolver
                     managed);
             })
             .ToList();
+    }
+
+    private static KotlinBuildOptions ParseKotlinBuildOptions(
+        XElement project,
+        string projectFile,
+        IReadOnlyDictionary<string, string> properties,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        var projectDirectory = Path.GetDirectoryName(projectFile)!;
+        var build = Child(project, "build");
+        var plugin = Child(build, "plugins")?.Elements()
+            .Where(element => NameIs(element, "plugin"))
+            .LastOrDefault(element =>
+                string.Equals(Value(element, "groupId"), "org.jetbrains.kotlin", StringComparison.Ordinal)
+                && string.Equals(Value(element, "artifactId"), "kotlin-maven-plugin", StringComparison.Ordinal));
+        var configuration = Child(plugin, "configuration");
+
+        var mainDirectories = ParseKotlinSourceDirectories(
+            configuration, "sourceDirs", "sourceDir", projectDirectory, properties, diagnostics, projectFile);
+        var testDirectories = ParseKotlinSourceDirectories(
+            configuration, "testSourceDirs", "testSourceDir", projectDirectory, properties, diagnostics, projectFile);
+
+        var languageVersion = ResolveKotlinOption(configuration, "languageVersion", properties, diagnostics, projectFile);
+        var apiVersion = ResolveKotlinOption(configuration, "apiVersion", properties, diagnostics, projectFile);
+        var jvmTarget = ResolveKotlinOption(configuration, "jvmTarget", properties, diagnostics, projectFile);
+
+        var executions = Child(plugin, "executions")?.Elements()
+            .Where(element => NameIs(element, "execution"))
+            ?? [];
+        foreach (var execution in executions)
+        {
+            var goals = Child(execution, "goals")?.Elements()
+                .Where(element => NameIs(element, "goal"))
+                .Select(element => element.Value.Trim())
+                .ToArray() ?? [];
+            var executionConfiguration = Child(execution, "configuration");
+            if (executionConfiguration is null)
+                continue;
+
+            var executionSourceDirectories = ParseKotlinSourceDirectories(
+                executionConfiguration, "sourceDirs", "sourceDir",
+                projectDirectory, properties, diagnostics, projectFile);
+            var executionTestDirectories = ParseKotlinSourceDirectories(
+                executionConfiguration, "testSourceDirs", "testSourceDir",
+                projectDirectory, properties, diagnostics, projectFile);
+
+            if (goals.Contains("test-compile", StringComparer.Ordinal))
+                testDirectories.AddRange(executionSourceDirectories);
+            else if (goals.Contains("compile", StringComparer.Ordinal))
+                mainDirectories.AddRange(executionSourceDirectories);
+
+            testDirectories.AddRange(executionTestDirectories);
+            languageVersion ??= ResolveKotlinOption(
+                executionConfiguration, "languageVersion", properties, diagnostics, projectFile);
+            apiVersion ??= ResolveKotlinOption(
+                executionConfiguration, "apiVersion", properties, diagnostics, projectFile);
+            jvmTarget ??= ResolveKotlinOption(
+                executionConfiguration, "jvmTarget", properties, diagnostics, projectFile);
+        }
+
+        var compilerPlugins = Child(configuration, "compilerPlugins")?.Elements()
+            .Where(element => NameIs(element, "plugin"))
+            .Select(element => element.Value.Trim())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToArray() ?? [];
+        foreach (var compilerPlugin in compilerPlugins)
+        {
+            diagnostics.Add(Diagnostic(
+                "MavenKotlinCompilerPluginNotExecuted",
+                "Kotlin compiler plugin '" + compilerPlugin
+                + "' is not executed by Aegis. Plugin-generated or transformed semantics may be incomplete.",
+                projectFile));
+        }
+
+        if (mainDirectories.Count == 0)
+            mainDirectories.Add(Path.Combine(projectDirectory, "src", "main", "kotlin"));
+        if (testDirectories.Count == 0)
+            testDirectories.Add(Path.Combine(projectDirectory, "src", "test", "kotlin"));
+
+        return new KotlinBuildOptions(
+            mainDirectories.Distinct(PathComparer).ToList(),
+            testDirectories.Distinct(PathComparer).ToList(),
+            languageVersion,
+            apiVersion,
+            jvmTarget);
+    }
+
+    private static List<string> ParseKotlinSourceDirectories(
+        XElement? configuration,
+        string collectionName,
+        string itemName,
+        string projectDirectory,
+        IReadOnlyDictionary<string, string> properties,
+        ICollection<AnalysisDiagnostic> diagnostics,
+        string projectFile)
+    {
+        var result = new List<string>();
+        var container = Child(configuration, collectionName);
+        if (container is null)
+            return result;
+
+        foreach (var element in container.Elements().Where(child => NameIs(child, itemName)))
+        {
+            var value = ResolveValue(element.Value.Trim(), properties);
+            if (string.IsNullOrWhiteSpace(value) || PropertyReference.IsMatch(value))
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenKotlinSourceDirectoryNotStaticallyResolved",
+                    "A Kotlin source directory uses an unresolved property or empty value.",
+                    projectFile));
+                continue;
+            }
+
+            string fullPath;
+            try
+            {
+                fullPath = Path.GetFullPath(Path.IsPathRooted(value)
+                    ? value
+                    : Path.Combine(projectDirectory, value));
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenKotlinSourceDirectoryInvalid",
+                    "Kotlin source directory '" + value + "' is invalid: " + exception.Message,
+                    projectFile));
+                continue;
+            }
+
+            if (!IsSameOrDescendantPath(fullPath, projectDirectory))
+            {
+                diagnostics.Add(Diagnostic(
+                    "MavenKotlinSourceDirectoryOutsideProject",
+                    "Kotlin source directory '" + value + "' resolves outside the analyzed Maven project.",
+                    projectFile));
+                continue;
+            }
+
+            result.Add(fullPath);
+        }
+
+        return result;
+    }
+
+    private static string? ResolveKotlinOption(
+        XElement? configuration,
+        string optionName,
+        IReadOnlyDictionary<string, string> properties,
+        ICollection<AnalysisDiagnostic> diagnostics,
+        string projectFile)
+    {
+        var rawValue = Value(configuration, optionName);
+        if (string.IsNullOrWhiteSpace(rawValue))
+            return null;
+
+        var resolved = ResolveValue(rawValue, properties);
+        if (string.IsNullOrWhiteSpace(resolved) || PropertyReference.IsMatch(resolved))
+        {
+            diagnostics.Add(Diagnostic(
+                "MavenKotlinCompilerOptionNotStaticallyResolved",
+                "Kotlin compiler option '" + optionName + "' uses an unresolved property expression.",
+                projectFile));
+            return null;
+        }
+
+        return resolved;
+    }
+
+    private static string? InferKotlinLanguageVersion(string? compilerVersion)
+    {
+        if (string.IsNullOrWhiteSpace(compilerVersion))
+            return null;
+
+        var match = Regex.Match(compilerVersion, @"^(?<major>\d+)\.(?<minor>\d+)");
+        return match.Success ? match.Groups["major"].Value + "." + match.Groups["minor"].Value : null;
     }
 
     private static List<ProjectSourceRoot> DiscoverSourceRoots(
@@ -1039,6 +1265,13 @@ internal static class MavenProjectModelResolver
             Diagnostics = [Diagnostic(code, message, projectFile)],
             IsComplete = false
         };
+
+    private sealed record KotlinBuildOptions(
+        List<string> MainSourceDirectories,
+        List<string> TestSourceDirectories,
+        string? LanguageVersion,
+        string? ApiVersion,
+        string? JvmTarget);
 
     private static AnalysisDiagnostic Diagnostic(string code, string message, string path) =>
         new()

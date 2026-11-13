@@ -138,9 +138,12 @@ public sealed class CircularDependencyEvaluator
     private ArchitectureEvaluatorResult CreateCycleResult(
         IReadOnlyCollection<string> cycle)
     {
+        var firstComponent = Context?.ProductionComponents.FirstOrDefault(component =>
+            component.Id.Equals(cycle.First(), StringComparison.Ordinal));
+        var target = firstComponent?.SourceFiles.FirstOrDefault() ?? cycle.First();
         var result =
             CreateResult(
-                cycle.First(),
+                target,
                 nameof(ArchitectureRuleCategory.Architecture));
 
 
@@ -158,9 +161,11 @@ public sealed class CircularDependencyEvaluator
 
 
         result.Metadata["Cycle"] =
-            string.Join(
-                " -> ",
-                cycle);
+            string.Join(" -> ", cycle.Select(GetCycleNodeLabel));
+        result.Metadata["GraphLevel"] =
+            Context?.ProductionComponents.Count > 0
+                ? "ArchitecturalComponents"
+                : "BuildModules";
 
         result.Metadata["Language"] =
             Context?.Language ?? "Unknown";
@@ -173,6 +178,16 @@ public sealed class CircularDependencyEvaluator
     }
 
 
+
+    private string GetCycleNodeLabel(string nodeId)
+    {
+        var component = Context?.ProductionComponents.FirstOrDefault(candidate =>
+            candidate.Id.Equals(nodeId, StringComparison.Ordinal));
+
+        return component is null
+            ? nodeId
+            : $"{component.BuildModuleName} · {component.QualifiedName}";
+    }
 
     private static Dictionary<string, HashSet<string>>
         BuildDependencyGraph(

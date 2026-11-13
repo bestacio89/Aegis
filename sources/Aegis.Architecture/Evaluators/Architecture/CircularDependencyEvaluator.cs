@@ -65,13 +65,20 @@ public sealed class CircularDependencyEvaluator
             return Task.FromResult<IEnumerable<ArchitectureEvaluatorResult>>(results);
 
         var useComponentGraph = context.ProductionComponents.Count > 0;
-        var componentLanguages = context.ProductionComponents
-            .Select(component => component.Language)
+        var requiredLanguages = context.ProductionModules
+            .SelectMany(module => module.Languages)
+            .Append(context.Language)
+            .Where(language => !string.IsNullOrWhiteSpace(language)
+                && !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var semanticRuns = context.SemanticAnalysisRuns
-            .Where(run => componentLanguages.Contains(run.Language))
+            .Where(run => requiredLanguages.Contains(run.Language))
             .ToArray();
-        var componentAnalysisComplete = semanticRuns.Length > 0
+        var analyzedLanguages = semanticRuns
+            .Select(run => run.Language)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var componentAnalysisComplete = requiredLanguages.Count > 0
+            && requiredLanguages.SetEquals(analyzedLanguages)
             && semanticRuns.All(run => run.IsComplete)
             && !context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
 

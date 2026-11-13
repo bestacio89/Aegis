@@ -38,7 +38,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
     {
         "Architectural components" => "ARCHITECTURAL ROLES",
         "Code containers" => "CONTAINER KINDS",
-        _ => "BUILD MODULE TYPES"
+        _ => "ARCHITECTURE LAYERS"
     };
 
     public string NodeCountLabel => GraphProjection switch

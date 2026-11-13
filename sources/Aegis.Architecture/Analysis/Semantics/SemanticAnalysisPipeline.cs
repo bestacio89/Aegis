@@ -81,6 +81,17 @@ public sealed class SemanticAnalysisPipeline
             }
         }
 
+        ProjectArchitectureComponents(context);
         ModuleRoleDetector.Analyze(context.Modules);
+    }
+
+    /// <summary>
+    /// Projects all available language-provider semantic runs into the shared
+    /// language-native architecture component graph.
+    /// </summary>
+    public static void ProjectArchitectureComponents(ProjectArchitectureContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        SemanticArchitectureComponentDetector.Analyze(context);
     }
 }

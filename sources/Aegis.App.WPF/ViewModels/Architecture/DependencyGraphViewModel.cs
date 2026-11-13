@@ -48,6 +48,9 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
         _ => "BUILD MODULES"
     };
 
+    public string ClassificationCoverageSummary { get; private set; } =
+        "Classification coverage is not available until an assessment is loaded.";
+
     public string ProjectionDescription => GraphProjection switch
     {
         "Architectural components" =>
@@ -156,6 +159,21 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                 .ToArray() ?? [];
 
             var codeContainers = _context?.ProductionComponents ?? [];
+            var classifiedCodeContainerIds = (_context?.ArchitecturalComponentMemberships ?? [])
+                .Where(membership =>
+                    !string.IsNullOrWhiteSpace(membership.ArchitecturalComponentId)
+                    && !string.Equals(membership.ClassificationSource.ToString(), "Unclassified", StringComparison.OrdinalIgnoreCase))
+                .Select(membership => membership.CodeComponentId)
+                .ToHashSet(StringComparer.Ordinal);
+            var classifiedCodeContainerCount = codeContainers.Count(container =>
+                classifiedCodeContainerIds.Contains(container.Id));
+            var unclassifiedCodeContainerCount = Math.Max(0, codeContainers.Count - classifiedCodeContainerCount);
+            var coverageDiagnosticCount = _context?.ArchitectureClassificationDiagnostics
+                .Count(diagnostic => diagnostic.AffectsCoverage) ?? 0;
+            ClassificationCoverageSummary =
+                $"Classification coverage: {classifiedCodeContainerCount:N0}/{codeContainers.Count:N0} production code containers classified; "
+                + $"{unclassifiedCodeContainerCount:N0} unclassified; {coverageDiagnosticCount:N0} coverage diagnostics.";
+
             var architecturalComponents = _context?.ArchitecturalComponents
                 .Where(component => component.ProductionSymbolCount > 0)
                 .ToArray() ?? [];
@@ -247,6 +265,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             };
 
             OnPropertyChanged(nameof(ProjectionDescription));
+            OnPropertyChanged(nameof(ClassificationCoverageSummary));
             OnPropertyChanged(nameof(NodeCountLabel));
             LayerFilters = ["All", .. _activeRelations
                 .SelectMany(relation => new[] { relation.SourceLayer, relation.TargetLayer })

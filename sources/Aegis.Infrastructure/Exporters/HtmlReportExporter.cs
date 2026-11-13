@@ -240,6 +240,10 @@ td {
                 report.EvaluationStats?.RulesDisabledByPolicy.ToString() ?? "N/A");
 
             AddRow(html,
+                "Rule Accounting Difference",
+                report.EvaluationStats?.RuleAccountingDifference.ToString() ?? "N/A");
+
+            AddRow(html,
                 "Total Diagnostics",
                 report.Diagnostics.Count.ToString());
 

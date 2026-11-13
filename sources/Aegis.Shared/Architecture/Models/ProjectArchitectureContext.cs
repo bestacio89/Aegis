@@ -174,7 +174,7 @@ public sealed class ProjectArchitectureContext
         ArchitectureComponents.Where(component => component.TestSymbolCount > 0).ToArray();
 
     /// <summary>
-    /// Compiler-resolved dependencies between language-level architectural components.
+    /// Semantic dependencies between language-level architectural components.
     /// Build-module dependency edges remain in <see cref="Dependencies"/>.
     /// </summary>
     public List<ArchitectureComponentDependencyContext> ArchitectureComponentDependencies { get; set; } = [];

@@ -120,7 +120,6 @@ private class KotlinSemanticCollector(
 
         override fun visitSimpleFunction(declaration: IrSimpleFunction) {
             val id = functionId(declaration)
-            declarationIds[declaration] = id
             addSymbol(
                 id = id,
                 name = declaration.name.asString(),
@@ -136,7 +135,6 @@ private class KotlinSemanticCollector(
 
         override fun visitConstructor(declaration: IrConstructor) {
             val id = functionId(declaration)
-            declarationIds[declaration] = id
             addSymbol(
                 id = id,
                 name = "<init>",

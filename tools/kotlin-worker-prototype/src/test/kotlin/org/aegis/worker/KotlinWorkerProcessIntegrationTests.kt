@@ -112,7 +112,7 @@ class KotlinWorkerProcessIntegrationTests {
                 .first().asJsonObject.get("code").asString)
             assertTrue(
                 boundedResult.getAsJsonArray("diagnostics").first().asJsonObject.get("message").asString
-                    .contains("50,000-file limit")
+                    .contains("50000-file limit")
             )
 
             writer.write(request("shutdown", "shutdown").toString())

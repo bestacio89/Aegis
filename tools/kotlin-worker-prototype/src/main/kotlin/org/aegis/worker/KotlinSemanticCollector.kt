@@ -17,8 +17,14 @@ import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.declarations.IrParameterKind
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import org.jetbrains.kotlin.ir.types.IrSimpleType
+import org.jetbrains.kotlin.ir.types.IrStarProjection
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.types.classOrNull
+import org.jetbrains.kotlin.ir.types.isMarkedNullable
 import org.jetbrains.kotlin.ir.types.classFqName
+import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
@@ -542,10 +548,30 @@ class KotlinSemanticCollector(
         return "kotlin:function:$name($signature)"
     }
 
-    private fun typeIdentity(type: org.jetbrains.kotlin.ir.types.IrType): String {
-        val rendered = type.toString()
-        val className = type.classFqName?.asString()
-        return if (className != null && rendered == className) className else rendered
+    private fun typeIdentity(type: IrType): String {
+        val simpleType = type as? IrSimpleType ?: return type.toString()
+        val classifierName = simpleType.classOrNull?.owner?.fqNameWhenAvailable?.asString()
+            ?: simpleType.classifier.owner.name.asString()
+        val arguments = simpleType.arguments.joinToString(",") { argument ->
+            when (argument) {
+                is IrStarProjection -> "*"
+                is IrTypeProjection -> {
+                    val variance = when (argument.variance) {
+                        Variance.IN_VARIANCE -> "in "
+                        Variance.OUT_VARIANCE -> "out "
+                        Variance.INVARIANT -> ""
+                    }
+                    variance + typeIdentity(argument.type)
+                }
+                else -> argument.toString()
+            }
+        }
+        val nullability = if (simpleType.isMarkedNullable()) "?" else ""
+        return if (arguments.isEmpty()) {
+            classifierName + nullability
+        } else {
+            "$classifierName<$arguments>$nullability"
+        }
     }
 
     private fun isPublic(declaration: IrDeclaration): Boolean =

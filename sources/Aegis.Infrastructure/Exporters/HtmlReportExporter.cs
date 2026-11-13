@@ -227,7 +227,7 @@ td {
                 "Supported Rules Not Evaluated",
                 report.EvaluationStats is null
                     ? "N/A"
-                    : Math.Max(0, report.EvaluationStats.RulesNotEvaluated.Count - report.EvaluationStats.RulesUnsupported).ToString());
+                    : report.EvaluationStats.RulesNotEvaluated.Count.ToString());
 
             AddRow(html,
                 "Unsupported Rules",

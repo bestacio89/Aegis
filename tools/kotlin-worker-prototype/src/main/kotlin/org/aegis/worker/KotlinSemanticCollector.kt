@@ -198,8 +198,21 @@ internal class KotlinSemanticCollector(
                 "isPublic",
                 isPublic(declaration)
             )
-            symbol.addProperty("visibility", (declaration as? IrDeclarationWithVisibility)?.visibility?.name ?: "Unknown")
+            symbol.addProperty(
+                "visibility",
+                (declaration as? IrDeclarationWithVisibility)?.visibility?.name
+                    ?.replaceFirstChar(Char::uppercase)
+                    ?: "Unknown"
+            )
             symbol.addProperty("declarationKind", declarationKind(declaration))
+            symbol.addProperty("receiverType", receiverType(declaration))
+            symbol.addProperty(
+                "expandedType",
+                (declaration as? IrTypeAlias)?.expandedType?.let(::typeIdentity)
+            )
+            symbol.add("modifiers", JsonArray().apply {
+                declarationModifiers(declaration).forEach(::add)
+            })
             symbol.add("provenance", provenance(file, offset))
             symbols[id] = symbol
         }
@@ -441,18 +454,60 @@ internal class KotlinSemanticCollector(
     private fun classId(declaration: IrClass): String =
         "kotlin:type:${declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()}"
 
+    private fun receiverType(declaration: IrDeclaration): String? = when (declaration) {
+        is IrFunction -> declaration.parameters
+            .firstOrNull { it.kind == IrParameterKind.ExtensionReceiver }
+            ?.type
+            ?.let(::typeIdentity)
+        is IrProperty -> (declaration.getter ?: declaration.setter)?.parameters
+            ?.firstOrNull { it.kind == IrParameterKind.ExtensionReceiver }
+            ?.type
+            ?.let(::typeIdentity)
+        else -> null
+    }
+
+    private fun declarationModifiers(declaration: IrDeclaration): List<String> = buildList {
+        when (declaration) {
+            is IrClass -> {
+                if (declaration.isData) add("data")
+                if (declaration.isValue) add("value")
+                if (declaration.modality.name == "SEALED") add("sealed")
+                if (declaration.kind.name == "OBJECT") add("object")
+                if (declaration.isCompanion) add("companion")
+            }
+            is IrFunction -> {
+                if (declaration.isSuspend) add("suspend")
+                if (declaration.isInline) add("inline")
+                if (declaration.isOperator) add("operator")
+                if (declaration.isInfix) add("infix")
+                if (declaration.isTailrec) add("tailrec")
+                if (declaration.isExternal) add("external")
+            }
+            is IrProperty -> {
+                if (declaration.isConst) add("const")
+                if (declaration.isLateinit) add("lateinit")
+                if (declaration.isDelegated) add("delegated")
+            }
+        }
+    }
+
     private fun declarationKind(declaration: IrDeclaration): String = when (declaration) {
-        is IrClass -> when (declaration.kind.name) {
-            "INTERFACE" -> "Interface"
-            "ENUM_CLASS" -> "EnumClass"
-            "ANNOTATION_CLASS" -> "AnnotationClass"
-            "OBJECT" -> "Object"
+        is IrClass -> when {
+            declaration.kind.name == "INTERFACE" && declaration.modality.name == "SEALED" -> "SealedInterface"
+            declaration.kind.name == "INTERFACE" -> "Interface"
+            declaration.kind.name == "ENUM_CLASS" -> "EnumClass"
+            declaration.kind.name == "ANNOTATION_CLASS" -> "AnnotationClass"
+            declaration.kind.name == "OBJECT" && declaration.isCompanion -> "CompanionObject"
+            declaration.kind.name == "OBJECT" -> "Object"
+            declaration.isData -> "DataClass"
+            declaration.isValue -> "ValueClass"
+            declaration.modality.name == "SEALED" -> "SealedClass"
             else -> "Class"
         }
-        is IrProperty -> "Property"
+        is IrProperty -> if (receiverType(declaration) != null) "ExtensionProperty" else "Property"
         is IrTypeAlias -> "TypeAlias"
         is IrConstructor -> "Constructor"
-        is IrSimpleFunction -> "Function"
+        is IrSimpleFunction -> if (receiverType(declaration) != null) "ExtensionFunction" else "Function"
         else -> declaration.javaClass.simpleName
     }
 

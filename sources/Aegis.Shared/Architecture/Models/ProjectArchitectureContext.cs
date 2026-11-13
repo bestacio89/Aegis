@@ -179,6 +179,22 @@ public sealed class ProjectArchitectureContext
     /// </summary>
     public List<ArchitectureComponentDependencyContext> ArchitectureComponentDependencies { get; set; } = [];
 
+    /// <summary>
+    /// Logical architectural components classified from language-level code containers.
+    /// This projection is additive and does not replace the existing code-container model.
+    /// </summary>
+    public List<ArchitecturalComponentContext> ArchitecturalComponents { get; set; } = [];
+
+    /// <summary>
+    /// Classification decisions linking code containers to logical architecture.
+    /// </summary>
+    public List<ArchitecturalComponentMembership> ArchitecturalComponentMemberships { get; set; } = [];
+
+    /// <summary>
+    /// Diagnostics describing missing, ambiguous, stale, or uncertain classifications.
+    /// </summary>
+    public List<ArchitectureClassificationDiagnostic> ArchitectureClassificationDiagnostics { get; set; } = [];
+
     /// <summary>Production-only semantic component dependencies.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyList<ArchitectureComponentDependencyContext> ProductionComponentDependencies =>
@@ -431,6 +447,9 @@ public sealed class ProjectArchitectureContext
             ArchitectureComponentDependencyCount = ArchitectureComponentDependencies.Count,
             ProductionComponentDependencyCount = ProductionComponentDependencies.Count,
             TestComponentDependencyCount = TestComponentDependencies.Count,
+            ArchitecturalComponentCount = ArchitecturalComponents.Count,
+            ArchitecturalComponentMembershipCount = ArchitecturalComponentMemberships.Count,
+            ArchitectureClassificationDiagnosticCount = ArchitectureClassificationDiagnostics.Count,
             DependencyEvidenceCount = DependencyEvidence.Count,
             FrameworkEvidenceCount = FrameworkEvidence.Count,
             SemanticAnalysisRunCount = SemanticAnalysisRuns.Count,

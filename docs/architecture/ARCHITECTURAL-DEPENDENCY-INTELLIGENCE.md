@@ -4,7 +4,7 @@
 
 - Baseline: `develop` at `26d97c3b3c95e4558cd1ea072fbe1a3d8e2c8104`
 - Working branch: `feat/architectural-dependency-intelligence`
-- Status: design baseline established; ADI-1 evidence-traceability implementation in progress
+- Status: ADI-1 evidence traceability validated on exact PR head; ADI-2 classification contracts introduced
 - Scope: introduce a logical architectural-component projection while preserving the existing build-module and language-container dependency views
 
 ## Executive assessment
@@ -168,10 +168,11 @@ The Relationship Ledger should add a relationship-level filter and expose the un
 - Preserve existing counts, relationship kinds, evidence files and production/test separation.
 - Add regression tests proving that every aggregate count can be traced to unique source relationships and duplicate IDs are not double-counted.
 - Acceptance: existing Java, Python and C# component graph tests remain green.
-- Status: implementation committed; exact-head CI validation pending.
+- Status: implementation committed and all required workflows passed on exact PR head `1af4fc62330dfe6bf5a63aa7f2c18372cd1000c9`.
 
 ### ADI-2 — Architectural classification
 - Add typed logical component and membership contracts.
+- Status: initial shared contracts and additive project-context collections committed; configuration loading, validation and classification execution remain pending.
 - Implement configuration parsing/validation for explicit mappings.
 - Implement deterministic segment-aware matching, ambiguity diagnostics, provenance and confidence.
 - Add conservative convention inference; unclassified is a valid outcome.

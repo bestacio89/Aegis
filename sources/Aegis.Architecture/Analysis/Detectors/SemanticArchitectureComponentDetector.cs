@@ -238,6 +238,24 @@ internal static class SemanticArchitectureComponentDetector
                 or SemanticResolutionStatus.PartiallyResolved)
             && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)));
 
+        if (componentNodes.Count == 0 && sourceSymbolCount > 0)
+        {
+            foreach (var run in semanticRuns.Where(run =>
+                         run.Symbols.Any(IsProjectSourceSymbol)
+                         && !run.Diagnostics.Any(diagnostic =>
+                             diagnostic.Code == "SemanticArchitectureComponentProjectionEmpty")))
+            {
+                run.Diagnostics.Add(new AnalysisDiagnostic
+                {
+                    Code = "SemanticArchitectureComponentProjectionEmpty",
+                    Component = nameof(SemanticArchitectureComponentDetector),
+                    Message = $"Semantic analysis produced {run.Symbols.Count(IsProjectSourceSymbol)} source symbols, but none could be projected into architectural components. Component symbols={componentSymbolCount}; projected components={componentNodes.Count}.",
+                    Target = run.ProjectPath,
+                    AffectsCoverage = true
+                });
+            }
+        }
+
         AegisDiagnostics.Report(
             nameof(SemanticArchitectureComponentDetector),
             componentSymbolCount == 0 && sourceSymbolCount > 0 ? DiagnosticLevel.Warning : DiagnosticLevel.Info,

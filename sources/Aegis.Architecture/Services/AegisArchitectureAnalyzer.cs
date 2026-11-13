@@ -2,6 +2,7 @@
 
 using Aegis.Architecture.Analysis;
 using Aegis.Architecture.Analysis.Classification;
+using Aegis.Architecture.Analysis.Detectors;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Architecture.Analysis.Semantics;
 using Aegis.Shared.Architecture.Models;

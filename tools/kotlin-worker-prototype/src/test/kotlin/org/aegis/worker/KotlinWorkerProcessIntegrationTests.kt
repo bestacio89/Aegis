@@ -62,6 +62,7 @@ class KotlinWorkerProcessIntegrationTests {
         val executor = Executors.newSingleThreadExecutor()
         var compilationOutput: Path? = null
         var oversizedManifest: Path? = null
+        var oversizedByteManifest: Path? = null
         try {
             val writer = BufferedWriter(OutputStreamWriter(process.outputStream, StandardCharsets.UTF_8))
             val reader = BufferedReader(InputStreamReader(process.inputStream, StandardCharsets.UTF_8))
@@ -115,6 +116,26 @@ class KotlinWorkerProcessIntegrationTests {
                     .contains("50000-file limit")
             )
 
+            oversizedByteManifest = Files.createTempFile("aegis-kotlin-source-manifest-bytes-", ".json")
+            Files.writeString(oversizedByteManifest, " ".repeat(16 * 1024 * 1024 + 1))
+            writer.write(
+                request(
+                    "oversized-bytes",
+                    "analyze",
+                    analysisPayload(workspace, sourceRoot, oversizedByteManifest, standardLibraryPath)
+                ).toString()
+            )
+            writer.newLine()
+            writer.flush()
+            val byteBoundedAnalysis = readResponse(executor, reader)
+            assertEquals("ok", byteBoundedAnalysis.get("status").asString)
+            val byteBoundedResult = byteBoundedAnalysis.getAsJsonObject("result")
+            assertEquals(4, byteBoundedResult.get("status").asInt)
+            assertTrue(
+                byteBoundedResult.getAsJsonArray("diagnostics").first().asJsonObject.get("message").asString
+                    .contains("16777216-byte limit")
+            )
+
             writer.write(request("shutdown", "shutdown").toString())
             writer.newLine()
             writer.flush()
@@ -127,6 +148,7 @@ class KotlinWorkerProcessIntegrationTests {
             deleteRecursively(workspace)
             Files.deleteIfExists(manifest)
             oversizedManifest?.let(Files::deleteIfExists)
+            oversizedByteManifest?.let(Files::deleteIfExists)
         }
     }
 

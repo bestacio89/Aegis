@@ -407,11 +407,21 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
 
         private String addType(ITypeBinding binding, ASTNode node, Path file, boolean test, boolean generated, int kind) {
             String id = binding == null ? fallbackId(file, node, "type") : bindingId(binding);
-            String name = binding == null ? node.toString() : binding.getName();
-            String qualified = binding == null ? name : binding.getTypeDeclaration().getQualifiedName();
+            String name = node instanceof AbstractTypeDeclaration declaration
+                ? declaration.getName().getIdentifier()
+                : binding == null ? node.getClass().getSimpleName() : binding.getName();
+            String qualified = binding == null
+                ? sourceQualifiedTypeName(node, name)
+                : binding.getTypeDeclaration().getQualifiedName();
+            if (qualified == null || qualified.isBlank()) {
+                qualified = sourceQualifiedTypeName(node, name);
+            }
+
+            // The declaration belongs to the source file currently being visited.
+            // Binding recovery affects semantic confidence, not source ownership.
             addSymbol(id, name, qualified, kind,
                 binding != null && org.eclipse.jdt.core.dom.Modifier.isPublic(binding.getModifiers()),
-                binding != null && binding.isFromSource(), file, node, test, generated);
+                true, file, node, test, generated);
             return id;
         }
 
@@ -424,8 +434,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             addSymbol(id, name, qualified,
                 declaration.isConstructor() ? PROTOCOL_SYMBOL_CONSTRUCTOR : PROTOCOL_SYMBOL_METHOD,
                 org.eclipse.jdt.core.dom.Modifier.isPublic(declaration.getModifiers()),
-                declaration.getDeclaringClass() != null && declaration.getDeclaringClass().isFromSource(),
-                file, node, test, generated);
+                true, file, node, test, generated);
         }
 
         private void addVariable(IVariableBinding binding, ASTNode node, Path file, boolean test, boolean generated, ITypeBinding owner) {
@@ -434,7 +443,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             String qualified = owner == null ? binding.getName() : owner.getTypeDeclaration().getQualifiedName() + "#" + binding.getName();
             addSymbol(id, binding.getName(), qualified, PROTOCOL_SYMBOL_FIELD,
                 org.eclipse.jdt.core.dom.Modifier.isPublic(binding.getModifiers()),
-                owner != null && owner.isFromSource(), file, node, test, generated);
+                true, file, node, test, generated);
         }
 
         private void addTypeRelationship(String sourceId, ITypeBinding target, String unresolved,
@@ -569,6 +578,21 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             provenance.add(provenance(file, node));
             symbol.add("provenance", provenance);
             symbols.put(id, symbol);
+        }
+
+        private static String sourceQualifiedTypeName(ASTNode node, String name) {
+            List<String> enclosingTypes = new ArrayList<>();
+            ASTNode current = node;
+            while (current != null) {
+                if (current instanceof AbstractTypeDeclaration declaration) {
+                    enclosingTypes.add(0, declaration.getName().getIdentifier());
+                }
+                current = current.getParent();
+            }
+
+            String typeName = enclosingTypes.isEmpty() ? name : String.join(".", enclosingTypes);
+            String packageName = packageName(node);
+            return packageName.isBlank() ? typeName : packageName + "." + typeName;
         }
 
         private static String packageName(ASTNode node) {

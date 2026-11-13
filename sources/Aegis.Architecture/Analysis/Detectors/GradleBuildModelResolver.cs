@@ -1277,7 +1277,7 @@ internal static class GradleBuildModelResolver
             {
                 if (escaped)
                     escaped = false;
-                else if (current == '\')
+                else if (current == '\\')
                     escaped = true;
                 else if (current == quote)
                     inString = false;
@@ -1805,7 +1805,7 @@ internal static class GradleBuildModelResolver
             if (inString)
             {
                 if (escaped) escaped = false;
-                else if (current == '\') escaped = true;
+                else if (current == '\\') escaped = true;
                 else if (current == quote) inString = false;
                 continue;
             }
@@ -1867,7 +1867,7 @@ internal static class GradleBuildModelResolver
             {
                 if (escaped)
                     escaped = false;
-                else if (current == '\')
+                else if (current == '\\')
                     escaped = true;
                 else if (current == quote)
                     inString = false;

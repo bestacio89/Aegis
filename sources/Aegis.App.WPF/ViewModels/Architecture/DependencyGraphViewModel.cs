@@ -41,6 +41,13 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
         _ => "BUILD MODULE TYPES"
     };
 
+    public string NodeCountLabel => GraphProjection switch
+    {
+        "Architectural components" => "ARCHITECTURAL COMPONENTS",
+        "Code containers" => "CODE CONTAINERS",
+        _ => "BUILD MODULES"
+    };
+
     public string ProjectionDescription => GraphProjection switch
     {
         "Architectural components" =>
@@ -145,18 +152,17 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
                 .ToArray() ?? [];
 
-            var buildModules = _context?.ProductionModules ?? [];
             var codeContainers = _context?.ProductionComponents ?? [];
             var architecturalComponents = _context?.ArchitecturalComponents
                 .Where(component => component.ProductionSymbolCount > 0)
                 .ToArray() ?? [];
 
-            GraphProjectionOptions =
-            [
-                "Build modules",
-                .. (codeContainers.Count > 0 ? ["Code containers"] : []),
-                .. (architecturalComponents.Length > 0 ? ["Architectural components"] : [])
-            ];
+            var projectionOptions = new List<string> { "Build modules" };
+            if (codeContainers.Count > 0)
+                projectionOptions.Add("Code containers");
+            if (architecturalComponents.Length > 0)
+                projectionOptions.Add("Architectural components");
+            GraphProjectionOptions = projectionOptions;
 
             // A single-module repository can still have meaningful code-container
             // and logical architecture graphs. Prefer the most informative
@@ -188,13 +194,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                         component.QualifiedName,
                         component.ComponentKind))
                     .ToArray(),
-                _ => buildModules
-                    .Where(module => !string.IsNullOrWhiteSpace(module.Path))
-                    .Select(module => new GraphNode(
-                        module.Path,
-                        module.Name,
-                        string.IsNullOrWhiteSpace(module.Type) ? module.ProjectKind : module.Type))
-                    .ToArray()
+                _ => []
             };
 
             _activeRelations = GraphProjection switch
@@ -242,6 +242,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             };
 
             OnPropertyChanged(nameof(ProjectionDescription));
+            OnPropertyChanged(nameof(NodeCountLabel));
             LayerFilters = ["All", .. _activeRelations
                 .SelectMany(relation => new[] { relation.SourceLayer, relation.TargetLayer })
                 .Where(layer => !string.IsNullOrWhiteSpace(layer))

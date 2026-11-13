@@ -261,6 +261,23 @@ Production and test source roots, classpaths, symbols and relationships must rem
 
 ---
 
+## K0 status — accepted
+
+The isolated Kotlin compiler/worker proof is accepted at commit `7b397819e1c436e2a4ecb684517c7510022059c2`. The Kotlin worker workflow passed on both `ubuntu-latest` and `windows-latest`, including the packaged runtime probe.
+
+Validated in K0:
+
+- Pinned Kotlin 2.4.21 K2 compiler and IR extraction for classes, interfaces, enums, annotation classes, type aliases, data classes, functions, constructors, properties, extension functions/properties, inheritance, implementation, calls, property reads and annotation use.
+- External Java source roots are available to Kotlin compilation; the integration fixture also proves Java compilation can consume Kotlin output when the Java source dependencies are compiled.
+- Stable relationship IDs aggregate repeated call-site provenance without embedding source offsets in identity.
+- Compiler errors remain explicit diagnostics and never produce a completed analysis.
+- Bounded source manifests (16 MiB / 50,000 files), source-root collections, JSONL frames and response size.
+- Process handshake, analysis, bounded-heap execution and graceful shutdown.
+- Private runtime package with pinned dependencies, CycloneDX SBOM, and a packaged-JAR smoke test on Linux and Windows.
+- Automated one-top-level-type-per-Kotlin-file and filename-matching enforcement.
+
+K0 validates the compiler boundary and private worker packaging. It does **not** claim that the .NET host adapter, build-system source ownership, process supervision or cross-language graph identity are integrated; those remain K1–K3 work.
+
 ## 7. Phases and acceptance checkpoints
 
 ### K0 — Baseline and compiler-engine proof

@@ -13,7 +13,7 @@ data class KotlinWorkerRequest(
             protocolVersion = json.get("protocolVersion")?.takeUnless { it.isJsonNull }?.asInt ?: 0,
             requestId = json.get("requestId")?.takeUnless { it.isJsonNull }?.asString,
             operation = json.get("operation")?.takeUnless { it.isJsonNull }?.asString,
-            payload = json.getAsJsonObject("payload") ?: JsonObject()
+            payload = json.get("payload")?.takeIf { it.isJsonObject }?.asJsonObject ?: JsonObject()
         )
     }
 }

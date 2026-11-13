@@ -6,7 +6,7 @@ using Aegis.Shared.Architecture.Models;
 namespace Aegis.Architecture.Analysis.Detectors;
 
 /// <summary>
-/// Projects semantic declaration relationships onto language-level architectural
+/// Projects provider-resolved semantic relationships onto language-level architectural
 /// components. This graph remains distinct from build-module edges.
 /// </summary>
 internal static class SemanticArchitectureComponentDetector

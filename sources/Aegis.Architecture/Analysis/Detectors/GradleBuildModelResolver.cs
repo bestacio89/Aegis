@@ -936,12 +936,21 @@ internal static class GradleBuildModelResolver
                     .Cast<Match>()
                     .Select(value => value.Groups["path"].Value.Trim())
                     .ToArray();
-                var hasSupportedDeclaration = Regex.IsMatch(
-                    line,
-                    @"(?:\bjava\s*\.\s*)?(?:srcDir|srcDirs|setSrcDirs)\s*(?:\(|=|\+=|\s+|$)",
-                    RegexOptions.CultureInvariant);
+                var hasDirectLiteralArguments =
+                    Regex.IsMatch(
+                        line,
+                        @"(?:\bjava\s*\.\s*)?(?:srcDir|srcDirs|setSrcDirs)\s*\(\s*['""]",
+                        RegexOptions.CultureInvariant)
+                    || Regex.IsMatch(
+                        line,
+                        @"(?:\bjava\s*\.\s*)?(?:srcDirs|setSrcDirs)\s*=\s*(?:\[\s*['""]|(?:listOf|setOf)\s*\(\s*['""])",
+                        RegexOptions.CultureInvariant)
+                    || Regex.IsMatch(
+                        line,
+                        @"(?:\bjava\s*\.\s*)?setSrcDirs\s*\(\s*(?:listOf|setOf)\s*\(\s*['""]",
+                        RegexOptions.CultureInvariant);
 
-                if (!hasSupportedDeclaration || quotedValues.Length == 0)
+                if (!hasDirectLiteralArguments || quotedValues.Length == 0)
                 {
                     diagnostics.Add(Diagnostic(
                         "GradleCustomSourceSetNotStaticallyResolved",

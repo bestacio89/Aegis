@@ -7,7 +7,7 @@ namespace Aegis.Architecture.Analysis.Detectors;
 
 /// <summary>
 /// Projects provider-resolved semantic relationships onto language-level architectural
-/// components. This graph remains distinct from build-module edges.
+/// components. Self-edges retain relationships internal to one code container; this graph remains distinct from build-module edges.
 /// </summary>
 internal static class SemanticArchitectureComponentDetector
 {

@@ -4,7 +4,7 @@
 
 - Baseline: `develop` at `26d97c3b3c95e4558cd1ea072fbe1a3d8e2c8104`
 - Working branch: `feat/architectural-dependency-intelligence`
-- Status: ADI-1 evidence traceability validated; ADI-2 declarative mapping and conservative classification implemented, pending exact-head CI
+- Status: ADI-1 evidence traceability and initial ADI-2 classification are green on exact head `ec6d8ae`; ADI-3 logical dependency aggregation is implemented and awaiting exact-head CI
 - Scope: introduce a logical architectural-component projection while preserving the existing build-module and language-container dependency views
 
 ## Executive assessment
@@ -29,7 +29,7 @@ The missing layer is a stable, explainable mapping from language-level code comp
 - `SemanticAnalysisRun` retains the symbols, relationships, diagnostics, capabilities and completion state for each module/language analysis.
 - `ProjectArchitectureContext` already stores semantic runs, build modules, build dependencies, language-level components, semantic component dependencies, integrations and dependency evidence.
 - `ArchitectureComponentContext` is the current language-level code-container projection. It is not a logical architectural component.
-- `ArchitectureComponentDependencyContext` is an aggregate of semantic relationships between language-level code components. It retains relationship counts, resolution counts, relationship kinds and evidence files, but currently does not expose the contributing semantic relationship IDs.
+- `ArchitectureComponentDependencyContext` aggregates semantic relationships between language-level code components and now retains exact contributing semantic relationship references, resolution counts, relationship kinds, evidence files and internal-edge identity.
 - `ArchitectureDependencyContext` represents build/project dependency edges. It must not be conflated with semantic code dependencies.
 - `ArchitectureBoundaryContext` currently represents allowed/forbidden dependency policy by source layer. It is not a logical component identity or membership model.
 - `ArchitectureInferenceTrace` is a generic key/value inference record, not a sufficiently typed component-classification contract.
@@ -44,7 +44,7 @@ Current language semantics are intentionally different:
 - TypeScript/JavaScript generally use modules.
 - Other providers can supply their own container kind.
 
-The detector preserves production and test scopes separately and excludes relationships internal to the same language-level component from the inter-component edge list. Raw semantic relationships remain available in `SemanticAnalysisRun`, so internal relationships can be recovered for drill-down. The current aggregate edge model should be strengthened with explicit contributing relationship identities before it becomes the source for higher-level architectural aggregation.
+The detector preserves production and test scopes separately and now retains relationships internal to the same language-level code container as explicit self-edges. Each edge carries exact semantic run/relationship references. This ensures the higher-level projection can preserve both code-container-internal relationships and dependencies that collapse between different code containers inside one logical architectural component.
 
 ### WPF graph and ledger
 
@@ -130,7 +130,9 @@ The first release can introduce explicit mappings and observed graph aggregation
 - Keep build-module edges as a separate evidence kind/filter. Do not silently merge build declarations, compiler-resolved relationships and runtime integrations into one undifferentiated edge count.
 - Preserve source relationship IDs so every aggregate architectural edge can be traced back to exact semantic evidence.
 - Preserve production and test scope separately.
-- Inter-component edges appear in the top-level architecture graph. Relationships that collapse inside one logical component remain available as internal-coupling metrics and drill-down evidence; they are not deleted.
+- Preserve the original code-container edges under each logical aggregate for drill-down; preserve all source relationship references and counts.
+- Inter-component edges appear as ordinary logical edges. Relationships that collapse inside one logical component remain as explicit internal logical edges with `IsInternal = true`; they are not deleted.
+- Code-container dependencies whose endpoints are unclassified or have ambiguous memberships are excluded from the logical graph with coverage-affecting projection diagnostics.
 - Cycles must be evaluated independently at code-container and logical architecture levels.
 - Unmapped code containers and classification coverage must be visible beside the graph.
 - No semantic relationships, unresolved targets or partial-resolution diagnostics may be fabricated to improve graph completeness.
@@ -168,7 +170,7 @@ The Relationship Ledger should add a relationship-level filter and expose the un
 - Preserve existing counts, relationship kinds, evidence files and production/test separation.
 - Add regression tests proving that every aggregate count can be traced to unique source relationships and duplicate IDs are not double-counted.
 - Acceptance: existing Java, Python and C# component graph tests remain green.
-- Status: implementation committed; all required workflows passed on exact PR head `1af4fc62330dfe6bf5a63aa7f2c18372cd1000c9`.
+- Status: implementation committed; all required workflows passed on exact PR head `ec6d8ae53d8304cdabdb9d5efc437f9fdfc4d26b`.
 
 ### ADI-2 — Architectural classification
 - Add typed logical component and membership contracts.
@@ -178,7 +180,7 @@ The Relationship Ledger should add a relationship-level filter and expose the un
 - Integrated classification into both the full semantic pipeline and the Java compatibility path.
 - Projected classification diagnostics and coverage counts into the architecture report so configuration and inference uncertainty is visible to report consumers.
 - Added tests for serialization compatibility, exact override, longest-prefix selection, segment boundaries, module mapping, ambiguity, conservative inference and configuration loading.
-- Status: implementation committed; exact-head CI validation pending.
+- Status: implementation committed; all required workflows passed on exact PR head `ec6d8ae53d8304cdabdb9d5efc437f9fdfc4d26b`.
 - Implement configuration parsing/validation for explicit mappings.
 - Implement deterministic segment-aware matching, ambiguity diagnostics, provenance and confidence.
 - Add conservative convention inference; unclassified is a valid outcome.
@@ -186,9 +188,13 @@ The Relationship Ledger should add a relationship-level filter and expose the un
 
 ### ADI-3 — Architectural graph projection
 - Aggregate code-container edges into logical component edges.
-- Preserve internal collapsed relationships separately.
+- Preserve original code-container edges under each aggregate, including relationships internal to a single code container.
+- Preserve internal logical relationships as explicit self-edges rather than discarding them.
+- Preserve exact source relationship references, relationship kinds, resolution counts, evidence files and production/test scope.
+- Emit coverage-affecting diagnostics when an edge endpoint is unclassified or has no unique membership.
 - Keep semantic and build evidence categories distinguishable.
-- Preserve production/test separation and exact source relationship IDs.
+- Add cycle analysis independently at code-container and logical architecture levels.
+- Initial aggregation and evidence-preservation implementation committed; exact-head CI validation pending. Cycle analysis remains outstanding.
 - Acceptance: projection is lossless with respect to source evidence; package/module projections remain unchanged; cycles can be calculated at both levels.
 
 ### ADI-4 — WPF projections and drill-down

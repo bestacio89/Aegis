@@ -178,6 +178,23 @@ public sealed class AegisArchitectureAnalyzer
                 AffectsCoverage = diagnostic.AffectsCoverage
             });
         }
+
+        report.Diagnostics.RemoveAll(diagnostic =>
+            string.Equals(diagnostic.Source, "ArchitecturalDependencyProjection", StringComparison.Ordinal));
+
+        foreach (var diagnostic in context.ArchitecturalDependencyProjectionDiagnostics)
+        {
+            report.Diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = diagnostic.Code,
+                Component = nameof(ArchitecturalComponentDependencyProjector),
+                Source = "ArchitecturalDependencyProjection",
+                Severity = "Warning",
+                Message = diagnostic.Message,
+                Target = $"{diagnostic.SourceCodeComponentId} -> {diagnostic.TargetCodeComponentId}",
+                AffectsCoverage = diagnostic.AffectsCoverage
+            });
+        }
     }
 
 
@@ -230,7 +247,22 @@ public sealed class AegisArchitectureAnalyzer
                     unclassifiedCodeContainerCount,
 
                 ["ArchitectureClassificationDiagnosticCount"] =
-                    context.ArchitectureClassificationDiagnostics.Count
+                    context.ArchitectureClassificationDiagnostics.Count,
+
+                ["ArchitecturalComponentDependencyCount"] =
+                    context.ArchitecturalComponentDependencies.Count,
+
+                ["ProductionArchitecturalComponentDependencyCount"] =
+                    context.ProductionArchitecturalComponentDependencies.Count,
+
+                ["TestArchitecturalComponentDependencyCount"] =
+                    context.TestArchitecturalComponentDependencies.Count,
+
+                ["InternalArchitecturalComponentDependencyCount"] =
+                    context.InternalArchitecturalComponentDependencies.Count,
+
+                ["ArchitecturalDependencyProjectionDiagnosticCount"] =
+                    context.ArchitecturalDependencyProjectionDiagnostics.Count
             },
 
             Metadata =

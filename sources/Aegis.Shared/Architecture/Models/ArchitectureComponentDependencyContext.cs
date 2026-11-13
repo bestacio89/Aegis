@@ -22,6 +22,10 @@ public sealed class ArchitectureComponentDependencyContext
 
     public string DependencyType { get; init; } = "SemanticComponentDependency";
 
+    /// <summary>True when both ends refer to the same language-level code container.</summary>
+    public bool IsInternal { get; init; }
+
+
     public int RelationshipCount { get; init; }
 
     /// <summary>Relationships resolved completely by the semantic provider.</summary>

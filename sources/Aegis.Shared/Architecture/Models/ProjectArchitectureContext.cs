@@ -191,6 +191,35 @@ public sealed class ProjectArchitectureContext
     public List<ArchitecturalComponentMembership> ArchitecturalComponentMemberships { get; set; } = [];
 
     /// <summary>
+    /// Semantic dependencies projected from language-level code containers onto
+    /// logical architectural components. These are not build-module dependencies.
+    /// </summary>
+    public List<ArchitecturalComponentDependencyContext> ArchitecturalComponentDependencies { get; set; } = [];
+
+    /// <summary>
+    /// Diagnostics for semantic dependencies that could not be assigned to both
+    /// ends of the logical architecture graph.
+    /// </summary>
+    public List<ArchitecturalDependencyProjectionDiagnostic> ArchitecturalDependencyProjectionDiagnostics { get; set; } = [];
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitecturalComponentDependencyContext> ProductionArchitecturalComponentDependencies =>
+        ArchitecturalComponentDependencies
+            .Where(dependency => dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitecturalComponentDependencyContext> TestArchitecturalComponentDependencies =>
+        ArchitecturalComponentDependencies
+            .Where(dependency => dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ArchitecturalComponentDependencyContext> InternalArchitecturalComponentDependencies =>
+        ArchitecturalComponentDependencies.Where(dependency => dependency.IsInternal).ToArray();
+
+
+    /// <summary>
     /// Diagnostics describing missing, ambiguous, stale, or uncertain classifications.
     /// </summary>
     public List<ArchitectureClassificationDiagnostic> ArchitectureClassificationDiagnostics { get; set; } = [];
@@ -450,6 +479,11 @@ public sealed class ProjectArchitectureContext
             ArchitecturalComponentCount = ArchitecturalComponents.Count,
             ArchitecturalComponentMembershipCount = ArchitecturalComponentMemberships.Count,
             ArchitectureClassificationDiagnosticCount = ArchitectureClassificationDiagnostics.Count,
+            ArchitecturalComponentDependencyCount = ArchitecturalComponentDependencies.Count,
+            ProductionArchitecturalComponentDependencyCount = ProductionArchitecturalComponentDependencies.Count,
+            TestArchitecturalComponentDependencyCount = TestArchitecturalComponentDependencies.Count,
+            InternalArchitecturalComponentDependencyCount = InternalArchitecturalComponentDependencies.Count,
+            ArchitecturalDependencyProjectionDiagnosticCount = ArchitecturalDependencyProjectionDiagnostics.Count,
             DependencyEvidenceCount = DependencyEvidence.Count,
             FrameworkEvidenceCount = FrameworkEvidence.Count,
             SemanticAnalysisRunCount = SemanticAnalysisRuns.Count,

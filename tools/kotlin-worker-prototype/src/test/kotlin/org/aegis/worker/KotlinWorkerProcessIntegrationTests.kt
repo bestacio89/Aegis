@@ -75,7 +75,7 @@ class KotlinWorkerProcessIntegrationTests {
             assertEquals("ok", analysis.get("status").asString)
 
             val result = analysis.getAsJsonObject("result")
-            assertEquals(2, result.get("status").asInt)
+            assertEquals(2, result.get("status").asInt, "Kotlin worker diagnostics: ${result.getAsJsonArray("diagnostics")}")
             assertTrue(result.getAsJsonArray("symbols").any {
                 it.asJsonObject.get("qualifiedName").asString == "sample.WorkerProbe"
             })

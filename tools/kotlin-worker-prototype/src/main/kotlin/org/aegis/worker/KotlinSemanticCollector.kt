@@ -475,7 +475,9 @@ class KotlinSemanticCollector(
     ): String {
         val owner = containingSymbolId ?: parentSymbolId(declaration) ?: projectPath
         val offset = declaration.startOffset.takeIf { it >= 0 }?.toString() ?: "unknown"
-        return "$owner::${declaration.name.asString()}@$offset"
+        val declarationName = (declaration as? IrDeclarationWithName)?.name?.asString()
+            ?: declaration.javaClass.simpleName
+        return "$owner::$declarationName@$offset"
     }
 
     private fun parentSymbolId(declaration: IrDeclaration): String? = when (val parent = declaration.parent) {

@@ -542,8 +542,11 @@ class KotlinSemanticCollector(
         return "kotlin:function:$name($signature)"
     }
 
-    private fun typeIdentity(type: org.jetbrains.kotlin.ir.types.IrType): String =
-        type.toString()
+    private fun typeIdentity(type: org.jetbrains.kotlin.ir.types.IrType): String {
+        val rendered = type.toString()
+        val className = type.classFqName?.asString()
+        return if (className != null && rendered == className) className else rendered
+    }
 
     private fun isPublic(declaration: IrDeclaration): Boolean =
         (declaration as? IrDeclarationWithVisibility)?.visibility?.name == "public"

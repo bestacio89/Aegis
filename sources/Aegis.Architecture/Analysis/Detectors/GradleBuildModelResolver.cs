@@ -891,15 +891,22 @@ internal static class GradleBuildModelResolver
                 }
             }
 
-            if (directories.Count == 0)
+            var kotlinDirectories = ParseExplicitKotlinSourceDirectories(
+                body, name, modulePath, analysisRoot, buildFile, diagnostics);
+            if (directories.Count == 0 && kotlinDirectories.Count == 0)
                 continue;
 
             var orderedDirectories = directories.OrderBy(directory => directory, PathComparer).ToList();
+            var orderedKotlinDirectories = kotlinDirectories
+                .OrderBy(directory => directory, PathComparer)
+                .ToList();
             result.Add(new GradleBuildModel.SourceSet(
                 name,
                 orderedDirectories,
                 IsTestSourceSet(name),
-                orderedDirectories));
+                orderedDirectories,
+                orderedKotlinDirectories,
+                orderedKotlinDirectories));
         }
 
         var createDeclarations = Regex.Matches(
@@ -914,6 +921,546 @@ internal static class GradleBuildModelResolver
         }
 
         return result;
+    }
+
+    private static List<string> ParseExplicitKotlinSourceDirectories(
+        string sourceSetBody,
+        string sourceSetName,
+        string modulePath,
+        string analysisRoot,
+        string buildFile,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        var statements = new List<string>();
+        var kotlinBlockMatch = Regex.Match(sourceSetBody, @"\\bkotlin\\s*\\{", RegexOptions.CultureInvariant);
+        if (kotlinBlockMatch.Success)
+        {
+            var opening = sourceSetBody.IndexOf('{', kotlinBlockMatch.Index);
+            var kotlinBody = ExtractBlockAt(sourceSetBody, opening);
+            if (kotlinBody is not null)
+                statements.AddRange(kotlinBody.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        statements.AddRange(sourceSetBody.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => Regex.IsMatch(
+                line, @"\\bkotlin\\s*\\.\\s*(?:srcDir|srcDirs|setSrcDirs)\\b",
+                RegexOptions.CultureInvariant)));
+
+        var directories = new HashSet<string>(PathComparer);
+        foreach (var line in statements)
+        {
+            var hasSourceDirectoryDeclaration = Regex.IsMatch(
+                line, @"(?:\\bkotlin\\s*\\.\\s*)?(?:srcDir|srcDirs|setSrcDirs)\\b",
+                RegexOptions.CultureInvariant);
+            if (!hasSourceDirectoryDeclaration)
+                continue;
+
+            var quotedValues = Regex.Matches(line, @"['""](?<path>[^'""]*)['""]")
+                .Cast<Match>()
+                .Select(value => value.Groups["path"].Value.Trim())
+                .ToArray();
+            var hasSupportedDeclaration = Regex.IsMatch(
+                line,
+                @"(?:\\bkotlin\\s*\\.\\s*)?(?:srcDir|srcDirs|setSrcDirs)\\s*(?:\\(|=|\\+=|\\s+|$)",
+                RegexOptions.CultureInvariant);
+
+            if (!hasSupportedDeclaration || quotedValues.Length == 0)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleCustomSourceSetNotStaticallyResolved",
+                    "Kotlin source directories for source set '" + sourceSetName
+                    + "' use a dynamic or unsupported declaration and were not inferred.",
+                    buildFile));
+                continue;
+            }
+
+            foreach (var value in quotedValues)
+            {
+                if (value.Length == 0 || value.Contains('
+        IReadOnlyCollection<GradleBuildModel.SourceSet> conventional,
+        IReadOnlyCollection<GradleBuildModel.SourceSet> explicitSourceSets)
+    {
+        var result = conventional.ToDictionary(
+            sourceSet => sourceSet.Name,
+            sourceSet => sourceSet,
+            StringComparer.Ordinal);
+
+        foreach (var explicitSourceSet in explicitSourceSets)
+        {
+            if (result.TryGetValue(explicitSourceSet.Name, out var existing))
+            {
+                var directories = existing.JavaSourceDirectories
+                    .Concat(explicitSourceSet.JavaSourceDirectories)
+                    .Distinct(PathComparer)
+                    .ToList();
+                result[explicitSourceSet.Name] = new GradleBuildModel.SourceSet(
+                    existing.Name,
+                    directories,
+                    existing.IsTest || explicitSourceSet.IsTest,
+                    explicitSourceSet.ExplicitJavaSourceDirectories);
+            }
+            else
+            {
+                result[explicitSourceSet.Name] = explicitSourceSet;
+            }
+        }
+
+        return result.Values.OrderBy(sourceSet => sourceSet.Name, StringComparer.Ordinal).ToList();
+    }
+
+    private static bool IsTestSourceSet(string name) =>
+        name.Equals("test", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("test", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith("Test", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("testFixtures", StringComparison.OrdinalIgnoreCase);
+
+    private static string? ExtractBlockAt(string source, int opening)
+    {
+        if (opening < 0 || opening >= source.Length || source[opening] != '{')
+            return null;
+
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+        var quote = '\0';
+        for (var index = opening; index < source.Length; index++)
+        {
+            var current = source[index];
+            if (inString)
+            {
+                if (escaped)
+                    escaped = false;
+                else if (current == '\\')
+                    escaped = true;
+                else if (current == quote)
+                    inString = false;
+                continue;
+            }
+
+            if (current is '\'' or '"')
+            {
+                inString = true;
+                quote = current;
+            }
+            else if (current == '{')
+            {
+                depth++;
+            }
+            else if (current == '}' && --depth == 0)
+            {
+                return source[(opening + 1)..index];
+            }
+        }
+
+        return null;
+    }
+
+    private static List<ProjectSourceRoot> DiscoverSourceRoots(
+        string modulePath,
+        IReadOnlyCollection<string> files,
+        IReadOnlyCollection<GradleBuildModel.SourceSet> sourceSets,
+        string buildFile,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        var roots = new Dictionary<string, ProjectSourceRoot>(PathComparer);
+
+        foreach (var sourceSet in sourceSets)
+        {
+            var ownership = sourceSet.IsTest
+                ? ProjectSourceRootOwnership.Test
+                : ProjectSourceRootOwnership.Production;
+            foreach (var directory in sourceSet.JavaSourceDirectories)
+            {
+                var fullDirectory = Path.GetFullPath(directory);
+                var isExplicit = sourceSet.ExplicitJavaSourceDirectories?.Any(explicitDirectory =>
+                    PathsEqual(explicitDirectory, fullDirectory)) == true;
+                roots[fullDirectory] = new ProjectSourceRoot
+                {
+                    Directory = fullDirectory,
+                    Ownership = ownership,
+                    Origin = isExplicit
+                        ? ProjectSourceRootOrigin.Explicit
+                        : ProjectSourceRootOrigin.Conventional,
+                    IsGenerated = false,
+                    ContainsJavaSources = files.Any(file =>
+                        Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
+                        && IsSameOrDescendantPath(file, fullDirectory)),
+                    EvidenceFile = buildFile
+                };
+            }
+        }
+
+        var generatedSourceFiles = DiscoverGeneratedJavaFiles(modulePath, diagnostics);
+        foreach (var sourceFile in generatedSourceFiles)
+        {
+            var relative = Path.GetRelativePath(modulePath, sourceFile)
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var buildIndex = 0;
+            if (buildIndex + 2 >= relative.Length
+                || !relative[buildIndex + 1].Equals("generated", StringComparison.OrdinalIgnoreCase)
+                || !relative[buildIndex + 2].Equals("sources", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var sourceSetIndex = -1;
+            // Gradle's generated-source layout places the source-set name
+            // immediately after the generator/language segments. Do not scan
+            // package names: a package called "main" is not source-set evidence.
+            foreach (var candidateIndex in new[] { buildIndex + 5, buildIndex + 4 })
+            {
+                if (candidateIndex >= relative.Length)
+                    continue;
+
+                if (relative[candidateIndex].Equals("main", StringComparison.OrdinalIgnoreCase)
+                    || relative[candidateIndex].Equals("test", StringComparison.OrdinalIgnoreCase)
+                    || relative[candidateIndex].Equals("integrationTest", StringComparison.OrdinalIgnoreCase)
+                    || relative[candidateIndex].Equals("testFixtures", StringComparison.OrdinalIgnoreCase))
+                {
+                    sourceSetIndex = candidateIndex;
+                    break;
+                }
+            }
+
+            ProjectSourceRootOwnership ownership;
+            int rootLength;
+            if (sourceSetIndex > buildIndex + 2)
+            {
+                ownership = relative[sourceSetIndex].Equals("main", StringComparison.OrdinalIgnoreCase)
+                    ? ProjectSourceRootOwnership.Production
+                    : ProjectSourceRootOwnership.Test;
+                rootLength = sourceSetIndex + 1;
+            }
+            else
+            {
+                // A generated directory without an identifiable Gradle source set
+                // remains visible but is not assigned to production or test.
+                ownership = ProjectSourceRootOwnership.Unknown;
+                rootLength = Math.Min(relative.Length, buildIndex + 4);
+                diagnostics.Add(Diagnostic(
+                    "GradleGeneratedSourceOwnershipUnknown",
+                    $"Generated Java source '{sourceFile}' is under a generated-sources directory without an identifiable source-set owner.",
+                    sourceFile));
+            }
+
+            var directory = Path.GetFullPath(Path.Combine(
+                modulePath,
+                Path.Combine(relative.Take(rootLength).ToArray())));
+            roots[directory] = new ProjectSourceRoot
+            {
+                Directory = directory,
+                Ownership = ownership,
+                Origin = ProjectSourceRootOrigin.GeneratedConvention,
+                IsGenerated = true,
+                ContainsJavaSources = true,
+                EvidenceFile = buildFile
+            };
+        }
+
+        return roots.Values
+            .OrderBy(root => root.Directory, PathComparer)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Inspects only Gradle's generated Java source subtree. These files remain
+    /// excluded from repository-wide governed-file analysis and file counts.
+    /// </summary>
+    private static IReadOnlyCollection<string> DiscoverGeneratedJavaFiles(
+        string modulePath,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        var generatedSourcesDirectory = Path.GetFullPath(Path.Combine(
+            modulePath, "build", "generated", "sources"));
+        try
+        {
+            if ((File.GetAttributes(generatedSourcesDirectory) & FileAttributes.ReparsePoint) != 0)
+                return [];
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return [];
+        }
+        catch (FileNotFoundException)
+        {
+            return [];
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleGeneratedSourceDiscoveryFailed",
+                $"Generated Java source discovery could not inspect '{generatedSourcesDirectory}': {exception.Message}",
+                generatedSourcesDirectory));
+            return [];
+        }
+
+        var discoveredFiles = new List<string>();
+        var pendingDirectories = new Stack<string>();
+        pendingDirectories.Push(generatedSourcesDirectory);
+
+        while (pendingDirectories.Count > 0)
+        {
+            var directory = pendingDirectories.Pop();
+            try
+            {
+                if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                    continue;
+
+                foreach (var file in Directory.EnumerateFiles(
+                             directory, "*", SearchOption.TopDirectoryOnly))
+                {
+                    if (!Path.GetExtension(file).Equals(
+                            ".java", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var fullPath = Path.GetFullPath(file);
+                    if (!IsSameOrDescendantPath(fullPath, generatedSourcesDirectory))
+                        continue;
+
+                    if ((File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) == 0)
+                        discoveredFiles.Add(fullPath);
+                }
+
+                foreach (var child in Directory.EnumerateDirectories(
+                             directory, "*", SearchOption.TopDirectoryOnly))
+                {
+                    if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0)
+                        pendingDirectories.Push(child);
+                }
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleGeneratedSourceDiscoveryFailed",
+                    $"Generated Java source discovery could not inspect '{directory}': {exception.Message}",
+                    directory));
+            }
+        }
+
+        return discoveredFiles;
+    }
+
+    private static List<GradleBuildModel.SourceSet> DiscoverConventionalSourceSets(
+        string modulePath,
+        IReadOnlyCollection<string> files)
+    {
+        var result = new List<GradleBuildModel.SourceSet>();
+        foreach (var sourceSet in new[] { "main", "test", "integrationTest", "testFixtures" })
+        {
+            var directory = Path.Combine(modulePath, "src", sourceSet, "java");
+            var exists = files.Any(file =>
+                IsSameOrDescendantPath(file, directory));
+            if (exists)
+                result.Add(new GradleBuildModel.SourceSet(sourceSet, [directory], sourceSet != "main"));
+        }
+
+        return result;
+    }
+
+    private static string? ExtractBlock(string source, string name)
+    {
+        var match = Regex.Match(source, $@"\b{Regex.Escape(name)}\s*\{{");
+        if (!match.Success)
+            return null;
+
+        var opening = source.IndexOf('{', match.Index);
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+        var quote = '\0';
+        for (var index = opening; index < source.Length; index++)
+        {
+            var current = source[index];
+            if (inString)
+            {
+                if (escaped) escaped = false;
+                else if (current == '\\') escaped = true;
+                else if (current == quote) inString = false;
+                continue;
+            }
+
+            if (current is '\'' or '"')
+            {
+                inString = true;
+                quote = current;
+            }
+            else if (current == '{') depth++;
+            else if (current == '}' && --depth == 0)
+                return source[(opening + 1)..index];
+        }
+
+        return null;
+    }
+
+    private static string StripComments(string source)
+    {
+        var characters = source.ToCharArray();
+        var inString = false;
+        var escaped = false;
+        var quote = '\0';
+        var lineComment = false;
+        var blockComment = false;
+
+        for (var index = 0; index < characters.Length; index++)
+        {
+            var current = characters[index];
+            var next = index + 1 < characters.Length ? characters[index + 1] : '\0';
+
+            if (lineComment)
+            {
+                if (current == '\n')
+                    lineComment = false;
+                else if (current is not '\r')
+                    characters[index] = ' ';
+                continue;
+            }
+
+            if (blockComment)
+            {
+                if (current == '*' && next == '/')
+                {
+                    characters[index] = ' ';
+                    characters[index + 1] = ' ';
+                    index++;
+                    blockComment = false;
+                }
+                else if (current is not '\n' and not '\r')
+                {
+                    characters[index] = ' ';
+                }
+
+                continue;
+            }
+
+            if (inString)
+            {
+                if (escaped)
+                    escaped = false;
+                else if (current == '\\')
+                    escaped = true;
+                else if (current == quote)
+                    inString = false;
+                continue;
+            }
+
+            if (current is '\'' or '"')
+            {
+                inString = true;
+                quote = current;
+            }
+            else if (current == '/' && next == '/')
+            {
+                characters[index] = ' ';
+                characters[index + 1] = ' ';
+                index++;
+                lineComment = true;
+            }
+            else if (current == '/' && next == '*')
+            {
+                characters[index] = ' ';
+                characters[index + 1] = ' ';
+                index++;
+                blockComment = true;
+            }
+        }
+
+        return new string(characters);
+    }
+
+    private static bool IsBuildFile(string path)
+    {
+        var name = Path.GetFileName(path);
+        return name.Equals("build.gradle", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("build.gradle.kts", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSameOrDescendantPath(string path, string root)
+    {
+        var relative = Path.GetRelativePath(root, path);
+        return !Path.IsPathRooted(relative)
+            && relative != ".."
+            && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+            && !relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
+    }
+
+    private static bool PathsEqual(string left, string right) =>
+        PathComparer.Equals(Path.GetFullPath(left), Path.GetFullPath(right));
+
+    private static string NormalizeAlias(string alias) =>
+        alias.Replace('-', '.')
+            .Replace('_', '.')
+            .Trim('.');
+
+    private static GradleBuildModel Incomplete(string buildFile, string code, string message) =>
+        new()
+        {
+            BuildFile = buildFile,
+            Dialect = Path.GetFileName(buildFile).EndsWith(".kts", StringComparison.OrdinalIgnoreCase)
+                ? "Kotlin" : "Groovy",
+            Diagnostics = [Diagnostic(code, message, buildFile)],
+            IsComplete = false
+        };
+
+    private static AnalysisDiagnostic Diagnostic(string code, string message, string path) =>
+        new()
+        {
+            Code = code,
+            Component = nameof(GradleBuildModelResolver),
+            Message = message,
+            Target = path,
+            AffectsCoverage = true
+        };
+
+    private sealed class VersionCatalog
+    {
+        public Dictionary<string, Library> Libraries { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, Plugin> Plugins { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, List<string>> Bundles { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public sealed record Library(string Group, string Artifact, string? Version);
+        public sealed record Plugin(string Id, string? Version);
+    }
+}
+) || value.Contains('{'))
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleCustomSourceSetNotStaticallyResolved",
+                        "Kotlin source directory '" + value + "' for source set '" + sourceSetName
+                        + "' is dynamic or empty.",
+                        buildFile));
+                    continue;
+                }
+
+                string directory;
+                try
+                {
+                    directory = Path.GetFullPath(Path.Combine(modulePath, value));
+                }
+                catch (Exception exception) when (
+                    exception is ArgumentException or NotSupportedException or PathTooLongException)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleCustomSourceSetPathInvalid",
+                        "Kotlin source directory '" + value + "' for source set '" + sourceSetName
+                        + "' is invalid: " + exception.Message,
+                        buildFile));
+                    continue;
+                }
+
+                if (!IsSameOrDescendantPath(directory, analysisRoot))
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleCustomSourceSetOutsideAnalysisRoot",
+                        "Kotlin source directory '" + value + "' for source set '" + sourceSetName
+                        + "' resolves outside the analyzed repository and is not attached.",
+                        buildFile));
+                    continue;
+                }
+
+                directories.Add(directory);
+            }
+        }
+
+        return directories.ToList();
     }
 
     private static List<GradleBuildModel.SourceSet> MergeSourceSets(

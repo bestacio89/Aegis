@@ -378,8 +378,11 @@ class KotlinSemanticCollector(
         override fun visitCall(expression: IrCall) {
             val sourceId = owners.lastOrNull()
             val target = expression.symbol.owner
-            val targetProperty = (target as? IrSimpleFunction)?.correspondingPropertySymbol?.owner
-            val propertyId = propertyAccessors[expression.symbol] ?: targetProperty?.let(::propertyId)
+            val targetProperty = target.correspondingPropertySymbol?.owner
+            val propertyId = propertyAccessors[expression.symbol]
+                ?: targetProperty?.takeIf {
+                    target.origin != IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
+                }?.let(::propertyId)
             val targetId = propertyId ?: functionId(target)
             if (propertyId != null) {
                 targetProperty?.let { addExternalPropertyIfNeeded(propertyId, it) }
@@ -434,11 +437,13 @@ class KotlinSemanticCollector(
         override fun visitFunctionReference(expression: IrFunctionReference) {
             val sourceId = owners.lastOrNull()
             val target = expression.symbol.owner
-            val targetProperty = (target as? IrSimpleFunction)?.correspondingPropertySymbol?.owner
-            val propertyId = targetProperty?.let(::propertyId)
+            val targetProperty = target.correspondingPropertySymbol?.owner
+            val propertyId = targetProperty?.takeIf {
+                target.origin != IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
+            }?.let(::propertyId)
             val targetId = propertyId ?: functionId(target)
             if (propertyId != null) {
-                addExternalPropertyIfNeeded(propertyId, targetProperty!!)
+                addExternalPropertyIfNeeded(propertyId, targetProperty)
             } else {
                 addExternalFunctionIfNeeded(targetId, target)
             }
@@ -451,8 +456,7 @@ class KotlinSemanticCollector(
         override fun visitPropertyReference(expression: IrPropertyReference) {
             val sourceId = owners.lastOrNull()
             val target = expression.symbol.owner
-            val targetId = propertyId(target)
-            addExternalPropertyIfNeeded(targetId, target)
+            val targetId = propertyReferenceTargetId(target)
             if (sourceId != null && sourceId != targetId) {
                 addRelationship(sourceId, targetId, 5, expression.startOffset, currentFile)
             }
@@ -741,6 +745,26 @@ class KotlinSemanticCollector(
         symbol.addProperty("declarationKind", "EnumEntry")
         symbol.add("provenance", JsonArray())
         symbols[id] = symbol
+    }
+
+    private fun propertyReferenceTargetId(declaration: IrProperty): String {
+        if (declaration.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) {
+            declaration.backingField?.let { field ->
+                val fieldId = fieldId(field)
+                addExternalFieldIfNeeded(fieldId, field)
+                return fieldId
+            }
+
+            declaration.getter?.let { getter ->
+                val getterId = functionId(getter)
+                addExternalFunctionIfNeeded(getterId, getter)
+                return getterId
+            }
+        }
+
+        val id = propertyId(declaration)
+        addExternalPropertyIfNeeded(id, declaration)
+        return id
     }
 
     private fun fieldTargetId(declaration: IrField): String {

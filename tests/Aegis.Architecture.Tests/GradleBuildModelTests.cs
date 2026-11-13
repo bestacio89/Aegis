@@ -535,6 +535,47 @@ public sealed class GradleBuildModelTests
     }
 
     [Fact]
+    public void Detect_does_not_infer_kotlin_source_directories_from_wrapped_path_expressions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleDynamicKotlinSourceSet_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"), "rootProject.name = \"dynamic-kotlin-source-set\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    kotlin("jvm") version "2.4.21"
+                }
+                sourceSets {
+                    create("generatedMain") {
+                        kotlin.srcDir(layout.projectDirectory.dir("src/generated/kotlin"))
+                    }
+                }
+                """);
+
+            var generatedRoot = Path.Combine(root, "src", "generated", "kotlin");
+            Directory.CreateDirectory(Path.Combine(generatedRoot, "sample"));
+            File.WriteAllText(Path.Combine(generatedRoot, "sample", "Generated.kt"),
+                "package sample\nclass Generated");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.False(model.IsComplete);
+            Assert.DoesNotContain(model.SourceSets, sourceSet => sourceSet.Name == "generatedMain");
+            Assert.DoesNotContain(model.SourceRoots, sourceRoot => sourceRoot.Directory == generatedRoot);
+            Assert.Contains(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleCustomSourceSetNotStaticallyResolved"
+                && diagnostic.Message.Contains("Kotlin source directories", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_does_not_infer_dynamic_custom_source_set_directories()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisGradleDynamicSourceSet_{Guid.NewGuid():N}");

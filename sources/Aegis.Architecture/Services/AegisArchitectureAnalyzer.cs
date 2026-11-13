@@ -89,6 +89,11 @@ public sealed class AegisArchitectureAnalyzer
         {
             await _semanticAnalysisOrchestrator.AnalyzeAsync(context, token)
                 .ConfigureAwait(false);
+
+            // The Java orchestrator supplies raw semantic evidence. Keep
+            // architectural component projection in the shared provider-neutral
+            // pipeline even when the compatibility fallback is used.
+            SemanticAnalysisPipeline.ProjectArchitectureComponents(context);
         }
 
         var report =

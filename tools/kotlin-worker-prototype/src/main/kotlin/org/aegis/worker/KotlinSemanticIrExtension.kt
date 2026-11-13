@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.declarations.IrParameterKind
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
@@ -120,6 +121,10 @@ private class KotlinSemanticCollector(
         }
 
         override fun visitSimpleFunction(declaration: IrSimpleFunction) {
+            if (propertyAccessors.containsKey(declaration.symbol)) {
+                declaration.acceptChildrenVoid(this)
+                return
+            }
             val id = functionId(declaration)
             addSymbol(
                 id = id,
@@ -221,6 +226,10 @@ private class KotlinSemanticCollector(
         }
 
         override fun visitSimpleFunction(declaration: IrSimpleFunction) {
+            if (propertyAccessors.containsKey(declaration.symbol)) {
+                declaration.acceptChildrenVoid(this)
+                return
+            }
             owners.addLast(functionId(declaration))
             declaration.acceptChildrenVoid(this)
             owners.removeLast()
@@ -271,7 +280,10 @@ private class KotlinSemanticCollector(
         symbol.addProperty("qualifiedName", declaration.fqNameWhenAvailable?.asString() ?: id)
         symbol.addProperty("containerName", declaration.parent.toString())
         symbol.addProperty("containerKind", "Package")
-        symbol.addProperty("language", "Kotlin")
+        symbol.addProperty(
+            "language",
+            if (declaration.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) "Java" else "Kotlin"
+        )
         symbol.addProperty("projectPath", projectPath)
         symbol.add("filePath", com.google.gson.JsonNull.INSTANCE)
         symbol.add("startLine", com.google.gson.JsonNull.INSTANCE)
@@ -336,7 +348,7 @@ private class KotlinSemanticCollector(
         if (file == null || offset < 0) return result
         val item = JsonObject()
         item.addProperty("analyzerId", "kotlin-k2-ir")
-        item.addProperty("source", "CompilerIR")
+        item.addProperty("source", "Compiler")
         item.addProperty("filePath", file.fileEntry.name)
         item.addProperty("startLine", file.fileEntry.getLineNumber(offset) + 1)
         item.addProperty("startColumn", file.fileEntry.getColumnNumber(offset) + 1)

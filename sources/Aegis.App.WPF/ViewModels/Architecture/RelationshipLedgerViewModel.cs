@@ -88,7 +88,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             ? "No architecture context available"
             : context.ProjectName;
 
-        var componentsById = context?.ArchitectureComponents
+        var codeContainersById = context?.ArchitectureComponents
             .Where(component => !string.IsNullOrWhiteSpace(component.Id))
             .GroupBy(component => component.Id, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal)
@@ -118,14 +118,14 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
                 File = dependency.File
             }) ?? [];
 
-        var componentRelationships = context?.ArchitectureComponentDependencies
+        var codeContainerRelationships = context?.ArchitectureComponentDependencies
             .Where(dependency =>
                 !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
                 && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
             .Select(dependency =>
             {
-                componentsById.TryGetValue(dependency.SourceComponentId, out var source);
-                componentsById.TryGetValue(dependency.TargetComponentId, out var target);
+                codeContainersById.TryGetValue(dependency.SourceComponentId, out var source);
+                codeContainersById.TryGetValue(dependency.TargetComponentId, out var target);
                 var relationshipKinds = dependency.RelationshipKinds
                     .Select(kind => kind.ToString())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -160,8 +160,8 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
                 && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
             .Select(dependency =>
             {
-                componentsById.TryGetValue(dependency.SourceComponentId, out var source);
-                componentsById.TryGetValue(dependency.TargetComponentId, out var target);
+                codeContainersById.TryGetValue(dependency.SourceComponentId, out var source);
+                codeContainersById.TryGetValue(dependency.TargetComponentId, out var target);
                 return new ArchitectureRelationshipRecordViewModel
                 {
                     RelationshipLevel = "Code container (internal)",
@@ -224,7 +224,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             }) ?? [];
 
         var dependencies = buildRelationships
-            .Concat(componentRelationships)
+            .Concat(codeContainerRelationships)
             .Concat(internalCodeContainerRelationships)
             .Concat(logicalRelationships)
             .OrderBy(dependency => dependency.RelationshipLevel, StringComparer.OrdinalIgnoreCase)

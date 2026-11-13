@@ -40,3 +40,9 @@ jobs:
 
       - name: Build WPF application
         run: dotnet build sources/Aegis.App.WPF/Aegis.Wpf.csproj --configuration Release --no-restore
+
+      - name: Restore WPF ViewModel tests
+        run: dotnet restore tests/Aegis.Wpf.Tests/Aegis.Wpf.Tests.csproj
+
+      - name: Run WPF ViewModel tests
+        run: dotnet test tests/Aegis.Wpf.Tests/Aegis.Wpf.Tests.csproj --configuration Release --no-restore

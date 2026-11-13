@@ -27,4 +27,16 @@ public sealed class ArchitectureRelationshipRecordViewModel
     public string File { get; init; } = string.Empty;
 
     public int RelationshipCount { get; init; } = 1;
+
+    public int ResolvedRelationshipCount { get; init; }
+
+    public int PartiallyResolvedRelationshipCount { get; init; }
+
+    public int UnreferencedRelationshipCount { get; init; }
+
+    public bool IsInternal { get; init; }
+
+    public string EvidenceReferences { get; init; } = string.Empty;
+
+    public string CodeContainerContributions { get; init; } = string.Empty;
 }

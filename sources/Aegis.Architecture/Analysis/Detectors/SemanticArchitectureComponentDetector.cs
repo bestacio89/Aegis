@@ -7,7 +7,7 @@ namespace Aegis.Architecture.Analysis.Detectors;
 
 /// <summary>
 /// Projects provider-resolved semantic relationships onto language-level architectural
-/// components. This graph remains distinct from build-module edges.
+/// components. Self-edges retain relationships internal to one code container; this graph remains distinct from build-module edges.
 /// </summary>
 internal static class SemanticArchitectureComponentDetector
 {
@@ -38,6 +38,7 @@ internal static class SemanticArchitectureComponentDetector
 
         context.ArchitectureComponentDependencies.RemoveAll(dependency =>
             dependency.DependencyType.Equals(DependencyType, StringComparison.OrdinalIgnoreCase));
+        context.ArchitectureComponentInternalDependencies.Clear();
 
         // Semantic runs are already scoped to a build module. Their ProjectPath
         // is the authoritative owner identity; the discovered module inventory
@@ -194,8 +195,7 @@ internal static class SemanticArchitectureComponentDetector
             {
                 if (!runSymbols.TryGetValue(relationship.SourceSymbolId, out var sourceSymbol)
                     || !symbolComponents.TryGetValue(relationship.SourceSymbolId, out var sourceComponent)
-                    || !symbolComponents.TryGetValue(relationship.TargetSymbolId!, out var targetComponent)
-                    || string.Equals(sourceComponent.ComponentId, targetComponent.ComponentId, StringComparison.Ordinal))
+                    || !symbolComponents.TryGetValue(relationship.TargetSymbolId!, out var targetComponent))
                 {
                     continue;
                 }
@@ -217,15 +217,21 @@ internal static class SemanticArchitectureComponentDetector
                     edges.Add(key, accumulator);
                 }
 
-                accumulator.Add(relationship);
+                accumulator.Add(run.RunId, relationship);
             }
         }
 
+        var projectedEdges = edges
+            .Select(pair => pair.Value.ToContext(pair.Key.Scope))
+            .OrderBy(edge => edge.SourceComponentName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(edge => edge.TargetComponentName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(edge => edge.Scope, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         context.ArchitectureComponentDependencies.AddRange(
-            edges.Select(pair => pair.Value.ToContext(pair.Key.Scope))
-                .OrderBy(edge => edge.SourceComponentName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(edge => edge.TargetComponentName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(edge => edge.Scope, StringComparer.OrdinalIgnoreCase));
+            projectedEdges.Where(edge => !edge.IsInternal));
+        context.ArchitectureComponentInternalDependencies.AddRange(
+            projectedEdges.Where(edge => edge.IsInternal));
 
         var sourceSymbolCount = semanticRuns.Sum(run => run.Symbols.Count(IsProjectSourceSymbol));
         var componentSymbolCount = semanticRuns.Sum(run => run.Symbols.Count(symbol =>
@@ -328,6 +334,8 @@ internal static class SemanticArchitectureComponentDetector
         private readonly SymbolComponent _source;
         private readonly SymbolComponent _target;
         private readonly HashSet<string> _relationshipIds = new(StringComparer.Ordinal);
+        private readonly List<SemanticRelationshipReference> _relationshipReferences = [];
+        private readonly HashSet<SemanticRelationship> _unreferencedRelationships = [];
         private readonly HashSet<SemanticRelationshipKind> _relationshipKinds = [];
         private readonly HashSet<string> _evidenceFiles = new(PathComparer);
         private int _resolvedRelationshipCount;
@@ -339,10 +347,25 @@ internal static class SemanticArchitectureComponentDetector
             _target = target;
         }
 
-        public void Add(SemanticRelationship relationship)
+        public void Add(string runId, SemanticRelationship relationship)
         {
-            if (!_relationshipIds.Add(relationship.Id))
+            if (string.IsNullOrWhiteSpace(relationship.Id))
+            {
+                if (!_unreferencedRelationships.Add(relationship))
+                    return;
+            }
+            else if (!_relationshipIds.Add(relationship.Id))
+            {
                 return;
+            }
+            else
+            {
+                _relationshipReferences.Add(new SemanticRelationshipReference
+                {
+                    RunId = runId,
+                    RelationshipId = relationship.Id
+                });
+            }
 
             _relationshipKinds.Add(relationship.Kind);
             if (relationship.ResolutionStatus == SemanticResolutionStatus.Resolved)
@@ -366,9 +389,17 @@ internal static class SemanticArchitectureComponentDetector
             TargetComponentName = GetComponentLabel(_target),
             Scope = scope,
             DependencyType = DependencyType,
-            RelationshipCount = _relationshipIds.Count,
+            IsInternal = string.Equals(
+                _source.ComponentId,
+                _target.ComponentId,
+                StringComparison.Ordinal),
+            RelationshipCount = _relationshipIds.Count + _unreferencedRelationships.Count,
             ResolvedRelationshipCount = _resolvedRelationshipCount,
             PartiallyResolvedRelationshipCount = _partiallyResolvedRelationshipCount,
+            ContributingRelationships = _relationshipReferences
+                .OrderBy(reference => reference.RelationshipId, StringComparer.Ordinal)
+                .ToList(),
+            UnreferencedRelationshipCount = _unreferencedRelationships.Count,
             RelationshipKinds = _relationshipKinds.OrderBy(kind => kind).ToList(),
             EvidenceFiles = _evidenceFiles.OrderBy(file => file, PathComparer).ToList()
         };

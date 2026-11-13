@@ -262,12 +262,27 @@
                             <TextBlock Text="{Binding SelectedDependency.TargetProjectPath, TargetNullValue='Not supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
                                        TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
-                            <TextBlock Text="DISCOVERY EVIDENCE" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="RESOLUTION COUNTS" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.ResolvedRelationshipCount, StringFormat='Resolved: {0:N0}'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
+                            <TextBlock Text="{Binding SelectedDependency.PartiallyResolvedRelationshipCount, StringFormat='Partially resolved: {0:N0}'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
+                            <TextBlock Text="{Binding SelectedDependency.UnreferencedRelationshipCount, StringFormat='Unreferenced: {0:N0}'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
+                            <TextBlock Text="DISCOVERY EVIDENCE FILES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.File, TargetNullValue='No source file supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12"
                                        TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
+                            <TextBlock Text="SEMANTIC SOURCE REFERENCES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.EvidenceReferences, TargetNullValue='No exact provider references supplied'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
+                                       TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
+                            <TextBlock Text="CONTRIBUTING CODE CONTAINER EDGES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.CodeContainerContributions, TargetNullValue='No lower-level contribution data supplied'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
+                                       TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
                             <TextBlock
-                                Text="Build-module dependencies and compiler-resolved component relationships are shown as distinct evidence levels. Component rows aggregate repeated semantic relationships and retain their count and source files."
+                                Text="Build-module dependencies and compiler-resolved component relationships are shown as distinct evidence levels. Semantic projections aggregate repeated relationships but retain exact run-scoped relationship references, resolution counts, and source files where supplied."
                                 Foreground="{StaticResource Brush.TextMuted}" FontSize="11"
                                 TextWrapping="Wrap" Margin="0,16,0,0" />
                         </StackPanel>

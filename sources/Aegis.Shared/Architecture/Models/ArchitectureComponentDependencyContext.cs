@@ -22,6 +22,10 @@ public sealed class ArchitectureComponentDependencyContext
 
     public string DependencyType { get; init; } = "SemanticComponentDependency";
 
+    /// <summary>True when both ends refer to the same language-level code container.</summary>
+    public bool IsInternal { get; init; }
+
+
     public int RelationshipCount { get; init; }
 
     /// <summary>Relationships resolved completely by the semantic provider.</summary>
@@ -29,6 +33,15 @@ public sealed class ArchitectureComponentDependencyContext
 
     /// <summary>Relationships with a usable target but incomplete resolution evidence.</summary>
     public int PartiallyResolvedRelationshipCount { get; init; }
+
+    /// <summary>
+    /// Exact source evidence references. A relationship ID is scoped to its
+    /// semantic run, so both values are required to resolve the original record.
+    /// </summary>
+    public List<SemanticRelationshipReference> ContributingRelationships { get; init; } = [];
+
+    /// <summary>Relationships whose provider omitted an ID and therefore cannot be referenced exactly.</summary>
+    public int UnreferencedRelationshipCount { get; init; }
 
     public List<SemanticRelationshipKind> RelationshipKinds { get; init; } = [];
 

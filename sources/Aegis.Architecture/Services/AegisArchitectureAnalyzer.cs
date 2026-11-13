@@ -1,6 +1,8 @@
 ﻿using System.Text.Json;
 
 using Aegis.Architecture.Analysis;
+using Aegis.Architecture.Analysis.Classification;
+using Aegis.Architecture.Analysis.Detectors;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Architecture.Analysis.Semantics;
 using Aegis.Shared.Architecture.Models;
@@ -90,10 +92,17 @@ public sealed class AegisArchitectureAnalyzer
             await _semanticAnalysisOrchestrator.AnalyzeAsync(context, token)
                 .ConfigureAwait(false);
 
-            // The Java orchestrator supplies raw semantic evidence. Keep
-            // architectural component projection in the shared provider-neutral
-            // pipeline even when the compatibility fallback is used.
-            SemanticAnalysisPipeline.ProjectArchitectureComponents(context);
+            // The Java orchestrator supplies raw semantic evidence. Apply the same
+            // declarative architecture map and provider-neutral projection used by
+            // the full semantic pipeline.
+            var architectureMap = await ArchitectureMapConfigurationLoader.LoadAsync(
+                context.RootPath,
+                token).ConfigureAwait(false);
+
+            SemanticAnalysisPipeline.ProjectArchitectureComponents(
+                context,
+                architectureMap.Configuration);
+            context.ArchitectureClassificationDiagnostics.InsertRange(0, architectureMap.Diagnostics);
         }
 
         var report =
@@ -149,6 +158,44 @@ public sealed class AegisArchitectureAnalyzer
 
         report.TotalFilesScanned =
             context.FileCount;
+
+        report.Diagnostics.RemoveAll(diagnostic =>
+            string.Equals(diagnostic.Source, "ArchitectureClassification", StringComparison.Ordinal));
+
+        foreach (var diagnostic in context.ArchitectureClassificationDiagnostics)
+        {
+            report.Diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = diagnostic.Code,
+                Component = nameof(ArchitecturalComponentClassifier),
+                Source = "ArchitectureClassification",
+                Severity = diagnostic.Severity,
+                Message = diagnostic.Message,
+                Target = diagnostic.Target
+                    ?? diagnostic.CodeComponentId
+                    ?? diagnostic.MappingId,
+                Language = diagnostic.Language,
+                ProjectPath = diagnostic.ModulePath,
+                AffectsCoverage = diagnostic.AffectsCoverage
+            });
+        }
+
+        report.Diagnostics.RemoveAll(diagnostic =>
+            string.Equals(diagnostic.Source, "ArchitecturalDependencyProjection", StringComparison.Ordinal));
+
+        foreach (var diagnostic in context.ArchitecturalDependencyProjectionDiagnostics)
+        {
+            report.Diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = diagnostic.Code,
+                Component = nameof(ArchitecturalComponentDependencyProjector),
+                Source = "ArchitecturalDependencyProjection",
+                Severity = "Warning",
+                Message = diagnostic.Message,
+                Target = $"{diagnostic.SourceCodeComponentId} -> {diagnostic.TargetCodeComponentId}",
+                AffectsCoverage = diagnostic.AffectsCoverage
+            });
+        }
     }
 
 
@@ -156,6 +203,11 @@ public sealed class AegisArchitectureAnalyzer
     private static ArchitectureEvaluatorResult BuildContextFact(
         ProjectArchitectureContext context)
     {
+        var classifiedCodeContainerCount = context.ArchitecturalComponentMemberships.Count(
+            membership => membership.ArchitecturalComponentId is not null);
+        var unclassifiedCodeContainerCount = context.ArchitecturalComponentMemberships.Count
+            - classifiedCodeContainerCount;
+
         return new ArchitectureEvaluatorResult(
             "ProjectContextFact",
             context.RootPath)
@@ -184,7 +236,37 @@ public sealed class AegisArchitectureAnalyzer
                     context.DiscoveryDiagnostics.Count,
 
                 ["ExcludedPathEntryCount"] =
-                    context.ExcludedEntriesByReason.Values.Sum()
+                    context.ExcludedEntriesByReason.Values.Sum(),
+
+                ["ArchitecturalComponentCount"] =
+                    context.ArchitecturalComponents.Count,
+
+                ["ClassifiedCodeContainerCount"] =
+                    classifiedCodeContainerCount,
+
+                ["UnclassifiedCodeContainerCount"] =
+                    unclassifiedCodeContainerCount,
+
+                ["ArchitectureClassificationDiagnosticCount"] =
+                    context.ArchitectureClassificationDiagnostics.Count,
+
+                ["CodeContainerInternalDependencyCount"] =
+                    context.ArchitectureComponentInternalDependencies.Count,
+
+                ["ArchitecturalComponentDependencyCount"] =
+                    context.ArchitecturalComponentDependencies.Count,
+
+                ["ProductionArchitecturalComponentDependencyCount"] =
+                    context.ProductionArchitecturalComponentDependencies.Count,
+
+                ["TestArchitecturalComponentDependencyCount"] =
+                    context.TestArchitecturalComponentDependencies.Count,
+
+                ["InternalArchitecturalComponentDependencyCount"] =
+                    context.InternalArchitecturalComponentDependencies.Count,
+
+                ["ArchitecturalDependencyProjectionDiagnosticCount"] =
+                    context.ArchitecturalDependencyProjectionDiagnostics.Count
             },
 
             Metadata =

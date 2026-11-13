@@ -286,7 +286,7 @@ private class KotlinSemanticCollector(
 
     private fun isInterfaceType(qualifiedName: String): Boolean {
         for (symbol in this@KotlinSemanticCollector.symbols.values) {
-            if (symbol.get("qualifiedName").asString() == qualifiedName
+            if (symbol.get("qualifiedName").asString == qualifiedName
                 && symbol.get("kind").asInt == 5) {
                 return true
             }

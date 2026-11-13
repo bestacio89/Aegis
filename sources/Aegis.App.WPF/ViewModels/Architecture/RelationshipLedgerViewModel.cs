@@ -213,7 +213,13 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
                     PartiallyResolvedRelationshipCount = dependency.PartiallyResolvedRelationshipCount,
                     UnreferencedRelationshipCount = dependency.UnreferencedRelationshipCount,
                     IsInternal = dependency.IsInternal,
-                    EvidenceReferences = FormatEvidenceReferences(dependency.ContributingRelationships)
+                    EvidenceReferences = FormatEvidenceReferences(dependency.ContributingRelationships),
+                    CodeContainerContributions = string.Join(
+                        Environment.NewLine,
+                        dependency.ContributingCodeContainerDependencies
+                            .OrderBy(edge => edge.SourceComponentName, StringComparer.OrdinalIgnoreCase)
+                            .ThenBy(edge => edge.TargetComponentName, StringComparer.OrdinalIgnoreCase)
+                            .Select(edge => $"{edge.SourceComponentName} -> {edge.TargetComponentName} ({edge.RelationshipCount})"))
                 };
             }) ?? [];
 
@@ -400,6 +406,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             Unreferenced relationships: {dependency.UnreferencedRelationshipCount}
             Internal dependency: {dependency.IsInternal}
             Semantic references: {dependency.EvidenceReferences}
+            Code-container contributions: {dependency.CodeContainerContributions}
             """);
     }
 
@@ -437,7 +444,8 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             || Contains(dependency.SourceProjectPath, query)
             || Contains(dependency.TargetProjectPath, query)
             || Contains(dependency.File, query)
-            || Contains(dependency.EvidenceReferences, query);
+            || Contains(dependency.EvidenceReferences, query)
+            || Contains(dependency.CodeContainerContributions, query);
     }
 
     private void RefreshFilter()

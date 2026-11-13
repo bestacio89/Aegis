@@ -1,8 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$JavaExecutable = 'java',
-    [string]$WorkerJar = (Join-Path $PSScriptRoot '..\target\runtime\kotlin-worker.jar'),
-    [string]$LibrariesDirectory = (Join-Path $PSScriptRoot '..\target\runtime\lib')
+    [string]$WorkerJar = ([System.IO.Path]::Combine($PSScriptRoot, '..', 'target', 'runtime', 'kotlin-worker.jar')),
+    [string]$LibrariesDirectory = ([System.IO.Path]::Combine($PSScriptRoot, '..', 'target', 'runtime', 'lib'))
 )
 
 $ErrorActionPreference = 'Stop'

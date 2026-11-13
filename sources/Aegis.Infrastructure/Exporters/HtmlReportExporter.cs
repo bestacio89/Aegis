@@ -234,6 +234,18 @@ td {
                 report.EvaluationStats?.RulesUnsupported.ToString() ?? "N/A");
 
             AddRow(html,
+                "Total Diagnostics",
+                report.Diagnostics.Count.ToString());
+
+            AddRow(html,
+                "Semantic Diagnostics",
+                report.SemanticDiagnosticCount.ToString());
+
+            AddRow(html,
+                "Coverage-affecting Diagnostics",
+                report.CoverageAffectingDiagnosticCount.ToString());
+
+            AddRow(html,
                 "Assessment Complete",
                 report.Metrics.AssessmentComplete ? "Yes" : "No");
 

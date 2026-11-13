@@ -294,9 +294,9 @@ public sealed class PdfReportExporter : IReportExporter
         var metrics = report.Metrics;
         if (stats is not null)
         {
-            var supportedRulesNotEvaluated = Math.Max(
-                0,
-                stats.RulesNotEvaluated.Count - stats.RulesUnsupported);
+            // RulesNotEvaluated already contains supported, applicable rules only.
+            // Unsupported rules are accounted for in their own status category.
+            var supportedRulesNotEvaluated = stats.RulesNotEvaluated.Count;
 
             AddRow(table, L(language, "Rules Registered", "Règles Enregistrées"), stats.RulesRegistered.ToString());
             AddRow(table, L(language, "Supported Rules Applicable", "Règles Applicables Prises en Charge"), stats.RulesApplicable.ToString());

@@ -238,6 +238,7 @@ private class KotlinSemanticCollector(
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             val sourceId = classId(declaration)
             owners.addLast(sourceId)
+            addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.superTypes.forEach { superType ->
                 val targetClass = superType.classOrNull?.owner
                 val targetName = targetClass?.fqNameWhenAvailable?.asString()
@@ -266,7 +267,9 @@ private class KotlinSemanticCollector(
 
         override fun visitProperty(declaration: IrProperty) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            owners.addLast(propertyId(declaration))
+            val sourceId = propertyId(declaration)
+            owners.addLast(sourceId)
+            addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.acceptChildrenVoid(this)
             owners.removeLast()
         }
@@ -277,14 +280,18 @@ private class KotlinSemanticCollector(
                 declaration.acceptChildrenVoid(this)
                 return
             }
-            owners.addLast(functionId(declaration))
+            val sourceId = functionId(declaration)
+            owners.addLast(sourceId)
+            addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.acceptChildrenVoid(this)
             owners.removeLast()
         }
 
         override fun visitConstructor(declaration: IrConstructor) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            owners.addLast(functionId(declaration))
+            val sourceId = functionId(declaration)
+            owners.addLast(sourceId)
+            addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.acceptChildrenVoid(this)
             owners.removeLast()
         }
@@ -326,6 +333,26 @@ private class KotlinSemanticCollector(
             if (sourceId != null)
                 addRelationship(sourceId, targetId, if (isAnnotation) 7 else 4, expression.startOffset, currentFile)
             expression.acceptChildrenVoid(this)
+        }
+    }
+
+    private fun addAnnotationRelationships(
+        sourceId: String,
+        declaration: IrDeclaration,
+        file: IrFile?
+    ) {
+        declaration.annotations.forEach { annotation ->
+            val annotationClass = annotation.symbol.owner.parent as? IrClass ?: return@forEach
+            val qualifiedName = annotationClass.fqNameWhenAvailable?.asString()
+                ?: annotationClass.name.asString()
+            val targetId = classId(annotationClass)
+            addExternalTypeIfNeeded(
+                targetId,
+                qualifiedName,
+                true,
+                annotationClass.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
+            )
+            addRelationship(sourceId, targetId, 7, annotation.startOffset, file)
         }
     }
 

@@ -151,7 +151,7 @@ public sealed class SemanticArchitectureComponentGraphTests
                             SourceSymbolId = "python-service",
                             TargetSymbolId = "python-order",
                             Kind = SemanticRelationshipKind.References,
-                            ResolutionStatus = SemanticResolutionStatus.Resolved,
+                            ResolutionStatus = SemanticResolutionStatus.PartiallyResolved,
                             Provenance =
                             [
                                 new SemanticEvidenceProvenance
@@ -179,6 +179,8 @@ public sealed class SemanticArchitectureComponentGraphTests
 
         var edge = Assert.Single(context.ProductionComponentDependencies);
         Assert.Equal(1, edge.RelationshipCount);
+        Assert.Equal(0, edge.ResolvedRelationshipCount);
+        Assert.Equal(1, edge.PartiallyResolvedRelationshipCount);
         Assert.Equal("application", context.ProductionComponents
             .Single(component => component.Id == edge.SourceComponentId).QualifiedName);
         Assert.Equal("domain", context.ProductionComponents

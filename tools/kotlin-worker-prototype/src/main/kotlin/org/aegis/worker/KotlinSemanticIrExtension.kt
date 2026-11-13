@@ -372,18 +372,27 @@ private class KotlinSemanticCollector(
     }
 
     private fun addRelationship(sourceId: String, targetId: String, kind: Int, offset: Int, file: IrFile?) {
-        val key = "$sourceId|$kind|$targetId|${file?.fileEntry?.name.orEmpty()}|$offset"
-        if (relationships.containsKey(key)) return
-        val relationship = JsonObject()
-        relationship.addProperty("id", key)
-        relationship.addProperty("sourceSymbolId", sourceId)
-        relationship.addProperty("targetSymbolId", targetId)
-        relationship.add("unresolvedTarget", com.google.gson.JsonNull.INSTANCE)
-        relationship.addProperty("kind", kind)
-        relationship.addProperty("resolutionStatus", 1)
-        relationship.addProperty("isTestCode", isTestCode)
-        relationship.add("provenance", provenance(file, offset))
-        relationships[key] = relationship
+        val key = "$sourceId|$kind|$targetId"
+        val relationship = relationships.getOrPut(key) {
+            JsonObject().apply {
+                addProperty("id", key)
+                addProperty("sourceSymbolId", sourceId)
+                addProperty("targetSymbolId", targetId)
+                add("unresolvedTarget", com.google.gson.JsonNull.INSTANCE)
+                addProperty("kind", kind)
+                addProperty("resolutionStatus", 1)
+                addProperty("isTestCode", isTestCode)
+                add("provenance", JsonArray())
+            }
+        }
+        val evidence = provenance(file, offset).firstOrNull()?.asJsonObject ?: return
+        val evidenceArray = relationship.getAsJsonArray("provenance")
+        val evidenceKey = "${evidence.get("filePath").asString}|${evidence.get("startLine").asInt}|${evidence.get("startColumn").asInt}"
+        val exists = evidenceArray.any { item ->
+            val existing = item.asJsonObject
+            "${existing.get("filePath").asString}|${existing.get("startLine").asInt}|${existing.get("startColumn").asInt}" == evidenceKey
+        }
+        if (!exists) evidenceArray.add(evidence)
     }
 
     private fun isGenerated(file: IrFile?): Boolean {

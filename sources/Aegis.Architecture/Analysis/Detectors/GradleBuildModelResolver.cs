@@ -905,7 +905,7 @@ internal static class GradleBuildModelResolver
     {
         var result = new List<GradleBuildModel.SourceSet>();
         var declaration = new Regex(
-            @"(?:create\s*\(\s*['""](?<created>[^'""]+)['""]\s*\)|(?:val\s+)?(?<kotlin>[A-Za-z][A-Za-z0-9_]*)\s+by\s+(?:creating|getting)|(?<named>(?<![A-Za-z0-9_])(?!java\b)[A-Za-z][A-Za-z0-9_]*))\s*\{",
+            @"(?:create\s*\(\s*['""](?<created>[^'""]+)['""]\s*\)|(?:val\s+)?(?<kotlin>[A-Za-z][A-Za-z0-9_]*)\s+by\s+(?:creating|getting)|(?<named>(?<![A-Za-z0-9_])(?!java\b|kotlin\b)[A-Za-z][A-Za-z0-9_]*))\s*\{",
             RegexOptions.CultureInvariant);
         var matches = declaration.Matches(sourceSetBlock);
 

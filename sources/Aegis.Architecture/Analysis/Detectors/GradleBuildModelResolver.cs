@@ -18,6 +18,22 @@ internal static class GradleBuildModelResolver
         @"^\s*kotlin\s*\(\s*['""](?<plugin>[^'""]+)['""]\s*\)\s*(?:version\s*['""](?<version>[^'""]+)['""])?",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex KotlinLanguageVersionOption = new(
+        @"\blanguageVersion\s*(?:\.set\s*\(\s*(?:KotlinVersion\.fromVersion\s*\(\s*)?)?(?:=\s*)?['""](?<version>\d+\.\d+)['""]",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex KotlinApiVersionOption = new(
+        @"\bapiVersion\s*(?:\.set\s*\(\s*(?:KotlinVersion\.fromVersion\s*\(\s*)?)?(?:=\s*)?['""](?<version>\d+\.\d+)['""]",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex KotlinJvmTargetLiteral = new(
+        @"\bjvmTarget\s*(?:=\s*|\.set\s*\(\s*)['""](?<version>\d+(?:\.\d+)?)['""]",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex KotlinJvmTargetEnum = new(
+        @"\bjvmTarget\s*\.set\s*\(\s*(?:JvmTarget\.)?JVM_(?<version>\d+(?:_\d+)*)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex PluginAlias = new(
         @"^\s*alias\s*\(\s*libs\.plugins\.(?<alias>[A-Za-z0-9_.-]+)\s*\)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -188,6 +204,12 @@ internal static class GradleBuildModelResolver
                     buildFile));
             }
 
+            var kotlinPluginVersion = kotlinPluginVersions.Length == 1
+                ? kotlinPluginVersions[0]
+                : null;
+            var kotlinCompilerOptions = ParseKotlinCompilerOptions(
+                source, kotlinPluginVersion, diagnostics, buildFile);
+
             foreach (var plugin in plugins.Where(plugin =>
                          plugin.Id.StartsWith("org.jetbrains.kotlin.plugin.", StringComparison.Ordinal)
                          || plugin.Id is "org.jetbrains.kotlin.kapt" or "com.google.devtools.ksp"))
@@ -210,7 +232,10 @@ internal static class GradleBuildModelResolver
                 TestTasks = testTasks,
                 SourceRoots = sourceRoots,
                 JavaToolchainVersion = toolchain,
-                KotlinPluginVersion = kotlinPluginVersions.Length == 1 ? kotlinPluginVersions[0] : null,
+                KotlinPluginVersion = kotlinPluginVersion,
+                KotlinLanguageVersion = kotlinCompilerOptions.LanguageVersion,
+                KotlinApiVersion = kotlinCompilerOptions.ApiVersion,
+                KotlinJvmTarget = kotlinCompilerOptions.JvmTarget,
                 Diagnostics = diagnostics,
                 IsComplete = diagnostics.Count == 0
             };
@@ -1095,6 +1120,75 @@ internal static class GradleBuildModelResolver
 
         return directories.ToList();
     }
+
+    private static KotlinCompilerOptions ParseKotlinCompilerOptions(
+        string source,
+        string? kotlinPluginVersion,
+        ICollection<AnalysisDiagnostic> diagnostics,
+        string buildFile)
+    {
+        var languageMatch = KotlinLanguageVersionOption.Match(source);
+        var apiMatch = KotlinApiVersionOption.Match(source);
+        var jvmTargetMatch = KotlinJvmTargetLiteral.Match(source);
+        if (!jvmTargetMatch.Success)
+            jvmTargetMatch = KotlinJvmTargetEnum.Match(source);
+
+        if (Regex.IsMatch(source, @"\blanguageVersion\b", RegexOptions.CultureInvariant)
+            && !languageMatch.Success)
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleKotlinCompilerOptionNotStaticallyResolved",
+                "The Kotlin languageVersion option is declared but is not a supported literal version.",
+                buildFile));
+        }
+
+        if (Regex.IsMatch(source, @"\bapiVersion\b", RegexOptions.CultureInvariant)
+            && !apiMatch.Success)
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleKotlinCompilerOptionNotStaticallyResolved",
+                "The Kotlin apiVersion option is declared but is not a supported literal version.",
+                buildFile));
+        }
+
+        if (Regex.IsMatch(source, @"\bjvmTarget\b", RegexOptions.CultureInvariant)
+            && !jvmTargetMatch.Success)
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleKotlinCompilerOptionNotStaticallyResolved",
+                "The Kotlin jvmTarget option is declared but is not a supported literal target.",
+                buildFile));
+        }
+
+        var inferredLanguageVersion = InferKotlinLanguageVersion(kotlinPluginVersion);
+        var languageVersion = languageMatch.Success
+            ? languageMatch.Groups["version"].Value
+            : inferredLanguageVersion;
+        var apiVersion = apiMatch.Success
+            ? apiMatch.Groups["version"].Value
+            : languageVersion;
+        var jvmTarget = jvmTargetMatch.Success
+            ? jvmTargetMatch.Groups["version"].Value.Replace('_', '.')
+            : kotlinPluginVersion is null ? null : "1.8";
+
+        return new KotlinCompilerOptions(languageVersion, apiVersion, jvmTarget);
+    }
+
+    private static string? InferKotlinLanguageVersion(string? compilerVersion)
+    {
+        if (string.IsNullOrWhiteSpace(compilerVersion))
+            return null;
+
+        var match = Regex.Match(compilerVersion, @"^(?<major>\d+)\.(?<minor>\d+)");
+        return match.Success
+            ? match.Groups["major"].Value + "." + match.Groups["minor"].Value
+            : null;
+    }
+
+    private sealed record KotlinCompilerOptions(
+        string? LanguageVersion,
+        string? ApiVersion,
+        string? JvmTarget);
 
     private static List<GradleBuildModel.SourceSet> MergeSourceSets(
         IReadOnlyCollection<GradleBuildModel.SourceSet> conventional,

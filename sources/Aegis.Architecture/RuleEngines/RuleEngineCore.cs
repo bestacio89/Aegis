@@ -684,6 +684,21 @@ public sealed class RuleEngineCore
             }
         }
 
+        if (stats.RuleAccountingDifference != 0)
+        {
+            _logger.LogWarning(
+                "Rule accounting is inconsistent: Registered={Registered}; " +
+                "Applicable={Applicable}; Unsupported={Unsupported}; " +
+                "DisabledByPolicy={Disabled}; NotApplicable={NotApplicable}; " +
+                "Difference={Difference}.",
+                stats.RulesRegistered,
+                stats.RulesApplicable,
+                stats.RulesUnsupported,
+                stats.RulesDisabledByPolicy,
+                stats.RulesNotApplicable.Count,
+                stats.RuleAccountingDifference);
+        }
+
         _logger.LogInformation(
             "RuleEngineCore processed {Facts} facts: {Violations} violations; " +
             "{Checks} checks ({Passed} passed, {Violated} violated); " +
@@ -693,6 +708,7 @@ public sealed class RuleEngineCore
             "({RegisteredCoverage:0.0}% registry-wide coverage); " +
             "{Unsupported} unsupported; {Disabled} disabled by policy; " +
             "{NotApplicable} not applicable; {NotEvaluated} supported applicable rules not evaluated; " +
+            "RuleAccountingDifference={RuleAccountingDifference}; " +
             "{ProjectSummaries} project summaries processed; " +
             "{NonFiniteSkipped} non-finite metrics skipped; " +
             "{InvalidThresholds} invalid thresholds skipped; " +
@@ -715,6 +731,7 @@ public sealed class RuleEngineCore
             stats.RulesDisabledByPolicy,
             stats.RulesNotApplicable.Count,
             stats.RulesNotEvaluated.Count,
+            stats.RuleAccountingDifference,
             projectSummaryFacts,
             skippedNonFiniteMetrics,
             skippedInvalidThresholds,

@@ -268,7 +268,7 @@ Production and test source roots, classpaths, symbols and relationships must rem
 
 ## K0 status — compiler boundary validated; semantic completeness audit in progress
 
-The isolated Kotlin 2.4.21 K2 compiler/IR worker boundary is validated at head `1263` (full commit recorded in the PR history). The Kotlin worker workflow passed on both `ubuntu-latest` and `windows-latest`, including the packaged runtime probe. This validates the worker protocol and existing extraction fixtures, but a deeper IR audit found semantic reference forms not yet represented. K0 remains open until those are implemented and tested.
+The isolated Kotlin 2.4.21 K2 compiler/IR worker boundary is validated at head `1263fcc1b448d50d41b86717667fe8e6d0dbb736` (full commit recorded in the PR history). The Kotlin worker workflow passed on both `ubuntu-latest` and `windows-latest`, including the packaged runtime probe. This validates the worker protocol and existing extraction fixtures, but a deeper IR audit found semantic reference forms not yet represented. K0 remains open until those are implemented and tested.
 
 Validated in K0:
 

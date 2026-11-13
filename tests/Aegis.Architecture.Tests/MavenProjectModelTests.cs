@@ -57,14 +57,22 @@ public sealed class MavenProjectModelTests
 
             var sharedRoot = Path.Combine(root, "src", "main", "shared");
             var testKotlinRoot = Path.Combine(root, "src", "test", "customKotlin");
+            var generatedMainRoot = Path.Combine(root, "target", "generated-sources", "kotlin");
+            var generatedTestRoot = Path.Combine(root, "target", "generated-test-sources", "kotlin");
             Directory.CreateDirectory(Path.Combine(sharedRoot, "sample"));
             Directory.CreateDirectory(Path.Combine(testKotlinRoot, "sample"));
+            Directory.CreateDirectory(Path.Combine(generatedMainRoot, "sample"));
+            Directory.CreateDirectory(Path.Combine(generatedTestRoot, "sample"));
             File.WriteAllText(Path.Combine(sharedRoot, "sample", "JavaContract.java"),
                 "package sample; public interface JavaContract {}");
             File.WriteAllText(Path.Combine(sharedRoot, "sample", "KotlinService.kt"),
                 "package sample\nclass KotlinService : JavaContract");
             File.WriteAllText(Path.Combine(testKotlinRoot, "sample", "KotlinServiceTest.kt"),
                 "package sample\nclass KotlinServiceTest");
+            File.WriteAllText(Path.Combine(generatedMainRoot, "sample", "GeneratedMain.kt"),
+                "package sample\nclass GeneratedMain");
+            File.WriteAllText(Path.Combine(generatedTestRoot, "sample", "GeneratedTest.kt"),
+                "package sample\nclass GeneratedTest");
 
             var context = ProjectArchitectureContextDetector.Detect(root);
             var module = Assert.Single(context.Modules);
@@ -85,6 +93,18 @@ public sealed class MavenProjectModelTests
             var testRoot = Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == testKotlinRoot);
             Assert.True(testRoot.ContainsKotlinSources);
             Assert.Equal(ProjectSourceRootOwnership.Test, testRoot.Ownership);
+
+            var generatedMainSourceRoot = Assert.Single(model.SourceRoots,
+                sourceRoot => sourceRoot.Directory == generatedMainRoot);
+            Assert.True(generatedMainSourceRoot.IsGenerated);
+            Assert.True(generatedMainSourceRoot.ContainsKotlinSources);
+            Assert.Equal(ProjectSourceRootOwnership.Production, generatedMainSourceRoot.Ownership);
+
+            var generatedTestSourceRoot = Assert.Single(model.SourceRoots,
+                sourceRoot => sourceRoot.Directory == generatedTestRoot);
+            Assert.True(generatedTestSourceRoot.IsGenerated);
+            Assert.True(generatedTestSourceRoot.ContainsKotlinSources);
+            Assert.Equal(ProjectSourceRootOwnership.Test, generatedTestSourceRoot.Ownership);
             Assert.True(model.IsComplete);
         }
         finally

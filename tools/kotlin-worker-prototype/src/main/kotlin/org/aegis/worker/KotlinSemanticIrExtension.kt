@@ -431,8 +431,15 @@ private class KotlinSemanticCollector(
         else -> declaration.javaClass.simpleName
     }
 
-    private fun propertyId(declaration: IrProperty): String =
-        "kotlin:property:${declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()}"
+    private fun propertyId(declaration: IrProperty): String {
+        val accessor = declaration.getter ?: declaration.setter
+        val receiver = accessor?.parameters
+            ?.firstOrNull { it.kind == IrParameterKind.ExtensionReceiver }
+            ?.type
+            ?.let(::typeIdentity)
+        val receiverIdentity = receiver?.let { "($it)" }.orEmpty()
+        return "kotlin:property:${declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()}$receiverIdentity"
+    }
 
     private fun functionId(declaration: IrFunction): String {
         val name = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()

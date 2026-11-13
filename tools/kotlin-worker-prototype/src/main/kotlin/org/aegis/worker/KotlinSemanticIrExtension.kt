@@ -6,7 +6,6 @@ import com.google.gson.JsonObject
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
-import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
 import org.jetbrains.kotlin.ir.declarations.IrFile
@@ -112,7 +111,7 @@ private class KotlinSemanticCollector(
                 containingSymbolId = owners.lastOrNull()
             )
             declaration.getter?.let { propertyAccessors[it.symbol] = id }
-            declaration.setter?.let { propertyAccessors[it.symbol.toString()] = id }
+            declaration.setter?.let { propertyAccessors[it.symbol] = id }
             owners.addLast(id)
             declaration.acceptChildrenVoid(this)
             owners.removeLast()
@@ -308,7 +307,7 @@ private class KotlinSemanticCollector(
     }
 
     private fun addRelationship(sourceId: String, targetId: String, kind: Int, offset: Int, file: IrFile?) {
-        val key = "$sourceId|$kind|$targetId|$file|$offset"
+        val key = "$sourceId|$kind|$targetId|${file?.fileEntry?.name.orEmpty()}|$offset"
         if (relationships.containsKey(key)) return
         val relationship = JsonObject()
         relationship.addProperty("id", key)

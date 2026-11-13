@@ -30,10 +30,10 @@ data class KotlinWorkerAnalysisRequest(
             generatedSourceRoots = payload.stringList("generatedSourceRoots"),
             classpathEntries = payload.stringList("classpathEntries"),
             kotlinStandardLibraryPath = payload.requiredString("kotlinStandardLibraryPath"),
-            compilerVersion = payload.optionalString("compilerVersion") ?: KotlinWorkerServer.KOTLIN_COMPILER_VERSION,
-            languageVersion = payload.optionalString("languageVersion") ?: "2.4",
-            apiVersion = payload.optionalString("apiVersion") ?: "2.4",
-            jvmTarget = payload.optionalString("jvmTarget") ?: "21",
+            compilerVersion = payload.requiredString("compilerVersion"),
+            languageVersion = payload.requiredString("languageVersion"),
+            apiVersion = payload.requiredString("apiVersion"),
+            jvmTarget = payload.requiredString("jvmTarget"),
             moduleName = payload.optionalString("moduleName") ?: "aegis-module",
             includeTestCode = payload.get("includeTestCode")?.takeUnless { it.isJsonNull }?.asBoolean ?: false
         )

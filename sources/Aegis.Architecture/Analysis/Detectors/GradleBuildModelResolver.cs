@@ -1342,6 +1342,7 @@ internal static class GradleBuildModelResolver
         ICollection<AnalysisDiagnostic> diagnostics)
     {
         var roots = new Dictionary<string, ProjectSourceRoot>(PathComparer);
+        var ownershipConflicts = new HashSet<string>(PathComparer);
 
         void AddSourceRoot(
             string directory,
@@ -1367,16 +1368,26 @@ internal static class GradleBuildModelResolver
 
             if (roots.TryGetValue(fullDirectory, out var existing))
             {
-                if (existing.Ownership != ownership && existing.Ownership != ProjectSourceRootOwnership.Unknown)
+                if (ownershipConflicts.Contains(fullDirectory))
                 {
-                    diagnostics.Add(Diagnostic(
-                        "GradleSourceRootOwnershipConflict",
-                        $"Source root '{fullDirectory}' is assigned to conflicting source sets; ownership remains unknown.",
-                        buildFile));
                     ownership = ProjectSourceRootOwnership.Unknown;
                 }
                 else if (existing.Ownership == ProjectSourceRootOwnership.Unknown)
                 {
+                    // A later source-set declaration can refine an earlier
+                    // generic discovery that had no ownership evidence.
+                }
+                else if (ownership == ProjectSourceRootOwnership.Unknown)
+                {
+                    ownership = existing.Ownership;
+                }
+                else if (existing.Ownership != ownership)
+                {
+                    ownershipConflicts.Add(fullDirectory);
+                    diagnostics.Add(Diagnostic(
+                        "GradleSourceRootOwnershipConflict",
+                        $"Source root '{fullDirectory}' is assigned to conflicting source sets; ownership remains unknown.",
+                        buildFile));
                     ownership = ProjectSourceRootOwnership.Unknown;
                 }
 

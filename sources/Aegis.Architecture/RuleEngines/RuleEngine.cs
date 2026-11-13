@@ -100,16 +100,21 @@ public sealed class RuleEngine
             context.ProjectName);
 
         var facts = new List<ArchitectureEvaluatorResult>();
-        var diagnostics = context.DiscoveryDiagnostics.ToList();
+        var semanticDiagnostics = CreateSemanticAnalysisDiagnostics(
+            context.SemanticAnalysisRuns);
+        var discoveryDiagnostics = context.DiscoveryDiagnostics.ToList();
         var scopes = DiscoverProjectScopes(
             projectPath,
             context,
-            diagnostics);
+            discoveryDiagnostics);
 
-        // Rule applicability must see the same discovery evidence that is
-        // preserved in the report. Otherwise a failed module discovery could
-        // be mistaken for proof that a candidate pattern is absent.
-        context.DiscoveryDiagnostics = diagnostics.ToList();
+        // Rule applicability must see discovery evidence, not semantic-provider
+        // diagnostics. Keep those channels distinct while preserving both in
+        // the finalized report.
+        context.DiscoveryDiagnostics = discoveryDiagnostics.ToList();
+        var diagnostics = discoveryDiagnostics
+            .Concat(semanticDiagnostics)
+            .ToList();
 
         var executions = new List<(IEvaluator Evaluator, string Path, ProjectArchitectureContext Context)>();
 
@@ -357,15 +362,27 @@ public sealed class RuleEngine
                     || status.Equals("CompletedWithDiagnostics", StringComparison.OrdinalIgnoreCase));
         });
 
+        var semanticDiagnosticCount = diagnostics.Count(diagnostic =>
+            string.Equals(diagnostic.Source, "SemanticAnalysis", StringComparison.Ordinal));
+        var discoveryDiagnosticCount = discoveryDiagnostics.Count;
+
         _logger.LogInformation(
             "Aegis scan completed. Violations={Violations}, Checks={Checks}, " +
-            "RulesEvaluated={Evaluated}/{Registered}, PipelineDiagnostics={PipelineDiagnostics}, " +
-            "ConfigurationDiagnostics={ConfigurationDiagnostics}, IncompleteFacts={IncompleteFacts}",
+            "RulesEvaluated={Evaluated}/{Applicable} supported applicable ({Coverage:0.0}%); " +
+            "RegisteredRules={Registered}, RegistryEvaluationCoverage={RegistryCoverage:0.0}%; " +
+            "AnalysisDiagnostics={AnalysisDiagnostics}, DiscoveryDiagnostics={DiscoveryDiagnostics}, " +
+            "SemanticDiagnostics={SemanticDiagnostics}, ConfigurationDiagnostics={ConfigurationDiagnostics}, " +
+            "IncompleteFacts={IncompleteFacts}",
             report.TotalViolations,
             outcome.Stats.ChecksPerformed,
             outcome.Stats.RulesEvaluated,
+            outcome.Stats.RulesApplicable,
+            outcome.Stats.EvaluationCoverage,
             outcome.Stats.RulesRegistered,
+            outcome.Stats.RegisteredRuleEvaluationCoverage,
             diagnostics.Count,
+            discoveryDiagnosticCount,
+            semanticDiagnosticCount,
             configurationDiagnosticCount,
             incompleteFactCount);
 
@@ -392,6 +409,57 @@ public sealed class RuleEngine
             null);
 
         return report;
+    }
+
+    private static List<AnalysisDiagnostic> CreateSemanticAnalysisDiagnostics(
+        IEnumerable<SemanticAnalysisRun> runs)
+    {
+        var diagnostics = new List<AnalysisDiagnostic>();
+
+        foreach (var run in runs)
+        {
+            foreach (var diagnostic in run.Diagnostics)
+            {
+                diagnostics.Add(new AnalysisDiagnostic
+                {
+                    Code = diagnostic.Code,
+                    Component = string.IsNullOrWhiteSpace(diagnostic.Component)
+                        ? run.EngineId
+                        : diagnostic.Component,
+                    Source = "SemanticAnalysis",
+                    Language = run.Language,
+                    EngineId = run.EngineId,
+                    RunId = run.RunId,
+                    ProjectPath = run.ProjectPath,
+                    Severity = diagnostic.Severity,
+                    Message = diagnostic.Message,
+                    Target = diagnostic.Target,
+                    ExceptionType = diagnostic.ExceptionType,
+                    AffectsCoverage = diagnostic.AffectsCoverage,
+                    Timestamp = diagnostic.Timestamp
+                });
+            }
+
+            if (!run.IsComplete && !run.Diagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
+            {
+                diagnostics.Add(new AnalysisDiagnostic
+                {
+                    Code = "SemanticAnalysisIncomplete",
+                    Component = run.EngineId,
+                    Source = "SemanticAnalysis",
+                    Language = run.Language,
+                    EngineId = run.EngineId,
+                    RunId = run.RunId,
+                    ProjectPath = run.ProjectPath,
+                    Message = $"Semantic analysis for {run.Language} ended with status '{run.Status}' without a coverage-affecting diagnostic.",
+                    Target = run.ProjectPath,
+                    AffectsCoverage = true,
+                    Timestamp = run.CompletedAtUtc ?? DateTimeOffset.UtcNow
+                });
+            }
+        }
+
+        return diagnostics;
     }
 
     private static void AppendEvaluatorDiagnostics(

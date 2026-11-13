@@ -64,7 +64,9 @@ class KotlinCompilerIntegrationTests {
 
             annotation class Audited
 
-            data class User(val id: String)
+            typealias UserIdentifier = String
+
+            data class User(val id: UserIdentifier)
 
             class Service(private val repository: JavaRepository) : Executable, JavaContract {
                 override fun execute() {
@@ -149,6 +151,11 @@ class KotlinCompilerIntegrationTests {
                 it.get("kind").asInt == 8 &&
                     it.get("qualifiedName").asString == "sample.Audited"
             }, "Kotlin annotation classes must retain the normalized annotation symbol kind.")
+            assertTrue(symbols.any {
+                it.get("kind").asInt == 14 &&
+                    it.get("qualifiedName").asString == "sample.UserIdentifier" &&
+                    it.get("declarationKind").asString == "TypeAlias"
+            }, "Kotlin type aliases must remain explicit source declarations after IR generation.")
             assertTrue(symbols.any {
                 it.get("kind").asInt == 12 &&
                     it.get("qualifiedName").asString == "sample.User.id"

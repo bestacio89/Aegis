@@ -1,9 +1,10 @@
 namespace Aegis.Shared.Architecture.Models;
 
 /// <summary>
-/// A language-level architectural component discovered from semantic declarations.
-/// Examples include Java/Kotlin packages, C# namespaces and source modules.
-/// Build-module identity remains available separately.
+/// A language-native architectural organisation unit, kept independent from
+/// build-system modules. Examples include Java/Python packages, C# projects,
+/// and TypeScript/JavaScript modules. The discovery provider determines the
+/// appropriate boundary semantics for its language.
 /// </summary>
 public sealed class ArchitectureComponentContext
 {

@@ -300,7 +300,8 @@ public sealed class PdfReportExporter : IReportExporter
 
             AddRow(table, L(language, "Rules Registered", "Règles Enregistrées"), stats.RulesRegistered.ToString());
             AddRow(table, L(language, "Supported Rules Applicable", "Règles Applicables Prises en Charge"), stats.RulesApplicable.ToString());
-            AddRow(table, L(language, "Rules Evaluated", "Règles Évaluées"), stats.RulesEvaluated.ToString());
+            AddRow(table, L(language, "Rules Evaluated / Applicable", "Règles Évaluées / Applicables"), $"{stats.RulesEvaluated} / {stats.RulesApplicable} ({stats.EvaluationCoverage:0.0}%)");
+            AddRow(table, L(language, "Registry-wide Rule Evaluation Coverage", "Couverture sur les règles enregistrées"), $"{stats.RegisteredRuleEvaluationCoverage:0.0}%");
             AddRow(table, L(language, "Rules Not Evaluated", "Règles Non Évaluées"), stats.RulesNotEvaluated.Count.ToString());
             AddRow(table, L(language, "Supported Rules Not Evaluated", "Règles Prises en Charge Non Évaluées"), supportedRulesNotEvaluated.ToString());
             AddRow(table, L(language, "Unsupported Rules", "Règles Non Prises en Charge"), stats.RulesUnsupported.ToString());

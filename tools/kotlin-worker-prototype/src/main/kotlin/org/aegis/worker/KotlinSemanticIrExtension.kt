@@ -186,7 +186,9 @@ private class KotlinSemanticCollector(
             if (symbols.containsKey(id)) return
             val file = currentFile
             val offset = declaration.startOffset
-            val isSource = file != null && offset >= 0
+            val isSource = file != null
+                && offset >= 0
+                && declaration.origin == IrDeclarationOrigin.DEFINED
             val symbol = JsonObject()
             symbol.addProperty("id", id)
             symbol.addProperty("kind", kind)
@@ -210,6 +212,8 @@ private class KotlinSemanticCollector(
                 "isPublic",
                 isPublic(declaration)
             )
+            symbol.addProperty("visibility", (declaration as? IrDeclarationWithVisibility)?.visibility?.name ?: "Unknown")
+            symbol.addProperty("declarationKind", declarationKind(declaration))
             symbol.add("provenance", provenance(file, offset))
             symbols[id] = symbol
         }
@@ -392,6 +396,20 @@ private class KotlinSemanticCollector(
 
     private fun classId(declaration: IrClass): String =
         "kotlin:type:${declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()}"
+
+    private fun declarationKind(declaration: IrDeclaration): String = when (declaration) {
+        is IrClass -> when (declaration.kind.name) {
+            "INTERFACE" -> "Interface"
+            "ENUM_CLASS" -> "EnumClass"
+            "ANNOTATION_CLASS" -> "AnnotationClass"
+            "OBJECT" -> "Object"
+            else -> "Class"
+        }
+        is IrProperty -> "Property"
+        is IrConstructor -> "Constructor"
+        is IrSimpleFunction -> "Function"
+        else -> declaration.javaClass.simpleName
+    }
 
     private fun propertyId(declaration: IrProperty): String =
         "kotlin:property:${declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()}"

@@ -58,13 +58,22 @@
           <jvmTarget>21</jvmTarget>
           <languageVersion>2.4</languageVersion>
           <apiVersion>2.4</apiVersion>
+          <sourceDirs>
+            <sourceDir>${project.basedir}/src/main/kotlin</sourceDir>
+          </sourceDirs>
+          <testSourceDirs>
+            <testSourceDir>${project.basedir}/src/test/kotlin</testSourceDir>
+          </testSourceDirs>
         </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.5.2</version>
-        <configuration><useModulePath>false</useModulePath></configuration>
+        <configuration>
+          <useModulePath>false</useModulePath>
+          <failIfNoTests>true</failIfNoTests>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

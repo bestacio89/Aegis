@@ -190,6 +190,10 @@ class KotlinWorkerProcessIntegrationTests {
             val recoveryResult = recoveryAnalysis.getAsJsonObject("result")
             assertNotEquals(2, recoveryResult.get("status").asInt)
             assertTrue(
+                recoveryResult.getAsJsonArray("relationships").isEmpty,
+                "An unresolved compiler reference must not be emitted as a resolved relationship."
+            )
+            assertTrue(
                 recoveryResult.getAsJsonArray("diagnostics").any { diagnostic ->
                     diagnostic.asJsonObject.get("severity").asString == "Error"
                         && diagnostic.asJsonObject.get("message").asString

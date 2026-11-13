@@ -190,8 +190,16 @@ td {
                 report.EvaluationStats?.RulesApplicable.ToString() ?? "N/A");
 
             AddRow(html,
-                "Supported Rules Evaluated",
-                report.EvaluationStats?.RulesEvaluated.ToString() ?? "N/A");
+                "Supported Rules Evaluated / Applicable",
+                report.EvaluationStats is null
+                    ? "N/A"
+                    : $"{report.EvaluationStats.RulesEvaluated} / {report.EvaluationStats.RulesApplicable} ({report.EvaluationStats.EvaluationCoverage:0.0}%)");
+
+            AddRow(html,
+                "Registry-wide Rule Evaluation Coverage",
+                report.EvaluationStats is null
+                    ? "N/A"
+                    : $"{report.EvaluationStats.RegisteredRuleEvaluationCoverage:0.0}%");
 
             AddRow(html,
                 "Rules Not Evaluated",

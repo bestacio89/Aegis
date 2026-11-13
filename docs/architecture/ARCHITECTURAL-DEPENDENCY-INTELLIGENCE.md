@@ -4,7 +4,7 @@
 
 - Baseline: `develop` at `26d97c3b3c95e4558cd1ea072fbe1a3d8e2c8104`
 - Working branch: `feat/architectural-dependency-intelligence`
-- Status: assessment and design baseline; implementation has not started
+- Status: design baseline established; ADI-1 evidence-traceability implementation in progress
 - Scope: introduce a logical architectural-component projection while preserving the existing build-module and language-container dependency views
 
 ## Executive assessment
@@ -158,15 +158,17 @@ The Relationship Ledger should add a relationship-level filter and expose the un
 
 ### ADI-0 — Baseline and contracts
 - Complete the read-only assessment on merged `develop`.
-- Add this design document and confirm the working branch.
-- Define serialized model compatibility and configuration schema before adding contracts.
-- Acceptance: design review completed; no production code changes.
+- Add this design document and establish the dedicated feature branch.
+- Define serialized model compatibility and configuration schema before adding the logical architecture contracts.
+- Acceptance: assessment and implementation roadmap committed; baseline branch is based directly on merged `develop`.
+- Status: completed.
 
 ### ADI-1 — Evidence traceability
 - Extend semantic component aggregates to retain contributing relationship IDs and any required evidence category metadata.
 - Preserve existing counts, relationship kinds, evidence files and production/test separation.
 - Add regression tests proving that every aggregate count can be traced to unique source relationships and duplicate IDs are not double-counted.
 - Acceptance: existing Java, Python and C# component graph tests remain green.
+- Status: implementation committed; exact-head CI validation pending.
 
 ### ADI-2 — Architectural classification
 - Add typed logical component and membership contracts.

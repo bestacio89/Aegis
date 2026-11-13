@@ -100,12 +100,19 @@ private class KotlinSemanticCollector(
         }
 
         override fun visitClass(declaration: IrClass) {
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             val id = classId(declaration)
+            val symbolKind = when (declaration.kind.name) {
+                "INTERFACE" -> 5
+                "ENUM_CLASS" -> 7
+                "ANNOTATION_CLASS" -> 8
+                else -> 4
+            }
             addSymbol(
                 id = id,
                 name = declaration.name.asString(),
                 qualifiedName = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString(),
-                kind = if (declaration.kind.name == "INTERFACE") 5 else 4,
+                kind = symbolKind,
                 declaration = declaration,
                 containingSymbolId = owners.lastOrNull()
             )

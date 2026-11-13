@@ -88,6 +88,17 @@ final class JdtSemanticAnalysisEngineTests {
         assertTrue(result.getAsJsonArray("diagnostics").asList().stream().anyMatch(item ->
             item.getAsJsonObject().get("severity").getAsString().equals("Error")
                 && item.getAsJsonObject().get("affectsCoverage").getAsBoolean()));
+
+        JsonObject sourceType = result.getAsJsonArray("symbols").asList().stream()
+            .map(item -> item.getAsJsonObject())
+            .filter(item -> item.get("name").getAsString().equals("Broken"))
+            .findFirst()
+            .orElseThrow();
+
+        assertEquals(1, sourceType.get("origin").getAsInt());
+        assertEquals("example", sourceType.get("containerName").getAsString());
+        assertEquals("Package", sourceType.get("containerKind").getAsString());
+        assertEquals(source.toString(), sourceType.get("filePath").getAsString());
     }
 
     @Test

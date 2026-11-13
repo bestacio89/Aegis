@@ -4,7 +4,7 @@
 
 - Baseline: `develop` at `26d97c3b3c95e4558cd1ea072fbe1a3d8e2c8104`
 - Working branch: `feat/architectural-dependency-intelligence`
-- Status: ADI-1 evidence traceability validated on exact PR head; ADI-2 classification contracts introduced
+- Status: ADI-1 evidence traceability validated; ADI-2 declarative mapping and conservative classification implemented, pending exact-head CI
 - Scope: introduce a logical architectural-component projection while preserving the existing build-module and language-container dependency views
 
 ## Executive assessment
@@ -168,11 +168,16 @@ The Relationship Ledger should add a relationship-level filter and expose the un
 - Preserve existing counts, relationship kinds, evidence files and production/test separation.
 - Add regression tests proving that every aggregate count can be traced to unique source relationships and duplicate IDs are not double-counted.
 - Acceptance: existing Java, Python and C# component graph tests remain green.
-- Status: implementation committed and all required workflows passed on exact PR head `1af4fc62330dfe6bf5a63aa7f2c18372cd1000c9`.
+- Status: implementation committed; all required workflows passed on exact PR head `1af4fc62330dfe6bf5a63aa7f2c18372cd1000c9`.
 
 ### ADI-2 — Architectural classification
 - Add typed logical component and membership contracts.
-- Status: initial shared contracts and additive project-context collections committed; configuration loading, validation and classification execution remain pending.
+- Added shared contracts and additive project-context collections.
+- Added a versioned JSON loader for `.aegis/architecture-map.json`, including schema, mapping and metadata validation.
+- Added deterministic exact/prefix/module matching, language/module scoping, ambiguity diagnostics, conservative role-segment inference and explicit unclassified memberships.
+- Integrated classification into both the full semantic pipeline and the Java compatibility path.
+- Added tests for serialization compatibility, exact override, longest-prefix selection, segment boundaries, module mapping, ambiguity, conservative inference and configuration loading.
+- Status: implementation committed; exact-head CI validation pending.
 - Implement configuration parsing/validation for explicit mappings.
 - Implement deterministic segment-aware matching, ambiguity diagnostics, provenance and confidence.
 - Add conservative convention inference; unclassified is a valid outcome.

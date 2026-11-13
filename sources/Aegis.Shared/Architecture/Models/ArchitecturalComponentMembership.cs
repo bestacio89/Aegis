@@ -10,7 +10,7 @@ public sealed class ArchitecturalComponentMembership
 {
     public string CodeComponentId { get; init; } = string.Empty;
 
-    public string ArchitecturalComponentId { get; init; } = string.Empty;
+    public string? ArchitecturalComponentId { get; init; }
 
     public ArchitectureClassificationSource ClassificationSource { get; init; }
         = ArchitectureClassificationSource.Unclassified;

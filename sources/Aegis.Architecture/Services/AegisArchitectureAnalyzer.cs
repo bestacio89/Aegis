@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 
 using Aegis.Architecture.Analysis;
+using Aegis.Architecture.Analysis.Classification;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Architecture.Analysis.Semantics;
 using Aegis.Shared.Architecture.Models;
@@ -90,10 +91,17 @@ public sealed class AegisArchitectureAnalyzer
             await _semanticAnalysisOrchestrator.AnalyzeAsync(context, token)
                 .ConfigureAwait(false);
 
-            // The Java orchestrator supplies raw semantic evidence. Keep
-            // architectural component projection in the shared provider-neutral
-            // pipeline even when the compatibility fallback is used.
-            SemanticAnalysisPipeline.ProjectArchitectureComponents(context);
+            // The Java orchestrator supplies raw semantic evidence. Apply the same
+            // declarative architecture map and provider-neutral projection used by
+            // the full semantic pipeline.
+            var architectureMap = await ArchitectureMapConfigurationLoader.LoadAsync(
+                context.RootPath,
+                token).ConfigureAwait(false);
+
+            SemanticAnalysisPipeline.ProjectArchitectureComponents(
+                context,
+                architectureMap.Configuration);
+            context.ArchitectureClassificationDiagnostics.InsertRange(0, architectureMap.Diagnostics);
         }
 
         var report =

@@ -1,3 +1,4 @@
+using Aegis.Architecture.Analysis.Classification;
 using Aegis.Architecture.Analysis.Detectors;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
@@ -82,8 +83,14 @@ public sealed class SemanticAnalysisPipeline
         }
 
         RecordMissingLanguageAnalyzers(context);
-        ProjectArchitectureComponents(context);
         ModuleRoleDetector.Analyze(context.Modules);
+
+        var architectureMap = await ArchitectureMapConfigurationLoader.LoadAsync(
+            context.RootPath,
+            cancellationToken).ConfigureAwait(false);
+
+        ProjectArchitectureComponents(context, architectureMap.Configuration);
+        context.ArchitectureClassificationDiagnostics.InsertRange(0, architectureMap.Diagnostics);
     }
 
     private void RecordMissingLanguageAnalyzers(ProjectArchitectureContext context)
@@ -142,9 +149,12 @@ public sealed class SemanticAnalysisPipeline
     /// Projects all available language-provider semantic runs into the shared
     /// language-native architecture component graph.
     /// </summary>
-    public static void ProjectArchitectureComponents(ProjectArchitectureContext context)
+    public static void ProjectArchitectureComponents(
+        ProjectArchitectureContext context,
+        ArchitectureMapConfiguration? configuration = null)
     {
         ArgumentNullException.ThrowIfNull(context);
         SemanticArchitectureComponentDetector.Analyze(context);
+        ArchitecturalComponentClassifier.Classify(context, configuration);
     }
 }

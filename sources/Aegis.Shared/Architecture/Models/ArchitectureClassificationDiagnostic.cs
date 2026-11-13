@@ -12,6 +12,8 @@ public sealed class ArchitectureClassificationDiagnostic
 
     public string Message { get; init; } = string.Empty;
 
+    public string? Target { get; init; }
+
     public string? CodeComponentId { get; init; }
 
     public string? MappingId { get; init; }

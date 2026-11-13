@@ -715,9 +715,21 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         private boolean isGeneratedPath(Path file) {
             Path normalized = file.toAbsolutePath().normalize();
             if (generatedSourceRoots.stream().anyMatch(normalized::startsWith)) return true;
-            String value = file.toString().replace('\\', '/').toLowerCase(Locale.ROOT);
-            return value.contains("/generated/") || value.contains("/generated-sources/")
-                || value.contains("/build/generated/") || value.contains("/target/generated/");
+            if (!normalized.startsWith(projectRoot)) return false;
+
+            Path relative = projectRoot.relativize(normalized);
+            for (int index = 0; index < relative.getNameCount(); index++) {
+                String segment = relative.getName(index).toString();
+                if (segment.equalsIgnoreCase("generated-sources")) return true;
+                if (index + 1 < relative.getNameCount()
+                    && (segment.equalsIgnoreCase("build") || segment.equalsIgnoreCase("target"))
+                    && relative.getName(index + 1).toString().equalsIgnoreCase("generated")) {
+                    return true;
+                }
+                if (index == 0 && segment.equalsIgnoreCase("generated")) return true;
+            }
+
+            return false;
         }
 
         private static ITypeBinding resolveType(AbstractTypeDeclaration type) {

@@ -1296,15 +1296,19 @@ internal static class GradleBuildModelResolver
         void AddSourceRoot(
             string directory,
             ProjectSourceRootOwnership ownership,
-            ProjectSourceRootOrigin origin)
+            ProjectSourceRootOrigin origin,
+            bool isGenerated = false,
+            string? generatedLanguage = null)
         {
             var fullDirectory = Path.GetFullPath(directory);
-            var containsJava = files.Any(file =>
-                Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
-                && IsSameOrDescendantPath(file, fullDirectory));
-            var containsKotlin = files.Any(file =>
-                Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
-                && IsSameOrDescendantPath(file, fullDirectory));
+            var containsJava = string.Equals(generatedLanguage, "Java", StringComparison.OrdinalIgnoreCase)
+                || files.Any(file =>
+                    Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
+                    && IsSameOrDescendantPath(file, fullDirectory));
+            var containsKotlin = string.Equals(generatedLanguage, "Kotlin", StringComparison.OrdinalIgnoreCase)
+                || files.Any(file =>
+                    Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
+                    && IsSameOrDescendantPath(file, fullDirectory));
             var languages = new List<string>();
             if (containsJava)
                 languages.Add("Java");
@@ -1330,10 +1334,16 @@ internal static class GradleBuildModelResolver
                     .Concat(languages)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                containsJava |= existing.ContainsJavaSources;
+                containsKotlin |= existing.ContainsKotlinSources;
+                isGenerated |= existing.IsGenerated;
                 origin = existing.Origin == ProjectSourceRootOrigin.Explicit
                     || origin == ProjectSourceRootOrigin.Explicit
                     ? ProjectSourceRootOrigin.Explicit
-                    : existing.Origin;
+                    : existing.Origin == ProjectSourceRootOrigin.GeneratedConvention
+                      || origin == ProjectSourceRootOrigin.GeneratedConvention
+                        ? ProjectSourceRootOrigin.GeneratedConvention
+                        : ProjectSourceRootOrigin.Conventional;
             }
 
             roots[fullDirectory] = new ProjectSourceRoot
@@ -1341,9 +1351,8 @@ internal static class GradleBuildModelResolver
                 Directory = fullDirectory,
                 Ownership = ownership,
                 Origin = origin,
-                IsGenerated = false,
-                ContainsJavaSources = containsJava
-                    || (roots.TryGetValue(fullDirectory, out var previous) && previous.ContainsJavaSources),
+                IsGenerated = isGenerated,
+                ContainsJavaSources = containsJava,
                 Languages = languages,
                 EvidenceFile = buildFile
             };

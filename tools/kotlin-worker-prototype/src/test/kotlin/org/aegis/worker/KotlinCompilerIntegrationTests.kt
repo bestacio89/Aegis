@@ -133,6 +133,10 @@ class KotlinCompilerIntegrationTests {
                 overload(42)
                 readId(user)
             }
+
+            fun invokeWithLambda(service: Service) {
+                listOf(1).forEach { service.execute() }
+            }
             """.trimIndent()
         )
 
@@ -284,6 +288,11 @@ class KotlinCompilerIntegrationTests {
                 repeatedCall.getAsJsonArray("provenance").size(),
                 "Repeated calls should aggregate into one stable relationship with both source locations."
             )
+            assertTrue(relationships.any {
+                it.get("kind").asInt == 4 &&
+                    it.get("sourceSymbolId").asString == "kotlin:function:sample.invokeWithLambda(sample.Service)" &&
+                    it.get("targetSymbolId").asString == "kotlin:function:sample.Service.execute()"
+            }, "Calls inside Kotlin lambdas must be attributed to their enclosing source declaration.")
             assertEquals(
                 "${repeatedCall.get("sourceSymbolId").asString}|4|${repeatedCall.get("targetSymbolId").asString}",
                 repeatedCall.get("id").asString
@@ -355,6 +364,19 @@ class KotlinCompilerIntegrationTests {
                 fun localFunction(value: String): LocalType = LocalType()
                 localFunction("value")
             }
+
+            fun duplicateScopes(flag: Boolean) {
+                if (flag) {
+                    class Reused
+                    fun local(value: String): Reused = Reused()
+                    local("first")
+                }
+                if (!flag) {
+                    class Reused
+                    fun local(value: String): Reused = Reused()
+                    local("second")
+                }
+            }
         """.trimIndent()
 
         try {
@@ -362,7 +384,7 @@ class KotlinCompilerIntegrationTests {
             val first = compileLocalDeclarationFixture(workspace, source, firstOutput, firstClasses)
             val firstIds = first.getAsJsonArray("symbols")
                 .map { it.asJsonObject }
-                .filter { it.get("name").asString in setOf("LocalType", "localFunction") }
+                .filter { it.get("name").asString in setOf("LocalType", "localFunction", "Reused", "local") }
                 .map { it.get("id").asString }
                 .sorted()
 
@@ -370,13 +392,13 @@ class KotlinCompilerIntegrationTests {
             val second = compileLocalDeclarationFixture(workspace, source, secondOutput, secondClasses)
             val secondIds = second.getAsJsonArray("symbols")
                 .map { it.asJsonObject }
-                .filter { it.get("name").asString in setOf("LocalType", "localFunction") }
+                .filter { it.get("name").asString in setOf("LocalType", "localFunction", "Reused", "local") }
                 .map { it.get("id").asString }
                 .sorted()
 
-            assertEquals(2, firstIds.size)
+            assertEquals(6, firstIds.size)
+            assertEquals(6, firstIds.distinct().size, "Same-named declarations in separate lexical scopes must remain distinct.")
             assertEquals(firstIds, secondIds)
-            assertTrue(firstIds.none { it.contains("@") }, "Local declaration IDs must not encode source offsets.")
         } finally {
             workspace.toFile().deleteRecursively()
         }

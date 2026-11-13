@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrTypeAlias
+import org.jetbrains.kotlin.ir.expressions.IrBlock
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.declarations.IrParameterKind
@@ -33,6 +34,7 @@ import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 import java.util.ArrayDeque
 import java.util.IdentityHashMap
 import java.util.LinkedHashMap
@@ -47,7 +49,8 @@ class KotlinSemanticCollector(
     private val relationships = LinkedHashMap<String, JsonObject>()
     private val propertyAccessors = HashMap<Any, String>()
     private val localDeclarationIds = IdentityHashMap<IrDeclaration, String>()
-    private val localDeclarationOccurrences = HashMap<String, Int>()
+    private val lexicalScopes = ArrayDeque<LexicalScope>()
+    private val sourceTextCache = HashMap<String, String>()
 
     fun collect(module: IrModuleFragment) {
         module.acceptChildrenVoid(DeclarationCollector())
@@ -81,6 +84,14 @@ class KotlinSemanticCollector(
             currentFile = declaration
             declaration.acceptChildrenVoid(this)
             currentFile = previous
+        }
+
+        override fun visitBlock(expression: IrBlock) {
+            lexicalScopes.addLast(
+                createLexicalScope(currentFile, expression.startOffset, expression.endOffset, "block")
+            )
+            expression.acceptChildrenVoid(this)
+            lexicalScopes.removeLast()
         }
 
         override fun visitClass(declaration: IrClass) {
@@ -138,11 +149,22 @@ class KotlinSemanticCollector(
         }
 
         override fun visitSimpleFunction(declaration: IrSimpleFunction) {
-            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             if (propertyAccessors.containsKey(declaration.symbol)) {
                 declaration.acceptChildrenVoid(this)
                 return
             }
+
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) {
+                if (declaration.origin.name == "LOCAL_FUNCTION_FOR_LAMBDA") {
+                    lexicalScopes.addLast(
+                        createLexicalScope(currentFile, declaration.startOffset, declaration.endOffset, "lambda")
+                    )
+                    declaration.acceptChildrenVoid(this)
+                    lexicalScopes.removeLast()
+                }
+                return
+            }
+
             val id = functionId(declaration, owners.lastOrNull())
             addSymbol(
                 id = id,
@@ -153,7 +175,11 @@ class KotlinSemanticCollector(
                 containingSymbolId = owners.lastOrNull()
             )
             owners.addLast(id)
+            lexicalScopes.addLast(
+                createLexicalScope(currentFile, declaration.startOffset, declaration.endOffset, "function")
+            )
             declaration.acceptChildrenVoid(this)
+            lexicalScopes.removeLast()
             owners.removeLast()
         }
 
@@ -169,7 +195,11 @@ class KotlinSemanticCollector(
                 containingSymbolId = owners.lastOrNull()
             )
             owners.addLast(id)
+            lexicalScopes.addLast(
+                createLexicalScope(currentFile, declaration.startOffset, declaration.endOffset, "constructor")
+            )
             declaration.acceptChildrenVoid(this)
+            lexicalScopes.removeLast()
             owners.removeLast()
         }
 
@@ -287,11 +317,18 @@ class KotlinSemanticCollector(
         }
 
         override fun visitSimpleFunction(declaration: IrSimpleFunction) {
-            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             if (propertyAccessors.containsKey(declaration.symbol)) {
                 declaration.acceptChildrenVoid(this)
                 return
             }
+
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) {
+                if (declaration.origin.name == "LOCAL_FUNCTION_FOR_LAMBDA") {
+                    declaration.acceptChildrenVoid(this)
+                }
+                return
+            }
+
             val sourceId = functionId(declaration, owners.lastOrNull())
             owners.addLast(sourceId)
             addAnnotationRelationships(sourceId, declaration, currentFile)
@@ -517,22 +554,73 @@ class KotlinSemanticCollector(
     private fun localDeclarationName(
         declaration: IrDeclaration,
         containingSymbolId: String?,
-        declarationKind: String,
-        signature: String = ""
+        declarationKind: String
     ): String {
         localDeclarationIds[declaration]?.let { return it }
 
         val owner = containingSymbolId ?: parentSymbolId(declaration) ?: projectPath
         val name = (declaration as? IrDeclarationWithName)?.name?.asString()
             ?: declaration.javaClass.simpleName
-        val occurrenceKey = "$owner|$declarationKind|$name|$signature"
-        val occurrence = localDeclarationOccurrences[occurrenceKey] ?: 0
-        localDeclarationOccurrences[occurrenceKey] = occurrence + 1
-
-        val identity = "$owner::$declarationKind:$name#$occurrence"
+        val scopeIdentity = lexicalScopes.lastOrNull()?.identity ?: "root"
+        val identity = "$owner::$declarationKind:$name@$scopeIdentity"
         localDeclarationIds[declaration] = identity
         return identity
     }
+
+    private fun createLexicalScope(
+        file: IrFile?,
+        startOffset: Int,
+        endOffset: Int,
+        kind: String
+    ): LexicalScope {
+        val parent = lexicalScopes.lastOrNull()
+        val source = sourceSnippet(file, startOffset, endOffset)
+        val parentPrefix = parent?.let { sourceSnippet(file, it.startOffset, startOffset) }
+        val identitySource = if (source == null) {
+            listOf(kind, parent?.identity.orEmpty(), file?.fileEntry?.name.orEmpty(), "source-unavailable")
+                .joinToString("|")
+        } else {
+            listOf(
+                kind,
+                parent?.identity.orEmpty(),
+                normalizeSourceSnippet(parentPrefix),
+                normalizeSourceSnippet(source)
+            ).joinToString("|")
+        }
+
+        return LexicalScope(startOffset, stableHash(identitySource))
+    }
+
+    private fun sourceSnippet(file: IrFile?, startOffset: Int, endOffset: Int): String? {
+        if (file == null || startOffset < 0 || endOffset < startOffset) return null
+
+        val path = file.fileEntry.name
+        val source = sourceTextCache.getOrPut(path) {
+            try {
+                Files.readString(Path.of(path))
+            } catch (_: Exception) {
+                ""
+            }
+        }
+
+        if (source.isEmpty() || endOffset > source.length) return null
+        return source.substring(startOffset, endOffset)
+    }
+
+    private fun normalizeSourceSnippet(source: String?): String =
+        source.orEmpty().lineSequence()
+            .filter(String::isNotBlank)
+            .joinToString("\n") { it.trim() }
+
+    private fun stableHash(value: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
+    private data class LexicalScope(
+        val startOffset: Int,
+        val identity: String
+    )
 
     private fun packageName(declaration: IrDeclaration): String {
         var parent = declaration.parent
@@ -621,7 +709,7 @@ class KotlinSemanticCollector(
             ?.let(::typeIdentity)
         val receiverIdentity = receiver?.let { "($it)" }.orEmpty()
         val name = declaration.fqNameWhenAvailable?.asString()
-            ?: localDeclarationName(declaration, containingSymbolId, "property", receiver.orEmpty())
+            ?: localDeclarationName(declaration, containingSymbolId, "property")
         return "kotlin:property:$name$receiverIdentity"
     }
 
@@ -643,8 +731,7 @@ class KotlinSemanticCollector(
             ?: localDeclarationName(
                 declaration,
                 containingSymbolId,
-                if (declaration is IrConstructor) "constructor" else "function",
-                signature
+                if (declaration is IrConstructor) "constructor" else "function"
             )
         return "kotlin:function:$name($signature)"
     }

@@ -989,15 +989,29 @@ internal static class GradleBuildModelResolver
         {
             if (result.TryGetValue(explicitSourceSet.Name, out var existing))
             {
-                var directories = existing.JavaSourceDirectories
+                var javaDirectories = existing.JavaSourceDirectories
                     .Concat(explicitSourceSet.JavaSourceDirectories)
+                    .Distinct(PathComparer)
+                    .ToList();
+                var kotlinDirectories = (existing.KotlinSourceDirectories ?? [])
+                    .Concat(explicitSourceSet.KotlinSourceDirectories ?? [])
+                    .Distinct(PathComparer)
+                    .ToList();
+                var explicitJavaDirectories = (existing.ExplicitJavaSourceDirectories ?? [])
+                    .Concat(explicitSourceSet.ExplicitJavaSourceDirectories ?? [])
+                    .Distinct(PathComparer)
+                    .ToList();
+                var explicitKotlinDirectories = (existing.ExplicitKotlinSourceDirectories ?? [])
+                    .Concat(explicitSourceSet.ExplicitKotlinSourceDirectories ?? [])
                     .Distinct(PathComparer)
                     .ToList();
                 result[explicitSourceSet.Name] = new GradleBuildModel.SourceSet(
                     existing.Name,
-                    directories,
+                    javaDirectories,
                     existing.IsTest || explicitSourceSet.IsTest,
-                    explicitSourceSet.ExplicitJavaSourceDirectories);
+                    explicitJavaDirectories,
+                    kotlinDirectories,
+                    explicitKotlinDirectories);
             }
             else
             {
@@ -1247,11 +1261,25 @@ internal static class GradleBuildModelResolver
         var result = new List<GradleBuildModel.SourceSet>();
         foreach (var sourceSet in new[] { "main", "test", "integrationTest", "testFixtures" })
         {
-            var directory = Path.Combine(modulePath, "src", sourceSet, "java");
-            var exists = files.Any(file =>
-                IsSameOrDescendantPath(file, directory));
-            if (exists)
-                result.Add(new GradleBuildModel.SourceSet(sourceSet, [directory], sourceSet != "main"));
+            var javaDirectory = Path.Combine(modulePath, "src", sourceSet, "java");
+            var kotlinDirectory = Path.Combine(modulePath, "src", sourceSet, "kotlin");
+            var javaSources = files.Any(file =>
+                Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
+                && IsSameOrDescendantPath(file, javaDirectory));
+            var kotlinSources = files.Any(file =>
+                Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
+                && IsSameOrDescendantPath(file, kotlinDirectory));
+
+            if (!javaSources && !kotlinSources)
+                continue;
+
+            result.Add(new GradleBuildModel.SourceSet(
+                sourceSet,
+                javaSources ? [javaDirectory] : [],
+                sourceSet != "main",
+                null,
+                kotlinSources ? [kotlinDirectory] : [],
+                null));
         }
 
         return result;

@@ -44,23 +44,26 @@ internal static class SemanticArchitectureComponentDetector
             .ToDictionary(
                 group => group.Key,
                 group => group
-                    .OrderByDescending(module => module.Languages.Count > 0)
-                    .ThenBy(module => module.Name, StringComparer.OrdinalIgnoreCase)
-                    .First(),
+                    .OrderBy(module => module.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
                 PathComparer);
 
-        ProjectModuleContext ResolveModule(SemanticAnalysisRun run)
+        ProjectModuleContext ResolveModule(string path, string language)
         {
-            var modulePath = NormalizePath(run.ProjectPath);
-            if (modulesByPath.TryGetValue(modulePath, out var discovered))
-                return discovered;
+            var modulePath = NormalizePath(path);
+            if (modulesByPath.TryGetValue(modulePath, out var candidates))
+            {
+                var languageMatch = candidates.FirstOrDefault(module =>
+                    module.Languages.Contains(language, StringComparer.OrdinalIgnoreCase));
+                return languageMatch ?? candidates[0];
+            }
 
             var moduleName = Path.GetFileName(modulePath);
             return new ProjectModuleContext
             {
                 Name = string.IsNullOrWhiteSpace(moduleName) ? context.ProjectName : moduleName,
                 Path = modulePath,
-                Languages = [run.Language]
+                Languages = [language]
             };
         }
 
@@ -73,7 +76,7 @@ internal static class SemanticArchitectureComponentDetector
             .Where(IsUsableSemanticRun)
             .SelectMany(run =>
             {
-                var module = ResolveModule(run);
+                var module = ResolveModule(run.ProjectPath, run.Language);
                 return run.Symbols
                     .Where(IsProjectSourceSymbol)
                     .Where(symbol =>
@@ -170,7 +173,7 @@ internal static class SemanticArchitectureComponentDetector
 
         foreach (var run in context.SemanticAnalysisRuns.Where(IsUsableSemanticRun))
         {
-            var sourceModule = ResolveModule(run);
+            var sourceModule = ResolveModule(run.ProjectPath, run.Language);
 
             var runSymbols = run.Symbols
                 .Where(IsProjectSourceSymbol)
@@ -193,7 +196,7 @@ internal static class SemanticArchitectureComponentDetector
                     continue;
                 }
 
-                var targetModule = modulesByPath.GetValueOrDefault(targetComponent.ModulePath);
+                var targetModule = ResolveModule(targetComponent.ModulePath, targetComponent.Language);
                 var isTest = relationship.IsTestCode
                     || sourceSymbol.IsTestCode
                     || targetComponent.IsTestCode

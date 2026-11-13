@@ -41,6 +41,36 @@ public sealed class SemanticAnalysisContractTests
     }
 
     [Fact]
+    public void Semantic_symbol_preserves_normalized_declaration_metadata()
+    {
+        var symbol = new SemanticSymbol
+        {
+            Id = "kotlin:typealias:sample.UserIdentifier",
+            Kind = SemanticSymbolKind.TypeAlias,
+            Name = "UserIdentifier",
+            QualifiedName = "sample.UserIdentifier",
+            Language = "Kotlin",
+            ProjectPath = "/workspace/sample",
+            DeclarationKind = "TypeAlias",
+            Visibility = "Public",
+            ExpandedType = "kotlin.String",
+            ReceiverType = "sample.User",
+            Modifiers = ["inline", "value"]
+        };
+
+        var json = JsonSerializer.SerializeToElement(symbol);
+
+        Assert.Equal(14, (int)SemanticSymbolKind.TypeAlias);
+        Assert.Equal("TypeAlias", json.GetProperty("DeclarationKind").GetString());
+        Assert.Equal("Public", json.GetProperty("Visibility").GetString());
+        Assert.Equal("kotlin.String", json.GetProperty("ExpandedType").GetString());
+        Assert.Equal("sample.User", json.GetProperty("ReceiverType").GetString());
+        Assert.Equal(
+            new[] { "inline", "value" },
+            json.GetProperty("Modifiers").EnumerateArray().Select(value => value.GetString()).ToArray());
+    }
+
+    [Fact]
     public void Unresolved_relationship_preserves_observation_without_fabricating_target_identity()
     {
         var relationship = new SemanticRelationship

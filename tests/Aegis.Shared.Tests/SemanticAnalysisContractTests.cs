@@ -41,6 +41,22 @@ public sealed class SemanticAnalysisContractTests
     }
 
     [Fact]
+    public void Project_source_root_can_represent_multiple_languages()
+    {
+        var sourceRoot = new ProjectSourceRoot
+        {
+            Directory = "/workspace/module/src/main",
+            Languages = ["Java", "Kotlin"],
+            ContainsJavaSources = true
+        };
+
+        Assert.True(sourceRoot.ContainsLanguage("Java"));
+        Assert.True(sourceRoot.ContainsLanguage("Kotlin"));
+        Assert.True(sourceRoot.ContainsKotlinSources);
+        Assert.False(sourceRoot.ContainsLanguage("Scala"));
+    }
+
+    [Fact]
     public void Semantic_symbol_preserves_normalized_declaration_metadata()
     {
         var symbol = new SemanticSymbol

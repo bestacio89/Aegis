@@ -68,6 +68,46 @@ public sealed class SemanticAnalysisPipelineTests
         Assert.Equal(SemanticAnalysisStatus.Completed, completedRun.Status);
     }
 
+
+    [Fact]
+    public async Task AnalyzeAsync_records_missing_semantic_provider_for_discovered_production_language()
+    {
+        var executionOrder = new List<string>();
+        var pipeline = new SemanticAnalysisPipeline(
+            [new RecordingAnalyzer("Java", executionOrder)],
+            NullLogger<SemanticAnalysisPipeline>.Instance);
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "Polyglot",
+            RootPath = Path.GetTempPath(),
+            Language = "Java",
+            Modules =
+            [
+                new ProjectModuleContext
+                {
+                    Name = "JavaModule",
+                    Path = Path.Combine(Path.GetTempPath(), "java"),
+                    Languages = ["Java"]
+                },
+                new ProjectModuleContext
+                {
+                    Name = "PythonModule",
+                    Path = Path.Combine(Path.GetTempPath(), "python"),
+                    Languages = ["Python"]
+                }
+            ]
+        };
+
+        await pipeline.AnalyzeAsync(context);
+
+        var missingRun = Assert.Single(context.SemanticAnalysisRuns, run =>
+            run.Language == "Python");
+        Assert.Equal(SemanticAnalysisStatus.Unsupported, missingRun.Status);
+        Assert.Contains(missingRun.Diagnostics, diagnostic =>
+            diagnostic.Code == "SemanticProjectAnalyzerNotRegistered"
+            && diagnostic.AffectsCoverage);
+    }
+
     [Fact]
     public async Task AnalyzeAsync_propagates_cancellation_before_starting_a_provider()
     {

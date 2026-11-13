@@ -15,7 +15,7 @@ class KotlinSourceLayoutTests {
             projectRoot.resolve("src/test/kotlin")
         )
         val declarationPattern = Regex(
-            """(?m)^(?:(?:public|private|internal|protected|expect|actual|open|abstract|final|inline|value|data|sealed|enum|annotation|fun|external)\\s+)*(?:class|interface|object|typealias)\\s+(`?[A-Za-z_][A-Za-z0-9_]*`?)"""
+            """(?m)^(?:(?:public|private|internal|protected|expect|actual|open|abstract|final|inline|value|data|sealed|enum|annotation|fun|external)\s+)*(?:class|interface|object|typealias)\s+(`?[A-Za-z_][A-Za-z0-9_]*`?)"""
         )
 
         sourceRoots.forEach { sourceRoot ->

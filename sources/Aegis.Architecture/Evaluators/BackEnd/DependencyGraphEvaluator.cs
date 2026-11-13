@@ -218,13 +218,20 @@ public sealed class DependencyGraphEvaluator
             "Provider-resolved semantic relationships aggregated between language-native architectural components; build-module dependencies are reported separately.";
         result.Metadata["GraphNodeCount"] = nodes.Length.ToString();
         result.Metadata["GraphEdgeCount"] = distinctEdges.ToString();
-        var componentLanguages = context.ProductionComponents
-            .Select(component => component.Language)
+        var requiredLanguages = context.ProductionModules
+            .SelectMany(module => module.Languages)
+            .Append(context.Language)
+            .Where(language => !string.IsNullOrWhiteSpace(language)
+                && !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var semanticRuns = context.SemanticAnalysisRuns
-            .Where(run => componentLanguages.Contains(run.Language))
+            .Where(run => requiredLanguages.Contains(run.Language))
             .ToArray();
-        var analysisComplete = semanticRuns.Length > 0
+        var analyzedLanguages = semanticRuns
+            .Select(run => run.Language)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var analysisComplete = requiredLanguages.Count > 0
+            && requiredLanguages.SetEquals(analyzedLanguages)
             && semanticRuns.All(run => run.IsComplete)
             && !context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
         result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();

@@ -475,12 +475,16 @@ internal class KotlinSemanticCollector(
                 if (declaration.kind.name == "OBJECT") add("object")
                 if (declaration.isCompanion) add("companion")
             }
-            is IrFunction -> {
+            is IrSimpleFunction -> {
                 if (declaration.isSuspend) add("suspend")
                 if (declaration.isInline) add("inline")
                 if (declaration.isOperator) add("operator")
                 if (declaration.isInfix) add("infix")
                 if (declaration.isTailrec) add("tailrec")
+                if (declaration.isExternal) add("external")
+            }
+            is IrFunction -> {
+                if (declaration.isInline) add("inline")
                 if (declaration.isExternal) add("external")
             }
             is IrProperty -> {

@@ -168,12 +168,16 @@ class KotlinCompilerIntegrationTests {
                 it.get("kind").asInt == 8 &&
                     it.get("qualifiedName").asString == "sample.Audited"
             }, "Kotlin annotation classes must retain the normalized annotation symbol kind.")
-            assertTrue(symbols.any {
-                it.get("kind").asInt == 14 &&
+            val typeAliasSymbols = symbols.filter { it.get("kind").asInt == 14 }
+            assertTrue(
+                typeAliasSymbols.any {
                     it.get("qualifiedName").asString == "sample.UserIdentifier" &&
-                    it.get("declarationKind").asString == "TypeAlias" &&
-                    it.get("expandedType").asString == "kotlin.String"
-            }, "Kotlin type aliases must remain explicit source declarations after IR generation.")
+                        it.get("declarationKind").asString == "TypeAlias" &&
+                        it.get("expandedType").asString == "kotlin.String"
+                },
+                "Kotlin type aliases must remain explicit source declarations after IR generation. Found: " +
+                    typeAliasSymbols.joinToString { it.toString() }
+            )
             assertTrue(symbols.any {
                 it.get("kind").asInt == 12 &&
                     it.get("qualifiedName").asString == "sample.User.id"

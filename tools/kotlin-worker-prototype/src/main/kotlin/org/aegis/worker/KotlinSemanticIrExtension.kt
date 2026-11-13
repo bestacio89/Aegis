@@ -336,7 +336,7 @@ private class KotlinSemanticCollector(
         symbol.add("startColumn", com.google.gson.JsonNull.INSTANCE)
         symbol.add("containingSymbolId", com.google.gson.JsonNull.INSTANCE)
         symbol.addProperty("origin", 3)
-        symbol.addProperty("isTestCode", false)
+        symbol.addProperty("isTestCode", isTestCode)
         symbol.addProperty("isPublic", true)
         symbol.add("provenance", JsonArray())
         symbols[id] = symbol
@@ -358,8 +358,8 @@ private class KotlinSemanticCollector(
     }
 
     private fun isGenerated(file: IrFile?): Boolean {
-        val filePath = file?.fileEntry?.name?.let(Path::of)?.toAbsolutePath()?.normalize() ?: return false
-        return generatedRoots.any(filePath::startsWith)
+        val filePath = file?.fileEntry?.name?.let { Path.of(it).toAbsolutePath().normalize() } ?: return false
+        return generatedRoots.any { root -> filePath.startsWith(root) }
     }
 
     private fun provenance(file: IrFile?, offset: Int): JsonArray {

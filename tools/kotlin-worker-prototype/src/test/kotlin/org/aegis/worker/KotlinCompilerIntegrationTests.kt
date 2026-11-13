@@ -413,19 +413,19 @@ class KotlinCompilerIntegrationTests {
                 "Java field reads from Kotlin must remain explicit references."
             )
 
-            val externalJavaBeanProperty = symbols.single {
-                it.get("kind").asInt == 12 &&
-                    it.get("qualifiedName").asString == "interop.JavaRepository.displayName" &&
+            val externalJavaBeanGetter = symbols.single {
+                it.get("kind").asInt == 9 &&
+                    it.get("qualifiedName").asString == "interop.JavaRepository.getDisplayName" &&
                     it.get("language").asString == "Java"
             }
-            assertEquals("Property", externalJavaBeanProperty.get("declarationKind").asString)
+            assertEquals("Function", externalJavaBeanGetter.get("declarationKind").asString)
             assertTrue(
                 relationships.any {
-                    it.get("kind").asInt == 5 &&
+                    it.get("kind").asInt == 4 &&
                         it.get("sourceSymbolId").asString.startsWith("kotlin:function:sample.readJavaBeanProperty(") &&
-                        it.get("targetSymbolId").asString == "kotlin:property:interop.JavaRepository.displayName"
+                        it.get("targetSymbolId").asString == "kotlin:function:interop.JavaRepository.getDisplayName()"
                 },
-                "JavaBean getter access from Kotlin must remain a property reference."
+                "Kotlin synthetic property syntax must retain the underlying JavaBean getter method identity."
             )
             assertTrue(
                 symbols.any {

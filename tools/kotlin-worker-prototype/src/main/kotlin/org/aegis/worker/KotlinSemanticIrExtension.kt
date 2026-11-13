@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
 import org.jetbrains.kotlin.ir.declarations.IrFile
+import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationWithVisibility
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
@@ -16,6 +17,7 @@ import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
+import org.jetbrains.kotlin.ir.declarations.IrParameterKind
 import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
@@ -101,7 +103,6 @@ private class KotlinSemanticCollector(
 
         override fun visitProperty(declaration: IrProperty) {
             val id = propertyId(declaration)
-            declarationIds[declaration] = id
             addSymbol(
                 id = id,
                 name = declaration.name.asString(),
@@ -343,17 +344,15 @@ private class KotlinSemanticCollector(
 
     private fun functionId(declaration: IrFunction): String {
         val name = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
-        val parameters = when (declaration) {
-            is IrSimpleFunction -> declaration.valueParameters
-            is IrConstructor -> declaration.valueParameters
-            else -> emptyList()
-        }
-        val receiver = (declaration as? IrSimpleFunction)
-            ?.extensionReceiverParameter
+        val parameters = declaration.parameters
+        val receiver = parameters.firstOrNull { it.kind == IrParameterKind.ExtensionReceiver }
             ?.type
             ?.let(::typeIdentity)
-        val parameterTypes = parameters.joinToString(",") { typeIdentity(it.type) }
-        val signature = listOfNotNull(receiver, parameterTypes.takeIf(String::isNotEmpty))
+        val parameterTypes = parameters
+            .filter { it.kind == IrParameterKind.Regular || it.kind == IrParameterKind.Context }
+            .joinToString(",") { typeIdentity(it.type) }
+        val suspendMarker = if ((declaration as? IrSimpleFunction)?.isSuspend == true) "suspend" else null
+        val signature = listOfNotNull(receiver, parameterTypes.takeIf(String::isNotEmpty), suspendMarker)
             .joinToString("|")
         return "kotlin:function:$name($signature)"
     }

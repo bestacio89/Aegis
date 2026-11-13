@@ -221,6 +221,42 @@ public sealed class GradleBuildModelTests
     }
 
     [Fact]
+    public void Detect_does_not_claim_android_kotlin_as_jvm_semantic_support()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleAndroidKotlin_{Guid.NewGuid():N}");
+        var sourceRoot = Path.Combine(root, "src", "main", "kotlin");
+        Directory.CreateDirectory(Path.Combine(sourceRoot, "sample"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-kotlin\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.8.0"
+                    id("org.jetbrains.kotlin.android") version "2.4.21"
+                }
+                """);
+            File.WriteAllText(Path.Combine(sourceRoot, "sample", "MainActivity.kt"),
+                "package sample\nclass MainActivity");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.Equal("2.4.21", model.KotlinPluginVersion);
+            Assert.Contains(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleKotlinAndroidTargetNotSupported");
+            Assert.DoesNotContain(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleKotlinJvmPluginNotDetected");
+            Assert.False(model.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_expands_catalog_bundles_and_resolves_rich_version_constraints()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisGradleRichCatalog_{Guid.NewGuid():N}");

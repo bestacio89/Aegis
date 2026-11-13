@@ -39,6 +39,9 @@ class KotlinWorkerProcessIntegrationTests {
             manifest,
             JsonArray().apply { add(source.toAbsolutePath().toString()) }.toString()
         )
+        val standardLibraryPath = Path.of(
+            Unit::class.java.protectionDomain.codeSource.location.toURI()
+        ).toAbsolutePath().normalize()
 
         val javaExecutable = Path.of(
             System.getProperty("java.home"),
@@ -68,7 +71,7 @@ class KotlinWorkerProcessIntegrationTests {
             assertEquals(KotlinWorkerServer.PROTOCOL_VERSION, handshake.getAsJsonObject("result")
                 .get("protocolVersion").asInt)
 
-            writer.write(request("analyze", "analyze", analysisPayload(workspace, sourceRoot, manifest)).toString())
+            writer.write(request("analyze", "analyze", analysisPayload(workspace, sourceRoot, manifest, standardLibraryPath)).toString())
             writer.newLine()
             writer.flush()
             val analysis = readResponse(executor, reader)
@@ -96,7 +99,12 @@ class KotlinWorkerProcessIntegrationTests {
         }
     }
 
-    private fun analysisPayload(workspace: Path, sourceRoot: Path, manifest: Path): JsonObject =
+    private fun analysisPayload(
+        workspace: Path,
+        sourceRoot: Path,
+        manifest: Path,
+        standardLibraryPath: Path
+    ): JsonObject =
         JsonObject().apply {
             addProperty("projectPath", workspace.toAbsolutePath().toString())
             addProperty("workspaceRoot", workspace.toAbsolutePath().toString())
@@ -105,7 +113,7 @@ class KotlinWorkerProcessIntegrationTests {
             add("referencedSourceRoots", JsonArray())
             add("testSourceRoots", JsonArray())
             add("generatedSourceRoots", JsonArray())
-            add("classpathEntries", JsonArray())
+            add("classpathEntries", JsonArray().apply { add(standardLibraryPath.toString()) })
             addProperty("compilerVersion", KotlinWorkerServer.KOTLIN_COMPILER_VERSION)
             addProperty("languageVersion", "2.4")
             addProperty("apiVersion", "2.4")

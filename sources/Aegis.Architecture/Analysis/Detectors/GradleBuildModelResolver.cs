@@ -943,11 +943,15 @@ internal static class GradleBuildModelResolver
                         RegexOptions.CultureInvariant)
                     || Regex.IsMatch(
                         line,
-                        @"(?:\bjava\s*\.\s*)?(?:srcDirs|setSrcDirs)\s*=\s*(?:\[\s*['""]|(?:listOf|setOf)\s*\(\s*['""])",
+                        @"(?:\bjava\s*\.\s*)?(?:srcDirs|setSrcDirs)\s*=\s*(?:\[\s*['""]|(?:listOf|setOf)\s*\(\s*['""]|(?:file|files)\s*\(\s*['""])",
                         RegexOptions.CultureInvariant)
                     || Regex.IsMatch(
                         line,
-                        @"(?:\bjava\s*\.\s*)?setSrcDirs\s*\(\s*(?:listOf|setOf)\s*\(\s*['""]",
+                        @"(?:\bjava\s*\.\s*)?(?:srcDir|srcDirs|setSrcDirs)\s*(?:\(\s*)?(?:file|files)\s*\(\s*['""]",
+                        RegexOptions.CultureInvariant)
+                    || Regex.IsMatch(
+                        line,
+                        @"(?:\bjava\s*\.\s*)?setSrcDirs\s*\(\s*(?:listOf|setOf|files)\s*\(\s*['""]",
                         RegexOptions.CultureInvariant);
 
                 if (!hasDirectLiteralArguments || quotedValues.Length == 0)
@@ -1077,11 +1081,15 @@ internal static class GradleBuildModelResolver
                     RegexOptions.CultureInvariant)
                 || Regex.IsMatch(
                     line,
-                    @"(?:\bkotlin\s*\.\s*)?(?:srcDirs|setSrcDirs)\s*=\s*(?:\[\s*['""]|(?:listOf|setOf)\s*\(\s*['""])",
+                    @"(?:\bkotlin\s*\.\s*)?(?:srcDirs|setSrcDirs)\s*=\s*(?:\[\s*['""]|(?:listOf|setOf|files|file)\s*\(\s*['""])",
                     RegexOptions.CultureInvariant)
                 || Regex.IsMatch(
                     line,
-                    @"(?:\bkotlin\s*\.\s*)?setSrcDirs\s*\(\s*(?:listOf|setOf)\s*\(\s*['""]",
+                    @"(?:\bkotlin\s*\.\s*)?(?:srcDir|srcDirs|setSrcDirs)\s*(?:\(\s*)?(?:file|files)\s*\(\s*['""]",
+                    RegexOptions.CultureInvariant)
+                || Regex.IsMatch(
+                    line,
+                    @"(?:\bkotlin\s*\.\s*)?setSrcDirs\s*\(\s*(?:listOf|setOf|files)\s*\(\s*['""]",
                     RegexOptions.CultureInvariant);
 
             if (!hasDirectLiteralArguments || quotedValues.Length == 0)

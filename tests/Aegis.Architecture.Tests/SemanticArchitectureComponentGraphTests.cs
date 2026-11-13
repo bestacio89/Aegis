@@ -79,6 +79,10 @@ public sealed class SemanticArchitectureComponentGraphTests
             Assert.Equal(
                 "sample.domain",
                 context.ProductionComponents.Single(component => component.Id == edge.TargetComponentId).QualifiedName);
+            Assert.Equal("sample.application", edge.SourceComponentName);
+            Assert.Equal("sample.domain", edge.TargetComponentName);
+            Assert.DoesNotContain("Template", edge.SourceComponentName, StringComparison.Ordinal);
+            Assert.DoesNotContain("Template", edge.TargetComponentName, StringComparison.Ordinal);
         }
         finally
         {

@@ -37,4 +37,6 @@ public sealed class ArchitectureRelationshipRecordViewModel
     public bool IsInternal { get; init; }
 
     public string EvidenceReferences { get; init; } = string.Empty;
+
+    public string CodeContainerContributions { get; init; } = string.Empty;
 }

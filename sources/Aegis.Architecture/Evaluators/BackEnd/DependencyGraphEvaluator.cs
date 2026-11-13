@@ -232,7 +232,8 @@ public sealed class DependencyGraphEvaluator
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var analysisComplete = requiredLanguages.Count > 0
             && requiredLanguages.SetEquals(analyzedLanguages)
-            && semanticRuns.All(run => run.IsComplete)
+            && semanticRuns.All(run => run.IsComplete
+                && !run.Diagnostics.Any(diagnostic => diagnostic.AffectsCoverage))
             && !context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
         result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
 

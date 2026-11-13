@@ -18,14 +18,14 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         };
 
     private readonly SemanticAnalysisCoordinator _coordinator;
-    private readonly IJavaClasspathResolver _classpathResolver;
+    private readonly IJvmClasspathResolver _classpathResolver;
     private readonly ILogger<JavaSemanticAnalysisOrchestrator> _logger;
 
     public string Language => "Java";
 
     public JavaSemanticAnalysisOrchestrator(
         IEnumerable<ISemanticAnalysisAdapter> adapters,
-        IJavaClasspathResolver classpathResolver,
+        IJvmClasspathResolver classpathResolver,
         ILogger<JavaSemanticAnalysisOrchestrator> logger,
         SemanticAnalysisCoordinator? coordinator = null)
     {

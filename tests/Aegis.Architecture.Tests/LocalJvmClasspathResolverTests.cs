@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Aegis.Architecture.Tests;
 
-public sealed class LocalJavaClasspathResolverTests
+public sealed class LocalJvmClasspathResolverTests
 {
     [Fact]
     public void Resolves_direct_maven_artifacts_without_claiming_transitive_completeness()
@@ -17,7 +17,7 @@ public sealed class LocalJavaClasspathResolverTests
 
         try
         {
-            var resolver = new LocalJavaClasspathResolver(repository, Path.Combine(root, "gradle"));
+            var resolver = new LocalJvmClasspathResolver(repository, Path.Combine(root, "gradle"));
             var module = new ProjectModuleContext
             {
                 MavenModel = new MavenProjectModel
@@ -52,7 +52,7 @@ public sealed class LocalJavaClasspathResolverTests
 
         try
         {
-            var resolver = new LocalJavaClasspathResolver(
+            var resolver = new LocalJvmClasspathResolver(
                 Path.Combine(root, "m2"),
                 Path.Combine(root, "gradle"));
             var module = new ProjectModuleContext
@@ -83,7 +83,7 @@ public sealed class LocalJavaClasspathResolverTests
     [Fact]
     public void Treats_modules_without_external_dependencies_as_complete()
     {
-        var resolver = new LocalJavaClasspathResolver(
+        var resolver = new LocalJvmClasspathResolver(
             Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "m2"),
             Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "gradle"));
 

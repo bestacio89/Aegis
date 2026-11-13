@@ -1000,17 +1000,17 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
         }
     }
 
-    private sealed class RecordingClasspathResolver : IJavaClasspathResolver
+    private sealed class RecordingClasspathResolver : IJvmClasspathResolver
     {
         public List<(string ProjectPath, bool IncludeTestCode)> Calls { get; } = [];
 
-        public JavaClasspathResolution Resolve(
+        public JvmClasspathResolution Resolve(
             ProjectModuleContext module,
             IReadOnlyCollection<ProjectModuleContext> projectModules,
             bool includeTestCode)
         {
             Calls.Add((module.Path, includeTestCode));
-            return new JavaClasspathResolution(
+            return new JvmClasspathResolution(
                 [includeTestCode ? "test-classpath.jar" : "production-classpath.jar"],
                 [],
                 true,
@@ -1018,9 +1018,9 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
         }
     }
 
-    private sealed class EmptyClasspathResolver : IJavaClasspathResolver
+    private sealed class EmptyClasspathResolver : IJvmClasspathResolver
     {
-        public JavaClasspathResolution Resolve(
+        public JvmClasspathResolution Resolve(
             ProjectModuleContext module,
             IReadOnlyCollection<ProjectModuleContext> projectModules,
             bool includeTestCode) =>

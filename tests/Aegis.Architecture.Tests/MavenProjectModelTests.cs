@@ -114,6 +114,59 @@ public sealed class MavenProjectModelTests
     }
 
     [Fact]
+    public void Detect_resolves_kotlin_compiler_properties_and_maven_release_when_extensions_are_enabled()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>org.example</groupId>
+                  <artifactId>kotlin-properties</artifactId>
+                  <version>1.0.0</version>
+                  <properties>
+                    <kotlin.version>2.4.21</kotlin.version>
+                    <kotlin.compiler.languageVersion>2.3</kotlin.compiler.languageVersion>
+                    <kotlin.compiler.apiVersion>2.2</kotlin.compiler.apiVersion>
+                    <maven.compiler.release>17</maven.compiler.release>
+                  </properties>
+                  <build>
+                    <plugins>
+                      <plugin>
+                        <groupId>org.jetbrains.kotlin</groupId>
+                        <artifactId>kotlin-maven-plugin</artifactId>
+                        <version>${kotlin.version}</version>
+                        <extensions>true</extensions>
+                      </plugin>
+                    </plugins>
+                  </build>
+                </project>
+                """);
+
+            var sourceRoot = Path.Combine(root, "src", "main", "kotlin");
+            Directory.CreateDirectory(Path.Combine(sourceRoot, "sample"));
+            File.WriteAllText(Path.Combine(sourceRoot, "sample", "Service.kt"),
+                "package sample\nclass Service");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.MavenProjectModel>(module.MavenModel);
+
+            Assert.Equal("2.4.21", model.KotlinPluginVersion);
+            Assert.Equal("2.3", model.KotlinLanguageVersion);
+            Assert.Equal("2.2", model.KotlinApiVersion);
+            Assert.Equal("17", model.KotlinJvmTarget);
+            Assert.Equal("17", model.KotlinJdkRelease);
+            Assert.True(model.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_resolves_local_parent_coordinates_properties_managed_versions_and_scopes()
     {
         var root = CreateTemporaryDirectory();

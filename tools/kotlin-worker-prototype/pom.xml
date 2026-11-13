@@ -47,23 +47,27 @@
             <id>compile-kotlin</id>
             <phase>compile</phase>
             <goals><goal>compile</goal></goals>
+            <configuration>
+              <sourceDirs>
+                <sourceDir>${project.basedir}/src/main/kotlin</sourceDir>
+              </sourceDirs>
+            </configuration>
           </execution>
           <execution>
             <id>test-compile-kotlin</id>
             <phase>test-compile</phase>
             <goals><goal>test-compile</goal></goals>
+            <configuration>
+              <sourceDirs>
+                <sourceDir>${project.basedir}/src/test/kotlin</sourceDir>
+              </sourceDirs>
+            </configuration>
           </execution>
         </executions>
         <configuration>
           <jvmTarget>21</jvmTarget>
           <languageVersion>2.4</languageVersion>
           <apiVersion>2.4</apiVersion>
-          <sourceDirs>
-            <sourceDir>${project.basedir}/src/main/kotlin</sourceDir>
-          </sourceDirs>
-          <testSourceDirs>
-            <testSourceDir>${project.basedir}/src/test/kotlin</testSourceDir>
-          </testSourceDirs>
         </configuration>
       </plugin>
       <plugin>

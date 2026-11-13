@@ -46,6 +46,8 @@ public sealed class MavenProjectModel
 
     public string? KotlinJvmTarget { get; init; }
 
+    public string? KotlinJdkRelease { get; init; }
+
     public List<Dependency> AnnotationProcessorPaths { get; init; } = [];
 
     public List<ProjectSourceRoot> SourceRoots { get; init; } = [];

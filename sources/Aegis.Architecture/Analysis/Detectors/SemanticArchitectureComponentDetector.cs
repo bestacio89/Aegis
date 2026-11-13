@@ -37,7 +37,7 @@ internal static class SemanticArchitectureComponentDetector
         // is the authoritative owner identity; the discovered module inventory
         // enriches the display name but must not gate package discovery. In
         // particular, duplicate or incomplete module records must not erase a
-        // valid JDT package graph.
+        // valid language-level component graph.
         var modulesByPath = context.Modules
             .Where(module => !string.IsNullOrWhiteSpace(module.Path))
             .GroupBy(module => NormalizePath(module.Path), PathComparer)
@@ -45,7 +45,7 @@ internal static class SemanticArchitectureComponentDetector
                 group => group.Key,
                 group => group
                     .OrderByDescending(module => module.Languages.Count > 0)
-                                        .ThenBy(module => module.Name, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(module => module.Name, StringComparer.OrdinalIgnoreCase)
                     .First(),
                 PathComparer);
 
@@ -83,12 +83,12 @@ internal static class SemanticArchitectureComponentDetector
                             || !string.IsNullOrWhiteSpace(symbol.ContainerName)))
                     .Select(symbol =>
                     {
-                        var componentName = string.IsNullOrWhiteSpace(symbol.ContainerName)
-                            ? "<default>"
-                            : symbol.ContainerName.Trim();
-                        var componentKind = string.IsNullOrWhiteSpace(symbol.ContainerKind)
-                            ? InferComponentKind(run.Language)
-                            : symbol.ContainerKind.Trim();
+                        var componentKind = InferComponentKind(run.Language, symbol.ContainerKind);
+                        var componentName = componentKind.Equals("Project", StringComparison.OrdinalIgnoreCase)
+                            ? module.Name
+                            : string.IsNullOrWhiteSpace(symbol.ContainerName)
+                                ? "<default>"
+                                : symbol.ContainerName.Trim();
                         var modulePath = NormalizePath(run.ProjectPath);
                         var componentId = CreateComponentId(modulePath, run.Language, componentKind, componentName);
                         return new SymbolComponent(
@@ -248,13 +248,26 @@ internal static class SemanticArchitectureComponentDetector
     private static bool IsProjectSourceSymbol(SemanticSymbol symbol) =>
         symbol.Origin is SemanticSymbolOrigin.Source or SemanticSymbolOrigin.Generated;
 
-    private static string InferComponentKind(string language) => language.ToLowerInvariant() switch
+    private static string InferComponentKind(string language, string? providerKind)
     {
-        "java" or "kotlin" or "python" => "Package",
-        "c#" or "csharp" => "Namespace",
-        "typescript" or "javascript" => "Module",
-        _ => "Module"
-    };
+        // C# architectural boundaries are build projects, not namespaces.
+        // Other providers may supply a more precise language-native container kind.
+        if (language.Equals("C#", StringComparison.OrdinalIgnoreCase)
+            || language.Equals("CSharp", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Project";
+        }
+
+        if (!string.IsNullOrWhiteSpace(providerKind))
+            return providerKind.Trim();
+
+        return language.ToLowerInvariant() switch
+        {
+            "java" or "kotlin" or "python" => "Package",
+            "typescript" or "javascript" => "Module",
+            _ => "Module"
+        };
+    }
 
     private static string GetComponentDisplayName(string qualifiedName)
     {

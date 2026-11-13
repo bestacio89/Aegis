@@ -306,6 +306,9 @@ public sealed class PdfReportExporter : IReportExporter
             AddRow(table, L(language, "Supported Rules Not Evaluated", "Règles Prises en Charge Non Évaluées"), supportedRulesNotEvaluated.ToString());
             AddRow(table, L(language, "Unsupported Rules", "Règles Non Prises en Charge"), stats.RulesUnsupported.ToString());
             AddRow(table, L(language, "Rule Evaluation Coverage", "Couverture d'Évaluation des Règles"), metrics is { HasCoverageEvidence: true } ? $"{stats.EvaluationCoverage:P1}" : "N/A");
+            AddRow(table, L(language, "Total Diagnostics", "Diagnostics Totaux"), report.Diagnostics.Count.ToString());
+            AddRow(table, L(language, "Semantic Diagnostics", "Diagnostics Sémantiques"), report.SemanticDiagnosticCount.ToString());
+            AddRow(table, L(language, "Coverage-affecting Diagnostics", "Diagnostics Affectant la Couverture"), report.CoverageAffectingDiagnosticCount.ToString());
             AddRow(table, L(language, "Assessed Health Index", "Indice de Santé Évalué"), metrics is { HasAssessmentEvidence: true } ? $"{metrics.ProjectHealthIndex:0.##}%" : "N/A");
             AddRow(table, L(language, "Coverage-Adjusted Diagnostic", "Indicateur Ajusté à la Couverture"), metrics is { HasCoverageEvidence: true } ? $"{metrics.CoverageAdjustedHealthIndex:0.##}%" : "N/A");
             AddRow(table, L(language, "Assessment Complete", "Évaluation Complète"), metrics is { AssessmentComplete: true } ? L(language, "Yes", "Oui") : L(language, "No", "Non"));

@@ -217,7 +217,7 @@ internal static class SemanticArchitectureComponentDetector
                     edges.Add(key, accumulator);
                 }
 
-                accumulator.Add(relationship);
+                accumulator.Add(run.RunId, relationship);
             }
         }
 
@@ -327,7 +327,8 @@ internal static class SemanticArchitectureComponentDetector
     {
         private readonly SymbolComponent _source;
         private readonly SymbolComponent _target;
-        private readonly HashSet<string> _relationshipIds = new(StringComparer.Ordinal);
+        private readonly HashSet<SemanticRelationshipReference> _relationshipReferences = [];
+        private readonly HashSet<SemanticRelationship> _unreferencedRelationships = [];
         private readonly HashSet<SemanticRelationshipKind> _relationshipKinds = [];
         private readonly HashSet<string> _evidenceFiles = new(PathComparer);
         private int _resolvedRelationshipCount;
@@ -339,10 +340,21 @@ internal static class SemanticArchitectureComponentDetector
             _target = target;
         }
 
-        public void Add(SemanticRelationship relationship)
+        public void Add(string runId, SemanticRelationship relationship)
         {
-            if (!_relationshipIds.Add(relationship.Id))
+            if (string.IsNullOrWhiteSpace(relationship.Id))
+            {
+                if (!_unreferencedRelationships.Add(relationship))
+                    return;
+            }
+            else if (!_relationshipReferences.Add(new SemanticRelationshipReference
+                     {
+                         RunId = runId,
+                         RelationshipId = relationship.Id
+                     }))
+            {
                 return;
+            }
 
             _relationshipKinds.Add(relationship.Kind);
             if (relationship.ResolutionStatus == SemanticResolutionStatus.Resolved)
@@ -366,9 +378,14 @@ internal static class SemanticArchitectureComponentDetector
             TargetComponentName = GetComponentLabel(_target),
             Scope = scope,
             DependencyType = DependencyType,
-            RelationshipCount = _relationshipIds.Count,
+            RelationshipCount = _relationshipReferences.Count + _unreferencedRelationships.Count,
             ResolvedRelationshipCount = _resolvedRelationshipCount,
             PartiallyResolvedRelationshipCount = _partiallyResolvedRelationshipCount,
+            ContributingRelationships = _relationshipReferences
+                .OrderBy(reference => reference.RunId, StringComparer.Ordinal)
+                .ThenBy(reference => reference.RelationshipId, StringComparer.Ordinal)
+                .ToList(),
+            UnreferencedRelationshipCount = _unreferencedRelationships.Count,
             RelationshipKinds = _relationshipKinds.OrderBy(kind => kind).ToList(),
             EvidenceFiles = _evidenceFiles.OrderBy(file => file, PathComparer).ToList()
         };

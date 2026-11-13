@@ -148,7 +148,9 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                 ? _context?.ProductionComponents
                     .Select(component => new GraphNode(
                         component.Id,
-                        $"{component.BuildModuleName} · {component.QualifiedName}",
+                        component.ComponentKind.Equals("Project", StringComparison.OrdinalIgnoreCase)
+                            ? component.QualifiedName
+                            : $"{component.BuildModuleName} · {component.QualifiedName}",
                         component.ComponentKind))
                     .ToArray() ?? []
                 : [];

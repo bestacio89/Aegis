@@ -108,8 +108,10 @@ public sealed partial class RuleDashboardViewModel : ObservableObject
 
             var stats = report.EvaluationStats;
             RegisteredRules = stats is null ? "n/a" : stats.RulesRegistered.ToString("N0");
-            InScopeRules = stats is null ? "n/a" : (stats.RulesApplicable + stats.RulesUnsupported).ToString("N0");
-            EvaluatedRules = stats is null ? "n/a" : stats.RulesEvaluated.ToString("N0");
+            InScopeRules = stats is null ? "n/a" : stats.RulesApplicable.ToString("N0");
+            EvaluatedRules = stats is null
+                ? "n/a"
+                : $"{stats.RulesEvaluated:N0} / {stats.RulesApplicable:N0} ({stats.EvaluationCoverage:0.0}%)";
             NotEvaluatedRules = stats is null ? "n/a" : stats.RulesNotEvaluated.Count.ToString("N0");
             NotApplicableRules = stats is null ? "n/a" : stats.RulesNotApplicable.Count.ToString("N0");
             UnsupportedRules = stats is null ? "n/a" : stats.RulesUnsupported.ToString("N0");

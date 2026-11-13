@@ -1,4 +1,5 @@
 using Aegis.Architecture.Analysis.Semantics;
+using Aegis.Architecture.Analysis.Detectors;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -80,6 +81,106 @@ public sealed class JavaSemanticComponentGraphTests
         {
             Directory.Delete(projectPath, recursive: true);
         }
+    }
+
+
+    [Fact]
+    public void Projects_python_package_components_and_relationships_without_build_module_boundaries()
+    {
+        var projectPath = Path.Combine(Path.GetTempPath(), $"aegis-python-graph-{Guid.NewGuid():N}");
+        var applicationFile = Path.Combine(projectPath, "application", "services.py");
+        var domainFile = Path.Combine(projectPath, "domain", "order.py");
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "sample-python",
+            RootPath = projectPath,
+            Language = "Python",
+            Modules =
+            [
+                new ProjectModuleContext
+                {
+                    Name = "sample-python",
+                    Path = projectPath,
+                    Languages = ["Python"]
+                }
+            ],
+            SemanticAnalysisRuns =
+            [
+                new SemanticAnalysisRun
+                {
+                    RunId = "python-run",
+                    Language = "Python",
+                    EngineId = "python-test-provider",
+                    ProjectPath = projectPath,
+                    Status = SemanticAnalysisStatus.PartiallyCompleted,
+                    Symbols =
+                    [
+                        new SemanticSymbol
+                        {
+                            Id = "python-service",
+                            Name = "OrderService",
+                            QualifiedName = "application.services.OrderService",
+                            ContainerName = "application",
+                            ContainerKind = "Package",
+                            Language = "Python",
+                            ProjectPath = projectPath,
+                            FilePath = applicationFile,
+                            Origin = SemanticSymbolOrigin.Source
+                        },
+                        new SemanticSymbol
+                        {
+                            Id = "python-order",
+                            Name = "Order",
+                            QualifiedName = "domain.order.Order",
+                            ContainerName = "domain",
+                            ContainerKind = "Package",
+                            Language = "Python",
+                            ProjectPath = projectPath,
+                            FilePath = domainFile,
+                            Origin = SemanticSymbolOrigin.Source
+                        }
+                    ],
+                    Relationships =
+                    [
+                        new SemanticRelationship
+                        {
+                            Id = "python-service-uses-domain",
+                            SourceSymbolId = "python-service",
+                            TargetSymbolId = "python-order",
+                            Kind = SemanticRelationshipKind.References,
+                            ResolutionStatus = SemanticResolutionStatus.Resolved,
+                            Provenance =
+                            [
+                                new SemanticEvidenceProvenance
+                                {
+                                    AnalyzerId = "python-test-provider",
+                                    Source = SemanticEvidenceSource.Compiler,
+                                    FilePath = applicationFile,
+                                    Confidence = 1.0
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        SemanticArchitectureComponentDetector.Analyze(context);
+
+        Assert.Equal(2, context.ProductionComponents.Count);
+        Assert.All(context.ProductionComponents, component =>
+        {
+            Assert.Equal("Python", component.Language);
+            Assert.Equal("Package", component.ComponentKind);
+        });
+
+        var edge = Assert.Single(context.ProductionComponentDependencies);
+        Assert.Equal(1, edge.RelationshipCount);
+        Assert.Equal("application", context.ProductionComponents
+            .Single(component => component.Id == edge.SourceComponentId).QualifiedName);
+        Assert.Equal("domain", context.ProductionComponents
+            .Single(component => component.Id == edge.TargetComponentId).QualifiedName);
+        Assert.Contains(applicationFile, edge.EvidenceFiles);
     }
 
     private sealed class PartialPackageGraphAdapter(string applicationFile, string domainFile)

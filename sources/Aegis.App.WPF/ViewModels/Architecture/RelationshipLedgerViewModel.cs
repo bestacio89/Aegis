@@ -11,8 +11,8 @@ using System.Windows.Data;
 namespace Aegis.Wpf.ViewModels.Architecture;
 
 /// <summary>
-/// Presents every detector-reported dependency as an independently filterable
-/// relationship record. Records are not aggregated or inferred.
+/// Presents build dependencies and semantic relationship projections as
+/// independently filterable records while retaining their evidence provenance.
 /// </summary>
 public sealed partial class RelationshipLedgerViewModel : ObservableObject
 {
@@ -133,7 +133,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
 
                 return new ArchitectureRelationshipRecordViewModel
                 {
-                    RelationshipLevel = "Architectural component",
+                    RelationshipLevel = "Code container",
                     Source = dependency.SourceComponentName,
                     SourceLayer = source?.ComponentKind ?? "Component",
                     SourceProjectPath = source?.BuildModulePath ?? string.Empty,
@@ -141,8 +141,8 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
                     TargetLayer = target?.ComponentKind ?? "Component",
                     TargetProjectPath = target?.BuildModulePath ?? string.Empty,
                     DependencyType = relationshipKinds.Any()
-                        ? $"{dependency.DependencyType} ({string.Join(", ", relationshipKinds)})"
-                        : dependency.DependencyType,
+                        ? string.Join(", ", relationshipKinds)
+                        : "Semantic dependency",
                     Scope = dependency.Scope,
                     File = string.Join(Environment.NewLine, dependency.EvidenceFiles),
                     RelationshipCount = dependency.RelationshipCount,
@@ -204,8 +204,8 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
                     Target = dependency.TargetComponentName,
                     TargetLayer = target?.Role ?? "Unclassified",
                     DependencyType = relationshipKinds.Any()
-                        ? $"{dependency.DependencyType} ({string.Join(", ", relationshipKinds)})"
-                        : dependency.DependencyType,
+                        ? string.Join(", ", relationshipKinds)
+                        : "Semantic dependency",
                     Scope = dependency.Scope,
                     File = string.Join(Environment.NewLine, dependency.EvidenceFiles),
                     RelationshipCount = dependency.RelationshipCount,

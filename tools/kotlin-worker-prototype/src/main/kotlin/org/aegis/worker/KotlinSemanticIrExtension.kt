@@ -33,7 +33,13 @@ class KotlinSemanticIrExtension : IrGenerationExtension {
     override fun generate(moduleFragment: IrModuleFragment, pluginContext: IrPluginContext) {
         val outputPath = System.getProperty(OUTPUT_PATH_PROPERTY)?.takeIf(String::isNotBlank) ?: return
         val projectPath = System.getProperty(PROJECT_PATH_PROPERTY).orEmpty()
-        val collector = KotlinSemanticCollector(projectPath)
+        val isTestCode = System.getProperty(TEST_SCOPE_PROPERTY).toBoolean()
+        val generatedRoots = System.getProperty(GENERATED_ROOTS_PROPERTY)
+            .orEmpty()
+            .split(java.io.File.pathSeparator)
+            .filter(String::isNotBlank)
+            .map { Path.of(it).toAbsolutePath().normalize() }
+        val collector = KotlinSemanticCollector(projectPath, isTestCode, generatedRoots)
         collector.collect(moduleFragment)
 
         val output = Path.of(outputPath).toAbsolutePath().normalize()
@@ -44,11 +50,15 @@ class KotlinSemanticIrExtension : IrGenerationExtension {
     private companion object {
         const val OUTPUT_PATH_PROPERTY = "aegis.kotlin.semantic.output"
         const val PROJECT_PATH_PROPERTY = "aegis.kotlin.semantic.project"
+        const val TEST_SCOPE_PROPERTY = "aegis.kotlin.semantic.test"
+        const val GENERATED_ROOTS_PROPERTY = "aegis.kotlin.semantic.generated"
     }
 }
 
 private class KotlinSemanticCollector(
-    private val projectPath: String
+    private val projectPath: String,
+    private val isTestCode: Boolean,
+    private val generatedRoots: List<Path>
 ) {
     private val symbols = LinkedHashMap<String, JsonObject>()
     private val relationships = LinkedHashMap<String, JsonObject>()
@@ -179,8 +189,12 @@ private class KotlinSemanticCollector(
             symbol.addProperty("startLine", if (isSource) file?.fileEntry?.getLineNumber(offset)?.plus(1) else null)
             symbol.addProperty("startColumn", if (isSource) file?.fileEntry?.getColumnNumber(offset)?.plus(1) else null)
             symbol.addProperty("containingSymbolId", containingSymbolId)
-            symbol.addProperty("origin", if (isSource) 1 else 2)
-            symbol.addProperty("isTestCode", false)
+            symbol.addProperty("origin", when {
+                !isSource -> 3
+                isGenerated(file) -> 2
+                else -> 1
+            })
+            symbol.addProperty("isTestCode", isTestCode)
             symbol.addProperty(
                 "isPublic",
                 isPublic(declaration)
@@ -290,7 +304,7 @@ private class KotlinSemanticCollector(
         symbol.add("startColumn", com.google.gson.JsonNull.INSTANCE)
         symbol.add("containingSymbolId", com.google.gson.JsonNull.INSTANCE)
         symbol.addProperty("origin", 3)
-        symbol.addProperty("isTestCode", false)
+        symbol.addProperty("isTestCode", isTestCode)
         symbol.addProperty("isPublic", declaration.visibility == DescriptorVisibilities.PUBLIC)
         symbol.add("provenance", JsonArray())
         symbols[id] = symbol
@@ -338,9 +352,14 @@ private class KotlinSemanticCollector(
         relationship.add("unresolvedTarget", com.google.gson.JsonNull.INSTANCE)
         relationship.addProperty("kind", kind)
         relationship.addProperty("resolutionStatus", 1)
-        relationship.addProperty("isTestCode", false)
+        relationship.addProperty("isTestCode", isTestCode)
         relationship.add("provenance", provenance(file, offset))
         relationships[key] = relationship
+    }
+
+    private fun isGenerated(file: IrFile?): Boolean {
+        val filePath = file?.fileEntry?.name?.let(Path::of)?.toAbsolutePath()?.normalize() ?: return false
+        return generatedRoots.any(filePath::startsWith)
     }
 
     private fun provenance(file: IrFile?, offset: Int): JsonArray {

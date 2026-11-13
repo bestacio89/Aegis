@@ -1,3 +1,6 @@
+using System.IO;
+using System.Linq;
+using Xunit;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Wpf.ViewModels.Architecture;
 
@@ -69,7 +72,7 @@ public sealed class DependencyGraphViewModelTests
 
         Assert.Equal("Architectural components", viewModel.GraphProjection);
         Assert.Equal(
-            ["logical-core", "logical-interface"],
+            new[] { "logical-core", "logical-interface" },
             viewModel.GraphNodes.Select(node => node.Id).OrderBy(id => id, StringComparer.Ordinal));
         Assert.Single(viewModel.GraphEdges);
         Assert.Equal(4, viewModel.TotalDependencies);
@@ -77,7 +80,7 @@ public sealed class DependencyGraphViewModelTests
         viewModel.GraphProjection = "Code containers";
 
         Assert.Equal(
-            ["container-api", "container-domain"],
+            new[] { "container-api", "container-domain" },
             viewModel.GraphNodes.Select(node => node.Id).OrderBy(id => id, StringComparer.Ordinal));
         Assert.Equal("CODE CONTAINERS", viewModel.NodeCountLabel);
         Assert.Empty(viewModel.GraphEdges);

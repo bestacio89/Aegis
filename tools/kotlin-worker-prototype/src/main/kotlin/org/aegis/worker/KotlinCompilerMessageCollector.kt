@@ -7,11 +7,11 @@ import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 
 class KotlinCompilerMessageCollector : MessageCollector {
-    private val items = JsonArray()
+    private var items = JsonArray()
     private var containsErrors = false
 
     override fun clear() {
-        items.asList().clear()
+        items = JsonArray()
         containsErrors = false
     }
 

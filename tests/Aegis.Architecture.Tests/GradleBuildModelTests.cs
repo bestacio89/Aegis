@@ -635,6 +635,113 @@ public sealed class GradleBuildModelTests
     }
 
     [Fact]
+    public void Detect_resolves_existing_kotlin_source_sets_declared_with_getting()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleKotlinGetting_{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"), "rootProject.name = \"kotlin-getting-source-sets\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    kotlin("jvm") version "2.4.21"
+                }
+
+                kotlin {
+                    sourceSets {
+                        val main by getting {
+                            kotlin.srcDir("src/main/customKotlin")
+                        }
+                        val test by getting {
+                            kotlin.srcDir("src/test/customKotlin")
+                        }
+                    }
+                }
+                """);
+
+            var mainRoot = Path.Combine(root, "src", "main", "customKotlin");
+            var testRoot = Path.Combine(root, "src", "test", "customKotlin");
+            Directory.CreateDirectory(mainRoot);
+            Directory.CreateDirectory(testRoot);
+            File.WriteAllText(Path.Combine(mainRoot, "Main.kt"), "class Main");
+            File.WriteAllText(Path.Combine(testRoot, "Test.kt"), "class Test");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == root);
+            var model = Assert.IsType<GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.Contains(model.SourceSets, sourceSet =>
+                sourceSet.Name == "main" && sourceSet.KotlinSourceDirectories!.Contains(mainRoot));
+            Assert.Contains(model.SourceSets, sourceSet =>
+                sourceSet.Name == "test" && sourceSet.KotlinSourceDirectories!.Contains(testRoot));
+            Assert.Equal(
+                ProjectSourceRootOwnership.Production,
+                Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == mainRoot).Ownership);
+            Assert.Equal(
+                ProjectSourceRootOwnership.Test,
+                Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == testRoot).Ownership);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_resolves_groovy_kotlin_source_directory_literal_notation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleGroovyKotlin_{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, "settings.gradle"), "rootProject.name = 'groovy-kotlin-source-sets'");
+            File.WriteAllText(Path.Combine(root, "build.gradle"), """
+                plugins {
+                    id 'org.jetbrains.kotlin.jvm' version '2.4.21'
+                }
+
+                sourceSets {
+                    main {
+                        kotlin.srcDir 'src/main/customKotlin'
+                    }
+                    test {
+                        kotlin.srcDir 'src/test/customKotlin'
+                    }
+                }
+                """);
+
+            var mainRoot = Path.Combine(root, "src", "main", "customKotlin");
+            var testRoot = Path.Combine(root, "src", "test", "customKotlin");
+            Directory.CreateDirectory(mainRoot);
+            Directory.CreateDirectory(testRoot);
+            File.WriteAllText(Path.Combine(mainRoot, "Main.kt"), "class Main");
+            File.WriteAllText(Path.Combine(testRoot, "Test.kt"), "class Test");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == root);
+            var model = Assert.IsType<GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.Equal("Groovy", model.Dialect);
+            Assert.Contains(model.SourceSets, sourceSet =>
+                sourceSet.Name == "main" && sourceSet.KotlinSourceDirectories!.Contains(mainRoot));
+            Assert.Contains(model.SourceSets, sourceSet =>
+                sourceSet.Name == "test" && sourceSet.KotlinSourceDirectories!.Contains(testRoot));
+            Assert.Equal(
+                ProjectSourceRootOwnership.Production,
+                Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == mainRoot).Ownership);
+            Assert.Equal(
+                ProjectSourceRootOwnership.Test,
+                Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == testRoot).Ownership);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_does_not_infer_kotlin_source_directories_from_wrapped_path_expressions()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisGradleDynamicKotlinSourceSet_{Guid.NewGuid():N}");

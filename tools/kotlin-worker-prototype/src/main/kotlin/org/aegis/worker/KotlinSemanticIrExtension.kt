@@ -122,6 +122,7 @@ private class KotlinSemanticCollector(
         }
 
         override fun visitProperty(declaration: IrProperty) {
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             val id = propertyId(declaration)
             addSymbol(
                 id = id,
@@ -139,6 +140,7 @@ private class KotlinSemanticCollector(
         }
 
         override fun visitSimpleFunction(declaration: IrSimpleFunction) {
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             if (propertyAccessors.containsKey(declaration.symbol)) {
                 declaration.acceptChildrenVoid(this)
                 return
@@ -158,6 +160,7 @@ private class KotlinSemanticCollector(
         }
 
         override fun visitConstructor(declaration: IrConstructor) {
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             val id = functionId(declaration)
             addSymbol(
                 id = id,
@@ -242,12 +245,14 @@ private class KotlinSemanticCollector(
         }
 
         override fun visitProperty(declaration: IrProperty) {
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             owners.addLast(propertyId(declaration))
             declaration.acceptChildrenVoid(this)
             owners.removeLast()
         }
 
         override fun visitSimpleFunction(declaration: IrSimpleFunction) {
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             if (propertyAccessors.containsKey(declaration.symbol)) {
                 declaration.acceptChildrenVoid(this)
                 return
@@ -258,6 +263,7 @@ private class KotlinSemanticCollector(
         }
 
         override fun visitConstructor(declaration: IrConstructor) {
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             owners.addLast(functionId(declaration))
             declaration.acceptChildrenVoid(this)
             owners.removeLast()

@@ -222,6 +222,66 @@ public sealed class GradleBuildModelTests
     }
 
     [Fact]
+    public void Detect_preserves_source_ownership_for_nested_kotlin_source_directory_blocks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleNestedKotlin_{Guid.NewGuid():N}");
+        var mainRoot = Path.Combine(root, "src", "main", "customKotlin");
+        var testRoot = Path.Combine(root, "src", "test", "customKotlin");
+        Directory.CreateDirectory(Path.Combine(mainRoot, "sample"));
+        Directory.CreateDirectory(Path.Combine(testRoot, "sample"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"nested-kotlin-sample\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    kotlin("jvm") version "2.4.21"
+                }
+                sourceSets {
+                    main {
+                        kotlin {
+                            srcDir("src/main/customKotlin")
+                        }
+                    }
+                    test {
+                        kotlin {
+                            srcDir("src/test/customKotlin")
+                        }
+                    }
+                }
+                """);
+            File.WriteAllText(Path.Combine(mainRoot, "sample", "ProductionType.kt"),
+                "package sample\nclass ProductionType");
+            File.WriteAllText(Path.Combine(testRoot, "sample", "ProductionTypeTest.kt"),
+                "package sample\nclass ProductionTypeTest");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(
+                module.GradleBuildModel);
+
+            Assert.Contains(model.SourceSets, sourceSet => sourceSet.Name == "main" && !sourceSet.IsTest);
+            Assert.Contains(model.SourceSets, sourceSet => sourceSet.Name == "test" && sourceSet.IsTest);
+            Assert.DoesNotContain(model.SourceSets, sourceSet => sourceSet.Name == "kotlin");
+
+            var productionRoot = Assert.Single(model.SourceRoots,
+                sourceRoot => sourceRoot.Directory == mainRoot);
+            Assert.True(productionRoot.ContainsKotlinSources);
+            Assert.Equal(ProjectSourceRootOwnership.Production, productionRoot.Ownership);
+
+            var testSourceRoot = Assert.Single(model.SourceRoots,
+                sourceRoot => sourceRoot.Directory == testRoot);
+            Assert.True(testSourceRoot.ContainsKotlinSources);
+            Assert.Equal(ProjectSourceRootOwnership.Test, testSourceRoot.Ownership);
+            Assert.True(model.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_does_not_claim_android_kotlin_as_jvm_semantic_support()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisGradleAndroidKotlin_{Guid.NewGuid():N}");

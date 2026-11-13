@@ -112,11 +112,14 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             add("compiler-diagnostics")
             add("jvm-interop")
         })
-        result.addProperty(
-            "status",
-            if (exitCode == ExitCode.OK) STATUS_COMPLETED else STATUS_PARTIALLY_COMPLETED
-        )
+        result.addProperty("status", statusForExitCode(exitCode))
         return result
+    }
+
+    internal fun statusForExitCode(exitCode: ExitCode): Int = when (exitCode) {
+        ExitCode.OK -> STATUS_COMPLETED
+        ExitCode.COMPILATION_ERROR -> STATUS_PARTIALLY_COMPLETED
+        else -> STATUS_FAILED
     }
 
     private fun createCompilerArguments(

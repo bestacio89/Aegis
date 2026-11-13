@@ -119,8 +119,12 @@ public sealed class JavaSemanticAnalysisEndToEndTests
 
             await using (var provider = services.BuildServiceProvider())
             {
-                var orchestrator = provider.GetRequiredService<JavaSemanticAnalysisOrchestrator>();
-                await orchestrator.AnalyzeAsync(context);
+                // Exercise the same provider-neutral semantic pipeline used by
+                // AegisArchitectureAnalyzer. The Java orchestrator produces raw
+                // JDT evidence; the pipeline projects that evidence into the
+                // language-native architectural component graph.
+                var pipeline = provider.GetRequiredService<SemanticAnalysisPipeline>();
+                await pipeline.AnalyzeAsync(context);
 
                 var run = Assert.Single(context.SemanticAnalysisRuns);
                 Assert.Equal("eclipse-jdt", run.EngineId);

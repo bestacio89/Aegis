@@ -83,7 +83,10 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
     partial void OnGraphProjectionChanged(string value)
     {
+        SelectedGraphNode = null;
         OnPropertyChanged(nameof(GroupingLabel));
+        OnPropertyChanged(nameof(NodeCountLabel));
+        OnPropertyChanged(nameof(ProjectionDescription));
         if (!_refreshingProjection)
         {
             _hasUserSelectedProjection = true;
@@ -247,6 +250,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             OnPropertyChanged(nameof(NodeCountLabel));
             LayerFilters = ["All", .. _activeRelations
                 .SelectMany(relation => new[] { relation.SourceLayer, relation.TargetLayer })
+                .Concat(_activeNodes.Select(node => node.Group))
                 .Where(layer => !string.IsNullOrWhiteSpace(layer))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(layer => layer, StringComparer.OrdinalIgnoreCase)];

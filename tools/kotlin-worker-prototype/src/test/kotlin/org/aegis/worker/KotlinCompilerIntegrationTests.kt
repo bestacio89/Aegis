@@ -233,6 +233,7 @@ class KotlinCompilerIntegrationTests {
             public final class JavaCaller {
                 public String call(sample.Service service, sample.User user) {
                     service.execute();
+                    service.verify();
                     return sample.ApplicationKt.label(user, "id") + user.getId();
                 }
             }
@@ -241,7 +242,13 @@ class KotlinCompilerIntegrationTests {
 
         val fileManager = javaCompiler.getStandardFileManager(null, null, null)
         try {
-            val compilationUnits = fileManager.getJavaFileObjectsFromPaths(listOf(javaSource))
+            val compilationUnits = fileManager.getJavaFileObjectsFromPaths(
+                listOf(
+                    javaSource,
+                    workspace.resolve("java/interop/JavaRepository.java"),
+                    workspace.resolve("java/interop/JavaContract.java")
+                )
+            )
             val options = listOf(
                 "-classpath",
                 listOf(kotlinOutput.toString(), stdlibPath).joinToString(System.getProperty("path.separator")),

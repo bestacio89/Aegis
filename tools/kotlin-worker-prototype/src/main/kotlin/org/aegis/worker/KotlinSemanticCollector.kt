@@ -540,7 +540,7 @@ class KotlinSemanticCollector(
             parent = parent.parent
         }
 
-        return (parent as? IrPackageFragment)?.fqName?.asString().orEmpty()
+        return (parent as? IrPackageFragment)?.packageFqName?.asString().orEmpty()
     }
 
     private fun parentSymbolId(declaration: IrDeclaration): String? = when (val parent = declaration.parent) {

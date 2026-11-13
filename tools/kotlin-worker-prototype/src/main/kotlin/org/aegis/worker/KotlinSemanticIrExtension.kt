@@ -235,14 +235,30 @@ private class KotlinSemanticCollector(
         }
 
         override fun visitClass(declaration: IrClass) {
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             val sourceId = classId(declaration)
             owners.addLast(sourceId)
             declaration.superTypes.forEach { superType ->
-                val targetName = superType.classFqName?.asString() ?: return@forEach
-                val targetId = "kotlin:type:$targetName"
-                val targetIsInterface = isInterfaceType(targetName)
-                addExternalTypeIfNeeded(targetId, targetName, targetIsInterface)
-                addRelationship(sourceId, targetId, if (targetIsInterface) 3 else 2, declaration.startOffset, currentFile)
+                val targetClass = superType.classOrNull?.owner
+                val targetName = targetClass?.fqNameWhenAvailable?.asString()
+                    ?: superType.classFqName?.asString()
+                    ?: return@forEach
+                if (targetName == "kotlin.Any") return@forEach
+
+                val targetId = targetClass?.let(::classId) ?: "kotlin:type:$targetName"
+                val targetIsInterface = targetClass?.kind?.name in setOf("INTERFACE", "ANNOTATION_CLASS")
+                val relationshipKind = when {
+                    declaration.kind.name == "INTERFACE" -> 2
+                    targetIsInterface -> 3
+                    else -> 2
+                }
+                addExternalTypeIfNeeded(
+                    targetId,
+                    targetName,
+                    targetIsInterface,
+                    targetClass?.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
+                )
+                addRelationship(sourceId, targetId, relationshipKind, declaration.startOffset, currentFile)
             }
             declaration.acceptChildrenVoid(this)
             owners.removeLast()
@@ -328,17 +344,12 @@ private class KotlinSemanticCollector(
         symbols[id] = symbol
     }
 
-    private fun isInterfaceType(qualifiedName: String): Boolean {
-        for (symbol in this@KotlinSemanticCollector.symbols.values) {
-            if (symbol.get("qualifiedName").asString == qualifiedName
-                && symbol.get("kind").asInt == 5) {
-                return true
-            }
-        }
-        return false
-    }
-
-    private fun addExternalTypeIfNeeded(id: String, qualifiedName: String, isInterface: Boolean) {
+    private fun addExternalTypeIfNeeded(
+        id: String,
+        qualifiedName: String,
+        isInterface: Boolean,
+        isJava: Boolean
+    ) {
         if (symbols.containsKey(id)) return
         val symbol = JsonObject()
         symbol.addProperty("id", id)
@@ -347,7 +358,7 @@ private class KotlinSemanticCollector(
         symbol.addProperty("qualifiedName", qualifiedName)
         symbol.addProperty("containerName", qualifiedName.substringBeforeLast('.', ""))
         symbol.addProperty("containerKind", "Package")
-        symbol.addProperty("language", "Kotlin")
+        symbol.addProperty("language", if (isJava) "Java" else "Kotlin")
         symbol.addProperty("projectPath", projectPath)
         symbol.add("filePath", com.google.gson.JsonNull.INSTANCE)
         symbol.add("startLine", com.google.gson.JsonNull.INSTANCE)

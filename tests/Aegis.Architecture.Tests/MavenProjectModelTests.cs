@@ -7,6 +7,93 @@ namespace Aegis.Architecture.Tests;
 public sealed class MavenProjectModelTests
 {
     [Fact]
+    public void Detect_resolves_kotlin_maven_compiler_options_and_mixed_source_roots()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>org.example</groupId>
+                  <artifactId>kotlin-service</artifactId>
+                  <version>1.0.0</version>
+                  <properties>
+                    <kotlin.version>2.4.21</kotlin.version>
+                  </properties>
+                  <build>
+                    <sourceDirectory>src/main/shared</sourceDirectory>
+                    <plugins>
+                      <plugin>
+                        <groupId>org.jetbrains.kotlin</groupId>
+                        <artifactId>kotlin-maven-plugin</artifactId>
+                        <version>${kotlin.version}</version>
+                        <executions>
+                          <execution>
+                            <id>compile</id>
+                            <goals><goal>compile</goal></goals>
+                          </execution>
+                          <execution>
+                            <id>test-compile</id>
+                            <goals><goal>test-compile</goal></goals>
+                          </execution>
+                        </executions>
+                        <configuration>
+                          <languageVersion>2.4</languageVersion>
+                          <apiVersion>2.4</apiVersion>
+                          <jvmTarget>21</jvmTarget>
+                          <sourceDirs>
+                            <sourceDir>src/main/shared</sourceDir>
+                          </sourceDirs>
+                          <testSourceDirs>
+                            <testSourceDir>src/test/customKotlin</testSourceDir>
+                          </testSourceDirs>
+                        </configuration>
+                      </plugin>
+                    </plugins>
+                  </build>
+                </project>
+                """);
+
+            var sharedRoot = Path.Combine(root, "src", "main", "shared");
+            var testKotlinRoot = Path.Combine(root, "src", "test", "customKotlin");
+            Directory.CreateDirectory(Path.Combine(sharedRoot, "sample"));
+            Directory.CreateDirectory(Path.Combine(testKotlinRoot, "sample"));
+            File.WriteAllText(Path.Combine(sharedRoot, "sample", "JavaContract.java"),
+                "package sample; public interface JavaContract {}");
+            File.WriteAllText(Path.Combine(sharedRoot, "sample", "KotlinService.kt"),
+                "package sample\nclass KotlinService : JavaContract");
+            File.WriteAllText(Path.Combine(testKotlinRoot, "sample", "KotlinServiceTest.kt"),
+                "package sample\nclass KotlinServiceTest");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.MavenProjectModel>(module.MavenModel);
+
+            Assert.Equal("2.4.21", model.KotlinPluginVersion);
+            Assert.Equal("2.4", model.KotlinLanguageVersion);
+            Assert.Equal("2.4", model.KotlinApiVersion);
+            Assert.Equal("21", model.KotlinJvmTarget);
+
+            var mixedRoot = Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == sharedRoot);
+            Assert.True(mixedRoot.ContainsJavaSources);
+            Assert.True(mixedRoot.ContainsKotlinSources);
+            Assert.True(mixedRoot.ContainsLanguage("Java"));
+            Assert.True(mixedRoot.ContainsLanguage("Kotlin"));
+            Assert.Equal(ProjectSourceRootOwnership.Production, mixedRoot.Ownership);
+
+            var testRoot = Assert.Single(model.SourceRoots, sourceRoot => sourceRoot.Directory == testKotlinRoot);
+            Assert.True(testRoot.ContainsKotlinSources);
+            Assert.Equal(ProjectSourceRootOwnership.Test, testRoot.Ownership);
+            Assert.True(model.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_resolves_local_parent_coordinates_properties_managed_versions_and_scopes()
     {
         var root = CreateTemporaryDirectory();

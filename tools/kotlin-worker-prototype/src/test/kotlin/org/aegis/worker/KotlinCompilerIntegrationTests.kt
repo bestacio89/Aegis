@@ -175,7 +175,7 @@ class KotlinCompilerIntegrationTests {
                 .toSet()
             assertEquals(setOf("sample.User", "kotlin.String"), extensionPropertyReceivers)
             assertTrue(symbols.any {
-                it.get("kind").asInt == 11 &&
+                it.get("kind").asInt == 9 &&
                     it.get("qualifiedName").asString == "sample.label" &&
                     it.get("declarationKind").asString == "ExtensionFunction" &&
                     it.get("receiverType").asString == "sample.User"

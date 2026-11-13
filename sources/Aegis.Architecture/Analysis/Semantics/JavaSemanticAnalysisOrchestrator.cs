@@ -161,7 +161,7 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
             {
                 Code = "JavaSourceFilesNotFound",
                 Component = nameof(JavaSemanticAnalysisOrchestrator),
-                Message = $"The { (includeTestCode ? "test" : "production") } source scope contains no Java files.",
+                Message = $"The {(includeTestCode ? "test" : "production")} source scope contains no Java files.",
                 Target = module.Path,
                 AffectsCoverage = true
             });
@@ -179,7 +179,7 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
             SourceFiles = sourceFiles,
             SourceRoots = sourceRoots.Select(root => root.Directory).ToArray(),
             ReferencedSourceRoots = ResolveReferencedSourceRoots(module, context, includeTestDependencies)
-                .Concat(includeTestCode ? ResolveOwnProductionSourceRoots(module, context) : [])
+                .Concat(includeTestCode ? ResolveOwnProductionSourceRoots(module, context) : Array.Empty<string>())
                 .Distinct(PathComparer)
                 .OrderBy(path => path, PathComparer)
                 .ToArray(),

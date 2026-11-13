@@ -64,7 +64,10 @@ public sealed class ProjectArchitectureContext
     // ===============================================================
 
     /// <summary>
-    /// Detected modules/projects/packages.
+    /// Build-system units discovered in the repository (for example .csproj,
+    /// Maven modules, Gradle projects, npm workspaces, or Python distributions).
+    /// These are build/deployment boundaries and are not assumed to be the
+    /// primary architectural organisation unit for every language.
     /// </summary>
     public List<ProjectModuleContext> Modules { get; set; } = new();
 

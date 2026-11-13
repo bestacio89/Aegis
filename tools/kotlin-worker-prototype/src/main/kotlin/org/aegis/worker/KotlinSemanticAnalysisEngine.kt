@@ -127,11 +127,8 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         val compilerPluginPath = Path.of(
             KotlinWorkerPluginRegistrar::class.java.protectionDomain.codeSource.location.toURI()
         ).toAbsolutePath().normalize()
-        val standardLibraryPath = Path.of(
-            Unit::class.java.protectionDomain.codeSource.location.toURI()
-        ).toAbsolutePath().normalize()
 
-        val classpath = (paths.classpathEntries + standardLibraryPath)
+        val classpath = (paths.classpathEntries + paths.standardLibraryPath)
             .distinct()
             .joinToString(File.pathSeparator) { it.toString() }
 
@@ -249,6 +246,18 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
 
         require(sourceFiles.isNotEmpty()) { "The Kotlin source manifest contains no Kotlin source files." }
 
+        val standardLibraryCandidate = Path.of(request.kotlinStandardLibraryPath).toAbsolutePath().normalize()
+        require(
+            Files.isRegularFile(standardLibraryCandidate, LinkOption.NOFOLLOW_LINKS)
+                && !Files.isSymbolicLink(standardLibraryCandidate)
+        ) {
+            "The worker Kotlin standard library must be a regular, non-symbolic file: $standardLibraryCandidate"
+        }
+        require(standardLibraryCandidate.fileName.toString().startsWith("kotlin-stdlib-")) {
+            "The worker runtime dependency must be a Kotlin standard library JAR: $standardLibraryCandidate"
+        }
+        val standardLibraryPath = standardLibraryCandidate.toRealPath()
+
         val classpathEntries = request.classpathEntries.map { value ->
             val candidate = Path.of(value).toAbsolutePath().normalize()
             require(Files.exists(candidate)) { "A resolved classpath entry does not exist: $candidate" }
@@ -263,7 +272,8 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             testRoots,
             generatedRoots,
             sourceFiles,
-            classpathEntries
+            classpathEntries,
+            standardLibraryPath
         )
     }
 
@@ -331,7 +341,8 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         val testRoots: List<Path>,
         val generatedRoots: List<Path>,
         val sourceFiles: List<Path>,
-        val classpathEntries: List<Path>
+        val classpathEntries: List<Path>,
+        val standardLibraryPath: Path
     )
 
     companion object {

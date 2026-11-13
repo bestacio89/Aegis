@@ -3,8 +3,10 @@ using Aegis.Shared.Architecture.Enums;
 namespace Aegis.Shared.Architecture.Models;
 
 /// <summary>
-/// Describes one independently discovered project or package inside a repository.
-/// Project identity and technology are kept separate from its inferred architecture layer.
+/// Describes one independently discovered build-system unit inside a repository.
+/// Examples include a .NET project, Maven module, Gradle project, npm workspace,
+/// or Python distribution. Its build identity is distinct from language-native
+/// architectural components such as Java and Python packages.
 /// </summary>
 public sealed class ProjectModuleContext
 {

@@ -68,15 +68,24 @@ public sealed class DependencyGraphEvaluator
             DiagnosticLevel.Trace,
             $"Evaluating dependency graph with {relations.Count} build-module relation(s) and {componentRelations.Count} semantic component relation(s).");
 
-        if (relations.Count > 0)
+        if (context.ProductionComponents.Count > 0)
+        {
+            // The language-native component graph is the primary architectural
+            // graph when providers can identify its nodes. Build-module edges
+            // remain available for separate layer-level coupling evidence.
+            if (relations.Count > 0)
+            {
+                EvaluateLayerCoupling(results, relations, token);
+                token.ThrowIfCancellationRequested();
+            }
+
+            EvaluateComponentGraphSummary(results, componentRelations, token);
+        }
+        else if (relations.Count > 0)
         {
             EvaluateLayerCoupling(results, relations, token);
             token.ThrowIfCancellationRequested();
             EvaluateGraphSummary(results, relations, token);
-        }
-        else if (context.ProductionComponents.Count > 0)
-        {
-            EvaluateComponentGraphSummary(results, componentRelations, token);
         }
         else
         {
@@ -206,14 +215,17 @@ public sealed class DependencyGraphEvaluator
         result.Metadata["GraphLevel"] = "ArchitecturalComponents";
         result.Metadata["GraphHasRelations"] = (observedEdges.Length > 0).ToString().ToLowerInvariant();
         result.Metadata["MeasurementMethod"] =
-            "Compiler-resolved semantic relationships aggregated between language-level architectural components; build-module dependencies are reported separately.";
+            "Provider-resolved semantic relationships aggregated between language-native architectural components; build-module dependencies are reported separately.";
         result.Metadata["GraphNodeCount"] = nodes.Length.ToString();
         result.Metadata["GraphEdgeCount"] = distinctEdges.ToString();
-        var javaRuns = context.SemanticAnalysisRuns
-            .Where(run => run.Language.Equals("Java", StringComparison.OrdinalIgnoreCase))
+        var componentLanguages = context.ProductionComponents
+            .Select(component => component.Language)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var semanticRuns = context.SemanticAnalysisRuns
+            .Where(run => componentLanguages.Contains(run.Language))
             .ToArray();
-        var analysisComplete = javaRuns.Length > 0
-            && javaRuns.All(run => run.IsComplete)
+        var analysisComplete = semanticRuns.Length > 0
+            && semanticRuns.All(run => run.IsComplete)
             && !context.DiscoveryDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
         result.Metadata["AnalysisComplete"] = analysisComplete.ToString().ToLowerInvariant();
 
@@ -222,7 +234,7 @@ public sealed class DependencyGraphEvaluator
             var possibleDirectedEdges = (double)nodes.Length * (nodes.Length - 1);
             result.Metrics["DependencyGraphDensity"] = distinctEdges / possibleDirectedEdges;
             result.Metadata["GraphDensityDefinition"] =
-                "Distinct observed directed non-self package/component edges divided by n*(n-1); this measures the observed graph and does not imply exhaustive semantic coverage.";
+                "Distinct observed directed non-self architectural component edges divided by n*(n-1); this measures the observed graph and does not imply exhaustive semantic coverage.";
             result.Metadata["GraphDensityStatus"] = distinctEdges > 0
                 ? "MeasuredOnObservedEdges"
                 : "MeasuredZeroEdgesWithCompleteAnalysis";

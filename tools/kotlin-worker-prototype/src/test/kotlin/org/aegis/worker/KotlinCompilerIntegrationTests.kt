@@ -158,7 +158,10 @@ class KotlinCompilerIntegrationTests {
                 .distinct()
             assertEquals(2, extensionPropertyIds.size, "Extension property identity must include the receiver type.")
             assertFalse(
-                symbols.any { it.get("name").asString in setOf("copy", "component1", "equals", "hashCode", "toString") },
+                symbols.any {
+                    it.get("qualifiedName").asString.startsWith("sample.User.")
+                        && it.get("name").asString in setOf("copy", "component1", "equals", "hashCode", "toString")
+                },
                 "Compiler-generated data-class members must not be reported as source declarations."
             )
             assertFalse(

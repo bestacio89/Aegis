@@ -89,6 +89,20 @@ class KotlinCompilerIntegrationTests {
             val String.label: String
                 get() = this
 
+            @JvmName("getUserLabels")
+            val List<User>.labels: String
+                get() = joinToString()
+
+            @JvmName("getStringLabels")
+            val List<String>.labels: String
+                get() = joinToString()
+
+            @JvmName("selectUsers")
+            fun List<User>.select(): User = first()
+
+            @JvmName("selectStrings")
+            fun List<String>.select(): String = first()
+
             fun readId(user: User): String = user.id
 
             fun overload(value: String): String = value
@@ -174,6 +188,27 @@ class KotlinCompilerIntegrationTests {
                 .map { it.get("receiverType").asString }
                 .toSet()
             assertEquals(setOf("sample.User", "kotlin.String"), extensionPropertyReceivers)
+
+            val genericExtensionPropertyIds = symbols
+                .filter { it.get("kind").asInt == 12 && it.get("qualifiedName").asString == "sample.labels" }
+                .map { it.get("id").asString }
+                .distinct()
+            assertEquals(
+                2,
+                genericExtensionPropertyIds.size,
+                "Generic receiver arguments must participate in extension-property identity."
+            )
+
+            val genericExtensionFunctionIds = symbols
+                .filter { it.get("kind").asInt == 9 && it.get("qualifiedName").asString == "sample.select" }
+                .map { it.get("id").asString }
+                .distinct()
+            assertEquals(
+                2,
+                genericExtensionFunctionIds.size,
+                "Generic receiver arguments must participate in extension-function identity."
+            )
+
             assertTrue(symbols.any {
                 it.get("kind").asInt == 9 &&
                     it.get("qualifiedName").asString == "sample.label" &&

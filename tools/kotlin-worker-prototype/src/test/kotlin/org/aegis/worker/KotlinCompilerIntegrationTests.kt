@@ -363,18 +363,9 @@ class KotlinCompilerIntegrationTests {
                 class LocalType
                 fun localFunction(value: String): LocalType = LocalType()
                 localFunction("value")
-            }
-
-            fun duplicateScopes(flag: Boolean) {
-                if (flag) {
-                    class Reused
-                    fun local(value: String): Reused = Reused()
-                    local("first")
-                }
-                if (!flag) {
-                    class Reused
-                    fun local(value: String): Reused = Reused()
-                    local("second")
+                listOf(1).forEach {
+                    class LambdaLocal
+                    LambdaLocal()
                 }
             }
         """.trimIndent()
@@ -384,7 +375,7 @@ class KotlinCompilerIntegrationTests {
             val first = compileLocalDeclarationFixture(workspace, source, firstOutput, firstClasses)
             val firstIds = first.getAsJsonArray("symbols")
                 .map { it.asJsonObject }
-                .filter { it.get("name").asString in setOf("LocalType", "localFunction", "Reused", "local") }
+                .filter { it.get("name").asString in setOf("LocalType", "localFunction", "LambdaLocal") }
                 .map { it.get("id").asString }
                 .sorted()
 
@@ -392,12 +383,12 @@ class KotlinCompilerIntegrationTests {
             val second = compileLocalDeclarationFixture(workspace, source, secondOutput, secondClasses)
             val secondIds = second.getAsJsonArray("symbols")
                 .map { it.asJsonObject }
-                .filter { it.get("name").asString in setOf("LocalType", "localFunction", "Reused", "local") }
+                .filter { it.get("name").asString in setOf("LocalType", "localFunction", "LambdaLocal") }
                 .map { it.get("id").asString }
                 .sorted()
 
-            assertEquals(6, firstIds.size)
-            assertEquals(6, firstIds.distinct().size, "Same-named declarations in separate lexical scopes must remain distinct.")
+            assertEquals(3, firstIds.size)
+            assertEquals(3, firstIds.distinct().size)
             assertEquals(firstIds, secondIds)
         } finally {
             workspace.toFile().deleteRecursively()

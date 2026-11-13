@@ -386,13 +386,17 @@ class KotlinCompilerIntegrationTests {
                 "kotlin:property:sample.ReferenceTarget.directField" in referenceTargets,
                 "@JvmField reads and writes must resolve to their source property."
             )
+            val externalJavaSymbols = symbols
+                .filter { it.get("language").asString == "Java" }
+                .map { it.get("kind").asInt.toString() + ":" + it.get("qualifiedName").asString }
             assertTrue(
                 symbols.any {
                     it.get("kind").asInt == 11 &&
                         it.get("qualifiedName").asString == "interop.JavaRepository.label" &&
                         it.get("language").asString == "Java"
                 },
-                "External Java field references must create a normalized external field symbol."
+                "External Java field references must create a normalized external field symbol. Actual Java symbols: " +
+                    externalJavaSymbols.joinToString()
             )
             assertTrue(
                 relationships.any {

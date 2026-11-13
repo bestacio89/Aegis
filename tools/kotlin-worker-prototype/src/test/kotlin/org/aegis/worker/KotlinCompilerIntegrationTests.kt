@@ -95,6 +95,7 @@ class KotlinCompilerIntegrationTests {
 
             fun exercise(user: User, service: Service) {
                 service.execute()
+                service.execute()
                 user.label("user")
                 overload("text")
                 overload(42)
@@ -184,6 +185,20 @@ class KotlinCompilerIntegrationTests {
                     it.get("sourceSymbolId").asString == "kotlin:type:sample.AuditedService" &&
                     it.get("targetSymbolId").asString == "kotlin:type:sample.Audited"
             }, "Annotation use must remain distinct from ordinary constructor calls.")
+            val repeatedCall = relationships.single {
+                it.get("kind").asInt == 4
+                    && it.get("sourceSymbolId").asString == "kotlin:function:sample.exercise(sample.User,sample.Service)"
+                    && it.get("targetSymbolId").asString == "kotlin:function:sample.Service.execute()"
+            }
+            assertEquals(
+                2,
+                repeatedCall.getAsJsonArray("provenance").size(),
+                "Repeated calls should aggregate into one stable relationship with both source locations."
+            )
+            assertEquals(
+                "${repeatedCall.get("sourceSymbolId").asString}|4|${repeatedCall.get("targetSymbolId").asString}",
+                repeatedCall.get("id").asString
+            )
             assertTrue(relationships.any {
                 it.get("kind").asInt == 5 &&
                     it.get("targetSymbolId").asString == "kotlin:property:sample.User.id"

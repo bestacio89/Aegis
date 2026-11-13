@@ -461,6 +461,7 @@ internal static class MavenProjectModelResolver
                 KotlinLanguageVersion = kotlinLanguageVersion,
                 KotlinApiVersion = kotlinApiVersion,
                 KotlinJvmTarget = kotlinJvmTarget,
+                KotlinJdkRelease = kotlinOptions.JdkRelease,
                 AnnotationProcessorPaths = processorPaths,
                 SourceRoots = sourceRoots,
                 ProfileIds = profileIds,
@@ -747,9 +748,18 @@ internal static class MavenProjectModelResolver
         var testDirectories = ParseKotlinSourceDirectories(
             configuration, "testSourceDirs", "testSourceDir", projectDirectory, properties, diagnostics, projectFile);
 
-        var languageVersion = ResolveKotlinOption(configuration, "languageVersion", properties, diagnostics, projectFile);
-        var apiVersion = ResolveKotlinOption(configuration, "apiVersion", properties, diagnostics, projectFile);
-        var jvmTarget = ResolveKotlinOption(configuration, "jvmTarget", properties, diagnostics, projectFile);
+        var languageVersion = ResolveKotlinOption(
+            configuration, "languageVersion", "kotlin.compiler.languageVersion",
+            properties, diagnostics, projectFile);
+        var apiVersion = ResolveKotlinOption(
+            configuration, "apiVersion", "kotlin.compiler.apiVersion",
+            properties, diagnostics, projectFile);
+        var jvmTarget = ResolveKotlinOption(
+            configuration, "jvmTarget", "kotlin.compiler.jvmTarget",
+            properties, diagnostics, projectFile);
+        var jdkRelease = ResolveKotlinOption(
+            configuration, "jdkRelease", "kotlin.compiler.jdkRelease",
+            properties, diagnostics, projectFile);
 
         var executions = Child(plugin, "executions")?.Elements()
             .Where(element => NameIs(element, "execution"))
@@ -778,11 +788,17 @@ internal static class MavenProjectModelResolver
 
             testDirectories.AddRange(executionTestDirectories);
             languageVersion ??= ResolveKotlinOption(
-                executionConfiguration, "languageVersion", properties, diagnostics, projectFile);
+                executionConfiguration, "languageVersion", "kotlin.compiler.languageVersion",
+                properties, diagnostics, projectFile);
             apiVersion ??= ResolveKotlinOption(
-                executionConfiguration, "apiVersion", properties, diagnostics, projectFile);
+                executionConfiguration, "apiVersion", "kotlin.compiler.apiVersion",
+                properties, diagnostics, projectFile);
             jvmTarget ??= ResolveKotlinOption(
-                executionConfiguration, "jvmTarget", properties, diagnostics, projectFile);
+                executionConfiguration, "jvmTarget", "kotlin.compiler.jvmTarget",
+                properties, diagnostics, projectFile);
+            jdkRelease ??= ResolveKotlinOption(
+                executionConfiguration, "jdkRelease", "kotlin.compiler.jdkRelease",
+                properties, diagnostics, projectFile);
         }
 
         var compilerPlugins = Child(configuration, "compilerPlugins")?.Elements()
@@ -799,6 +815,29 @@ internal static class MavenProjectModelResolver
                 projectFile));
         }
 
+        if (jvmTarget is not null && jdkRelease is not null)
+        {
+            diagnostics.Add(Diagnostic(
+                "MavenKotlinJvmTargetConflict",
+                "Both Kotlin jvmTarget and jdkRelease are declared. The compiler rejects this combination; the effective target is not inferred.",
+                projectFile));
+        }
+
+        if (jvmTarget is null && jdkRelease is not null)
+            jvmTarget = jdkRelease;
+
+        var extensionsEnabled = bool.TryParse(Value(plugin, "extensions"), out var extensions)
+            && extensions;
+        if (jvmTarget is null && extensionsEnabled)
+        {
+            jvmTarget = properties.GetValueOrDefault("maven.compiler.release")
+                ?? properties.GetValueOrDefault("maven.compiler.target");
+            if (jdkRelease is null && properties.ContainsKey("maven.compiler.release"))
+                jdkRelease = jvmTarget;
+        }
+
+        jvmTarget ??= "1.8";
+
         if (mainDirectories.Count == 0)
             mainDirectories.Add(Path.Combine(projectDirectory, "src", "main", "kotlin"));
         if (testDirectories.Count == 0)
@@ -809,7 +848,8 @@ internal static class MavenProjectModelResolver
             testDirectories.Distinct(PathComparer).ToList(),
             languageVersion,
             apiVersion,
-            jvmTarget);
+            jvmTarget,
+            jdkRelease);
     }
 
     private static List<string> ParseKotlinSourceDirectories(
@@ -873,11 +913,13 @@ internal static class MavenProjectModelResolver
     private static string? ResolveKotlinOption(
         XElement? configuration,
         string optionName,
+        string propertyName,
         IReadOnlyDictionary<string, string> properties,
         ICollection<AnalysisDiagnostic> diagnostics,
         string projectFile)
     {
-        var rawValue = Value(configuration, optionName);
+        var rawValue = Value(configuration, optionName)
+            ?? properties.GetValueOrDefault(propertyName);
         if (string.IsNullOrWhiteSpace(rawValue))
             return null;
 
@@ -1347,7 +1389,8 @@ internal static class MavenProjectModelResolver
         List<string> TestSourceDirectories,
         string? LanguageVersion,
         string? ApiVersion,
-        string? JvmTarget);
+        string? JvmTarget,
+        string? JdkRelease);
 
     private static AnalysisDiagnostic Diagnostic(string code, string message, string path) =>
         new()

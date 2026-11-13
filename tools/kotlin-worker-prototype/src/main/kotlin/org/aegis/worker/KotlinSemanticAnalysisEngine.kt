@@ -128,7 +128,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             KotlinWorkerPluginRegistrar::class.java.protectionDomain.codeSource.location.toURI()
         ).toAbsolutePath().normalize()
 
-        val classpath = (paths.classpathEntries + paths.standardLibraryPath)
+        val classpath = (paths.classpathEntries + listOf(paths.standardLibraryPath))
             .distinct()
             .joinToString(File.pathSeparator) { it.toString() }
 

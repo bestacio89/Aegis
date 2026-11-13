@@ -32,6 +32,8 @@ class KotlinCompilerIntegrationTests {
             package interop;
 
             public final class JavaRepository {
+                public String label;
+
                 public String load() {
                     return "loaded";
                 }
@@ -138,6 +140,8 @@ class KotlinCompilerIntegrationTests {
                 listOf(1).forEach { service.execute() }
             }
 
+            fun readJavaField(repository: JavaRepository): String = repository.label
+
             class ReferenceTarget() {
                 @JvmField var directField: String = ""
                 var property: String = ""
@@ -153,12 +157,15 @@ class KotlinCompilerIntegrationTests {
                 NORTH
             }
 
+            object SharedRegistry
+
             class ReferenceConsumer {
                 fun inspect(target: ReferenceTarget) {
                     val callableReference = target::transform
                     val propertyReference = target::property
                     val classReference = ReferenceTarget::class
-                    val constructorReference = ::ReferenceTarget
+                    val constructorReference: () -> ReferenceTarget = ::ReferenceTarget
+                    val singleton = SharedRegistry
                     val fieldValue = target.directField
                     target.directField = fieldValue
                     val direction = Direction.NORTH
@@ -346,7 +353,7 @@ class KotlinCompilerIntegrationTests {
             }, "An extension call must resolve to its extension declaration.")
 
             val referenceConsumerId = symbols.single {
-                it.get("qualifiedName").asString == "sample.ReferenceConsumer.inspect"
+                it.get("qualifiedName").asString.startsWith("sample.ReferenceConsumer.inspect(")
             }.get("id").asString
             val referenceTargets = relationships
                 .filter {
@@ -368,12 +375,32 @@ class KotlinCompilerIntegrationTests {
                 "Class references must resolve to the class declaration."
             )
             assertTrue(
+                "kotlin:type:sample.SharedRegistry" in referenceTargets,
+                "Object singleton access must resolve to the object declaration."
+            )
+            assertTrue(
                 referenceTargets.any { it.startsWith("kotlin:constructor:sample.ReferenceTarget") },
                 "Constructor references must resolve to constructor symbols."
             )
             assertTrue(
                 "kotlin:property:sample.ReferenceTarget.directField" in referenceTargets,
                 "@JvmField reads and writes must resolve to their source property."
+            )
+            assertTrue(
+                symbols.any {
+                    it.get("kind").asInt == 11 &&
+                        it.get("qualifiedName").asString == "interop.JavaRepository.label" &&
+                        it.get("language").asString == "Java"
+                },
+                "External Java field references must create a normalized external field symbol."
+            )
+            assertTrue(
+                relationships.any {
+                    it.get("kind").asInt == 5 &&
+                        it.get("sourceSymbolId").asString.startsWith("kotlin:function:sample.readJavaField(") &&
+                        it.get("targetSymbolId").asString == "kotlin:field:interop.JavaRepository.label"
+                },
+                "Java field reads from Kotlin must remain explicit references."
             )
             assertTrue(
                 symbols.any {

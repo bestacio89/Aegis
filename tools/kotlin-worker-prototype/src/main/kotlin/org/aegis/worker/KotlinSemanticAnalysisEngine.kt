@@ -174,6 +174,12 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
     }
 
     private fun validatePaths(request: KotlinWorkerAnalysisRequest): ValidatedPaths {
+        require(request.sourceRoots.size <= MAX_SOURCE_ROOTS) { "The Kotlin request exceeds the source-root limit." }
+        require(request.referencedSourceRoots.size <= MAX_REFERENCED_ROOTS) { "The Kotlin request exceeds the referenced-source-root limit." }
+        require(request.testSourceRoots.size <= MAX_SOURCE_ROOTS) { "The Kotlin request exceeds the test-source-root limit." }
+        require(request.generatedSourceRoots.size <= MAX_REFERENCED_ROOTS) { "The Kotlin request exceeds the generated-source-root limit." }
+        require(request.classpathEntries.size <= MAX_CLASSPATH_ENTRIES) { "The Kotlin request exceeds the classpath-entry limit." }
+
         val workspaceRoot = requireDirectory(request.workspaceRoot, "workspace root")
         val projectRoot = requireDirectory(request.projectPath, "project module")
         require(isWithin(projectRoot, workspaceRoot)) {
@@ -223,9 +229,16 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         require(isWithin(manifestRealPath, temporaryRoot)) {
             "The Kotlin source manifest must be located under the worker temporary directory."
         }
+        val manifestSize = Files.size(manifestRealPath)
+        require(manifestSize in 1..MAX_SOURCE_MANIFEST_BYTES) {
+            "The Kotlin source manifest exceeds the $MAX_SOURCE_MANIFEST_BYTES-byte limit."
+        }
 
         val manifestElement = JsonParser.parseString(Files.readString(manifestRealPath))
         require(manifestElement.isJsonArray) { "The Kotlin source manifest must be a JSON array." }
+        require(manifestElement.asJsonArray.size() <= MAX_SOURCE_FILES) {
+            "The Kotlin source manifest exceeds the $MAX_SOURCE_FILES-file limit."
+        }
         val sourceFiles = manifestElement.asJsonArray.map { element ->
             require(element.isJsonPrimitive && element.asJsonPrimitive.isString) {
                 "The Kotlin source manifest must contain only file paths."
@@ -348,6 +361,11 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
     companion object {
         private const val ENGINE_ID = "kotlin-k2-ir"
         private const val MAX_DIAGNOSTIC_LENGTH = 8_192
+        private const val MAX_SOURCE_MANIFEST_BYTES = 16L * 1024 * 1024
+        private const val MAX_SOURCE_FILES = 50_000
+        private const val MAX_SOURCE_ROOTS = 1_024
+        private const val MAX_REFERENCED_ROOTS = 2_048
+        private const val MAX_CLASSPATH_ENTRIES = 8_192
         private const val OUTPUT_PATH_PROPERTY = "aegis.kotlin.semantic.output"
         private const val PROJECT_PATH_PROPERTY = "aegis.kotlin.semantic.project"
         private const val TEST_SCOPE_PROPERTY = "aegis.kotlin.semantic.test"

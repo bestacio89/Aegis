@@ -39,6 +39,16 @@ class KotlinCompilerIntegrationTests {
             """.trimIndent()
         )
         Files.writeString(
+            javaSourceRoot.resolve("interop/JavaContract.java"),
+            """
+            package interop;
+
+            public interface JavaContract {
+                void verify();
+            }
+            """.trimIndent()
+        )
+        Files.writeString(
             source,
             """
             package sample
@@ -49,15 +59,32 @@ class KotlinCompilerIntegrationTests {
                 fun execute()
             }
 
+            interface DerivedExecutable : Executable
+
+            annotation class Audited
+
             data class User(val id: String)
 
-            class Service(private val repository: JavaRepository) : Executable {
+            class Service(private val repository: JavaRepository) : Executable, JavaContract {
                 override fun execute() {
+                    repository.load()
+                }
+
+                override fun verify() {
                     repository.load()
                 }
             }
 
+            @Audited
+            class AuditedService
+
             fun User.label(prefix: String): String = prefix + id
+
+            val User.label: String
+                get() = id
+
+            val String.label: String
+                get() = this
 
             fun readId(user: User): String = user.id
 
@@ -117,9 +144,22 @@ class KotlinCompilerIntegrationTests {
             assertTrue(symbols.any { it.get("qualifiedName").asString == "sample.Service" })
             assertTrue(symbols.any { it.get("qualifiedName").asString == "sample.User" })
             assertTrue(symbols.any {
+                it.get("kind").asInt == 8 &&
+                    it.get("qualifiedName").asString == "sample.Audited"
+            }, "Kotlin annotation classes must retain the normalized annotation symbol kind.")
+            assertTrue(symbols.any {
                 it.get("kind").asInt == 12 &&
                     it.get("qualifiedName").asString == "sample.User.id"
             })
+            val extensionPropertyIds = symbols
+                .filter { it.get("kind").asInt == 12 && it.get("qualifiedName").asString == "sample.label" }
+                .map { it.get("id").asString }
+                .distinct()
+            assertEquals(2, extensionPropertyIds.size, "Extension property identity must include the receiver type.")
+            assertFalse(
+                symbols.any { it.get("name").asString in setOf("copy", "component1", "equals", "hashCode", "toString") },
+                "Compiler-generated data-class members must not be reported as source declarations."
+            )
             assertFalse(
                 symbols.any { it.get("name").asString == "getId" },
                 "Compiler-generated property accessors must not become duplicate source symbols."
@@ -127,8 +167,19 @@ class KotlinCompilerIntegrationTests {
 
             assertTrue(relationships.any {
                 it.get("kind").asInt == 3 &&
-                    it.get("sourceSymbolId").asString == "kotlin:type:sample.Service"
-            })
+                    it.get("sourceSymbolId").asString == "kotlin:type:sample.Service" &&
+                    it.get("targetSymbolId").asString == "kotlin:type:interop.JavaContract"
+            }, "A class implementing an external Java interface must be classified as Implements.")
+            assertTrue(relationships.any {
+                it.get("kind").asInt == 2 &&
+                    it.get("sourceSymbolId").asString == "kotlin:type:sample.DerivedExecutable" &&
+                    it.get("targetSymbolId").asString == "kotlin:type:sample.Executable"
+            }, "An interface extending another interface must be classified as Inherits.")
+            assertTrue(relationships.any {
+                it.get("kind").asInt == 7 &&
+                    it.get("sourceSymbolId").asString == "kotlin:type:sample.AuditedService" &&
+                    it.get("targetSymbolId").asString == "kotlin:type:sample.Audited"
+            }, "Annotation use must remain distinct from ordinary constructor calls.")
             assertTrue(relationships.any {
                 it.get("kind").asInt == 5 &&
                     it.get("targetSymbolId").asString == "kotlin:property:sample.User.id"

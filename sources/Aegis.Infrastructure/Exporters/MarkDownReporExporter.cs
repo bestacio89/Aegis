@@ -85,6 +85,9 @@ public sealed class MarkdownReportExporter : IReportExporter
             md.AppendLine($"| Rule Evaluation Coverage | {(report.Metrics.HasCoverageEvidence ? $"{report.Metrics.RuleEvaluationCoverage:0.00}%" : "N/A")} |");
             md.AppendLine($"| Supported Rules Not Evaluated | {(report.EvaluationStats is null ? "N/A" : report.EvaluationStats.RulesNotEvaluated.Count.ToString())} |");
             md.AppendLine($"| Unsupported Rules | {report.EvaluationStats?.RulesUnsupported.ToString() ?? "N/A"} |");
+            md.AppendLine($"| Total Diagnostics | {report.Diagnostics.Count} |");
+            md.AppendLine($"| Semantic Diagnostics | {report.SemanticDiagnosticCount} |");
+            md.AppendLine($"| Coverage-affecting Diagnostics | {report.CoverageAffectingDiagnosticCount} |");
             md.AppendLine($"| Assessment Complete | {(report.Metrics.AssessmentComplete ? "Yes" : "No")} |");
 
             md.AppendLine();

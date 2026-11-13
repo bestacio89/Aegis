@@ -541,7 +541,7 @@ internal class KotlinSemanticCollector(
     }
 
     private fun typeIdentity(type: org.jetbrains.kotlin.ir.types.IrType): String =
-        type.classFqName?.asString() ?: type.toString()
+        type.toString()
 
     private fun isPublic(declaration: IrDeclaration): Boolean =
         (declaration as? IrDeclarationWithVisibility)?.visibility == DescriptorVisibilities.PUBLIC

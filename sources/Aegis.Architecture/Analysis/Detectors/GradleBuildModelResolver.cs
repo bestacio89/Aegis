@@ -1368,7 +1368,21 @@ internal static class GradleBuildModelResolver
 
             if (roots.TryGetValue(fullDirectory, out var existing))
             {
-                if (ownershipConflicts.Contains(fullDirectory))
+                if (existing.Origin == ProjectSourceRootOrigin.Explicit
+                    && origin != ProjectSourceRootOrigin.Explicit)
+                {
+                    ownership = ownershipConflicts.Contains(fullDirectory)
+                        ? ProjectSourceRootOwnership.Unknown
+                        : existing.Ownership;
+                }
+                else if (existing.Origin != ProjectSourceRootOrigin.Explicit
+                    && origin == ProjectSourceRootOrigin.Explicit)
+                {
+                    // Explicit source-set declarations supersede conventional
+                    // folder inference, including conflicts between inferred roots.
+                    ownershipConflicts.Remove(fullDirectory);
+                }
+                else if (ownershipConflicts.Contains(fullDirectory))
                 {
                     ownership = ProjectSourceRootOwnership.Unknown;
                 }

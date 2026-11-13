@@ -146,7 +146,7 @@ public sealed class GradleBuildModelTests
                 sourceSets {
                     main {
                         java.srcDir("src/main/shared")
-                        kotlin.srcDir("src/main/shared")
+                        kotlin.srcDir(file("src/main/shared"))
                     }
                     test {
                         kotlin.srcDir("src/test/customKotlin")

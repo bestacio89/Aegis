@@ -137,6 +137,33 @@ class KotlinCompilerIntegrationTests {
             fun invokeWithLambda(service: Service) {
                 listOf(1).forEach { service.execute() }
             }
+
+            class ReferenceTarget() {
+                @JvmField var directField: String = ""
+                var property: String = ""
+
+                fun transform(): String = property
+
+                constructor(value: String) : this() {
+                    property = value
+                }
+            }
+
+            enum class Direction {
+                NORTH
+            }
+
+            class ReferenceConsumer {
+                fun inspect(target: ReferenceTarget) {
+                    val callableReference = target::transform
+                    val propertyReference = target::property
+                    val classReference = ReferenceTarget::class
+                    val constructorReference = ::ReferenceTarget
+                    val fieldValue = target.directField
+                    target.directField = fieldValue
+                    val direction = Direction.NORTH
+                }
+            }
             """.trimIndent()
         )
 
@@ -317,6 +344,57 @@ class KotlinCompilerIntegrationTests {
                 it.get("kind").asInt == 4 &&
                     it.get("targetSymbolId").asString.contains("sample.label")
             }, "An extension call must resolve to its extension declaration.")
+
+            val referenceConsumerId = symbols.single {
+                it.get("qualifiedName").asString == "sample.ReferenceConsumer.inspect"
+            }.get("id").asString
+            val referenceTargets = relationships
+                .filter {
+                    it.get("sourceSymbolId").asString == referenceConsumerId &&
+                        it.get("kind").asInt == 5
+                }
+                .map { it.get("targetSymbolId").asString }
+                .toSet()
+            assertTrue(
+                "kotlin:function:sample.ReferenceTarget.transform()" in referenceTargets,
+                "Callable references must be represented as References relationships."
+            )
+            assertTrue(
+                "kotlin:property:sample.ReferenceTarget.property" in referenceTargets,
+                "Property references must resolve to the property declaration."
+            )
+            assertTrue(
+                "kotlin:type:sample.ReferenceTarget" in referenceTargets,
+                "Class references must resolve to the class declaration."
+            )
+            assertTrue(
+                referenceTargets.any { it.startsWith("kotlin:constructor:sample.ReferenceTarget") },
+                "Constructor references must resolve to constructor symbols."
+            )
+            assertTrue(
+                "kotlin:property:sample.ReferenceTarget.directField" in referenceTargets,
+                "@JvmField reads and writes must resolve to their source property."
+            )
+            assertTrue(
+                symbols.any {
+                    it.get("kind").asInt == 11 &&
+                        it.get("qualifiedName").asString == "sample.Direction.NORTH" &&
+                        it.get("declarationKind").asString == "EnumEntry"
+                },
+                "Enum entries must remain explicit source symbols."
+            )
+            assertTrue(
+                referenceTargets.any { it == "kotlin:field:sample.Direction.NORTH" },
+                "Enum entry reads must produce a reference to the enum entry."
+            )
+            assertTrue(
+                relationships.any {
+                    it.get("kind").asInt == 4 &&
+                        it.get("sourceSymbolId").asString.startsWith("kotlin:constructor:sample.ReferenceTarget") &&
+                        it.get("targetSymbolId").asString.startsWith("kotlin:constructor:sample.ReferenceTarget")
+                },
+                "Secondary constructor delegation must remain a constructor relationship."
+            )
 
             val overloadIds = symbols
                 .filter { it.get("qualifiedName").asString.contains("sample.overload") }

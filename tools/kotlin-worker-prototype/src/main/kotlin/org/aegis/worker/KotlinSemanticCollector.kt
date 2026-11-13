@@ -10,6 +10,8 @@ import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationWithName
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationWithVisibility
 import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.declarations.IrEnumEntry
+import org.jetbrains.kotlin.ir.declarations.IrField
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
@@ -17,6 +19,14 @@ import org.jetbrains.kotlin.ir.declarations.IrTypeAlias
 import org.jetbrains.kotlin.ir.expressions.IrBlock
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
+import org.jetbrains.kotlin.ir.expressions.IrDelegatingConstructorCall
+import org.jetbrains.kotlin.ir.expressions.IrFunctionReference
+import org.jetbrains.kotlin.ir.expressions.IrPropertyReference
+import org.jetbrains.kotlin.ir.expressions.IrClassReference
+import org.jetbrains.kotlin.ir.expressions.IrGetField
+import org.jetbrains.kotlin.ir.expressions.IrSetField
+import org.jetbrains.kotlin.ir.expressions.IrGetEnumValue
+import org.jetbrains.kotlin.ir.expressions.IrGetObjectValue
 import org.jetbrains.kotlin.ir.declarations.IrParameterKind
 import org.jetbrains.kotlin.ir.declarations.IrPackageFragment
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
@@ -48,6 +58,7 @@ class KotlinSemanticCollector(
     private val symbols = LinkedHashMap<String, JsonObject>()
     private val relationships = LinkedHashMap<String, JsonObject>()
     private val propertyAccessors = HashMap<Any, String>()
+    private val backingFieldProperties = HashMap<Any, String>()
     private val localDeclarationIds = IdentityHashMap<IrDeclaration, String>()
     private val lexicalScopes = ArrayDeque<LexicalScope>()
     private val sourceTextCache = HashMap<String, String>()
@@ -143,9 +154,28 @@ class KotlinSemanticCollector(
             )
             declaration.getter?.let { propertyAccessors[it.symbol] = id }
             declaration.setter?.let { propertyAccessors[it.symbol] = id }
+            declaration.backingField?.let { backingFieldProperties[it.symbol] = id }
             owners.addLast(id)
             declaration.acceptChildrenVoid(this)
             owners.removeLast()
+        }
+
+        override fun visitEnumEntry(declaration: IrEnumEntry) {
+            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
+            val containingClass = declaration.parent as? IrClass
+            val qualifiedName = containingClass?.fqNameWhenAvailable?.asString()
+                ?.let { it + "." + declaration.name.asString() }
+                ?: declaration.name.asString()
+            val id = enumEntryId(declaration)
+            addSymbol(
+                id = id,
+                name = declaration.name.asString(),
+                qualifiedName = qualifiedName,
+                kind = 11,
+                declaration = declaration,
+                containingSymbolId = owners.lastOrNull()
+            )
+            declaration.acceptChildrenVoid(this)
         }
 
         override fun visitSimpleFunction(declaration: IrSimpleFunction) {
@@ -348,15 +378,18 @@ class KotlinSemanticCollector(
         override fun visitCall(expression: IrCall) {
             val sourceId = owners.lastOrNull()
             val target = expression.symbol.owner
-            val targetId = functionId(target)
-            val propertyId = propertyAccessors[expression.symbol]
-            if (propertyId == null) {
+            val targetProperty = (target as? IrSimpleFunction)?.correspondingPropertySymbol?.owner
+            val propertyId = propertyAccessors[expression.symbol] ?: targetProperty?.let(::propertyId)
+            val targetId = propertyId ?: functionId(target)
+            if (propertyId != null) {
+                targetProperty?.let { addExternalPropertyIfNeeded(propertyId, it) }
+            } else {
                 addExternalFunctionIfNeeded(targetId, target)
             }
             if (sourceId != null) {
                 addRelationship(
                     sourceId,
-                    propertyId ?: targetId,
+                    targetId,
                     if (propertyId == null) 4 else 5,
                     expression.startOffset,
                     currentFile
@@ -384,6 +417,110 @@ class KotlinSemanticCollector(
             }
             if (sourceId != null)
                 addRelationship(sourceId, targetId, if (isAnnotation) 7 else 4, expression.startOffset, currentFile)
+            expression.acceptChildrenVoid(this)
+        }
+
+        override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall) {
+            val sourceId = owners.lastOrNull()
+            val target = expression.symbol.owner
+            val targetId = functionId(target)
+            addExternalFunctionIfNeeded(targetId, target)
+            if (sourceId != null) {
+                addRelationship(sourceId, targetId, 4, expression.startOffset, currentFile)
+            }
+            expression.acceptChildrenVoid(this)
+        }
+
+        override fun visitFunctionReference(expression: IrFunctionReference) {
+            val sourceId = owners.lastOrNull()
+            val target = expression.symbol.owner
+            val targetProperty = (target as? IrSimpleFunction)?.correspondingPropertySymbol?.owner
+            val propertyId = targetProperty?.let(::propertyId)
+            val targetId = propertyId ?: functionId(target)
+            if (propertyId != null) {
+                addExternalPropertyIfNeeded(propertyId, targetProperty!!)
+            } else {
+                addExternalFunctionIfNeeded(targetId, target)
+            }
+            if (sourceId != null && sourceId != targetId) {
+                addRelationship(sourceId, targetId, 5, expression.startOffset, currentFile)
+            }
+            expression.acceptChildrenVoid(this)
+        }
+
+        override fun visitPropertyReference(expression: IrPropertyReference) {
+            val sourceId = owners.lastOrNull()
+            val target = expression.symbol.owner
+            val targetId = propertyId(target)
+            addExternalPropertyIfNeeded(targetId, target)
+            if (sourceId != null && sourceId != targetId) {
+                addRelationship(sourceId, targetId, 5, expression.startOffset, currentFile)
+            }
+            expression.acceptChildrenVoid(this)
+        }
+
+        override fun visitClassReference(expression: IrClassReference) {
+            val sourceId = owners.lastOrNull()
+            val target = expression.symbol.owner
+            val targetId = classId(target)
+            val qualifiedName = target.fqNameWhenAvailable?.asString() ?: targetId
+            addExternalTypeIfNeeded(
+                targetId,
+                qualifiedName,
+                target.kind.name in setOf("INTERFACE", "ANNOTATION_CLASS"),
+                target.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB,
+                target
+            )
+            if (sourceId != null && sourceId != targetId) {
+                addRelationship(sourceId, targetId, 5, expression.startOffset, currentFile)
+            }
+            expression.acceptChildrenVoid(this)
+        }
+
+        override fun visitGetField(expression: IrGetField) {
+            val sourceId = owners.lastOrNull()
+            val targetId = fieldTargetId(expression.symbol.owner)
+            if (sourceId != null && sourceId != targetId) {
+                addRelationship(sourceId, targetId, 5, expression.startOffset, currentFile)
+            }
+            expression.acceptChildrenVoid(this)
+        }
+
+        override fun visitSetField(expression: IrSetField) {
+            val sourceId = owners.lastOrNull()
+            val targetId = fieldTargetId(expression.symbol.owner)
+            if (sourceId != null && sourceId != targetId) {
+                addRelationship(sourceId, targetId, 5, expression.startOffset, currentFile)
+            }
+            expression.acceptChildrenVoid(this)
+        }
+
+        override fun visitGetEnumValue(expression: IrGetEnumValue) {
+            val sourceId = owners.lastOrNull()
+            val target = expression.symbol.owner
+            val targetId = enumEntryId(target)
+            addExternalEnumEntryIfNeeded(targetId, target)
+            if (sourceId != null && sourceId != targetId) {
+                addRelationship(sourceId, targetId, 5, expression.startOffset, currentFile)
+            }
+            expression.acceptChildrenVoid(this)
+        }
+
+        override fun visitGetObjectValue(expression: IrGetObjectValue) {
+            val sourceId = owners.lastOrNull()
+            val target = expression.symbol.owner
+            val targetId = classId(target)
+            val qualifiedName = target.fqNameWhenAvailable?.asString() ?: targetId
+            addExternalTypeIfNeeded(
+                targetId,
+                qualifiedName,
+                false,
+                target.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB,
+                target
+            )
+            if (sourceId != null && sourceId != targetId) {
+                addRelationship(sourceId, targetId, 5, expression.startOffset, currentFile)
+            }
             expression.acceptChildrenVoid(this)
         }
     }
@@ -458,6 +595,155 @@ class KotlinSemanticCollector(
         symbol.addProperty("receiverType", receiverType(declaration))
         symbol.add("provenance", JsonArray())
         symbols[id] = symbol
+    }
+
+    private fun addExternalPropertyIfNeeded(id: String, declaration: IrProperty) {
+        if (symbols.containsKey(id)) return
+
+        val containingClass = declaration.parent as? IrClass
+        val containingSymbolId = containingClass?.let(::classId)
+        if (containingClass != null && containingSymbolId != null) {
+            val qualifiedName = containingClass.fqNameWhenAvailable?.asString() ?: containingSymbolId
+            addExternalTypeIfNeeded(
+                containingSymbolId,
+                qualifiedName,
+                containingClass.kind.name in setOf("INTERFACE", "ANNOTATION_CLASS"),
+                containingClass.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB,
+                containingClass
+            )
+        }
+
+        val visibility = (declaration as? IrDeclarationWithVisibility)?.visibility?.name
+        val symbol = JsonObject()
+        symbol.addProperty("id", id)
+        symbol.addProperty("kind", 12)
+        symbol.addProperty("name", declaration.name.asString())
+        symbol.addProperty("qualifiedName", declaration.fqNameWhenAvailable?.asString() ?: id)
+        symbol.addProperty("containerName", packageName(declaration))
+        symbol.addProperty("containerKind", "Package")
+        symbol.addProperty(
+            "language",
+            if (declaration.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) "Java" else "Kotlin"
+        )
+        symbol.addProperty("projectPath", projectPath)
+        symbol.add("filePath", com.google.gson.JsonNull.INSTANCE)
+        symbol.add("startLine", com.google.gson.JsonNull.INSTANCE)
+        symbol.add("startColumn", com.google.gson.JsonNull.INSTANCE)
+        symbol.addProperty("containingSymbolId", containingSymbolId)
+        symbol.addProperty("origin", 3)
+        symbol.addProperty("isTestCode", isTestCode)
+        symbol.addProperty("isPublic", visibility == "public")
+        symbol.addProperty("visibility", visibility?.replaceFirstChar(Char::uppercase) ?: "Unknown")
+        symbol.addProperty("declarationKind", "Property")
+        symbol.addProperty("receiverType", receiverType(declaration))
+        symbol.add("provenance", JsonArray())
+        symbols[id] = symbol
+    }
+
+    private fun addExternalFieldIfNeeded(id: String, declaration: IrField) {
+        if (symbols.containsKey(id)) return
+
+        val containingClass = declaration.parent as? IrClass
+        val containingSymbolId = containingClass?.let(::classId)
+        if (containingClass != null && containingSymbolId != null) {
+            val qualifiedName = containingClass.fqNameWhenAvailable?.asString() ?: containingSymbolId
+            addExternalTypeIfNeeded(
+                containingSymbolId,
+                qualifiedName,
+                containingClass.kind.name in setOf("INTERFACE", "ANNOTATION_CLASS"),
+                containingClass.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB,
+                containingClass
+            )
+        }
+
+        val visibility = (declaration as? IrDeclarationWithVisibility)?.visibility?.name
+        val qualifiedName = declaration.fqNameWhenAvailable?.asString()
+            ?: containingClass?.fqNameWhenAvailable?.asString()
+                ?.let { it + "." + declaration.name.asString() }
+            ?: declaration.name.asString()
+        val symbol = JsonObject()
+        symbol.addProperty("id", id)
+        symbol.addProperty("kind", 11)
+        symbol.addProperty("name", declaration.name.asString())
+        symbol.addProperty("qualifiedName", qualifiedName)
+        symbol.addProperty("containerName", packageName(declaration))
+        symbol.addProperty("containerKind", "Package")
+        symbol.addProperty(
+            "language",
+            if (declaration.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) "Java" else "Kotlin"
+        )
+        symbol.addProperty("projectPath", projectPath)
+        symbol.add("filePath", com.google.gson.JsonNull.INSTANCE)
+        symbol.add("startLine", com.google.gson.JsonNull.INSTANCE)
+        symbol.add("startColumn", com.google.gson.JsonNull.INSTANCE)
+        symbol.addProperty("containingSymbolId", containingSymbolId)
+        symbol.addProperty("origin", 3)
+        symbol.addProperty("isTestCode", isTestCode)
+        symbol.addProperty("isPublic", visibility == "public")
+        symbol.addProperty("visibility", visibility?.replaceFirstChar(Char::uppercase) ?: "Unknown")
+        symbol.addProperty("declarationKind", "Field")
+        symbol.add("provenance", JsonArray())
+        symbols[id] = symbol
+    }
+
+    private fun addExternalEnumEntryIfNeeded(id: String, declaration: IrEnumEntry) {
+        if (symbols.containsKey(id)) return
+
+        val containingClass = declaration.parent as? IrClass
+        val containingSymbolId = containingClass?.let(::classId)
+        if (containingClass != null && containingSymbolId != null) {
+            val qualifiedName = containingClass.fqNameWhenAvailable?.asString() ?: containingSymbolId
+            addExternalTypeIfNeeded(
+                containingSymbolId,
+                qualifiedName,
+                false,
+                containingClass.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB,
+                containingClass
+            )
+        }
+
+        val qualifiedName = containingClass?.fqNameWhenAvailable?.asString()
+            ?.let { it + "." + declaration.name.asString() }
+            ?: declaration.name.asString()
+        val visibility = (declaration as? IrDeclarationWithVisibility)?.visibility?.name
+        val symbol = JsonObject()
+        symbol.addProperty("id", id)
+        symbol.addProperty("kind", 11)
+        symbol.addProperty("name", declaration.name.asString())
+        symbol.addProperty("qualifiedName", qualifiedName)
+        symbol.addProperty("containerName", packageName(declaration))
+        symbol.addProperty("containerKind", "Package")
+        symbol.addProperty(
+            "language",
+            if (declaration.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) "Java" else "Kotlin"
+        )
+        symbol.addProperty("projectPath", projectPath)
+        symbol.add("filePath", com.google.gson.JsonNull.INSTANCE)
+        symbol.add("startLine", com.google.gson.JsonNull.INSTANCE)
+        symbol.add("startColumn", com.google.gson.JsonNull.INSTANCE)
+        symbol.addProperty("containingSymbolId", containingSymbolId)
+        symbol.addProperty("origin", 3)
+        symbol.addProperty("isTestCode", isTestCode)
+        symbol.addProperty("isPublic", visibility == "public")
+        symbol.addProperty("visibility", visibility?.replaceFirstChar(Char::uppercase) ?: "Unknown")
+        symbol.addProperty("declarationKind", "EnumEntry")
+        symbol.add("provenance", JsonArray())
+        symbols[id] = symbol
+    }
+
+    private fun fieldTargetId(declaration: IrField): String {
+        val propertyId = backingFieldProperties[declaration.symbol]
+            ?: declaration.correspondingPropertySymbol?.owner?.let(::propertyId)
+        if (propertyId != null) {
+            declaration.correspondingPropertySymbol?.owner?.let {
+                addExternalPropertyIfNeeded(propertyId, it)
+            }
+            return propertyId
+        }
+
+        val id = fieldId(declaration)
+        addExternalFieldIfNeeded(id, declaration)
+        return id
     }
 
     private fun addExternalTypeIfNeeded(
@@ -540,6 +826,23 @@ class KotlinSemanticCollector(
         item.addProperty("confidence", 1.0)
         result.add(item)
         return result
+    }
+
+    private fun enumEntryId(declaration: IrEnumEntry): String {
+        val containingClass = declaration.parent as? IrClass
+        val qualifiedName = containingClass?.fqNameWhenAvailable?.asString()
+            ?.let { it + "." + declaration.name.asString() }
+            ?: declaration.name.asString()
+        return "kotlin:field:$qualifiedName"
+    }
+
+    private fun fieldId(declaration: IrField): String {
+        val containingClass = declaration.parent as? IrClass
+        val qualifiedName = declaration.fqNameWhenAvailable?.asString()
+            ?: containingClass?.fqNameWhenAvailable?.asString()
+                ?.let { it + "." + declaration.name.asString() }
+            ?: declaration.name.asString()
+        return "kotlin:field:$qualifiedName"
     }
 
     private fun classId(
@@ -694,6 +997,8 @@ class KotlinSemanticCollector(
         is IrProperty -> if (receiverType(declaration) != null) "ExtensionProperty" else "Property"
         is IrTypeAlias -> "TypeAlias"
         is IrConstructor -> "Constructor"
+        is IrEnumEntry -> "EnumEntry"
+        is IrField -> "Field"
         is IrSimpleFunction -> if (receiverType(declaration) != null) "ExtensionFunction" else "Function"
         else -> declaration.javaClass.simpleName
     }

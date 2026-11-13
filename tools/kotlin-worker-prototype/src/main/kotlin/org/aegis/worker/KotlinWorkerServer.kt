@@ -218,7 +218,7 @@ class KotlinWorkerServer(
             }
 
             sawData = true
-            if (buffer.size() < maxFrameBytes + 1) {
+            if (buffer.size() < maxFrameBytes) {
                 buffer.write(value)
             } else {
                 tooLarge = true

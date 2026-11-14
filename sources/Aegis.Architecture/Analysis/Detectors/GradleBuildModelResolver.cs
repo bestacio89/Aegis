@@ -167,8 +167,6 @@ internal static class GradleBuildModelResolver
             var sourceRoots = DiscoverSourceRoots(module.Path, files, sourceSets, buildFile, diagnostics);
             var androidModel = ParseAndroidBuildModel(
                 source, plugins, catalog, files, module.Path, owningRoot?.Path, sourceRoots, diagnostics, buildFile);
-            if (androidModel is not null)
-                ApplyAndroidModuleMetadata(module, androidModel);
             var kotlinJvmPlugins = plugins
                 .Where(plugin => plugin.IsApplied && plugin.Id == "org.jetbrains.kotlin.jvm")
                 .ToArray();
@@ -270,35 +268,6 @@ internal static class GradleBuildModelResolver
             module.SourceRoots = model.SourceRoots;
             AddDependencyEvidence(context, module, model);
         }
-    }
-
-    private static void ApplyAndroidModuleMetadata(
-        ProjectModuleContext module,
-        GradleAndroidBuildModel androidModel)
-    {
-        module.ProjectKind = androidModel.ModuleKind switch
-        {
-            "Application" => "AndroidApplication",
-            "Library" => "AndroidLibrary",
-            "Test" => "AndroidTest",
-            "DynamicFeature" => "AndroidDynamicFeature",
-            "AssetPack" => "AndroidAssetPack",
-            _ => "Unknown"
-        };
-
-        module.IsExecutable = androidModel.ModuleKind == "Application";
-        module.IsLibrary = androidModel.ModuleKind == "Library";
-        module.IsTestProject = module.IsTestProject || androidModel.ModuleKind == "Test";
-
-        if (!module.Frameworks.Contains("Android", StringComparer.OrdinalIgnoreCase))
-            module.Frameworks.Add("Android");
-
-        module.Framework = module.Frameworks.Count switch
-        {
-            0 => null,
-            1 => module.Frameworks[0],
-            _ => "Multi-Framework"
-        };
     }
 
     private static GradleAndroidBuildModel? ParseAndroidBuildModel(

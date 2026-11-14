@@ -171,62 +171,86 @@ public sealed class JvmSourceRootResolver
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(language);
 
-        var modulePath = Path.GetFullPath(module.Path);
-        var pending = new Stack<string>(
-            context.Dependencies
-                .Where(dependency => !string.IsNullOrWhiteSpace(dependency.SourceProjectPath)
-                    && PathsEqual(dependency.SourceProjectPath, modulePath))
-                .Where(dependency =>
-                    dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase)
-                    || (includeTestDependencies
-                        && dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase)))
-                .Select(dependency => dependency.TargetProjectPath)
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .Distinct(PathComparer)
-                .OrderByDescending(path => path, PathComparer));
-
-        var visitedModules = new HashSet<string>(PathComparer);
-        var sourceRoots = new HashSet<string>(PathComparer);
+        var moduleGroups = context.Modules
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Path))
+            .GroupBy(candidate => NormalizePath(candidate.Path), PathComparer)
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single(), PathComparer);
         var workspaceRoot = Path.GetFullPath(context.RootPath);
+        var sourceRoots = new List<string>();
+        var seenSourceRoots = new HashSet<string>(PathComparer);
+        var visitedProductionModules = new HashSet<string>(PathComparer);
+        var visitedTestArtifactModules = new HashSet<string>(PathComparer);
+        var pending = new Queue<(string Path, bool IncludeTestEdges, bool IncludeTestRoots)>();
 
-        while (pending.TryPop(out var targetPath))
+        EnqueueDependencies(module.Path, includeTestDependencies);
+
+        while (pending.TryDequeue(out var current))
         {
-            var normalizedTargetPath = Path.GetFullPath(targetPath);
-            if (!visitedModules.Add(normalizedTargetPath))
-                continue;
-
-            var targetModules = context.Modules
-                .Where(candidate => PathsEqual(candidate.Path, normalizedTargetPath))
-                .Take(2)
-                .ToArray();
-            if (targetModules.Length != 1)
-                continue;
-
-            var targetModule = targetModules[0];
-            foreach (var sourceRoot in ResolveSourceRoots(targetModule, language).Where(root =>
-                         root.ContainsLanguage(language)
-                         && IsSameOrDescendantPath(Path.GetFullPath(root.Directory), workspaceRoot)
-                         && (root.Ownership == ProjectSourceRootOwnership.Production
-                             || (includeTestDependencies && root.Ownership == ProjectSourceRootOwnership.Test))))
+            var visited = current.IncludeTestEdges
+                ? visitedTestArtifactModules
+                : visitedProductionModules;
+            if (!visited.Add(current.Path)
+                || !moduleGroups.TryGetValue(current.Path, out var targetModule))
             {
-                sourceRoots.Add(Path.GetFullPath(sourceRoot.Directory));
+                continue;
             }
 
-            foreach (var dependency in context.Dependencies.Where(dependency =>
-                         !string.IsNullOrWhiteSpace(dependency.SourceProjectPath)
-                         && PathsEqual(dependency.SourceProjectPath, targetModule.Path)))
+            foreach (var sourceRoot in ResolveSourceRoots(targetModule, language))
             {
-                if (!dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase)
-                    && !(includeTestDependencies
-                        && dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase)))
+                if (!sourceRoot.ContainsLanguage(language))
                     continue;
 
-                if (!string.IsNullOrWhiteSpace(dependency.TargetProjectPath))
-                    pending.Push(dependency.TargetProjectPath);
+                var normalizedRoot = Path.GetFullPath(sourceRoot.Directory);
+                if (!IsSameOrDescendantPath(normalizedRoot, workspaceRoot))
+                    continue;
+
+                var isAllowedScope = sourceRoot.Ownership == ProjectSourceRootOwnership.Production
+                    || (current.IncludeTestRoots
+                        && sourceRoot.Ownership == ProjectSourceRootOwnership.Test);
+                if (isAllowedScope && seenSourceRoots.Add(normalizedRoot))
+                    sourceRoots.Add(normalizedRoot);
             }
+
+            EnqueueDependencies(targetModule.Path, current.IncludeTestEdges);
         }
 
-        return sourceRoots.OrderBy(path => path, PathComparer).ToArray();
+        return sourceRoots;
+
+        void EnqueueDependencies(string sourcePath, bool allowTestEdges)
+        {
+            var normalizedSourcePath = NormalizePath(sourcePath);
+            foreach (var dependency in context.Dependencies)
+            {
+                if (string.IsNullOrWhiteSpace(dependency.SourceProjectPath)
+                    || !PathsEqual(dependency.SourceProjectPath, normalizedSourcePath)
+                    || string.IsNullOrWhiteSpace(dependency.TargetProjectPath))
+                {
+                    continue;
+                }
+
+                var isProduction = string.Equals(
+                    dependency.Scope,
+                    "Production",
+                    StringComparison.OrdinalIgnoreCase);
+                var isTest = string.Equals(
+                    dependency.Scope,
+                    "Test",
+                    StringComparison.OrdinalIgnoreCase);
+                if (!isProduction && !(allowTestEdges && isTest))
+                    continue;
+
+                var targetPath = NormalizePath(dependency.TargetProjectPath);
+                var isTestArtifact = isTest
+                    && moduleGroups.TryGetValue(targetPath, out var dependencyModule)
+                    && JvmModuleDependencyResolver.IsTestArtifact(dependencyModule);
+
+                pending.Enqueue((
+                    targetPath,
+                    isTestArtifact,
+                    isTestArtifact));
+            }
+        }
     }
 
     public IReadOnlyList<string> ResolveOwnSourceRoots(
@@ -295,10 +319,11 @@ public sealed class JvmSourceRootResolver
                 && !relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal));
     }
 
+    private static string NormalizePath(string path) =>
+        Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
     private static bool PathsEqual(string left, string right) =>
-        PathComparer.Equals(
-            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        PathComparer.Equals(NormalizePath(left), NormalizePath(right));
 
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;

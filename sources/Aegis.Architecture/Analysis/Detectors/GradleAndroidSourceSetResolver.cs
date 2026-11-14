@@ -503,7 +503,7 @@ internal static class GradleAndroidSourceSetResolver
             sourceSetsBlock,
             @"\b(?:getByName|maybeCreate|create)\s*\(",
             RegexOptions.CultureInvariant).Count;
-        var resolvedFactoryDeclarationCount = declarations.Count(match =>
+        var resolvedFactoryDeclarationCount = declarations.Cast<Match>().Count(match =>
             match.Value.StartsWith("getByName", StringComparison.Ordinal)
             || match.Value.StartsWith("maybeCreate", StringComparison.Ordinal)
             || match.Value.StartsWith("create", StringComparison.Ordinal));

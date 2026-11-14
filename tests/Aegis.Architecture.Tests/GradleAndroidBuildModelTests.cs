@@ -497,4 +497,157 @@ public sealed class GradleAndroidBuildModelTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public void Detect_builds_android_variant_matrix_and_separates_production_unit_and_instrumentation_source_sets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidVariants_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-variants\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                    id("org.jetbrains.kotlin.android") version "2.1.0"
+                }
+                android {
+                    namespace = "org.example.variants"
+                    compileSdk = 35
+                    flavorDimensions += "tier"
+                    productFlavors {
+                        create("free") { dimension = "tier" }
+                        create("paid") { dimension = "tier" }
+                    }
+                    buildTypes {
+                        debug { isDebuggable = true }
+                        release { isMinifyEnabled = true }
+                        create("staging") { }
+                    }
+                }
+                """);
+
+            WriteFile(app, "src/main/java/Main.java", "package org.example; class Main {}");
+            WriteFile(app, "src/main/java/Main.kt", "package org.example\nclass MainKotlin");
+            WriteFile(app, "src/free/java/FreeFlavor.java", "package org.example; class FreeFlavor {}");
+            WriteFile(app, "src/freeDebug/kotlin/FreeDebug.kt", "package org.example\nclass FreeDebug");
+            WriteFile(app, "src/testDebug/kotlin/DebugUnitTest.kt", "package org.example\nclass DebugUnitTest");
+            WriteFile(app, "src/androidTest/java/InstrumentedTest.kt", "package org.example\nclass InstrumentedTest");
+            WriteFile(app, "src/main/AndroidManifest.xml", "<manifest />");
+            WriteFile(app, "src/freeDebug/AndroidManifest.xml", "<manifest />");
+            WriteFile(app, "src/freeDebug/res/values/strings.xml", "<resources />");
+            WriteFile(app, "src/freeDebug/assets/config.json", "{}");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+
+            Assert.Contains(android.Variants, variant =>
+                variant.Name == "freeDebug"
+                && variant.ProductFlavors.SequenceEqual(["free"])
+                && variant.BuildType == "debug");
+            Assert.Contains(android.Variants, variant => variant.Name == "freeRelease");
+            Assert.Contains(android.Variants, variant => variant.Name == "paidDebug");
+            Assert.Contains(android.Variants, variant => variant.Name == "paidRelease");
+            Assert.Contains(android.Variants, variant => variant.Name == "freeStaging");
+
+            var main = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "main");
+            Assert.Contains(main.ManifestFiles, file => file.EndsWith(
+                Path.Combine("src", "main", "AndroidManifest.xml"), StringComparison.Ordinal));
+            Assert.Single(main.JavaSourceDirectories);
+            Assert.Single(main.KotlinSourceDirectories);
+
+            var freeDebug = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "freeDebug");
+            Assert.Contains(freeDebug.ManifestFiles, file => file.EndsWith(
+                Path.Combine("src", "freeDebug", "AndroidManifest.xml"), StringComparison.Ordinal));
+            Assert.Contains(freeDebug.ResourceDirectories, directory => directory.EndsWith(
+                Path.Combine("src", "freeDebug", "res"), StringComparison.Ordinal));
+            Assert.Contains(freeDebug.AssetDirectories, directory => directory.EndsWith(
+                Path.Combine("src", "freeDebug", "assets"), StringComparison.Ordinal));
+
+            var instrumentation = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "androidTest");
+            Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test, instrumentation.Ownership);
+            var unitTests = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "testDebug");
+            Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test, unitTests.Ownership);
+
+            var mainRoot = Assert.Single(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "src", "main", "java"));
+            Assert.Contains("Java", mainRoot.Languages);
+            Assert.Contains("Kotlin", mainRoot.Languages);
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "src", "androidTest", "java")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test);
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "src", "freeDebug", "kotlin")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_reads_literal_android_source_set_directory_and_manifest_overrides()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidExplicitSourceSets_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-explicit-source-sets\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                    id("org.jetbrains.kotlin.android") version "2.1.0"
+                }
+                android {
+                    namespace = "org.example.explicit"
+                    compileSdk = 35
+                    sourceSets {
+                        getByName("main") {
+                            java.srcDirs("src/shared/java")
+                            kotlin.srcDirs("src/shared/kotlin")
+                            manifest.srcFile("manifests/main/AndroidManifest.xml")
+                            res.srcDirs("resources/main")
+                            assets.srcDirs("assets/main")
+                        }
+                    }
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+            var main = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "main");
+
+            Assert.Contains(main.JavaSourceDirectories, directory => directory == Path.Combine(app, "src", "shared", "java"));
+            Assert.Contains(main.KotlinSourceDirectories, directory => directory == Path.Combine(app, "src", "shared", "kotlin"));
+            Assert.Contains(main.ManifestFiles, file => file == Path.Combine(app, "manifests", "main", "AndroidManifest.xml"));
+            Assert.Contains(main.ResourceDirectories, directory => directory == Path.Combine(app, "resources", "main"));
+            Assert.Contains(main.AssetDirectories, directory => directory == Path.Combine(app, "assets", "main"));
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "src", "shared", "java")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production);
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "src", "shared", "kotlin")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static void WriteFile(string root, string relativePath, string content)
+    {
+        var path = Path.Combine(root, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+    }
 }

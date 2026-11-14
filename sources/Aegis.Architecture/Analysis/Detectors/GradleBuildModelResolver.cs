@@ -165,6 +165,8 @@ internal static class GradleBuildModelResolver
 
             var testTasks = ParseTestTasks(source, sourceSets);
             var sourceRoots = DiscoverSourceRoots(module.Path, files, sourceSets, buildFile, diagnostics);
+            var androidModel = ParseAndroidBuildModel(
+                source, plugins, catalog, files, module.Path, owningRoot?.Path, sourceRoots, diagnostics, buildFile);
             var kotlinJvmPlugins = plugins
                 .Where(plugin => plugin.Id == "org.jetbrains.kotlin.jvm")
                 .ToArray();
@@ -249,6 +251,7 @@ internal static class GradleBuildModelResolver
                 KotlinLanguageVersion = kotlinCompilerOptions.LanguageVersion,
                 KotlinApiVersion = kotlinCompilerOptions.ApiVersion,
                 KotlinJvmTarget = kotlinCompilerOptions.JvmTarget,
+                Android = androidModel,
                 KotlinCompilerConfigurationInferred = kotlinPluginVersion is null
                     || kotlinCompilerOptions.ConfigurationInferred,
                 Diagnostics = diagnostics,
@@ -259,6 +262,401 @@ internal static class GradleBuildModelResolver
             AddDependencyEvidence(context, module, model);
         }
     }
+
+    private static GradleAndroidBuildModel? ParseAndroidBuildModel(
+        string source,
+        IReadOnlyCollection<GradleBuildModel.Plugin> plugins,
+        VersionCatalog catalog,
+        IReadOnlyCollection<string> files,
+        string modulePath,
+        string? owningRootPath,
+        IReadOnlyCollection<ProjectSourceRoot> sourceRoots,
+        ICollection<AnalysisDiagnostic> diagnostics,
+        string buildFile)
+    {
+        var androidPlugins = plugins
+            .Where(plugin => plugin.Id is
+                "com.android.application"
+                or "com.android.library"
+                or "com.android.test"
+                or "com.android.dynamic-feature"
+                or "com.android.asset-pack")
+            .ToArray();
+        if (androidPlugins.Length == 0)
+            return null;
+
+        var modelDiagnostics = new List<AnalysisDiagnostic>();
+        if (androidPlugins.Select(plugin => plugin.Id).Distinct(StringComparer.Ordinal).Count() > 1)
+        {
+            modelDiagnostics.Add(Diagnostic(
+                "GradleAndroidPluginConflict",
+                "A module declares more than one mutually exclusive Android Gradle Plugin module type.",
+                buildFile));
+        }
+
+        var androidPlugin = androidPlugins[0];
+        var pluginVersion = androidPlugin.Version
+            ?? ResolveRootPluginVersion(androidPlugin.Id, catalog, files, owningRootPath);
+        if (string.IsNullOrWhiteSpace(pluginVersion))
+        {
+            modelDiagnostics.Add(Diagnostic(
+                "GradleAndroidPluginVersionNotStaticallyResolved",
+                $"Android plugin '{androidPlugin.Id}' is applied, but its version is not statically available from the module or root plugin declaration.",
+                buildFile));
+        }
+
+        var moduleKind = androidPlugin.Id switch
+        {
+            "com.android.application" => "Application",
+            "com.android.library" => "Library",
+            "com.android.test" => "Test",
+            "com.android.dynamic-feature" => "DynamicFeature",
+            "com.android.asset-pack" => "AssetPack",
+            _ => "Unknown"
+        };
+
+        var androidBlock = ExtractBlock(source, "android");
+        if (androidBlock is null)
+        {
+            modelDiagnostics.Add(Diagnostic(
+                "GradleAndroidConfigurationNotFound",
+                "An Android Gradle Plugin is applied, but no statically readable android configuration block was found.",
+                buildFile));
+        }
+
+        var namespaceValue = ReadAndroidLiteral(androidBlock, "namespace");
+        var compileSdk = ReadAndroidLiteral(androidBlock, "compileSdk", "compileSdkVersion");
+        var compileSdkPreview = ReadAndroidLiteral(androidBlock, "compileSdkPreview");
+        var buildToolsVersion = ReadAndroidLiteral(androidBlock, "buildToolsVersion");
+
+        if (androidBlock is not null && compileSdk is null && compileSdkPreview is null)
+        {
+            modelDiagnostics.Add(Diagnostic(
+                "GradleAndroidCompileSdkNotStaticallyResolved",
+                "The Android compile SDK is not expressed as a supported literal; SDK selection may be inherited or dynamic.",
+                buildFile));
+        }
+
+        var agpMajorVersion = TryGetMajorVersion(pluginVersion);
+        if (androidBlock is not null && agpMajorVersion >= 8 && namespaceValue is null)
+        {
+            modelDiagnostics.Add(Diagnostic(
+                "GradleAndroidNamespaceNotStaticallyResolved",
+                "The Android namespace is not expressed as a supported literal; namespace ownership cannot be established statically.",
+                buildFile));
+        }
+
+        var defaultConfigBlock = androidBlock is null ? null : ExtractBlock(androidBlock, "defaultConfig");
+        var defaultConfig = defaultConfigBlock is null
+            ? null
+            : new GradleAndroidBuildModel.DefaultConfig(
+                ReadAndroidLiteral(defaultConfigBlock, "applicationId"),
+                ReadAndroidLiteral(defaultConfigBlock, "minSdk", "minSdkVersion"),
+                ReadAndroidLiteral(defaultConfigBlock, "targetSdk", "targetSdkVersion"),
+                ReadAndroidLiteral(defaultConfigBlock, "testInstrumentationRunner"));
+
+        var compileOptionsBlock = androidBlock is null ? null : ExtractBlock(androidBlock, "compileOptions");
+        var compileOptions = compileOptionsBlock is null
+            ? null
+            : new GradleAndroidBuildModel.CompileOptions(
+                ReadAndroidLiteral(compileOptionsBlock, "sourceCompatibility"),
+                ReadAndroidLiteral(compileOptionsBlock, "targetCompatibility"),
+                ReadAndroidBoolean(compileOptionsBlock, "isCoreLibraryDesugaringEnabled", "coreLibraryDesugaringEnabled"));
+
+        var flavorDimensions = ReadQuotedValues(androidBlock, "flavorDimensions");
+        var productFlavors = ExtractNamedBlocks(
+                androidBlock is null ? null : ExtractBlock(androidBlock, "productFlavors"))
+            .Select(entry => new GradleAndroidBuildModel.ProductFlavor(
+                entry.Name,
+                ReadAndroidLiteral(entry.Block, "dimension"),
+                ReadAndroidLiteral(entry.Block, "applicationIdSuffix"),
+                ReadAndroidLiteral(entry.Block, "versionNameSuffix"),
+                ReadAndroidLiteral(entry.Block, "minSdk", "minSdkVersion"),
+                ReadAndroidLiteral(entry.Block, "targetSdk", "targetSdkVersion")))
+            .ToList();
+
+        var buildTypes = ExtractNamedBlocks(
+                androidBlock is null ? null : ExtractBlock(androidBlock, "buildTypes"))
+            .Select(entry => new GradleAndroidBuildModel.BuildType(
+                entry.Name,
+                ReadAndroidBoolean(entry.Block, "isDebuggable", "debuggable"),
+                ReadAndroidBoolean(entry.Block, "isMinifyEnabled", "minifyEnabled"),
+                ReadAndroidLiteral(entry.Block, "applicationIdSuffix")))
+            .ToList();
+
+        var legacyKotlinAndroid = plugins.Any(plugin =>
+            plugin.Id.Equals("org.jetbrains.kotlin.android", StringComparison.Ordinal)
+            || plugin.Id.Equals("kotlin-android", StringComparison.Ordinal));
+        var builtInKotlinPlugin = plugins.Any(plugin =>
+            plugin.Id.Equals("com.android.built-in-kotlin", StringComparison.Ordinal));
+        var builtInKotlinDisabled = ReadGradleProperty(
+            files, modulePath, owningRootPath, "android.builtInKotlin")?.Equals(
+                "false", StringComparison.OrdinalIgnoreCase) == true;
+
+        var kotlinIntegration = builtInKotlinPlugin
+            ? "BuiltInPlugin"
+            : legacyKotlinAndroid
+                ? "LegacyKotlinAndroidPlugin"
+                : agpMajorVersion >= 9
+                    ? builtInKotlinDisabled ? "Disabled" : "BuiltInDefault"
+                    : agpMajorVersion > 0 ? "NotDeclared" : "Unknown";
+
+        if (legacyKotlinAndroid && agpMajorVersion >= 9 && !builtInKotlinDisabled)
+        {
+            modelDiagnostics.Add(Diagnostic(
+                "GradleAndroidLegacyKotlinPluginConflictsWithBuiltInKotlin",
+                "AGP 9 enables built-in Kotlin by default; the legacy org.jetbrains.kotlin.android plugin is incompatible unless built-in Kotlin is explicitly disabled.",
+                buildFile));
+        }
+
+        if (sourceRoots.Any(root => root.ContainsKotlinSources)
+            && kotlinIntegration is "Disabled" or "NotDeclared" or "Unknown")
+        {
+            modelDiagnostics.Add(Diagnostic(
+                "GradleAndroidKotlinIntegrationNotResolved",
+                "Kotlin sources are present in this Android module, but the active Kotlin integration could not be established from supported static build evidence.",
+                buildFile));
+        }
+
+        diagnostics.AddRange(modelDiagnostics);
+
+        return new GradleAndroidBuildModel
+        {
+            PluginId = androidPlugin.Id,
+            PluginVersion = pluginVersion,
+            ModuleKind = moduleKind,
+            KotlinIntegration = kotlinIntegration,
+            Namespace = namespaceValue,
+            CompileSdk = compileSdk,
+            CompileSdkPreview = compileSdkPreview,
+            BuildToolsVersion = buildToolsVersion,
+            DefaultConfig = defaultConfig,
+            CompileOptions = compileOptions,
+            FlavorDimensions = flavorDimensions,
+            ProductFlavors = productFlavors,
+            BuildTypes = buildTypes,
+            Diagnostics = modelDiagnostics,
+            IsComplete = modelDiagnostics.Count == 0
+        };
+    }
+
+    private static string? ResolveRootPluginVersion(
+        string pluginId,
+        VersionCatalog catalog,
+        IReadOnlyCollection<string> files,
+        string? owningRootPath)
+    {
+        if (string.IsNullOrWhiteSpace(owningRootPath))
+            return null;
+
+        var rootBuildFile = files.FirstOrDefault(file =>
+            IsBuildFile(file)
+            && PathsEqual(Path.GetDirectoryName(Path.GetFullPath(file))!, Path.GetFullPath(owningRootPath)));
+        if (rootBuildFile is null)
+            return null;
+
+        try
+        {
+            var source = StripComments(File.ReadAllText(rootBuildFile));
+            var rootPlugins = ParsePlugins(
+                ExtractBlock(source, "plugins"),
+                catalog,
+                new List<AnalysisDiagnostic>(),
+                rootBuildFile);
+            return rootPlugins.FirstOrDefault(plugin => plugin.Id.Equals(pluginId, StringComparison.Ordinal))?.Version;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadGradleProperty(
+        IReadOnlyCollection<string> files,
+        string modulePath,
+        string? owningRootPath,
+        string propertyName)
+    {
+        var candidates = new[]
+            {
+                Path.Combine(modulePath, "gradle.properties"),
+                string.IsNullOrWhiteSpace(owningRootPath)
+                    ? null
+                    : Path.Combine(owningRootPath, "gradle.properties")
+            }
+            .Where(path => path is not null)
+            .Cast<string>()
+            .Distinct(PathComparer);
+
+        foreach (var candidate in candidates)
+        {
+            if (!files.Any(file => PathsEqual(file, candidate)))
+                continue;
+
+            try
+            {
+                foreach (var line in File.ReadLines(candidate))
+                {
+                    var match = Regex.Match(
+                        line,
+                        @"^\s*" + Regex.Escape(propertyName) + @"\s*=\s*(?<value>.*?)\s*$",
+                        RegexOptions.CultureInvariant);
+                    if (match.Success)
+                        return match.Groups["value"].Value.Trim();
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    private static int TryGetMajorVersion(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            return 0;
+
+        var match = Regex.Match(version, @"^\s*(?<major>\d+)(?:\.|$)", RegexOptions.CultureInvariant);
+        return match.Success && int.TryParse(match.Groups["major"].Value, out var major)
+            ? major
+            : 0;
+    }
+
+    private static string? ReadAndroidLiteral(string? block, params string[] names)
+    {
+        if (block is null)
+            return null;
+
+        foreach (var name in names)
+        {
+            var match = Regex.Match(
+                block,
+                @"\b" + Regex.Escape(name)
+                + @"\b\s*(?:=\s*|\(\s*|\s+)(?<value>['""](?<quoted>[^'""]+)['""]|(?<token>[A-Za-z0-9_.-]+))\s*\)?",
+                RegexOptions.CultureInvariant);
+            if (match.Success)
+                return match.Groups["quoted"].Success
+                    ? match.Groups["quoted"].Value
+                    : match.Groups["token"].Value;
+        }
+
+        return null;
+    }
+
+    private static bool? ReadAndroidBoolean(string? block, params string[] names)
+    {
+        if (block is null)
+            return null;
+
+        foreach (var name in names)
+        {
+            var match = Regex.Match(
+                block,
+                @"\b" + Regex.Escape(name) + @"\b\s*(?:=\s*|\s+)(?<value>true|false)\b",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (match.Success && bool.TryParse(match.Groups["value"].Value, out var value))
+                return value;
+        }
+
+        return null;
+    }
+
+    private static List<string> ReadQuotedValues(string? block, string propertyName)
+    {
+        if (block is null)
+            return [];
+
+        var match = Regex.Match(
+            block,
+            @"\b" + Regex.Escape(propertyName) + @"\b[^\r\n]*",
+            RegexOptions.CultureInvariant);
+        if (!match.Success)
+            return [];
+
+        return Regex.Matches(match.Value, @"['""](?<value>[^'""]+)['""]")
+            .Cast<Match>()
+            .Select(value => value.Groups["value"].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static IReadOnlyList<NamedBlock> ExtractNamedBlocks(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return [];
+
+        var result = new List<NamedBlock>();
+        var declaration = new Regex(
+            @"(?:create|getByName|named)\s*\(\s*['""](?<factory>[^'""]+)['""]\s*\)\s*\{|(?<named>[A-Za-z_][A-Za-z0-9_]*)\s*\{",
+            RegexOptions.CultureInvariant);
+        var offset = 0;
+
+        while (offset < source.Length)
+        {
+            var match = declaration.Match(source, offset);
+            if (!match.Success)
+                break;
+
+            var opening = source.IndexOf('{', match.Index);
+            var block = ExtractBlockAt(source, opening, out var closing);
+            if (block is null)
+            {
+                offset = opening + 1;
+                continue;
+            }
+
+            var name = match.Groups["factory"].Success
+                ? match.Groups["factory"].Value
+                : match.Groups["named"].Value;
+            result.Add(new NamedBlock(name, block));
+            offset = closing + 1;
+        }
+
+        return result;
+    }
+
+    private static string? ExtractBlockAt(string source, int opening, out int closing)
+    {
+        closing = -1;
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+        var quote = '\0';
+
+        for (var index = opening; index < source.Length; index++)
+        {
+            var current = source[index];
+            if (inString)
+            {
+                if (escaped) escaped = false;
+                else if (current == '\\') escaped = true;
+                else if (current == quote) inString = false;
+                continue;
+            }
+
+            if (current is '\'' or '"')
+            {
+                inString = true;
+                quote = current;
+            }
+            else if (current == '{')
+            {
+                depth++;
+            }
+            else if (current == '}' && --depth == 0)
+            {
+                closing = index;
+                return source[(opening + 1)..index];
+            }
+        }
+
+        return null;
+    }
+
+    private sealed record NamedBlock(string Name, string Block);
 
     private static List<GradleBuildModel.Plugin> ParsePlugins(
         string? block,

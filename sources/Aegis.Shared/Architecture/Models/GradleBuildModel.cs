@@ -31,6 +31,9 @@ public sealed class GradleBuildModel
 
     public string? KotlinJvmTarget { get; init; }
 
+    /// <summary>Statically interpreted Android Gradle Plugin configuration; null for non-Android modules.</summary>
+    public GradleAndroidBuildModel? Android { get; init; }
+
     public bool KotlinCompilerConfigurationInferred { get; init; }
 
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];

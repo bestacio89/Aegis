@@ -84,6 +84,10 @@ public sealed class GradleAndroidBuildModelTests
             Assert.Equal("com.android.application", android.PluginId);
             Assert.Equal("9.0.0", android.PluginVersion);
             Assert.Equal("Application", android.ModuleKind);
+            Assert.Equal("AndroidApplication", module.ProjectKind);
+            Assert.True(module.IsExecutable);
+            Assert.Contains("Android", module.Frameworks);
+            Assert.Equal("Application", context.Nature);
             Assert.Equal("BuiltInDefault", android.KotlinIntegration);
             Assert.Equal("org.example.mobile", android.Namespace);
             Assert.Equal("35", android.CompileSdk);
@@ -272,6 +276,8 @@ public sealed class GradleAndroidBuildModelTests
                 Assert.IsType<GradleBuildModel>(discovered.GradleBuildModel).Android);
 
             Assert.Equal("Library", android.ModuleKind);
+            Assert.Equal("AndroidLibrary", discovered.ProjectKind);
+            Assert.True(discovered.IsLibrary);
             Assert.Equal("8.7.3", android.PluginVersion);
             Assert.Equal("LegacyKotlinAndroidPlugin", android.KotlinIntegration);
             Assert.True(android.IsComplete);

@@ -80,14 +80,25 @@ internal static class GradleAndroidSourceSetResolver
                 AppliesToVariants = ResolveApplicableVariants(name, ownership, variants, knownTestSourceSetNames),
                 JavaSourceDirectories = javaDirectories,
                 KotlinSourceDirectories = kotlinDirectories,
+                ExplicitJavaSourceDirectories = explicitSet?.JavaSourceDirectories ?? [],
+                ExplicitKotlinSourceDirectories = explicitSet?.KotlinSourceDirectories ?? [],
                 ManifestFiles = manifestFiles,
+                ExplicitManifestFiles = explicitSet?.ManifestFiles ?? [],
                 ResourceDirectories = resourceDirectories,
+                ExplicitResourceDirectories = explicitSet?.ResourceDirectories ?? [],
                 AssetDirectories = assetDirectories,
+                ExplicitAssetDirectories = explicitSet?.AssetDirectories ?? [],
                 EvidenceFile = buildFile
             });
 
-            AddSourceRoots(sourceRoots, javaDirectories, "Java", ownership, buildFile);
-            AddSourceRoots(sourceRoots, kotlinDirectories, "Kotlin", ownership, buildFile);
+            AddSourceRoots(sourceRoots, discovered?.JavaSourceDirectories ?? [], "Java", ownership,
+                ProjectSourceRootOrigin.Conventional, buildFile);
+            AddSourceRoots(sourceRoots, discovered?.KotlinSourceDirectories ?? [], "Kotlin", ownership,
+                ProjectSourceRootOrigin.Conventional, buildFile);
+            AddSourceRoots(sourceRoots, explicitSet?.JavaSourceDirectories ?? [], "Java", ownership,
+                ProjectSourceRootOrigin.Explicit, buildFile);
+            AddSourceRoots(sourceRoots, explicitSet?.KotlinSourceDirectories ?? [], "Kotlin", ownership,
+                ProjectSourceRootOrigin.Explicit, buildFile);
         }
 
         model.Variants = variants;
@@ -461,6 +472,7 @@ internal static class GradleAndroidSourceSetResolver
         IEnumerable<string> directories,
         string language,
         ProjectSourceRootOwnership ownership,
+        ProjectSourceRootOrigin origin,
         string buildFile)
     {
         foreach (var directory in directories)
@@ -476,6 +488,10 @@ internal static class GradleAndroidSourceSetResolver
                 roots[fullDirectory] = existing with
                 {
                     Ownership = mergedOwnership,
+                    Origin = existing.Origin == ProjectSourceRootOrigin.Explicit
+                        || origin == ProjectSourceRootOrigin.Explicit
+                            ? ProjectSourceRootOrigin.Explicit
+                            : existing.Origin,
                     Languages = languages,
                     ContainsJavaSources = languages.Contains("Java", StringComparer.OrdinalIgnoreCase)
                 };
@@ -486,7 +502,7 @@ internal static class GradleAndroidSourceSetResolver
             {
                 Directory = fullDirectory,
                 Ownership = ownership,
-                Origin = ProjectSourceRootOrigin.Conventional,
+                Origin = origin,
                 Languages = [language],
                 ContainsJavaSources = language.Equals("Java", StringComparison.OrdinalIgnoreCase),
                 EvidenceFile = buildFile

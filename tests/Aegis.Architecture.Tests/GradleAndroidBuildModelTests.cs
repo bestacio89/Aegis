@@ -638,12 +638,18 @@ public sealed class GradleAndroidBuildModelTests
             Assert.Contains(main.ManifestFiles, file => file == Path.Combine(app, "manifests", "main", "AndroidManifest.xml"));
             Assert.Contains(main.ResourceDirectories, directory => directory == Path.Combine(app, "resources", "main"));
             Assert.Contains(main.AssetDirectories, directory => directory == Path.Combine(app, "assets", "main"));
+            Assert.Contains(main.ExplicitJavaSourceDirectories, directory =>
+                directory == Path.Combine(app, "src", "shared", "java"));
+            Assert.Contains(main.ExplicitKotlinSourceDirectories, directory =>
+                directory == Path.Combine(app, "src", "shared", "kotlin"));
             Assert.Contains(module.SourceRoots, sourceRoot =>
                 sourceRoot.Directory == Path.Combine(app, "src", "shared", "java")
-                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production);
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production
+                && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Explicit);
             Assert.Contains(module.SourceRoots, sourceRoot =>
                 sourceRoot.Directory == Path.Combine(app, "src", "shared", "kotlin")
-                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production);
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production
+                && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Explicit);
         }
         finally
         {

@@ -435,7 +435,7 @@ public sealed class SemanticArchitectureComponentGraphTests
         Assert.Equal("second-library", context.ProductionComponents
             .Single(component => component.Id == edge.TargetComponentId).BuildModuleName);
         Assert.Empty(context.TestComponentDependencies);
-        Assert.Equal(2, context.Dependencies.Count);
+        Assert.Equal(3, context.Dependencies.Count);
         Assert.All(context.Dependencies, dependency =>
             Assert.Equal("GradleProjectDependency", dependency.DependencyType));
     }

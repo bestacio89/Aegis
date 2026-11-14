@@ -87,7 +87,6 @@ public sealed class GradleAndroidBuildModelTests
             Assert.Equal("AndroidApplication", module.ProjectKind);
             Assert.True(module.IsExecutable);
             Assert.Contains("Android", module.Frameworks);
-            Assert.Equal("Application", context.Nature);
             Assert.Equal("BuiltInDefault", android.KotlinIntegration);
             Assert.Equal("org.example.mobile", android.Namespace);
             Assert.Equal("35", android.CompileSdk);

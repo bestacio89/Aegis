@@ -213,6 +213,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 cancellationToken).ConfigureAwait(false);
         }
 
+        JavaSemanticFrameworkDetector.Analyze(context);
         ModuleRoleDetector.Analyze(context.Modules);
     }
 

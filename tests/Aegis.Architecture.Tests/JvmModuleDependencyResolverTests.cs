@@ -188,6 +188,7 @@ public sealed class JvmModuleDependencyResolverTests
 
         var order = JvmModuleDependencyResolver.OrderModules(
             [first, second, dependent],
+            [first, second, dependent],
             dependencies,
             includeTestDependencies: false,
             out var blocked);

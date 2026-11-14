@@ -333,7 +333,7 @@ internal static class JavaSemanticFrameworkDetector
         if (groupId.Equals("androidx.room", StringComparison.OrdinalIgnoreCase))
             return ("Room", FrameworkEvidenceKind.Persistence);
 
-        if (groupId.Equals("androidx.compose", StringComparison.OrdinalIgnoreCase))
+        if (groupId.StartsWith("androidx.compose", StringComparison.OrdinalIgnoreCase))
             return ("Jetpack Compose", FrameworkEvidenceKind.Application);
 
         if (groupId.Equals("androidx.activity", StringComparison.OrdinalIgnoreCase)

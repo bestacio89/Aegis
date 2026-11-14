@@ -37,8 +37,8 @@ public sealed class AndroidSdkResolverTests
         var root = CreateTemporaryDirectory();
         var module = Directory.CreateDirectory(Path.Combine(root, "app")).FullName;
         var workspaceSdk = CreateSdk(root, "android-35");
-        var moduleSdk = Path.Combine(root, "module-sdk");
-        CreateSdk(moduleSdk, "android-35");
+        var moduleSdkParent = Path.Combine(root, "module-sdk");
+        var moduleSdk = CreateSdk(moduleSdkParent, "android-35");
         File.WriteAllText(Path.Combine(root, "local.properties"), $"sdk.dir={workspaceSdk}");
         File.WriteAllText(Path.Combine(module, "local.properties"), $"sdk.dir={moduleSdk}");
 

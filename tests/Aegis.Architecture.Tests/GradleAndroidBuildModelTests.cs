@@ -740,6 +740,7 @@ public sealed class GradleAndroidBuildModelTests
                 }
                 """);
             WriteFile(app, "src/custom/java/CustomSource.java", "package org.example; class CustomSource {}");
+            WriteFile(app, "src/testFixtures/java/Fixture.java", "package org.example; class Fixture {}");
 
             var context = ProjectArchitectureContextDetector.Detect(root);
             var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
@@ -757,6 +758,11 @@ public sealed class GradleAndroidBuildModelTests
             Assert.Contains(module.SourceRoots, sourceRoot =>
                 sourceRoot.Directory == Path.Combine(app, "src", "custom", "java")
                 && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Unknown);
+            var fixtures = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "testFixtures");
+            Assert.Equal(Aegis.Shared.Architecture.Enums.GradleAndroidTestKind.Fixtures, fixtures.TestKind);
+            Assert.Empty(fixtures.AppliesToVariants);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidTestFixturesNotEnabled" && diagnostic.AffectsCoverage);
         }
         finally
         {

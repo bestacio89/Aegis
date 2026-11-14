@@ -285,5 +285,5 @@ public sealed class JvmSourceRootResolverTests
         };
 
     private static string Root(ProjectModuleContext module, string relativePath) =>
-        Path.Combine(module.Path, relativePath);
+        Path.GetFullPath(Path.Combine(module.Path, relativePath));
 }

@@ -692,6 +692,7 @@ public sealed class GradleAndroidBuildModelTests
                             java.srcDirs("src/overridden/java")
                             java.srcDir("src/additional/java")
                             kotlin.srcDir("src/additional/kotlin")
+                            kotlin.srcDirs += listOf("src/extra/kotlin")
                             manifest.srcFile("manifests/custom/AndroidManifest.xml")
                             res.srcDirs("resources/replaced")
                             assets.srcDir("assets/additional")
@@ -705,6 +706,7 @@ public sealed class GradleAndroidBuildModelTests
             WriteFile(app, "src/additional/java/Additional.java", "package org.example; class Additional {}");
             WriteFile(app, "src/main/kotlin/Default.kt", "package org.example\nclass DefaultKotlin");
             WriteFile(app, "src/additional/kotlin/Additional.kt", "package org.example\nclass AdditionalKotlin");
+            WriteFile(app, "src/extra/kotlin/Extra.kt", "package org.example\nclass ExtraKotlin");
             WriteFile(app, "src/main/AndroidManifest.xml", "<manifest />");
             WriteFile(app, "src/main/res/values/default.xml", "<resources />");
             WriteFile(app, "resources/replaced/values/custom.xml", "<resources />");
@@ -731,6 +733,8 @@ public sealed class GradleAndroidBuildModelTests
                 directory == Path.Combine(app, "src", "main", "kotlin"));
             Assert.Contains(main.KotlinSourceDirectories, directory =>
                 directory == Path.Combine(app, "src", "additional", "kotlin"));
+            Assert.Contains(main.KotlinSourceDirectories, directory =>
+                directory == Path.Combine(app, "src", "extra", "kotlin"));
             Assert.Contains(module.SourceRoots, sourceRoot =>
                 sourceRoot.Directory == Path.Combine(app, "src", "main", "kotlin")
                 && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Conventional);

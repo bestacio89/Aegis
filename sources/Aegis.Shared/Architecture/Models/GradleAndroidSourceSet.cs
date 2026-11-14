@@ -25,6 +25,10 @@ public sealed record GradleAndroidSourceSet
 
     public List<string> ExplicitKotlinSourceDirectories { get; init; } = [];
 
+    public List<string> GeneratedJavaSourceDirectories { get; init; } = [];
+
+    public List<string> GeneratedKotlinSourceDirectories { get; init; } = [];
+
     public List<string> ManifestFiles { get; init; } = [];
 
     public List<string> ExplicitManifestFiles { get; init; } = [];

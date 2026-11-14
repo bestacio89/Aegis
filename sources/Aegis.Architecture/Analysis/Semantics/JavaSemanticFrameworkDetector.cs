@@ -668,9 +668,6 @@ internal static class JavaSemanticFrameworkDetector
 
     private static (string Name, FrameworkEvidenceKind Kind)? Classify(string qualifiedName)
     {
-        if (qualifiedName.StartsWith("androidx.compose.", StringComparison.Ordinal))
-            return ("Jetpack Compose", FrameworkEvidenceKind.Application);
-
         if (qualifiedName.StartsWith("org.junit.jupiter.api.", StringComparison.Ordinal)
             || qualifiedName.StartsWith("org.junit.platform.", StringComparison.Ordinal)
             || qualifiedName.StartsWith("org.junit.vintage.", StringComparison.Ordinal))

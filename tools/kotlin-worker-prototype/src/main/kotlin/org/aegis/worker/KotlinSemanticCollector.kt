@@ -1093,6 +1093,7 @@ class KotlinSemanticCollector(
             .filter {
                 (it.kind == IrParameterKind.Regular || it.kind == IrParameterKind.Context)
                     && it.origin == IrDeclarationOrigin.DEFINED
+                    && !isComposeCompilerParameter(it)
             }
             .joinToString(",") { typeIdentity(it.type) }
         val suspendMarker = if ((declaration as? IrSimpleFunction)?.isSuspend == true) "suspend" else null
@@ -1106,6 +1107,14 @@ class KotlinSemanticCollector(
             )
         val symbolPrefix = if (declaration is IrConstructor) "constructor" else "function"
         return "kotlin:$symbolPrefix:$name($signature)"
+    }
+
+    private fun isComposeCompilerParameter(parameter: org.jetbrains.kotlin.ir.declarations.IrValueParameter): Boolean {
+        val name = parameter.name.asString()
+        return name == "\$composer"
+            || name.startsWith("\$changed")
+            || name.startsWith("\$default")
+            || typeIdentity(parameter.type) == "androidx.compose.runtime.Composer"
     }
 
     private fun typeIdentity(type: IrType): String {

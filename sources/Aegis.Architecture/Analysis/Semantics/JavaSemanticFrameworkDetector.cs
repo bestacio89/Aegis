@@ -458,6 +458,17 @@ internal static class JavaSemanticFrameworkDetector
             return "Mockito";
         if (groupId.Equals("org.testcontainers", StringComparison.OrdinalIgnoreCase))
             return "Testcontainers";
+        if (groupId.Equals("io.kotest", StringComparison.OrdinalIgnoreCase))
+            return "Kotest";
+        if (groupId.Equals("io.mockk", StringComparison.OrdinalIgnoreCase)
+            && artifactId.StartsWith("mockk", StringComparison.OrdinalIgnoreCase))
+            return "MockK";
+        if (groupId.Equals("org.jetbrains.kotlin", StringComparison.OrdinalIgnoreCase)
+            && artifactId.Equals("kotlin-test", StringComparison.OrdinalIgnoreCase))
+            return "Kotlin Test";
+        if (groupId.Equals("org.jetbrains.kotlinx", StringComparison.OrdinalIgnoreCase)
+            && artifactId.Equals("kotlinx-coroutines-test", StringComparison.OrdinalIgnoreCase))
+            return "kotlinx.coroutines Test";
         if (groupId.Equals("org.assertj", StringComparison.OrdinalIgnoreCase)
             && artifactId.StartsWith("assertj-", StringComparison.OrdinalIgnoreCase))
             return "AssertJ";

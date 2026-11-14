@@ -690,6 +690,7 @@ public sealed class GradleAndroidBuildModelTests
                     sourceSets {
                         getByName("main") {
                             java.srcDirs("src/overridden/java")
+                            java.srcDir("src/additional/java")
                             kotlin.srcDir("src/additional/kotlin")
                             manifest.srcFile("manifests/custom/AndroidManifest.xml")
                             res.srcDirs("resources/replaced")
@@ -701,6 +702,7 @@ public sealed class GradleAndroidBuildModelTests
 
             WriteFile(app, "src/main/java/Default.java", "package org.example; class Default {}");
             WriteFile(app, "src/overridden/java/Overridden.java", "package org.example; class Overridden {}");
+            WriteFile(app, "src/additional/java/Additional.java", "package org.example; class Additional {}");
             WriteFile(app, "src/main/kotlin/Default.kt", "package org.example\nclass DefaultKotlin");
             WriteFile(app, "src/additional/kotlin/Additional.kt", "package org.example\nclass AdditionalKotlin");
             WriteFile(app, "src/main/AndroidManifest.xml", "<manifest />");
@@ -715,9 +717,10 @@ public sealed class GradleAndroidBuildModelTests
                 Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
             var main = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "main");
 
-            Assert.Equal(
-                [Path.Combine(app, "src", "overridden", "java")],
-                main.JavaSourceDirectories);
+            Assert.Contains(main.JavaSourceDirectories, directory =>
+                directory == Path.Combine(app, "src", "overridden", "java"));
+            Assert.Contains(main.JavaSourceDirectories, directory =>
+                directory == Path.Combine(app, "src", "additional", "java"));
             Assert.DoesNotContain(module.SourceRoots, sourceRoot =>
                 sourceRoot.Directory == Path.Combine(app, "src", "main", "java"));
             Assert.Contains(module.SourceRoots, sourceRoot =>

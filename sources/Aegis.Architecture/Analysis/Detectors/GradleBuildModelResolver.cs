@@ -169,8 +169,18 @@ internal static class GradleBuildModelResolver
             var toolchainMatch = ToolchainVersion.Match(source);
             var toolchain = toolchainMatch.Success ? toolchainMatch.Groups["version"].Value : null;
 
-            var sourceSets = DiscoverConventionalSourceSets(module.Path, files);
-            var sourceSetBlock = ExtractBlock(source, "sourceSets");
+            var isAndroidModule = plugins.Any(plugin => plugin.IsApplied
+                    && plugin.Id is
+                        "com.android.application"
+                        or "com.android.library"
+                        or "com.android.test"
+                        or "com.android.dynamic-feature"
+                        or "com.android.asset-pack")
+                || ExtractBlock(source, "android") is not null;
+            var sourceSets = isAndroidModule
+                ? new List<GradleBuildModel.SourceSet>()
+                : DiscoverConventionalSourceSets(module.Path, files);
+            var sourceSetBlock = isAndroidModule ? null : ExtractBlock(source, "sourceSets");
             if (sourceSetBlock is not null)
             {
                 var explicitSourceSets = ParseExplicitSourceSets(
@@ -543,7 +553,11 @@ internal static class GradleBuildModelResolver
                 buildFile));
         }
 
-        if (sourceRoots.Any(root => root.ContainsKotlinSources)
+        var hasKotlinSources = sourceRoots.Any(root => root.ContainsKotlinSources)
+            || files.Any(file =>
+                Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
+                && IsSameOrDescendantPath(file, modulePath));
+        if (hasKotlinSources
             && (kotlinIntegration is "Disabled" or "NotDeclared" or "Unknown"))
         {
             modelDiagnostics.Add(Diagnostic(

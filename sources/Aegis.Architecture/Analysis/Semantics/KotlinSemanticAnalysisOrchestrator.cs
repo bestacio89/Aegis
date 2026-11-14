@@ -280,14 +280,15 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
     {
         var plugins = module.GradleBuildModel?.Plugins ?? [];
         var unsupportedPlugin = plugins.FirstOrDefault(plugin =>
-            plugin.Id.Equals("org.jetbrains.kotlin.multiplatform", StringComparison.Ordinal)
+            plugin.IsApplied
+            && (plugin.Id.Equals("org.jetbrains.kotlin.multiplatform", StringComparison.Ordinal)
             || plugin.Id.Equals("org.jetbrains.kotlin.android", StringComparison.Ordinal)
             || plugin.Id.Equals("com.android.application", StringComparison.Ordinal)
             || plugin.Id.Equals("com.android.library", StringComparison.Ordinal)
             || plugin.Id.Equals("com.android.test", StringComparison.Ordinal)
             || plugin.Id.Equals("org.jetbrains.kotlin.js", StringComparison.Ordinal)
             || plugin.Id.StartsWith("org.jetbrains.kotlin.native", StringComparison.Ordinal)
-            || plugin.Id.StartsWith("org.jetbrains.kotlin.wasm", StringComparison.Ordinal));
+            || plugin.Id.StartsWith("org.jetbrains.kotlin.wasm", StringComparison.Ordinal)));
 
         if (unsupportedPlugin is null)
         {

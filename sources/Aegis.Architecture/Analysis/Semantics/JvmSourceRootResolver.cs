@@ -25,7 +25,7 @@ public sealed class JvmSourceRootResolver
         var roots = module.SourceRoots
             .Where(root => !string.IsNullOrWhiteSpace(root.Directory))
             .Where(root => Directory.Exists(root.Directory))
-            .Where(root => root.ContainsLanguage(language))
+            .Where(root => root.ContainsLanguage(language) || root.Languages.Count == 0)
             .GroupBy(root => Path.GetFullPath(root.Directory), PathComparer)
             .Select(group => group.First() with { Directory = Path.GetFullPath(group.Key) })
             .ToList();
@@ -81,7 +81,7 @@ public sealed class JvmSourceRootResolver
         var files = new HashSet<string>(PathComparer);
         var normalizedModulePath = Path.GetFullPath(modulePath);
 
-        foreach (var sourceRoot in sourceRoots.Where(root => root.ContainsLanguage(language)))
+        foreach (var sourceRoot in sourceRoots.Where(root => root.ContainsLanguage(language) || root.Languages.Count == 0))
         {
             var root = Path.GetFullPath(sourceRoot.Directory);
             if (!IsSameOrDescendantPath(root, normalizedModulePath))

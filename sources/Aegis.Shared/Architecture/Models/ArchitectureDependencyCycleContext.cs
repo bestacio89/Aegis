@@ -12,6 +12,9 @@ public sealed class ArchitectureDependencyCycleContext
     /// <summary>Production or Test. These scopes are analysed independently.</summary>
     public string Scope { get; init; } = "Production";
 
+    /// <summary>Android variants for which every edge in this cycle cluster is represented.</summary>
+    public List<string> AndroidVariants { get; init; } = [];
+
     /// <summary>Deterministically ordered code-container or logical component IDs.</summary>
     public List<string> ComponentIds { get; init; } = [];
 

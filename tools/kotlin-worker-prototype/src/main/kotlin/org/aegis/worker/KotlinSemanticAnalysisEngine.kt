@@ -11,7 +11,6 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 
 class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
     override fun isAvailable(): Boolean = true
@@ -38,9 +37,9 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             )
         }
 
-        val temporaryDirectory = Files.createTempDirectory("aegis-kotlin-analysis-")
-        val classesDirectory = temporaryDirectory.resolve("classes")
-        val semanticOutput = temporaryDirectory.resolve("semantic.json")
+        val artifactRoot = paths.artifactRoot
+        val classesDirectory = artifactRoot.resolve("classes")
+        val semanticOutput = artifactRoot.resolve("semantic.json")
         Files.createDirectories(classesDirectory)
 
         val collector = KotlinCompilerMessageCollector()
@@ -75,7 +74,6 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         }
 
         if (!Files.isRegularFile(semanticOutput)) {
-            deleteTemporaryDirectory(temporaryDirectory)
             return failureResult(
                 "KotlinSemanticExtractionUnavailable",
                 "The Kotlin compiler completed without producing Aegis semantic evidence.",
@@ -86,7 +84,6 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         val result = try {
             JsonParser.parseString(Files.readString(semanticOutput)).asJsonObject
         } catch (exception: Exception) {
-            deleteTemporaryDirectory(temporaryDirectory)
             return failureResult(
                 "KotlinSemanticEvidenceInvalid",
                 "The Kotlin compiler extension produced invalid semantic evidence: ${exception.javaClass.simpleName}.",
@@ -104,6 +101,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         result.addProperty("moduleName", request.moduleName)
         result.addProperty("compilationSucceeded", exitCode == ExitCode.OK)
         result.addProperty("compilerExitCode", exitCode.name)
+        result.addProperty("artifactRoot", artifactRoot.toString())
         result.addProperty("compilationOutputDirectory", classesDirectory.toString())
         result.add("diagnostics", collector.diagnostics())
         result.add("capabilities", JsonArray().apply {
@@ -223,14 +221,23 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             root
         }.distinct()
 
-        val manifest = Path.of(request.sourceManifestPath).toAbsolutePath().normalize()
         val temporaryRoot = Path.of(System.getProperty("java.io.tmpdir")).toRealPath()
+        val artifactRoot = requireDirectory(request.artifactRoot, "host-owned artifact root")
+        require(isWithin(artifactRoot, temporaryRoot)) {
+            "The host-owned artifact root must be located under the worker temporary directory."
+        }
+        require(!Files.exists(artifactRoot.resolve("classes"))
+            && !Files.exists(artifactRoot.resolve("semantic.json"))) {
+            "The host-owned artifact root must be fresh for each analysis request."
+        }
+
+        val manifest = Path.of(request.sourceManifestPath).toAbsolutePath().normalize()
         require(Files.isRegularFile(manifest, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(manifest)) {
             "The Kotlin source manifest is not a regular, non-symbolic file."
         }
         val manifestRealPath = manifest.toRealPath()
-        require(isWithin(manifestRealPath, temporaryRoot)) {
-            "The Kotlin source manifest must be located under the worker temporary directory."
+        require(isWithin(manifestRealPath, artifactRoot) && isWithin(manifestRealPath, temporaryRoot)) {
+            "The Kotlin source manifest must be located inside the host-owned artifact root."
         }
         val manifestSize = Files.size(manifestRealPath)
         require(manifestSize in 1..MAX_SOURCE_MANIFEST_BYTES) {
@@ -281,6 +288,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         }.distinct()
 
         return ValidatedPaths(
+            artifactRoot,
             workspaceRoot,
             projectRoot,
             sourceRoots,
@@ -339,17 +347,8 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         else System.setProperty(name, value)
     }
 
-    private fun deleteTemporaryDirectory(directory: Path) {
-        try {
-            Files.walk(directory).use { paths ->
-                paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
-            }
-        } catch (_: Exception) {
-            System.err.println("Could not clean a temporary Kotlin analysis directory.")
-        }
-    }
-
     private data class ValidatedPaths(
+        val artifactRoot: Path,
         val workspaceRoot: Path,
         val projectRoot: Path,
         val sourceRoots: List<Path>,

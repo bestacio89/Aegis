@@ -24,7 +24,7 @@ class KotlinWorkerProcessIntegrationTests {
         val workspace = Files.createTempDirectory("aegis-kotlin-worker-process-")
         val sourceRoot = workspace.resolve("src/main/kotlin")
         val source = sourceRoot.resolve("sample/WorkerProbe.kt")
-        val manifest = Files.createTempFile("aegis-kotlin-source-manifest-", ".json")
+        val artifactRoots = mutableListOf<Path>()
         Files.createDirectories(source.parent)
         Files.writeString(
             source,
@@ -35,10 +35,6 @@ class KotlinWorkerProcessIntegrationTests {
                 fun execute(): String = "ready"
             }
             """.trimIndent()
-        )
-        Files.writeString(
-            manifest,
-            JsonArray().apply { add(source.toAbsolutePath().toString()) }.toString()
         )
         val standardLibraryPath = Path.of(
             Unit::class.java.protectionDomain.codeSource.location.toURI()
@@ -61,11 +57,6 @@ class KotlinWorkerProcessIntegrationTests {
         ).redirectError(ProcessBuilder.Redirect.DISCARD).start()
 
         val executor = Executors.newSingleThreadExecutor()
-        var compilationOutput: Path? = null
-        var oversizedManifest: Path? = null
-        var oversizedByteManifest: Path? = null
-        var brokenManifest: Path? = null
-        var brokenCompilationOutput: Path? = null
         try {
             val writer = BufferedWriter(OutputStreamWriter(process.outputStream, StandardCharsets.UTF_8))
             val reader = BufferedReader(InputStreamReader(process.inputStream, StandardCharsets.UTF_8))
@@ -75,10 +66,15 @@ class KotlinWorkerProcessIntegrationTests {
             writer.flush()
             val handshake = readResponse(executor, reader)
             assertEquals("ok", handshake.get("status").asString)
-            assertEquals(KotlinWorkerServer.PROTOCOL_VERSION, handshake.getAsJsonObject("result")
-                .get("protocolVersion").asInt)
+            assertEquals(
+                KotlinWorkerServer.PROTOCOL_VERSION,
+                handshake.getAsJsonObject("result").get("protocolVersion").asInt
+            )
 
-            writer.write(request("analyze", "analyze", analysisPayload(workspace, sourceRoot, manifest, standardLibraryPath)).toString())
+            val analysisPayload = analysisPayload(
+                workspace, sourceRoot, standardLibraryPath, listOf(source), artifactRoots
+            )
+            writer.write(request("analyze", "analyze", analysisPayload).toString())
             writer.newLine()
             writer.flush()
             val analysis = readResponse(executor, reader)
@@ -89,37 +85,39 @@ class KotlinWorkerProcessIntegrationTests {
             assertTrue(result.getAsJsonArray("symbols").any {
                 it.asJsonObject.get("qualifiedName").asString == "sample.WorkerProbe"
             })
-            compilationOutput = Path.of(result.get("compilationOutputDirectory").asString)
+            val compilationOutput = Path.of(result.get("compilationOutputDirectory").asString)
             assertTrue(Files.isDirectory(compilationOutput), "The worker must retain JVM output for the host interop phase.")
+            assertEquals(
+                Path.of(result.get("artifactRoot").asString),
+                compilationOutput.parent
+            )
 
-            oversizedManifest = Files.createTempFile("aegis-kotlin-source-manifest-oversized-", ".json")
-            Files.writeString(
-                oversizedManifest,
-                JsonArray().apply {
-                    repeat(50_001) { add(source.toAbsolutePath().toString()) }
-                }.toString()
+            val oversizedManifestPayload = analysisPayload(
+                workspace,
+                sourceRoot,
+                standardLibraryPath,
+                List(50_001) { source },
+                artifactRoots
             )
-            writer.write(
-                request(
-                    "oversized-manifest",
-                    "analyze",
-                    analysisPayload(workspace, sourceRoot, oversizedManifest, standardLibraryPath)
-                ).toString()
-            )
+            writer.write(request("oversized-manifest", "analyze", oversizedManifestPayload).toString())
             writer.newLine()
             writer.flush()
             val boundedAnalysis = readResponse(executor, reader)
             assertEquals("ok", boundedAnalysis.get("status").asString)
             val boundedResult = boundedAnalysis.getAsJsonObject("result")
             assertEquals(4, boundedResult.get("status").asInt)
-            assertEquals("KotlinWorkerInputInvalid", boundedResult.getAsJsonArray("diagnostics")
-                .first().asJsonObject.get("code").asString)
+            assertEquals(
+                "KotlinWorkerInputInvalid",
+                boundedResult.getAsJsonArray("diagnostics").first().asJsonObject.get("code").asString
+            )
             assertTrue(
                 boundedResult.getAsJsonArray("diagnostics").first().asJsonObject.get("message").asString
                     .contains("50000-file limit")
             )
 
-            val excessiveRootsPayload = analysisPayload(workspace, sourceRoot, manifest, standardLibraryPath)
+            val excessiveRootsPayload = analysisPayload(
+                workspace, sourceRoot, standardLibraryPath, listOf(source), artifactRoots
+            )
             excessiveRootsPayload.add(
                 "sourceRoots",
                 JsonArray().apply {
@@ -138,15 +136,11 @@ class KotlinWorkerProcessIntegrationTests {
                     .contains("source-root limit")
             )
 
-            oversizedByteManifest = Files.createTempFile("aegis-kotlin-source-manifest-bytes-", ".json")
-            Files.writeString(oversizedByteManifest, " ".repeat(16 * 1024 * 1024 + 1))
-            writer.write(
-                request(
-                    "oversized-bytes",
-                    "analyze",
-                    analysisPayload(workspace, sourceRoot, oversizedByteManifest, standardLibraryPath)
-                ).toString()
+            val oversizedBytesPayload = analysisPayload(
+                workspace, sourceRoot, standardLibraryPath, listOf(source), artifactRoots,
+                manifestContent = " ".repeat(16 * 1024 * 1024 + 1)
             )
+            writer.write(request("oversized-bytes", "analyze", oversizedBytesPayload).toString())
             writer.newLine()
             writer.flush()
             val byteBoundedAnalysis = readResponse(executor, reader)
@@ -171,18 +165,10 @@ class KotlinWorkerProcessIntegrationTests {
                 }
                 """.trimIndent()
             )
-            brokenManifest = Files.createTempFile("aegis-kotlin-source-manifest-broken-", ".json")
-            Files.writeString(
-                brokenManifest,
-                JsonArray().apply { add(brokenSource.toAbsolutePath().toString()) }.toString()
+            val brokenPayload = analysisPayload(
+                workspace, brokenSourceRoot, standardLibraryPath, listOf(brokenSource), artifactRoots
             )
-            writer.write(
-                request(
-                    "compiler-error-recovery",
-                    "analyze",
-                    analysisPayload(workspace, brokenSourceRoot, brokenManifest, standardLibraryPath)
-                ).toString()
-            )
+            writer.write(request("compiler-error-recovery", "analyze", brokenPayload).toString())
             writer.newLine()
             writer.flush()
             val recoveryAnalysis = readResponse(executor, reader)
@@ -201,9 +187,6 @@ class KotlinWorkerProcessIntegrationTests {
                 },
                 "Compiler errors must remain explicit diagnostics and must not produce a completed analysis."
             )
-            recoveryResult.get("compilationOutputDirectory")?.takeIf { !it.isJsonNull }?.asString?.let {
-                brokenCompilationOutput = Path.of(it)
-            }
 
             writer.write(request("shutdown", "shutdown").toString())
             writer.newLine()
@@ -213,26 +196,32 @@ class KotlinWorkerProcessIntegrationTests {
         } finally {
             if (process.isAlive) process.destroyForcibly()
             executor.shutdownNow()
-            compilationOutput?.let(::deleteRecursively)
+            artifactRoots.forEach(::deleteRecursively)
             deleteRecursively(workspace)
-            Files.deleteIfExists(manifest)
-            oversizedManifest?.let(Files::deleteIfExists)
-            oversizedByteManifest?.let(Files::deleteIfExists)
-            brokenManifest?.let(Files::deleteIfExists)
-            brokenCompilationOutput?.let(::deleteRecursively)
         }
     }
 
     private fun analysisPayload(
         workspace: Path,
         sourceRoot: Path,
-        manifest: Path,
-        standardLibraryPath: Path
-    ): JsonObject =
-        JsonObject().apply {
+        standardLibraryPath: Path,
+        sourceFiles: List<Path>,
+        artifactRoots: MutableList<Path>,
+        manifestContent: String? = null
+    ): JsonObject {
+        val artifactRoot = Files.createTempDirectory("aegis-kotlin-artifacts-")
+        artifactRoots.add(artifactRoot)
+        val manifest = artifactRoot.resolve("source-manifest.json")
+        val manifestJson = manifestContent ?: JsonArray().apply {
+            sourceFiles.forEach { add(it.toAbsolutePath().toString()) }
+        }.toString()
+        Files.writeString(manifest, manifestJson)
+
+        return JsonObject().apply {
             addProperty("projectPath", workspace.toAbsolutePath().toString())
             addProperty("workspaceRoot", workspace.toAbsolutePath().toString())
             addProperty("sourceManifestPath", manifest.toAbsolutePath().toString())
+            addProperty("artifactRoot", artifactRoot.toAbsolutePath().toString())
             add("sourceRoots", stringArray(sourceRoot.toAbsolutePath().toString()))
             add("referencedSourceRoots", JsonArray())
             add("testSourceRoots", JsonArray())
@@ -246,6 +235,7 @@ class KotlinWorkerProcessIntegrationTests {
             addProperty("moduleName", "worker-probe")
             addProperty("includeTestCode", false)
         }
+    }
 
     private fun stringArray(value: String): JsonArray = JsonArray().apply { add(value) }
 

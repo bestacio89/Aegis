@@ -12,7 +12,7 @@ internal static class JavaSemanticFrameworkDetector
         ArgumentNullException.ThrowIfNull(context);
 
         foreach (var run in context.SemanticAnalysisRuns.Where(run =>
-                     run.Language.Equals("Java", StringComparison.OrdinalIgnoreCase)
+                     (run.Language.Equals("Java", StringComparison.OrdinalIgnoreCase) || run.Language.Equals("Kotlin", StringComparison.OrdinalIgnoreCase))
                      && run.Status is SemanticAnalysisStatus.Completed or SemanticAnalysisStatus.PartiallyCompleted))
         {
             var module = context.Modules.FirstOrDefault(candidate => PathsEqual(candidate.Path, run.ProjectPath));
@@ -25,7 +25,9 @@ internal static class JavaSemanticFrameworkDetector
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
             foreach (var relationship in run.Relationships.Where(relationship =>
-                         relationship.Kind == SemanticRelationshipKind.UsesAnnotation
+                         (relationship.Kind == SemanticRelationshipKind.UsesAnnotation
+                             || run.Language.Equals("Kotlin", StringComparison.OrdinalIgnoreCase)
+                             && (relationship.Kind is SemanticRelationshipKind.Calls or SemanticRelationshipKind.References))
                          && relationship.ResolutionStatus == SemanticResolutionStatus.Resolved
                          && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)))
             {
@@ -298,6 +300,23 @@ internal static class JavaSemanticFrameworkDetector
         if (groupId.Equals("org.eclipse.persistence", StringComparison.OrdinalIgnoreCase)
             && artifactId.Equals("eclipselink", StringComparison.OrdinalIgnoreCase))
             return ("EclipseLink", FrameworkEvidenceKind.Persistence);
+
+        if (groupId.Equals("io.ktor", StringComparison.OrdinalIgnoreCase))
+            return artifactId.StartsWith("ktor-server-", StringComparison.OrdinalIgnoreCase)
+                || artifactId.StartsWith("ktor-client-", StringComparison.OrdinalIgnoreCase)
+                    ? ("Ktor", FrameworkEvidenceKind.Web)
+                    : ("Ktor", FrameworkEvidenceKind.Application);
+
+        if (groupId.Equals("org.jetbrains.kotlinx", StringComparison.OrdinalIgnoreCase))
+        {
+            if (artifactId.StartsWith("kotlinx-coroutines-", StringComparison.OrdinalIgnoreCase))
+                return ("kotlinx.coroutines", FrameworkEvidenceKind.Runtime);
+            if (artifactId.StartsWith("kotlinx-serialization-", StringComparison.OrdinalIgnoreCase))
+                return ("kotlinx.serialization", FrameworkEvidenceKind.Serialization);
+        }
+
+        if (groupId.Equals("org.jetbrains.exposed", StringComparison.OrdinalIgnoreCase))
+            return ("Exposed", FrameworkEvidenceKind.Persistence);
 
         return null;
     }
@@ -626,6 +645,18 @@ internal static class JavaSemanticFrameworkDetector
             return ("Hibernate", FrameworkEvidenceKind.Persistence);
         if (qualifiedName.StartsWith("org.eclipse.microprofile.", StringComparison.Ordinal))
             return ("MicroProfile", FrameworkEvidenceKind.Runtime);
+
+        if (qualifiedName.StartsWith("io.ktor.server.", StringComparison.Ordinal)
+            || qualifiedName.StartsWith("io.ktor.client.", StringComparison.Ordinal))
+            return ("Ktor", FrameworkEvidenceKind.Web);
+        if (qualifiedName.StartsWith("io.ktor.", StringComparison.Ordinal))
+            return ("Ktor", FrameworkEvidenceKind.Application);
+        if (qualifiedName.StartsWith("kotlinx.coroutines.", StringComparison.Ordinal))
+            return ("kotlinx.coroutines", FrameworkEvidenceKind.Runtime);
+        if (qualifiedName.StartsWith("kotlinx.serialization.", StringComparison.Ordinal))
+            return ("kotlinx.serialization", FrameworkEvidenceKind.Serialization);
+        if (qualifiedName.StartsWith("org.jetbrains.exposed.", StringComparison.Ordinal))
+            return ("Exposed", FrameworkEvidenceKind.Persistence);
 
         return null;
     }

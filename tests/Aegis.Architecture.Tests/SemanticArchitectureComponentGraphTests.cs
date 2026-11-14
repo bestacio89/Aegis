@@ -305,12 +305,12 @@ public sealed class SemanticArchitectureComponentGraphTests
         var production = Assert.Single(context.ProductionComponents);
         Assert.Equal(["debug", "release"], production.AndroidVariants);
         Assert.Equal(["main"], production.AndroidSourceSets);
-        Assert.Equal(["Application"], production.AndroidModuleKind is null ? [] : [production.AndroidModuleKind]);
+        Assert.Equal("Application", production.AndroidModuleKind);
         Assert.Empty(context.ProductionComponentDependencies);
         var testEdge = Assert.Single(context.TestComponentDependencies);
         Assert.Equal("Test", testEdge.Scope);
         Assert.Equal(["debug", "release"], testEdge.AndroidVariants);
-        Assert.Equal(["androidTest"], testEdge.AndroidSourceSets);
+        Assert.Equal(["androidTest", "main"], testEdge.AndroidSourceSets);
         Assert.Equal(["Instrumentation"], testEdge.AndroidTestKinds);
         Assert.Empty(context.ProductionComponentDependencies);
     }

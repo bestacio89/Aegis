@@ -194,6 +194,16 @@ internal static class GradleBuildModelResolver
                 sourceRoots, diagnostics, buildFile);
             if (androidModel is not null)
             {
+                var androidGeneratedRoots = androidModel.SourceRoots
+                    .Where(sourceRoot => sourceRoot.IsGenerated)
+                    .ToArray();
+                sourceRoots.RemoveAll(existing =>
+                    existing.IsGenerated
+                    && existing.Ownership == ProjectSourceRootOwnership.Unknown
+                    && androidGeneratedRoots.Any(androidRoot =>
+                        !PathsEqual(existing.Directory, androidRoot.Directory)
+                        && IsSameOrDescendantPath(androidRoot.Directory, existing.Directory)));
+
                 foreach (var androidRoot in androidModel.SourceRoots)
                 {
                     var existingIndex = sourceRoots.FindIndex(existing =>

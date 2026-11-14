@@ -154,6 +154,53 @@ public sealed class AndroidSdkResolverTests
         }
     }
 
+    [Fact]
+    public void Resolves_sdk_from_android_home_when_project_configuration_is_absent()
+    {
+        var root = CreateTemporaryDirectory();
+        var module = Directory.CreateDirectory(Path.Combine(root, "app")).FullName;
+        var sdk = CreateSdk(root, "android-35");
+
+        try
+        {
+            var result = new AndroidSdkResolver(environment: new Dictionary<string, string>
+            {
+                ["ANDROID_HOME"] = sdk,
+                ["ANDROID_SDK_ROOT"] = string.Empty
+            }).Resolve(root, module, Android("35"));
+
+            Assert.True(result.IsComplete);
+            Assert.Equal("ANDROID_HOME", result.SdkRootSource);
+            Assert.Equal(Path.Combine(sdk, "platforms", "android-35", "android.jar"), result.AndroidJar);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Rejects_compile_sdk_values_that_contain_path_segments()
+    {
+        var root = CreateTemporaryDirectory();
+        var sdk = CreateSdk(root, "android-35");
+        var module = Directory.CreateDirectory(Path.Combine(root, "app")).FullName;
+        File.WriteAllText(Path.Combine(root, "local.properties"), $"sdk.dir={sdk}");
+
+        try
+        {
+            var result = new AndroidSdkResolver(environment: EmptyEnvironment())
+                .Resolve(root, module, Android("../android-35"));
+
+            Assert.False(result.IsComplete);
+            Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Code == "AndroidCompileSdkInvalid");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static GradleAndroidBuildModel Android(string? compileSdk) => new()
     {
         PluginId = "com.android.application",

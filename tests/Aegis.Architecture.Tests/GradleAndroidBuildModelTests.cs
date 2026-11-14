@@ -929,6 +929,89 @@ public sealed class GradleAndroidBuildModelTests
     }
 
     [Fact]
+    public void Detect_preserves_order_across_multiple_flavor_dimension_declarations()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidRepeatedDimensions_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-repeated-dimensions\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.repeateddimensions"
+                    compileSdk = 35
+                    flavorDimensions += "tier"
+                    flavorDimensions += "api"
+                    productFlavors {
+                        create("free") { dimension = "tier" }
+                        create("minApi24") { dimension = "api" }
+                    }
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+
+            Assert.Contains(android.Variants, variant => variant.Name == "freeMinApi24Debug");
+            Assert.DoesNotContain(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidFlavorDimensionOrderNotStaticallyResolved");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_rejects_product_flavors_assigned_to_undeclared_dimensions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidUndeclaredDimension_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-undeclared-dimension\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.undeclared"
+                    compileSdk = 35
+                    flavorDimensions += "tier"
+                    productFlavors {
+                        create("free") { dimension = "tier" }
+                        create("regional") { dimension = "region" }
+                    }
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+
+            Assert.Empty(android.Variants);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidVariantMatrixIncomplete"
+                && diagnostic.AffectsCoverage);
+            Assert.False(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_builds_cartesian_variant_matrix_across_multiple_flavor_dimensions()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidMultiDimension_{Guid.NewGuid():N}");

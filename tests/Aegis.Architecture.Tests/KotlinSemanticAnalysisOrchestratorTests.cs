@@ -26,6 +26,8 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
         var kotlinTestFile = Path.Combine(kotlinTestRoot, "sample", "ServiceTests.kt");
         Directory.CreateDirectory(Path.GetDirectoryName(kotlinMainFile)!);
         Directory.CreateDirectory(Path.GetDirectoryName(kotlinTestFile)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(kotlinMainFile)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(kotlinTestFile)!);
         await File.WriteAllTextAsync(kotlinMainFile, "package sample\nclass Service");
         await File.WriteAllTextAsync(kotlinTestFile, "package sample\nclass ServiceTests");
         await File.WriteAllTextAsync(Path.Combine(javaMainRoot, "JavaService.java"), "class JavaService {}");
@@ -52,8 +54,8 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
             await orchestrator.AnalyzeAsync(context, executionContext);
 
             Assert.Equal(2, adapter.Requests.Count);
-            var production = Assert.Single(adapter.Requests.Where(request => !request.IncludeTestCode));
-            var test = Assert.Single(adapter.Requests.Where(request => request.IncludeTestCode));
+            var production = Assert.Single(adapter.Requests, request => !request.IncludeTestCode);
+            var test = Assert.Single(adapter.Requests, request => request.IncludeTestCode);
 
             Assert.Equal([Path.GetFullPath(kotlinMainFile)], production.SourceFiles);
             Assert.Equal([Path.GetFullPath(kotlinTestFile)], test.SourceFiles);

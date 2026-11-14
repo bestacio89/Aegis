@@ -15,6 +15,7 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
 {
     private const int ProtocolVersion = 1;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private readonly IOptionsMonitor<KotlinWorkerOptions> _options;
     private readonly ILogger<KotlinWorkerClient> _logger;
@@ -77,7 +78,7 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
                 await File.WriteAllTextAsync(
                     sourceManifestPath,
                     sourceManifest,
-                    Encoding.UTF8,
+                    Utf8NoBom,
                     timeout.Token).ConfigureAwait(false);
 
                 await _workerProcess.StartAsync(launchOptions, timeout.Token).ConfigureAwait(false);

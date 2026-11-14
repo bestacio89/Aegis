@@ -67,7 +67,9 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
 
             var run = await adapter.AnalyzeAsync(request, executionContext);
 
-            Assert.Equal(SemanticAnalysisStatus.Completed, run.Status);
+            Assert.True(
+                run.Status == SemanticAnalysisStatus.Completed,
+                $"Expected completed Kotlin analysis, received {run.Status}: {string.Join(" | ", run.Diagnostics.Select(diagnostic => $"{diagnostic.Code} ({diagnostic.ExceptionType}): {diagnostic.Message}"))}");
             Assert.Contains(run.Symbols, symbol =>
                 symbol.QualifiedName == "sample.WorkerProbe"
                 && symbol.Language == "Kotlin");

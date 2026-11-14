@@ -115,8 +115,8 @@ public sealed class KotlinJavaInteropPipelineTests
             await pipeline.AnalyzeAsync(context);
 
             Assert.Equal(["Kotlin", "Kotlin", "Java", "Java"], executionOrder);
-            var javaProduction = Assert.Single(javaAdapter.Requests.Where(request => !request.IncludeTestCode));
-            var javaTest = Assert.Single(javaAdapter.Requests.Where(request => request.IncludeTestCode));
+            var javaProduction = Assert.Single(javaAdapter.Requests, request => !request.IncludeTestCode);
+            var javaTest = Assert.Single(javaAdapter.Requests, request => request.IncludeTestCode);
             Assert.Equal(2, kotlinAdapter.OutputDirectories.Count);
             var kotlinProductionOutput = kotlinAdapter.OutputDirectories[0];
             var kotlinTestOutput = kotlinAdapter.OutputDirectories[1];

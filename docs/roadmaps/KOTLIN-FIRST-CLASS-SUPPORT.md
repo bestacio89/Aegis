@@ -409,7 +409,7 @@ The accepted static model covers:
 
 K7.1 deliberately does not resolve active variants, Android manifests/resources, SDK installations, \`android.jar\`, variant classpaths, Compose semantics or Android architecture projections. Those belong to later checkpoints.
 
-#### K7.2 — Variant-aware source and test ownership — in progress
+#### K7.2 — Variant-aware source and test ownership — accepted
 
 - Derive the bounded Cartesian variant matrix from build types and ordered product-flavor dimensions without executing Gradle. Missing dimension order, undeclared dimensions, case-insensitive variant/task-name collisions and matrices above the 512-variant safety limit remain incomplete.
 - Associate conventional, flavor, build-type and variant-specific source sets with the variants they contribute to.
@@ -419,6 +419,10 @@ K7.1 deliberately does not resolve active variants, Android manifests/resources,
 - Distinguish production, local unit-test, instrumentation-test and test-fixture ownership. Unmapped custom source sets remain unknown rather than being inferred as production.
 - Preserve source-root provenance, generated state, variant applicability and test ownership in the shared project model.
 - Bound variant derivation and report ambiguous or unsupported declarations as coverage diagnostics.
+
+**Accepted at exact code head:** `4d86a1baa070dc018bfefca65b6c965495562eaa`. All four required workflows passed on that exact head: Java semantic worker, Kotlin semantic worker, WPF build validation and non-WPF quality gates.
+
+The accepted implementation also ensures Android source-set ownership takes precedence over generic Gradle generated-source inference, including `com.android.test` module main sources and generated instrumentation sources. Explicit source directories are not misinterpreted as separate conventional source sets, and mixed Java/Kotlin files in explicit roots retain both language classifications.
 
 **Acceptance:** Application and library fixtures prove single- and multi-dimension variant matrices, repeated flavor-dimension declarations, variant-name collision and matrix-limit handling, debug/release/flavor/variant source ownership, source-directory append/replace semantics, manifest/resource/asset overlays, Groovy/Kotlin DSL overrides, Java/Kotlin mixed roots, generated-source ownership, unit-test versus instrumentation-test separation, test-fixture classification and conservative handling of unknown source sets. All four required workflows must pass on the exact accepted code head.
 

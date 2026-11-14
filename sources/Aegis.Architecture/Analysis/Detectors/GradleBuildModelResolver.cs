@@ -553,7 +553,7 @@ internal static class GradleBuildModelResolver
         !string.IsNullOrWhiteSpace(version)
         && Regex.IsMatch(
             version,
-            @"^\\d+(?:\\.\\d+){1,2}(?:[-+][A-Za-z0-9.-]+)?$",
+            @"^\d+(?:\.\d+){1,2}(?:[-+][A-Za-z0-9.-]+)?$",
             RegexOptions.CultureInvariant);
 
     private static int TryGetMajorVersion(string? version)

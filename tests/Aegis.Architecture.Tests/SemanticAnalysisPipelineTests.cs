@@ -134,9 +134,11 @@ public sealed class SemanticAnalysisPipelineTests
     private sealed class RecordingAnalyzer(
         string language,
         ICollection<string> executionOrder,
-        bool shouldFail = false) : ISemanticAnalysisProjectAnalyzer
+        bool shouldFail = false,
+        int executionOrderValue = 0) : ISemanticAnalysisProjectAnalyzer
     {
         public string Language => language;
+        public int ExecutionOrder => executionOrderValue;
 
         public Task AnalyzeAsync(
             ProjectArchitectureContext context,

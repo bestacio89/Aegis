@@ -87,15 +87,15 @@ public sealed class KotlinFrameworkDetectionTests
 
             await orchestrator.AnalyzeAsync(context);
 
-            var declared = Assert.Single(module.FrameworkEvidence.Where(evidence =>
+            var declared = Assert.Single(module.FrameworkEvidence, evidence =>
                 evidence.Name == "Ktor"
-                && evidence.Provenance.Any(item => item.Source == SemanticEvidenceSource.BuildModel)));
+                && evidence.Provenance.Any(item => item.Source == SemanticEvidenceSource.BuildModel));
             Assert.Equal("3.0.0", declared.Version);
             Assert.Equal(FrameworkEvidenceKind.Web, declared.Kind);
 
-            var observed = Assert.Single(module.FrameworkEvidence.Where(evidence =>
+            var observed = Assert.Single(module.FrameworkEvidence, evidence =>
                 evidence.Name == "Ktor"
-                && evidence.Provenance.Any(item => item.Source == SemanticEvidenceSource.Compiler)));
+                && evidence.Provenance.Any(item => item.Source == SemanticEvidenceSource.Compiler));
             Assert.Null(observed.Version);
             Assert.Equal(FrameworkEvidenceKind.Web, observed.Kind);
             Assert.Contains(context.FrameworkEvidence, evidence => evidence.Id == declared.Id);
@@ -172,7 +172,7 @@ public sealed class KotlinFrameworkDetectionTests
 
             foreach (var framework in new[] { "Kotest", "MockK" })
             {
-                var evidence = Assert.Single(module.FrameworkEvidence.Where(item => item.Name == framework));
+                var evidence = Assert.Single(module.FrameworkEvidence, item => item.Name == framework);
                 Assert.Equal(FrameworkEvidenceKind.Testing, evidence.Kind);
                 Assert.True(evidence.IsTestOnly);
                 Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(evidence.Provenance).Source);
@@ -190,7 +190,8 @@ public sealed class KotlinFrameworkDetectionTests
     {
         public string AdapterId => "kotlin-framework-evidence-test";
         public string Language => "Kotlin";
-        public IReadOnlyCollection<string> SupportedCapabilities => ["symbols", "relationships"];
+        public IReadOnlyCollection<string> SupportedCapabilities =>
+            ["symbols", "relationships", "compiler-diagnostics", "jvm-interop"];
 
         public bool CanAnalyze(SemanticAnalysisRequest request) =>
             request.Language.Equals("Kotlin", StringComparison.OrdinalIgnoreCase);

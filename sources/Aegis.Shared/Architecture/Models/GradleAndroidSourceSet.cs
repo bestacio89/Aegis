@@ -12,6 +12,11 @@ public sealed record GradleAndroidSourceSet
 
     public ProjectSourceRootOwnership Ownership { get; init; }
 
+    public GradleAndroidTestKind TestKind { get; init; }
+
+    /// <summary>Variants to which this source set contributes according to static AGP naming rules.</summary>
+    public List<string> AppliesToVariants { get; init; } = [];
+
     public List<string> JavaSourceDirectories { get; init; } = [];
 
     public List<string> KotlinSourceDirectories { get; init; } = [];

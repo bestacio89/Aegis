@@ -425,7 +425,8 @@ internal static class GradleBuildModelResolver
                 buildFile));
         }
 
-        diagnostics.AddRange(modelDiagnostics);
+        foreach (var diagnostic in modelDiagnostics)
+            diagnostics.Add(diagnostic);
 
         return new GradleAndroidBuildModel
         {

@@ -115,6 +115,85 @@ public sealed class GradleAndroidBuildModelTests
     }
 
     [Fact]
+    public void Detect_does_not_treat_dynamic_agp_versions_as_resolved()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidDynamicAgp_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-dynamic-agp\"");
+            var module = Path.Combine(root, "app");
+            Directory.CreateDirectory(module);
+            File.WriteAllText(Path.Combine(module, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "$agpVersion"
+                }
+                android {
+                    namespace = "org.example.dynamic"
+                    compileSdk = 35
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var discovered = Assert.Single(context.Modules, candidate => candidate.Path == module);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(discovered.GradleBuildModel).Android);
+
+            Assert.Null(android.PluginVersion);
+            Assert.Equal("Unknown", android.KotlinIntegration);
+            Assert.False(android.IsComplete);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidPluginVersionNotStaticallyResolved");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_honors_per_module_builtin_kotlin_disable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidKotlinDisabled_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-kotlin-disabled\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "9.0.0" apply false
+                }
+                """);
+            var module = Path.Combine(root, "app");
+            Directory.CreateDirectory(module);
+            File.WriteAllText(Path.Combine(module, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application")
+                }
+                android {
+                    namespace = "org.example.disabled"
+                    compileSdk = 35
+                    enableKotlin = false
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var discovered = Assert.Single(context.Modules, candidate => candidate.Path == module);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(discovered.GradleBuildModel).Android);
+
+            Assert.Equal("Disabled", android.KotlinIntegration);
+            Assert.True(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_resolves_android_plugin_alias_from_the_version_catalog()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidCatalog_{Guid.NewGuid():N}");
@@ -167,7 +246,10 @@ public sealed class GradleAndroidBuildModelTests
         try
         {
             File.WriteAllText(Path.Combine(root, "settings.gradle"), "rootProject.name = 'android-opt-out'");
-            File.WriteAllText(Path.Combine(root, "gradle.properties"), "android.builtInKotlin=false");
+            File.WriteAllText(Path.Combine(root, "gradle.properties"), """
+                android.builtInKotlin=false
+                android.newDsl=false
+                """);
             File.WriteAllText(Path.Combine(root, "build.gradle"), """
                 plugins {
                     id 'com.android.application' version '9.0.0' apply false
@@ -190,6 +272,7 @@ public sealed class GradleAndroidBuildModelTests
                 Assert.IsType<GradleBuildModel>(discovered.GradleBuildModel).Android);
 
             Assert.Equal("LegacyKotlinAndroidPlugin", android.KotlinIntegration);
+            Assert.Equal(false, android.NewDslEnabled);
             Assert.DoesNotContain(android.Diagnostics, diagnostic =>
                 diagnostic.Code == "GradleAndroidLegacyKotlinPluginConflictsWithBuiltInKotlin");
             Assert.True(android.IsComplete);

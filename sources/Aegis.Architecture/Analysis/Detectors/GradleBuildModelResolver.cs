@@ -302,9 +302,12 @@ internal static class GradleBuildModelResolver
         }
 
         var androidPlugin = androidPlugins[0];
-        var pluginVersion = androidPlugin.Version
+        var declaredPluginVersion = androidPlugin.Version
             ?? ResolveRootPluginVersion(androidPlugin.Id, catalog, files, owningRootPath);
-        if (string.IsNullOrWhiteSpace(pluginVersion))
+        var pluginVersion = IsStaticAndroidPluginVersion(declaredPluginVersion)
+            ? declaredPluginVersion
+            : null;
+        if (pluginVersion is null)
         {
             modelDiagnostics.Add(Diagnostic(
                 "GradleAndroidPluginVersionNotStaticallyResolved",
@@ -396,23 +399,46 @@ internal static class GradleBuildModelResolver
                 || plugin.Id.Equals("kotlin-android", StringComparison.Ordinal)));
         var builtInKotlinPlugin = plugins.Any(plugin => plugin.IsApplied
             && plugin.Id.Equals("com.android.built-in-kotlin", StringComparison.Ordinal));
-        var builtInKotlinDisabled = ReadGradleProperty(
-            files, modulePath, owningRootPath, "android.builtInKotlin")?.Equals(
-                "false", StringComparison.OrdinalIgnoreCase) == true;
+        var builtInKotlinProperty = ReadGradleProperty(
+            files, modulePath, owningRootPath, "android.builtInKotlin");
+        var builtInKotlinDisabled = builtInKotlinProperty?.Equals(
+            "false", StringComparison.OrdinalIgnoreCase) == true;
+        if (builtInKotlinProperty is not null
+            && !bool.TryParse(builtInKotlinProperty, out _))
+        {
+            modelDiagnostics.Add(Diagnostic(
+                "GradleAndroidBuiltInKotlinSettingNotStaticallyResolved",
+                "The android.builtInKotlin Gradle property is not a literal boolean.",
+                buildFile));
+        }
 
+        var newDslProperty = ReadGradleProperty(files, modulePath, owningRootPath, "android.newDsl");
+        bool? newDslEnabled = bool.TryParse(newDslProperty, out var parsedNewDsl)
+            ? parsedNewDsl
+            : newDslProperty is null && agpMajorVersion >= 9 ? true : null;
+        if (newDslProperty is not null && newDslEnabled is null)
+        {
+            modelDiagnostics.Add(Diagnostic(
+                "GradleAndroidNewDslSettingNotStaticallyResolved",
+                "The android.newDsl Gradle property is not a literal boolean.",
+                buildFile));
+        }
+
+        var moduleKotlinDisabled = ReadAndroidBoolean(androidBlock, "enableKotlin") == false;
         var kotlinIntegration = builtInKotlinPlugin
             ? "BuiltInPlugin"
             : legacyKotlinAndroid
                 ? "LegacyKotlinAndroidPlugin"
                 : agpMajorVersion >= 9
-                    ? builtInKotlinDisabled ? "Disabled" : "BuiltInDefault"
+                    ? builtInKotlinDisabled || moduleKotlinDisabled ? "Disabled" : "BuiltInDefault"
                     : agpMajorVersion > 0 ? "NotDeclared" : "Unknown";
 
-        if (legacyKotlinAndroid && agpMajorVersion >= 9 && !builtInKotlinDisabled)
+        if (legacyKotlinAndroid && agpMajorVersion >= 9
+            && (!builtInKotlinDisabled || newDslEnabled != false))
         {
             modelDiagnostics.Add(Diagnostic(
                 "GradleAndroidLegacyKotlinPluginConflictsWithBuiltInKotlin",
-                "AGP 9 enables built-in Kotlin by default; the legacy org.jetbrains.kotlin.android plugin is incompatible unless built-in Kotlin is explicitly disabled.",
+                "AGP 9 enables built-in Kotlin and the new Android DSL by default. The legacy Kotlin Android plugin requires both android.builtInKotlin=false and android.newDsl=false.",
                 buildFile));
         }
 
@@ -434,6 +460,7 @@ internal static class GradleBuildModelResolver
             PluginVersion = pluginVersion,
             ModuleKind = moduleKind,
             KotlinIntegration = kotlinIntegration,
+            NewDslEnabled = newDslEnabled,
             Namespace = namespaceValue,
             CompileSdk = compileSdk,
             CompileSdkPreview = compileSdkPreview,
@@ -487,10 +514,10 @@ internal static class GradleBuildModelResolver
     {
         var candidates = new[]
             {
-                Path.Combine(modulePath, "gradle.properties"),
                 string.IsNullOrWhiteSpace(owningRootPath)
                     ? null
-                    : Path.Combine(owningRootPath, "gradle.properties")
+                    : Path.Combine(owningRootPath, "gradle.properties"),
+                Path.Combine(modulePath, "gradle.properties")
             }
             .Where(path => path is not null)
             .Cast<string>()
@@ -521,6 +548,13 @@ internal static class GradleBuildModelResolver
 
         return null;
     }
+
+    private static bool IsStaticAndroidPluginVersion(string? version) =>
+        !string.IsNullOrWhiteSpace(version)
+        && Regex.IsMatch(
+            version,
+            @"^\\d+(?:\\.\\d+){1,2}(?:[-+][A-Za-z0-9.-]+)?$",
+            RegexOptions.CultureInvariant);
 
     private static int TryGetMajorVersion(string? version)
     {

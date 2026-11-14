@@ -15,6 +15,9 @@ public sealed class GradleAndroidBuildModel
     /// <summary>BuiltInDefault, BuiltInPlugin, LegacyKotlinAndroidPlugin, Disabled, NotDeclared, or Unknown.</summary>
     public string KotlinIntegration { get; init; } = "Unknown";
 
+    /// <summary>Effective Android Gradle Plugin DSL mode when it can be inferred from the declared AGP version and properties.</summary>
+    public bool? NewDslEnabled { get; init; }
+
     public string? Namespace { get; init; }
 
     /// <summary>Literal API level or codename; SDK installation is resolved in a later checkpoint.</summary>

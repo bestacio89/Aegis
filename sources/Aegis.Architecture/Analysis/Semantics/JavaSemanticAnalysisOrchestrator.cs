@@ -228,10 +228,11 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
                 .Where(root => root.IsGenerated)
                 .Select(root => root.Directory)
                 .ToArray(),
+            // Keep resolver precedence intact; sorting can silently select a
+            // different binary when classpath entries contain duplicate names.
             ClasspathEntries = classpath.Entries
                 .Concat(compilationOutputs)
                 .Distinct(PathComparer)
-                .OrderBy(path => path, PathComparer)
                 .ToArray(),
             UnresolvedClasspathDependencies = classpath.UnresolvedDependencies,
             ClasspathResolutionComplete = classpath.IsComplete,

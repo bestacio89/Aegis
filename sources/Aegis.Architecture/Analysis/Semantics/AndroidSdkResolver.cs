@@ -168,9 +168,9 @@ public sealed class AndroidSdkResolver
                 continue;
 
             sdkDirectory = match.Groups[1].Value
-                .Replace(@"\\:", ":", StringComparison.Ordinal)
-                .Replace(@"\\ ", " ", StringComparison.Ordinal)
-                .Replace(@"\\\\", @"\", StringComparison.Ordinal);
+                .Replace(@"\:", ":", StringComparison.Ordinal)
+                .Replace(@"\ ", " ", StringComparison.Ordinal)
+                .Replace(@"\\", @"\", StringComparison.Ordinal);
             return !string.IsNullOrWhiteSpace(sdkDirectory);
         }
 

@@ -666,7 +666,7 @@ internal static class GradleBuildModelResolver
     private sealed record NamedBlock(string Name, string Block);
 
     private static bool IsPluginApplied(string declaration) =>
-        !Regex.IsMatch(declaration, @"\\bapply\\s+false\\b", RegexOptions.CultureInvariant);
+        !Regex.IsMatch(declaration, @"\bapply\s+false\b", RegexOptions.CultureInvariant);
 
     private static List<GradleBuildModel.Plugin> ParsePlugins(
         string? block,

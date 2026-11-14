@@ -652,8 +652,9 @@ internal static class GradleAndroidSourceSetResolver
         foreach (Match declaration in declarations)
         {
             var operation = declaration.Groups["operation"].Value;
-            var replaces = declaration.Groups["assignment"].Success
-                || operation.Equals("setSrcDirs", StringComparison.Ordinal);
+            var replaces = operation.Equals("setSrcDirs", StringComparison.Ordinal)
+                || (!declaration.Groups["appendAssignment"].Success
+                    && !operation.Equals("srcDir", StringComparison.Ordinal));
             if (replaces)
             {
                 destination.Clear();

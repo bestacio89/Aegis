@@ -21,11 +21,21 @@ public sealed record GradleAndroidSourceSet
 
     public List<string> KotlinSourceDirectories { get; init; } = [];
 
+    public List<string> ExplicitJavaSourceDirectories { get; init; } = [];
+
+    public List<string> ExplicitKotlinSourceDirectories { get; init; } = [];
+
     public List<string> ManifestFiles { get; init; } = [];
+
+    public List<string> ExplicitManifestFiles { get; init; } = [];
 
     public List<string> ResourceDirectories { get; init; } = [];
 
+    public List<string> ExplicitResourceDirectories { get; init; } = [];
+
     public List<string> AssetDirectories { get; init; } = [];
+
+    public List<string> ExplicitAssetDirectories { get; init; } = [];
 
     public string EvidenceFile { get; init; } = string.Empty;
 }

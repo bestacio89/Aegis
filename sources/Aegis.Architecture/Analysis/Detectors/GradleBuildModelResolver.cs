@@ -170,12 +170,12 @@ internal static class GradleBuildModelResolver
             var toolchain = toolchainMatch.Success ? toolchainMatch.Groups["version"].Value : null;
 
             var isAndroidModule = plugins.Any(plugin => plugin.IsApplied
-                    && plugin.Id is
+                    && (plugin.Id is
                         "com.android.application"
                         or "com.android.library"
                         or "com.android.test"
                         or "com.android.dynamic-feature"
-                        or "com.android.asset-pack")
+                        or "com.android.asset-pack"))
                 || ExtractBlock(source, "android") is not null;
             var sourceSets = isAndroidModule
                 ? new List<GradleBuildModel.SourceSet>()

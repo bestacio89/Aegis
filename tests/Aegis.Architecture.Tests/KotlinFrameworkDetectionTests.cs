@@ -285,7 +285,7 @@ public sealed class KotlinFrameworkDetectionTests
 
         JavaSemanticFrameworkDetector.Analyze(context);
 
-        Assert.Equal(2, module.FrameworkEvidence.Count(evidence =>
+        Assert.Equal(3, module.FrameworkEvidence.Count(evidence =>
             evidence.Name == "Jetpack Compose"
             && evidence.Provenance.Any(item => item.Source == SemanticEvidenceSource.Compiler)));
         Assert.Contains(module.Frameworks, framework => framework == "Jetpack Compose");

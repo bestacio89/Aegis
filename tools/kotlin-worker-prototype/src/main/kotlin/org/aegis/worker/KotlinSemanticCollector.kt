@@ -654,6 +654,9 @@ class KotlinSemanticCollector(
         symbol.addProperty("visibility", visibility?.replaceFirstChar(Char::uppercase) ?: "Unknown")
         symbol.addProperty("declarationKind", "Property")
         symbol.addProperty("receiverType", receiverType(declaration))
+        symbol.add("modifiers", JsonArray().apply {
+            declarationModifiers(declaration).forEach(::add)
+        })
         symbol.add("provenance", JsonArray())
         symbols[id] = symbol
     }
@@ -1031,6 +1034,9 @@ class KotlinSemanticCollector(
         declaration.annotations.any { annotation ->
             val annotationClass = annotation.symbol.owner.parent as? IrClass
             annotationClass?.fqNameWhenAvailable?.asString() == "androidx.compose.runtime.Composable"
+        } || declaration.parameters.any { parameter ->
+            parameter.name.asString() == "\$composer"
+                && typeIdentity(parameter.type) == "androidx.compose.runtime.Composer"
         }
 
     private fun declarationKind(declaration: IrDeclaration): String = when (declaration) {
@@ -1079,11 +1085,15 @@ class KotlinSemanticCollector(
         containingSymbolId: String? = null
     ): String {
         val parameters = declaration.parameters
-        val receiver = parameters.firstOrNull { it.kind == IrParameterKind.ExtensionReceiver }
-            ?.type
-            ?.let(::typeIdentity)
+        val receiver = parameters.firstOrNull {
+            it.kind == IrParameterKind.ExtensionReceiver
+                && it.origin == IrDeclarationOrigin.DEFINED
+        }?.type?.let(::typeIdentity)
         val parameterTypes = parameters
-            .filter { it.kind == IrParameterKind.Regular || it.kind == IrParameterKind.Context }
+            .filter {
+                (it.kind == IrParameterKind.Regular || it.kind == IrParameterKind.Context)
+                    && it.origin == IrDeclarationOrigin.DEFINED
+            }
             .joinToString(",") { typeIdentity(it.type) }
         val suspendMarker = if ((declaration as? IrSimpleFunction)?.isSuspend == true) "suspend" else null
         val signature = listOfNotNull(receiver, parameterTypes.takeIf(String::isNotEmpty), suspendMarker)

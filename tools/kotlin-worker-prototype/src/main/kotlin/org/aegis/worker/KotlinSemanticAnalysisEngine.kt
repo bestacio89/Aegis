@@ -136,7 +136,6 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             .joinToString(File.pathSeparator) { it.toString() }
 
         val pluginClasspaths = buildList {
-            add(compilerPluginPath.toString())
             if (request.composeCompilerPluginEnabled) {
                 add(
                     Path.of(ComposePluginRegistrar::class.java.protectionDomain.codeSource.location.toURI())
@@ -145,6 +144,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
                         .toString()
                 )
             }
+            add(compilerPluginPath.toString())
         }.distinct().toTypedArray()
 
         return K2JVMCompilerArguments().apply {

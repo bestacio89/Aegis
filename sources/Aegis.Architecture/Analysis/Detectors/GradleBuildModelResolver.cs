@@ -197,6 +197,11 @@ internal static class GradleBuildModelResolver
                 var androidGeneratedRoots = androidModel.SourceRoots
                     .Where(sourceRoot => sourceRoot.IsGenerated)
                     .ToArray();
+                diagnostics.RemoveAll(diagnostic =>
+                    diagnostic.Code is "GradleGeneratedSourceOwnershipUnknown"
+                        or "GradleGeneratedKotlinSourceOwnershipUnknown"
+                    && androidGeneratedRoots.Any(androidRoot =>
+                        IsSameOrDescendantPath(diagnostic.Target, androidRoot.Directory)));
                 sourceRoots.RemoveAll(existing =>
                     existing.IsGenerated
                     && existing.Ownership == ProjectSourceRootOwnership.Unknown

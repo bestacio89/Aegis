@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.File
+import java.net.URLClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -87,9 +88,9 @@ class KotlinComposeCompilerIntegrationTests {
             val evidence = JsonParser.parseString(Files.readString(output)).asJsonObject
             val symbols = evidence.getAsJsonArray("symbols").map { it.asJsonObject }
             val composables = symbols.filter { symbol ->
-                symbol.getAsJsonArray("modifiers").any {
+                symbol.getAsJsonArray("modifiers")?.any {
                     it.asString.equals("Composable", ignoreCase = true)
-                }
+                } == true
             }
             assertEquals(
                 setOf("sample.Child", "sample.Screen"),
@@ -97,6 +98,18 @@ class KotlinComposeCompilerIntegrationTests {
             )
             assertTrue(composables.all { it.get("origin").asInt == 1 })
             assertTrue(composables.all { it.get("filePath").asString == source.toString() })
+
+            URLClassLoader(
+                arrayOf(classes.toUri().toURL()),
+                KotlinSemanticAnalysisEngine::class.java.classLoader
+            ).use { classLoader ->
+                val screenClass = classLoader.loadClass("sample.ScreenKt")
+                val screenMethod = screenClass.declaredMethods.single { it.name == "Screen" }
+                assertTrue(
+                    screenMethod.parameterTypes.any { it.name == Composer::class.java.name },
+                    "The Compose compiler plugin must lower composable functions with a Composer parameter."
+                )
+            }
 
             val child = composables.single { it.get("qualifiedName").asString == "sample.Child" }
             val screen = composables.single { it.get("qualifiedName").asString == "sample.Screen" }

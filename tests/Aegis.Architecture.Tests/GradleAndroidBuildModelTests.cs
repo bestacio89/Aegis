@@ -771,7 +771,7 @@ public sealed class GradleAndroidBuildModelTests
                     compileSdk = 35
                     sourceSets {
                         getByName("main") {
-                            manifest.srcFile(layout.projectDirectory.file("manifests/\u0024{variant.name}/AndroidManifest.xml"))
+                            manifest.srcFile(layout.projectDirectory.file("manifests/${variant.name}/AndroidManifest.xml"))
                         }
                     }
                 }

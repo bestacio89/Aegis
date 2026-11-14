@@ -81,6 +81,9 @@ internal static class SemanticArchitectureComponentDetector
             .Select(run => run.Language)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        // Symbol IDs are opaque and project-scoped by the shared semantic contract.
+        // Keep module identity in the key; a workspace-wide ID-only map can collapse
+        // unrelated declarations when different modules emit the same ID.
         var symbolComponents = semanticRuns
             .SelectMany(run =>
             {
@@ -123,17 +126,23 @@ internal static class SemanticArchitectureComponentDetector
                             sourceOwnership.TestKind);
                     });
             })
-            .GroupBy(item => item.SymbolId, StringComparer.Ordinal)
-            .Select(group => new
-            {
-                SymbolId = group.Key,
-                Components = group
+            .GroupBy(
+                item => new SymbolIdentity(item.ModulePath, item.Language, item.SymbolId),
+                SymbolIdentityComparer.Instance)
+            .ToDictionary(
+                group => group.Key,
+                group => group
                     .GroupBy(item => item.ComponentId, StringComparer.Ordinal)
                     .Select(componentGroup => componentGroup.First())
-                    .ToArray()
-            })
-            .Where(item => item.Components.Length == 1)
-            .ToDictionary(item => item.SymbolId, item => item.Components[0], StringComparer.Ordinal);
+                    .Single(),
+                SymbolIdentityComparer.Instance);
+
+        var symbolComponentsById = symbolComponents.Values
+            .GroupBy(item => item.SymbolId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToArray(),
+                StringComparer.Ordinal);
 
         var componentNodes = symbolComponents.Values
             .GroupBy(component => component.ComponentId, StringComparer.Ordinal)
@@ -219,11 +228,20 @@ internal static class SemanticArchitectureComponentDetector
                          && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)))
             {
                 if (!runSymbols.TryGetValue(relationship.SourceSymbolId, out var sourceSymbol)
-                    || !symbolComponents.TryGetValue(relationship.SourceSymbolId, out var sourceComponent)
-                    || !symbolComponents.TryGetValue(relationship.TargetSymbolId!, out var targetComponent))
+                    || !symbolComponents.TryGetValue(
+                        new SymbolIdentity(NormalizePath(run.ProjectPath), run.Language, relationship.SourceSymbolId),
+                        out var sourceComponent))
                 {
                     continue;
                 }
+
+                var targetComponent = ResolveTargetComponent(
+                    run,
+                    relationship.TargetSymbolId!,
+                    symbolComponents,
+                    symbolComponentsById);
+                if (targetComponent is null)
+                    continue;
 
                 var targetModule = ResolveModule(targetComponent.ModulePath, targetComponent.Language);
                 var isTest = relationship.IsTestCode
@@ -298,6 +316,50 @@ internal static class SemanticArchitectureComponentDetector
             nameof(SemanticArchitectureComponentDetector),
             componentSymbolCount == 0 && sourceSymbolCount > 0 ? DiagnosticLevel.Warning : DiagnosticLevel.Info,
             $"Semantic architectural component projection: runs={semanticRuns.Length}; sourceSymbols={sourceSymbolCount}; componentSymbols={componentSymbolCount}; components={componentNodes.Count}; candidateRelationships={candidateRelationshipCount}; projectedEdges={edges.Count}; productionEdges={context.ProductionComponentDependencies.Count}; testEdges={context.TestComponentDependencies.Count}.");
+    }
+
+    private static SymbolComponent? ResolveTargetComponent(
+        SemanticAnalysisRun run,
+        string targetSymbolId,
+        IReadOnlyDictionary<SymbolIdentity, SymbolComponent> symbolComponents,
+        IReadOnlyDictionary<string, SymbolComponent[]> symbolComponentsById)
+    {
+        // Providers may include a referenced dependency declaration in the
+        // consumer run as an External symbol. Its ProjectPath supplies the
+        // project-scoped identity required by the shared semantic contract.
+        var externalTargets = run.Symbols
+            .Where(symbol =>
+                symbol.Id.Equals(targetSymbolId, StringComparison.Ordinal)
+                && symbol.Origin == SemanticSymbolOrigin.External
+                && !string.IsNullOrWhiteSpace(symbol.ProjectPath))
+            .Select(symbol => new SymbolIdentity(
+                NormalizePath(symbol.ProjectPath),
+                string.IsNullOrWhiteSpace(symbol.Language) ? run.Language : symbol.Language,
+                symbol.Id))
+            .Distinct(SymbolIdentityComparer.Instance)
+            .ToArray();
+
+        if (externalTargets.Length == 1
+            && symbolComponents.TryGetValue(externalTargets[0], out var externalTarget))
+        {
+            return externalTarget;
+        }
+
+        // Same-run source declarations are already scoped by the run's project.
+        var sameProjectTarget = new SymbolIdentity(
+            NormalizePath(run.ProjectPath),
+            run.Language,
+            targetSymbolId);
+        if (symbolComponents.TryGetValue(sameProjectTarget, out var localTarget))
+            return localTarget;
+
+        // Older Java/C# providers may expose only the target ID in a relationship.
+        // Preserve that contract when the ID is unambiguous across the workspace;
+        // never choose arbitrarily when multiple projects own the same ID.
+        return symbolComponentsById.TryGetValue(targetSymbolId, out var candidates)
+            && candidates.Length == 1
+                ? candidates[0]
+                : null;
     }
 
     private static AndroidSourceOwnership ResolveAndroidSourceOwnership(
@@ -419,6 +481,26 @@ internal static class SemanticArchitectureComponentDetector
 
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private sealed record SymbolIdentity(string ProjectPath, string Language, string SymbolId);
+
+    private sealed class SymbolIdentityComparer : IEqualityComparer<SymbolIdentity>
+    {
+        public static SymbolIdentityComparer Instance { get; } = new();
+
+        public bool Equals(SymbolIdentity? x, SymbolIdentity? y) =>
+            ReferenceEquals(x, y)
+            || x is not null && y is not null
+                && PathComparer.Equals(x.ProjectPath, y.ProjectPath)
+                && StringComparer.OrdinalIgnoreCase.Equals(x.Language, y.Language)
+                && StringComparer.Ordinal.Equals(x.SymbolId, y.SymbolId);
+
+        public int GetHashCode(SymbolIdentity identity) =>
+            HashCode.Combine(
+                PathComparer.GetHashCode(identity.ProjectPath),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(identity.Language),
+                StringComparer.Ordinal.GetHashCode(identity.SymbolId));
+    }
 
     private sealed record SymbolComponent(
         string SymbolId,

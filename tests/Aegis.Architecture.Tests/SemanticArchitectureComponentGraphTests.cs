@@ -218,7 +218,13 @@ public sealed class SemanticArchitectureComponentGraphTests
             [
                 new ProjectModuleContext { Name = "app", Path = appPath, Languages = ["Kotlin"] },
                 new ProjectModuleContext { Name = "first-library", Path = firstLibraryPath, Languages = ["Kotlin"] },
-                new ProjectModuleContext { Name = "second-library", Path = secondLibraryPath, Languages = ["Kotlin"] }
+                new ProjectModuleContext { Name = "second-library", Path = secondLibraryPath, Languages = ["Kotlin"] },
+                new ProjectModuleContext
+                {
+                    Name = "unrelated-library",
+                    Path = Path.Combine(root, "unrelated-library"),
+                    Languages = ["Kotlin"]
+                }
             ],
             Dependencies =
             [
@@ -226,6 +232,15 @@ public sealed class SemanticArchitectureComponentGraphTests
                 {
                     Source = "app",
                     SourceProjectPath = appPath,
+                    Target = "first-library",
+                    TargetProjectPath = firstLibraryPath,
+                    DependencyType = "GradleProjectDependency",
+                    Scope = "Production"
+                },
+                new ArchitectureDependencyContext
+                {
+                    Source = "first-library",
+                    SourceProjectPath = firstLibraryPath,
                     Target = "second-library",
                     TargetProjectPath = secondLibraryPath,
                     DependencyType = "GradleProjectDependency",
@@ -295,12 +310,35 @@ public sealed class SemanticArchitectureComponentGraphTests
                         {
                             Id = "shared-library-symbol",
                             Name = "LibraryService",
-                            QualifiedName = "sample.second.LibraryService",
+                            QualifiedName = "sample.first.LibraryService",
                             ContainerName = "sample.first",
                             ContainerKind = "Package",
                             Language = "Kotlin",
                             ProjectPath = firstLibraryPath,
                             FilePath = Path.Combine(firstLibraryPath, "LibraryService.kt"),
+                            Origin = SemanticSymbolOrigin.Source
+                        }
+                    ]
+                },
+                new SemanticAnalysisRun
+                {
+                    RunId = "unrelated-library-run",
+                    Language = "Kotlin",
+                    EngineId = "kotlin-k2-test-provider",
+                    ProjectPath = Path.Combine(root, "unrelated-library"),
+                    Status = SemanticAnalysisStatus.Completed,
+                    Symbols =
+                    [
+                        new SemanticSymbol
+                        {
+                            Id = "unrelated-library-symbol",
+                            Name = "LibraryService",
+                            QualifiedName = "sample.second.LibraryService",
+                            ContainerName = "sample.second",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = Path.Combine(root, "unrelated-library"),
+                            FilePath = Path.Combine(root, "unrelated-library", "LibraryService.kt"),
                             Origin = SemanticSymbolOrigin.Source
                         }
                     ]
@@ -339,8 +377,9 @@ public sealed class SemanticArchitectureComponentGraphTests
         Assert.Equal("second-library", context.ProductionComponents
             .Single(component => component.Id == edge.TargetComponentId).BuildModuleName);
         Assert.Empty(context.TestComponentDependencies);
-        var moduleDependency = Assert.Single(context.Dependencies);
-        Assert.Equal("GradleProjectDependency", moduleDependency.DependencyType);
+        Assert.Equal(2, context.Dependencies.Count);
+        Assert.All(context.Dependencies, dependency =>
+            Assert.Equal("GradleProjectDependency", dependency.DependencyType));
     }
 
     [Fact]

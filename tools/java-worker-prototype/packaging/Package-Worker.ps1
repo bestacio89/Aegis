@@ -70,7 +70,36 @@ try {
     }
 
     $classpath = (Get-Content -LiteralPath $classpathFile -Raw).Trim()
-    $moduleOutput = & $jdepsExecutable --multi-release 21 --ignore-missing-deps --print-module-deps --recursive --class-path $classpath $classesDirectory
+    $jdepsTargets = [System.Collections.Generic.List[string]]::new()
+    $jdepsTargets.Add($classesDirectory)
+
+    $kotlinRuntimeDirectory = Join-Path $repositoryRoot "tools/kotlin-worker-prototype/target/runtime"
+    $kotlinWorkerJar = Join-Path $kotlinRuntimeDirectory "kotlin-worker.jar"
+    $kotlinLibrariesDirectory = Join-Path $kotlinRuntimeDirectory "lib"
+    if (Test-Path -LiteralPath $kotlinWorkerJar) {
+        if (-not (Test-Path -LiteralPath $kotlinLibrariesDirectory)) {
+            throw "The Kotlin worker JAR exists but its runtime dependency directory is missing."
+        }
+
+        $kotlinClasspathEntries = @(
+            Get-ChildItem -LiteralPath $kotlinLibrariesDirectory -Filter "*.jar" -File |
+                Sort-Object FullName |
+                ForEach-Object { $_.FullName }
+        )
+        if ($kotlinClasspathEntries.Count -eq 0) {
+            throw "The Kotlin worker runtime dependency directory is empty."
+        }
+
+        $combinedClasspath = @($classpath) + $kotlinClasspathEntries -join [System.IO.Path]::PathSeparator
+        $jdepsTargets.Add($kotlinWorkerJar)
+        Write-Host "Including Kotlin K2 worker and $($kotlinClasspathEntries.Count) runtime libraries in private JVM module analysis."
+    }
+    else {
+        $combinedClasspath = $classpath
+        Write-Host "Kotlin worker package is not present; building a Java-only private runtime."
+    }
+
+    $moduleOutput = & $jdepsExecutable --multi-release 21 --ignore-missing-deps --print-module-deps --recursive --class-path $combinedClasspath $jdepsTargets.ToArray()
     if ($LASTEXITCODE -ne 0) { throw "jdeps failed with exit code $LASTEXITCODE." }
     $modules = ($moduleOutput | Select-Object -Last 1).Trim()
     if ([string]::IsNullOrWhiteSpace($modules) -or ($modules -split ',') -notcontains "java.base") {

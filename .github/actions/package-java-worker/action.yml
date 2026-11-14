@@ -14,6 +14,14 @@ runs:
           tools/java-worker-prototype/pom.xml
           tools/kotlin-worker-prototype/pom.xml
 
+    - name: Verify Kotlin K2 worker
+      shell: pwsh
+      run: mvn --batch-mode --no-transfer-progress -f tools/kotlin-worker-prototype/pom.xml verify
+
+    - name: Package Eclipse JDT worker and shared private runtime
+      shell: pwsh
+      run: ./tools/java-worker-prototype/packaging/Package-Worker.ps1 -OutputDirectory artifacts/java-worker-package
+
     - name: Add Kotlin worker to the shared private JVM package
       shell: pwsh
       run: |
@@ -22,12 +30,4 @@ runs:
         New-Item -ItemType Directory -Path $kotlinLibraries -Force | Out-Null
         Copy-Item -LiteralPath 'tools/kotlin-worker-prototype/target/runtime/kotlin-worker.jar' -Destination $kotlinPackage -Force
         Copy-Item -Path 'tools/kotlin-worker-prototype/target/runtime/lib/*' -Destination $kotlinLibraries -Recurse -Force
-        Copy-Item -LiteralPath 'tools/kotlin-worker-prototype/target/bom.json' -Destination (Join-Path $kotlinPackage 'sbom.cdx.json') -Force    - name: Verify Kotlin K2 worker
-      shell: pwsh
-      run: mvn --batch-mode --no-transfer-progress -f tools/kotlin-worker-prototype/pom.xml verify
-
-    - name: Package Eclipse JDT worker and private runtime
-      shell: pwsh
-      run: ./tools/java-worker-prototype/packaging/Package-Worker.ps1 -OutputDirectory artifacts/java-worker-package
-
-
+        Copy-Item -LiteralPath 'tools/kotlin-worker-prototype/target/bom.json' -Destination (Join-Path $kotlinPackage 'sbom.cdx.json') -Force

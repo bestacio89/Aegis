@@ -90,7 +90,14 @@ try {
             throw "The Kotlin worker runtime dependency directory is empty."
         }
 
-        $combinedClasspath = @($classpath) + $kotlinClasspathEntries -join [System.IO.Path]::PathSeparator
+        $combinedClasspathEntries = [System.Collections.Generic.List[string]]::new()
+        if (-not [string]::IsNullOrWhiteSpace($classpath)) {
+            $combinedClasspathEntries.Add($classpath)
+        }
+        foreach ($entry in $kotlinClasspathEntries) {
+            $combinedClasspathEntries.Add($entry)
+        }
+        $combinedClasspath = $combinedClasspathEntries -join [System.IO.Path]::PathSeparator
         $jdepsTargets.Add($kotlinWorkerJar)
         Write-Host "Including Kotlin K2 worker and $($kotlinClasspathEntries.Count) runtime libraries in private JVM module analysis."
     }

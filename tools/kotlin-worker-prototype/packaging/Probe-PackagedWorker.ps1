@@ -23,11 +23,11 @@ $workspace = Join-Path ([System.IO.Path]::GetTempPath()) "aegis-kotlin-packaged-
 $projectPath = Join-Path $workspace 'project'
 $sourceRoot = Join-Path $projectPath 'src/main/kotlin'
 $sourceFile = Join-Path $sourceRoot 'sample/PackagedProbe.kt'
-$manifestPath = Join-Path ([System.IO.Path]::GetTempPath()) "aegis-kotlin-sources-$([guid]::NewGuid().ToString('N')).json"
+$artifactRoot = Join-Path ([System.IO.Path]::GetTempPath()) "aegis-kotlin-artifacts-$([guid]::NewGuid().ToString('N'))"
+$manifestPath = Join-Path $artifactRoot 'source-manifest.json'
 
 $process = $null
 $stderrTask = $null
-$compilationOutputDirectory = $null
 
 function Send-WorkerRequest {
     param(
@@ -80,6 +80,7 @@ class PackagedProbe {
 }
 '@ | Set-Content -LiteralPath $sourceFile -Encoding utf8
 
+    New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
     ConvertTo-Json -InputObject @($sourceFile) -Compress |
         Set-Content -LiteralPath $manifestPath -Encoding utf8 -NoNewline
 
@@ -121,6 +122,7 @@ class PackagedProbe {
             projectPath = $projectPath
             workspaceRoot = $workspace
             sourceManifestPath = $manifestPath
+            artifactRoot = $artifactRoot
             sourceRoots = @($sourceRoot)
             referencedSourceRoots = @()
             testSourceRoots = @()
@@ -147,7 +149,6 @@ class PackagedProbe {
         throw 'The packaged worker did not return the expected Kotlin source symbol.'
     }
 
-    $compilationOutputDirectory = $analysis.result.compilationOutputDirectory
 
     Send-WorkerRequest $process @{
         protocolVersion = 1
@@ -179,12 +180,8 @@ finally {
     if ($null -ne $process) {
         $process.Dispose()
     }
-    if (-not [string]::IsNullOrWhiteSpace($compilationOutputDirectory) -and
-        (Test-Path -LiteralPath $compilationOutputDirectory)) {
-        Remove-Item -LiteralPath $compilationOutputDirectory -Recurse -Force
-    }
-    if (Test-Path -LiteralPath $manifestPath) {
-        Remove-Item -LiteralPath $manifestPath -Force
+    if (Test-Path -LiteralPath $artifactRoot) {
+        Remove-Item -LiteralPath $artifactRoot -Recurse -Force
     }
     if (Test-Path -LiteralPath $workspace) {
         Remove-Item -LiteralPath $workspace -Recurse -Force

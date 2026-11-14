@@ -82,63 +82,32 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
 
                 await _workerProcess.StartAsync(launchOptions, timeout.Token).ConfigureAwait(false);
                 var startedAt = DateTimeOffset.UtcNow;
-                try
+                var payload = new
                 {
-                    var sourceManifest = JsonSerializer.Serialize(request.SourceFiles, JsonOptions);
-                    await File.WriteAllTextAsync(
-                        sourceManifestPath,
-                        sourceManifest,
-                        Encoding.UTF8,
-                        timeout.Token).ConfigureAwait(false);
+                    projectPath = request.ProjectPath,
+                    workspaceRoot = request.WorkspaceRoot,
+                    sourceRoots = request.SourceRoots,
+                    referencedSourceRoots = request.ReferencedSourceRoots,
+                    testSourceRoots = request.TestSourceRoots,
+                    generatedSourceRoots = request.GeneratedSourceRoots,
+                    sourceManifestPath,
+                    artifactRoot = normalizedArtifactRoot,
+                    classpathEntries = request.ClasspathEntries,
+                    kotlinStandardLibraryPath = options.KotlinStandardLibraryPath,
+                    compilerVersion = configuration.CompilerVersion,
+                    languageVersion = configuration.LanguageVersion,
+                    apiVersion = configuration.ApiVersion,
+                    jvmTarget = configuration.JvmTarget,
+                    moduleName = configuration.ModuleName,
+                    includeTestCode = request.IncludeTestCode
+                };
 
-                    var payload = new
-                    {
-                        projectPath = request.ProjectPath,
-                        workspaceRoot = request.WorkspaceRoot,
-                        sourceRoots = request.SourceRoots,
-                        referencedSourceRoots = request.ReferencedSourceRoots,
-                        testSourceRoots = request.TestSourceRoots,
-                        generatedSourceRoots = request.GeneratedSourceRoots,
-                        sourceManifestPath,
-                        artifactRoot = normalizedArtifactRoot,
-                        classpathEntries = request.ClasspathEntries,
-                        kotlinStandardLibraryPath = options.KotlinStandardLibraryPath,
-                        compilerVersion = configuration.CompilerVersion,
-                        languageVersion = configuration.LanguageVersion,
-                        apiVersion = configuration.ApiVersion,
-                        jvmTarget = configuration.JvmTarget,
-                        moduleName = configuration.ModuleName,
-                        includeTestCode = request.IncludeTestCode
-                    };
-
-                    var result = await _workerProcess.SendAsync(
-                        launchOptions,
-                        "analyze",
-                        payload,
-                        timeout.Token).ConfigureAwait(false);
-                    return MapResult(result, request, startedAt);
-                }
-                finally
-                {
-                    try
-                    {
-                        File.Delete(sourceManifestPath);
-                    }
-                    catch (IOException exception)
-                    {
-                        _logger.LogWarning(
-                            exception,
-                            "Could not remove temporary Kotlin source manifest {ManifestPath}.",
-                            sourceManifestPath);
-                    }
-                    catch (UnauthorizedAccessException exception)
-                    {
-                        _logger.LogWarning(
-                            exception,
-                            "Access to temporary Kotlin source manifest {ManifestPath} was denied during cleanup.",
-                            sourceManifestPath);
-                    }
-                }
+                var result = await _workerProcess.SendAsync(
+                    launchOptions,
+                    "analyze",
+                    payload,
+                    timeout.Token).ConfigureAwait(false);
+                return MapResult(result, request, startedAt);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -150,6 +119,27 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
             {
                 await _workerProcess.StopAsync().ConfigureAwait(false);
                 throw;
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(sourceManifestPath);
+                }
+                catch (IOException exception)
+                {
+                    _logger.LogWarning(
+                        exception,
+                        "Could not remove temporary Kotlin source manifest {ManifestPath}.",
+                        sourceManifestPath);
+                }
+                catch (UnauthorizedAccessException exception)
+                {
+                    _logger.LogWarning(
+                        exception,
+                        "Access to temporary Kotlin source manifest {ManifestPath} was denied during cleanup.",
+                        sourceManifestPath);
+                }
             }
         }
         finally

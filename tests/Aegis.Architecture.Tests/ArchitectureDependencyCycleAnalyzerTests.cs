@@ -60,6 +60,17 @@ public sealed class ArchitectureDependencyCycleAnalyzerTests
         Assert.Contains(context.ArchitectureComponentCycles, cycle => cycle.AndroidVariants.SequenceEqual(["debug"]));
         Assert.Contains(context.ArchitectureComponentCycles, cycle => cycle.AndroidVariants.SequenceEqual(["release"]));
         Assert.All(context.ArchitectureComponentCycles, cycle => Assert.Equal(2, cycle.RelationshipCount));
+
+        context.ArchitectureComponentDependencies =
+        [
+            Edge("a", "b", "Production", "shared-run", "shared-ab", "debug", "release"),
+            Edge("b", "a", "Production", "debug-run", "debug-ba", "debug")
+        ];
+
+        ArchitectureDependencyCycleAnalyzer.Analyze(context);
+
+        var overlappingVariantCycle = Assert.Single(context.ArchitectureComponentCycles);
+        Assert.Equal(["debug"], overlappingVariantCycle.AndroidVariants);
     }
 
     [Fact]

@@ -29,6 +29,7 @@ internal static class GradleAndroidSourceSetResolver
         ArgumentNullException.ThrowIfNull(diagnostics);
         ArgumentNullException.ThrowIfNull(model);
 
+        model.TestFixturesEnabled = ResolveTestFixturesEnabled(androidBlock);
         var variants = ResolveVariants(model, buildFile, diagnostics);
         var knownSourceSetNames = CreateExpectedSourceSetNames(model, variants);
         var knownTestSourceSetNames = CreateExpectedTestSourceSetNames(model, variants);
@@ -54,8 +55,8 @@ internal static class GradleAndroidSourceSetResolver
             observed.TryGetValue(name, out var discovered);
             generated.TryGetValue(name, out var generatedSet);
             explicitDirectories.TryGetValue(name, out var explicitSet);
-            if (ownership == ProjectSourceRootOwnership.Unknown
-                && (discovered is not null || generatedSet is not null || explicitSet is not null))
+            var hasSourceEvidence = discovered is not null || generatedSet is not null || explicitSet is not null;
+            if (ownership == ProjectSourceRootOwnership.Unknown && hasSourceEvidence)
             {
                 diagnostics.Add(Diagnostic(
                     "GradleAndroidSourceSetOwnershipUnknown",
@@ -81,12 +82,26 @@ internal static class GradleAndroidSourceSetResolver
             var generatedJavaDirectories = generatedSet?.JavaSourceDirectories ?? [];
             var generatedKotlinDirectories = generatedSet?.KotlinSourceDirectories ?? [];
 
+            var applicableVariants = ResolveApplicableVariants(
+                name, ownership, variants, knownTestSourceSetNames);
+            if (name == "testFixtures" && model.TestFixturesEnabled != true)
+            {
+                applicableVariants = [];
+                if (hasSourceEvidence)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleAndroidTestFixturesNotEnabled",
+                        "Android test-fixture sources were found, but android.testFixtures.enable is not statically true.",
+                        buildFile));
+                }
+            }
+
             sourceSets.Add(new GradleAndroidSourceSet
             {
                 Name = name,
                 Ownership = ownership,
                 TestKind = ResolveTestKind(name, ownership, knownTestSourceSetNames),
-                AppliesToVariants = ResolveApplicableVariants(name, ownership, variants, knownTestSourceSetNames),
+                AppliesToVariants = applicableVariants,
                 JavaSourceDirectories = javaDirectories,
                 KotlinSourceDirectories = kotlinDirectories,
                 ExplicitJavaSourceDirectories = explicitSet?.JavaSourceDirectories ?? [],
@@ -122,6 +137,21 @@ internal static class GradleAndroidSourceSetResolver
             .OrderBy(root => root.Directory, PathComparer)
             .ToList();
         model.IsComplete = diagnostics.All(diagnostic => !diagnostic.AffectsCoverage);
+    }
+
+    private static bool? ResolveTestFixturesEnabled(string? androidBlock)
+    {
+        var testFixturesBlock = ExtractBlock(androidBlock, "testFixtures");
+        if (testFixturesBlock is null)
+            return null;
+
+        var match = Regex.Match(
+            testFixturesBlock,
+            @"\benable\s*=\s*(?<value>true|false)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success && bool.TryParse(match.Groups["value"].Value, out var enabled)
+            ? enabled
+            : null;
     }
 
     private static List<GradleAndroidVariant> ResolveVariants(

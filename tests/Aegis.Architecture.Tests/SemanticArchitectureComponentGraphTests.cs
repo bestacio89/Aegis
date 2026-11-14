@@ -295,7 +295,7 @@ public sealed class SemanticArchitectureComponentGraphTests
                         {
                             Id = "shared-library-symbol",
                             Name = "LibraryService",
-                            QualifiedName = "sample.first.LibraryService",
+                            QualifiedName = "sample.second.LibraryService",
                             ContainerName = "sample.first",
                             ContainerKind = "Package",
                             Language = "Kotlin",

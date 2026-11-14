@@ -569,7 +569,10 @@ internal static class GradleAndroidSourceSetResolver
                 .Cast<Match>()
                 .Select(match => match.Groups["path"].Value)
                 .ToArray();
-            var residue = Regex.Replace(expression, @"['""][^'""]+['""]|\s|,|\[|\]|\(|\)", string.Empty);
+            var residue = Regex.Replace(
+                expression,
+                @"['""][^'""]+['""]|\b(?:file|files|listOf|setOf|arrayOf)\b|\s|,|\[|\]|\(|\)",
+                string.Empty);
 
             if (values.Length == 0 || residue.Length > 0 || values.Any(value =>
                     value.Contains('$') || value.Contains('{')))

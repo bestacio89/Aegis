@@ -10,6 +10,8 @@ namespace Aegis.Architecture.Analysis.Detectors;
 /// </summary>
 internal static class GradleAndroidSourceSetResolver
 {
+    private const int MaximumDerivedVariants = 512;
+
     private static readonly StringComparer PathComparer = OperatingSystem.IsWindows()
         ? StringComparer.OrdinalIgnoreCase
         : StringComparer.Ordinal;
@@ -173,6 +175,31 @@ internal static class GradleAndroidSourceSetResolver
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray()).ToArray();
 
+        long combinationCount = 1;
+        foreach (var dimensionChoices in choices)
+        {
+            if (dimensionChoices.Length == 0
+                || combinationCount > MaximumDerivedVariants / dimensionChoices.Length)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleAndroidVariantMatrixLimitExceeded",
+                    $"The declared flavor dimensions exceed Aegis' static derivation limit of {MaximumDerivedVariants} variants.",
+                    buildFile));
+                return [];
+            }
+
+            combinationCount *= dimensionChoices.Length;
+        }
+
+        if (combinationCount * buildTypes.Length > MaximumDerivedVariants)
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleAndroidVariantMatrixLimitExceeded",
+                $"The declared flavor/build-type matrix exceeds Aegis' static derivation limit of {MaximumDerivedVariants} variants.",
+                buildFile));
+            return [];
+        }
+
         var combinations = new List<List<string>> { [] };
         foreach (var dimensionChoices in choices)
         {
@@ -188,6 +215,15 @@ internal static class GradleAndroidSourceSetResolver
         {
             var name = string.Concat(combination.Select(Capitalize)) + Capitalize(buildType);
             result.Add(new GradleAndroidVariant(name, combination, buildType));
+        }
+
+        if (result.Select(variant => variant.Name).Distinct(StringComparer.Ordinal).Count() != result.Count)
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleAndroidVariantNameConflict",
+                "Multiple flavor combinations produce the same Android variant name; variant-to-source-set mapping is ambiguous.",
+                buildFile));
+            return [];
         }
 
         return result.OrderBy(variant => variant.Name, StringComparer.Ordinal).ToList();

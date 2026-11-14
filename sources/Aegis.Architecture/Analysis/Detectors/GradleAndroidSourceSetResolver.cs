@@ -360,17 +360,28 @@ internal static class GradleAndroidSourceSetResolver
         string buildFile,
         ICollection<AnalysisDiagnostic> diagnostics)
     {
-        var declarations = Regex.Matches(
+        var declarationPattern = @"\b" + Regex.Escape(property)
+            + @"\s*\.\s*(?:srcDirs|srcDir|setSrcDirs)\s*(?:\(\s*(?<args>[^\n)]*)\)|=\s*(?<assignment>[^\n]+)|\s+(?<groovy>[^\n]+))";
+        var declarations = Regex.Matches(body, declarationPattern, RegexOptions.CultureInvariant);
+        var declarationCount = Regex.Matches(
             body,
-            @"\b" + Regex.Escape(property)
-            + @"\s*\.\s*(?:srcDirs|srcDir|setSrcDirs)\s*(?:\(\s*(?<args>[^\n)]*)\)|=\s*(?<assignment>[^\n]+))",
-            RegexOptions.CultureInvariant);
+            @"\b" + Regex.Escape(property) + @"\s*\.\s*(?:srcDirs|srcDir|setSrcDirs)\b",
+            RegexOptions.CultureInvariant).Count;
+        if (declarations.Count < declarationCount)
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleAndroidSourceDirectoryNotStaticallyResolved",
+                $"One or more Android {property} source directory declarations for source set '{sourceSetName}' use unsupported syntax.",
+                buildFile));
+        }
 
         foreach (Match declaration in declarations)
         {
             var expression = declaration.Groups["args"].Success
                 ? declaration.Groups["args"].Value
-                : declaration.Groups["assignment"].Value;
+                : declaration.Groups["assignment"].Success
+                    ? declaration.Groups["assignment"].Value
+                    : declaration.Groups["groovy"].Value;
             var values = Regex.Matches(expression, @"['""](?<path>[^'""]+)['""]")
                 .Cast<Match>()
                 .Select(match => match.Groups["path"].Value)

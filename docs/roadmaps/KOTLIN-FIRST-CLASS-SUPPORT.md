@@ -393,13 +393,61 @@ Validate discovery, source ownership, semantic resolution and diagnostics, Java 
 
 ### K7 — Android Kotlin support
 
-- Model Android Gradle Plugin versions, Kotlin Android plugin IDs and the newer Android/Kotlin plugin integration without executing Gradle.
-- Discover Android main, unit-test, instrumentation-test, flavor and variant source sets, including Java/Kotlin mixed roots.
-- Resolve compile SDK and the matching `android.jar` from statically available SDK configuration (`local.properties`, configured SDK environment and explicit build metadata); report missing or ambiguous SDK evidence.
-- Model variant-specific dependencies and generated source roots. KAPT/KSP outputs are consumed only when already materialized or explicitly declared; processors are never executed by Aegis.
-- Validate Jetpack Compose source usage and generated/compiler-plugin limitations separately from ordinary Kotlin/JVM semantics.
+#### K7.1 — Android project and build-model discovery — accepted
 
-**Acceptance:** Representative Android application and library fixtures cover debug/release, product flavors, unit tests, androidTest, Java/Kotlin interop, Android SDK symbols and Compose. Variant classpaths and source ownership are accurate; missing SDK/generated-code evidence remains explicitly partial.
+K7.1 is accepted at exact code head \`813885b0c65b20fd088e1ba91e7a6297768f4768\`. All four required workflows passed on that head: Kotlin semantic worker, Java semantic worker, WPF build validation and non-WPF quality gates.
+
+The accepted static model covers:
+
+- Android Gradle Plugin application/library/test/dynamic-feature/asset-pack module kinds.
+- Modern Groovy and Kotlin plugin declarations, version-catalog aliases, root \`apply false\` version declarations, legacy \`apply plugin\` declarations and root/module \`buildscript\` classpath versions.
+- Plugin application state and static AGP version evidence. Dynamic/unresolved versions remain incomplete diagnostics.
+- Namespace, compile SDK, build-tools version, default configuration, Java compile options, flavor dimensions, product flavors and build types.
+- AGP 9 built-in Kotlin and new-DSL defaults, explicit module-level Kotlin disablement, and the legacy Kotlin Android plugin migration rule. The legacy plugin is accepted with AGP 9 only when both \`android.builtInKotlin=false\` and \`android.newDsl=false\` are declared.
+- Android module identity and framework classification in the shared project model.
+- Conservative Android DSL fallback when plugin identity is unresolved. Both Java and Kotlin semantic workers refuse to treat such modules as ordinary JVM projects.
+
+K7.1 deliberately does not resolve active variants, Android manifests/resources, SDK installations, \`android.jar\`, variant classpaths, Compose semantics or Android architecture projections. Those belong to later checkpoints.
+
+#### K7.2 — Variant-aware source and test ownership
+
+- Model the variant matrix from build types and product flavors without executing Gradle.
+- Discover variant-specific and conventional Java/Kotlin roots, generated roots and mixed-language ownership.
+- Model \`AndroidManifest.xml\`, resources and assets by source set and variant.
+- Distinguish local unit tests, instrumentation tests (\`androidTest\`), test fixtures and test-support ownership.
+- Preserve production/test separation and variant-specific source/dependency evidence.
+
+**Acceptance:** Application and library fixtures prove debug/release and flavor source ownership, manifest/resource ownership, Java/Kotlin mixed roots, unit-test versus instrumentation-test separation and test-to-production traceability.
+
+#### K7.3 — Android framework and Jetpack Compose intelligence
+
+- Add module-owned dependency and compiler-confirmed usage evidence for AndroidX, lifecycle, navigation, Room, Hilt/Dagger/Koin, coroutines and related Android integrations.
+- Recognize Jetpack Compose declarations and usage without confusing Compose compiler-generated declarations with source declarations.
+- Model Compose compiler/plugin compatibility and generated-code limitations as explicit evidence.
+- Keep declared dependency evidence distinct from observed semantic usage.
+
+**Acceptance:** Positive, negative and test-only fixtures validate framework classification, Compose usage and generated-symbol handling without annotation-only inference.
+
+#### K7.4 — Android architecture projection
+
+- Project Android modules, variants and source-set ownership into the existing component and dependency graph contracts.
+- Preserve module, variant, production/test and source provenance in graph edges and the relationship ledger.
+- Separate package-level dependencies from logical architectural components.
+- Keep instrumentation-test relationships out of production coupling, cycle and component metrics.
+
+**Acceptance:** Representative multi-module Android fixtures produce consistent module, package and architectural-component graphs with traceable variant-aware relationships and isolated test metrics.
+
+#### K7.5 — Android SDK/classpath resolution and production validation
+
+- Resolve SDK roots from \`local.properties\`, configured SDK environment variables and explicit build metadata without executing project scripts.
+- Resolve the platform \`android.jar\` matching the selected compile SDK and the variant-specific compile classpath where local evidence is available.
+- Preserve AAR/JAR and generated-source evidence with explicit resolution provenance.
+- Report missing SDKs, ambiguous SDK versions, unresolved artifacts and unavailable generated code as partial coverage.
+- Validate representative application/library projects, mixed Java/Kotlin compilation, worker safety, resource use and existing Java/Kotlin regression gates.
+
+**Acceptance:** Android SDK and variant classpaths are proven against representative fixtures and a real project corpus. No Android source is reported as semantically complete when required SDK, dependency or generated-code inputs are missing.
+
+**K7 acceptance:** All five checkpoints are accepted independently. Android support is first-class only for the SDK, variants, framework integrations and architecture projections actually validated.
 
 ### K8 — Kotlin Multiplatform support
 

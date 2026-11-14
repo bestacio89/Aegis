@@ -37,6 +37,15 @@ public sealed class GradleAndroidBuildModel
 
     public List<BuildType> BuildTypes { get; init; } = [];
 
+    /// <summary>Statically derived Android build variants; this is a declared matrix, not Gradle's resolved variant graph.</summary>
+    public List<GradleAndroidVariant> Variants { get; set; } = [];
+
+    /// <summary>Source-set ownership and conventional Android manifest/resource/source directories.</summary>
+    public List<GradleAndroidSourceSet> SourceSets { get; set; } = [];
+
+    /// <summary>Java/Kotlin source roots projected from Android source sets.</summary>
+    public List<ProjectSourceRoot> SourceRoots { get; set; } = [];
+
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];
 
     public bool IsComplete { get; init; }

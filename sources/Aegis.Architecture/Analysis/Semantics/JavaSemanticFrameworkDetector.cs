@@ -41,7 +41,10 @@ internal static class JavaSemanticFrameworkDetector
             foreach (var relationship in run.Relationships.Where(relationship =>
                          (relationship.Kind == SemanticRelationshipKind.UsesAnnotation
                              || run.Language.Equals("Kotlin", StringComparison.OrdinalIgnoreCase)
-                             && (relationship.Kind is SemanticRelationshipKind.Calls or SemanticRelationshipKind.References))
+                             && (relationship.Kind is SemanticRelationshipKind.Calls
+                                 or SemanticRelationshipKind.References
+                                 or SemanticRelationshipKind.Inherits
+                                 or SemanticRelationshipKind.Implements))
                          && relationship.ResolutionStatus == SemanticResolutionStatus.Resolved
                          && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)))
             {
@@ -742,6 +745,25 @@ internal static class JavaSemanticFrameworkDetector
             return ("kotlinx.serialization", FrameworkEvidenceKind.Serialization);
         if (qualifiedName.StartsWith("org.jetbrains.exposed.", StringComparison.Ordinal))
             return ("Exposed", FrameworkEvidenceKind.Persistence);
+
+        if (qualifiedName.StartsWith("androidx.core.", StringComparison.Ordinal))
+            return ("AndroidX Core", FrameworkEvidenceKind.Runtime);
+        if (qualifiedName.StartsWith("androidx.lifecycle.", StringComparison.Ordinal))
+            return ("AndroidX Lifecycle", FrameworkEvidenceKind.Runtime);
+        if (qualifiedName.StartsWith("androidx.navigation.", StringComparison.Ordinal))
+            return ("AndroidX Navigation", FrameworkEvidenceKind.Application);
+        if (qualifiedName.StartsWith("androidx.room.", StringComparison.Ordinal))
+            return ("Room", FrameworkEvidenceKind.Persistence);
+        if (qualifiedName.StartsWith("androidx.compose.", StringComparison.Ordinal)
+            || qualifiedName.StartsWith("androidx.activity.compose.", StringComparison.Ordinal))
+            return ("Jetpack Compose", FrameworkEvidenceKind.Application);
+        if (qualifiedName.StartsWith("androidx.hilt.", StringComparison.Ordinal)
+            || qualifiedName.StartsWith("dagger.hilt.", StringComparison.Ordinal))
+            return ("Hilt", FrameworkEvidenceKind.Application);
+        if (qualifiedName.StartsWith("dagger.", StringComparison.Ordinal))
+            return ("Dagger", FrameworkEvidenceKind.Application);
+        if (qualifiedName.StartsWith("org.koin.", StringComparison.Ordinal))
+            return ("Koin", FrameworkEvidenceKind.Application);
 
         return null;
     }

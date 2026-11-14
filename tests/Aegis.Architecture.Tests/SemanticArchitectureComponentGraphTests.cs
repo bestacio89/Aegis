@@ -600,7 +600,7 @@ public sealed class SemanticArchitectureComponentGraphTests
     }
 
     [Fact]
-    public void Projects_cross_module_android_relationships_only_for_matching_variants()
+    public void Rejects_cross_module_android_relationships_when_target_variant_identity_is_ambiguous()
     {
         var root = Path.Combine(Path.GetTempPath(), $"aegis-android-variant-edges-{Guid.NewGuid():N}");
         var appPath = Path.Combine(root, "app");
@@ -790,14 +790,13 @@ public sealed class SemanticArchitectureComponentGraphTests
 
         SemanticArchitectureComponentDetector.Analyze(context);
 
-        var edges = context.ProductionComponentDependencies;
-        Assert.Equal(2, edges.Count);
-        Assert.All(edges, edge => Assert.Equal("library", context.ProductionComponents
-            .Single(component => component.Id == edge.TargetComponentId).BuildModuleName));
-        Assert.Contains(edges, edge => edge.AndroidVariants.SequenceEqual(["debug"]));
-        Assert.Contains(edges, edge => edge.AndroidVariants.SequenceEqual(["release"]));
-        Assert.DoesNotContain(edges, edge => edge.ContributingRelationships
-            .Any(reference => reference.RelationshipId == "debug-to-release"));
+        // The external symbols carry a consumer project path and a qualified
+        // name shared by both library variants. The current generic semantic
+        // contract therefore cannot prove which target variant the compiler bound.
+        // Reject all three relationships rather than infer target identity from
+        // whichever variant happens to intersect the source variant.
+        Assert.Empty(context.ProductionComponentDependencies);
+        Assert.Empty(context.TestComponentDependencies);
     }
 
     [Fact]

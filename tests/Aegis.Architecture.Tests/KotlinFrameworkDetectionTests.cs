@@ -351,6 +351,135 @@ public sealed class KotlinFrameworkDetectionTests
             Assert.Contains(context.FrameworkEvidence, item => item.Id == evidence.Id));
     }
 
+    [Fact]
+    public void Analyze_classifies_compiler_confirmed_Android_framework_usage_from_resolved_relationships()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidUsage_{Guid.NewGuid():N}");
+        var module = new ProjectModuleContext
+        {
+            Name = "android-app",
+            Path = root,
+            BuildSystem = ArchitectureBuildSystem.Gradle,
+            Languages = ["Kotlin"],
+            Framework = "Android"
+        };
+        var source = new SemanticSymbol
+        {
+            Id = "kotlin:function:sample.AndroidFeature",
+            Name = "AndroidFeature",
+            QualifiedName = "sample.AndroidFeature",
+            Language = "Kotlin",
+            ProjectPath = root,
+            FilePath = Path.Combine(root, "AndroidFeature.kt")
+        };
+        var targets = new[]
+        {
+            CreateExternalSymbol("androidx.core.content.ContextCompat"),
+            CreateExternalSymbol("androidx.lifecycle.ViewModel"),
+            CreateExternalSymbol("androidx.navigation.NavController"),
+            CreateExternalSymbol("androidx.room.RoomDatabase"),
+            CreateExternalSymbol("androidx.compose.runtime.Composer"),
+            CreateExternalSymbol("dagger.hilt.android.HiltAndroidApp"),
+            CreateExternalSymbol("dagger.Component"),
+            CreateExternalSymbol("org.koin.dsl.ModuleDSL"),
+            CreateExternalSymbol("kotlinx.coroutines.CoroutineScope")
+        };
+        var relationshipKinds = new[]
+        {
+            SemanticRelationshipKind.References,
+            SemanticRelationshipKind.Inherits,
+            SemanticRelationshipKind.Calls,
+            SemanticRelationshipKind.Implements,
+            SemanticRelationshipKind.References,
+            SemanticRelationshipKind.UsesAnnotation,
+            SemanticRelationshipKind.UsesAnnotation,
+            SemanticRelationshipKind.Calls,
+            SemanticRelationshipKind.References
+        };
+        var relationships = targets.Select((target, index) => new SemanticRelationship
+        {
+            Id = $"android-usage-{index}",
+            SourceSymbolId = source.Id,
+            TargetSymbolId = target.Id,
+            Kind = relationshipKinds[index],
+            ResolutionStatus = SemanticResolutionStatus.Resolved,
+            IsTestCode = index == 7,
+            Provenance =
+            [
+                new SemanticEvidenceProvenance
+                {
+                    AnalyzerId = "kotlin-k2-ir",
+                    Source = SemanticEvidenceSource.Compiler,
+                    FilePath = source.FilePath,
+                    StartLine = index + 1,
+                    StartColumn = 1,
+                    Confidence = 1.0
+                }
+            ]
+        }).ToList();
+        relationships.Add(new SemanticRelationship
+        {
+            Id = "unresolved-android-usage",
+            SourceSymbolId = source.Id,
+            TargetSymbolId = targets[0].Id,
+            Kind = SemanticRelationshipKind.References,
+            ResolutionStatus = SemanticResolutionStatus.Unresolved
+        });
+        var run = new SemanticAnalysisRun
+        {
+            Language = "Kotlin",
+            EngineId = "kotlin-k2-ir",
+            ProjectPath = root,
+            Status = SemanticAnalysisStatus.Completed,
+            Symbols = [source, .. targets],
+            Relationships = relationships
+        };
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "android-app",
+            RootPath = root,
+            Language = "Kotlin",
+            Modules = [module],
+            SemanticAnalysisRuns = [run]
+        };
+
+        JavaSemanticFrameworkDetector.Analyze(context);
+
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "AndroidX Core" && evidence.Kind == FrameworkEvidenceKind.Runtime);
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "AndroidX Lifecycle" && evidence.Kind == FrameworkEvidenceKind.Runtime);
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "AndroidX Navigation" && evidence.Kind == FrameworkEvidenceKind.Application);
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "Room" && evidence.Kind == FrameworkEvidenceKind.Persistence);
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "Jetpack Compose" && evidence.Kind == FrameworkEvidenceKind.Application);
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "Hilt" && evidence.Kind == FrameworkEvidenceKind.Application);
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "Dagger" && evidence.Kind == FrameworkEvidenceKind.Application);
+        var koin = Assert.Single(module.FrameworkEvidence, evidence => evidence.Name == "Koin");
+        Assert.True(koin.IsTestOnly);
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "kotlinx.coroutines" && evidence.Kind == FrameworkEvidenceKind.Runtime);
+        Assert.All(module.FrameworkEvidence, evidence =>
+            Assert.Contains(context.FrameworkEvidence, item => item.Id == evidence.Id));
+    }
+
+    private static SemanticSymbol CreateExternalSymbol(string qualifiedName)
+    {
+        var separator = qualifiedName.LastIndexOf('.');
+        return new SemanticSymbol
+        {
+            Id = $"kotlin:external:{qualifiedName}",
+            Name = qualifiedName[(separator + 1)..],
+            QualifiedName = qualifiedName,
+            Language = "Kotlin",
+            Origin = SemanticSymbolOrigin.External
+        };
+    }
+
     private static ArchitectureDependencyEvidence CreateDependency(
         string name,
         string scope,

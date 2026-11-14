@@ -73,7 +73,7 @@ public sealed class AndroidVariantDependencySelectorTests
     [Fact]
     public void Test_fixture_scope_keeps_fixture_dependencies_separate()
     {
-        var module = CreateModule(
+        var module = CreateModuleWithTestFixturesEnabled(
             Dependency("implementation", "base"),
             Dependency("testFixturesImplementation", "fixture"),
             Dependency("testFixturesDebugImplementation", "build-type-fixture"),
@@ -87,6 +87,33 @@ public sealed class AndroidVariantDependencySelectorTests
         Assert.Equal(
             new string?[] { "base", "fixture", "build-type-fixture", "variant-fixture" },
             result.Dependencies.Select(dependency => dependency.Artifact));
+    }
+
+    [Fact]
+    public void Does_not_select_test_fixture_dependencies_when_feature_is_disabled()
+    {
+        var module = CreateModule(Dependency("testFixturesImplementation", "fixture"));
+        module.GradleBuildModel!.Android!.TestFixturesEnabled = false;
+
+        var result = new AndroidVariantDependencySelector().Select(
+            module, "freeDebug", AndroidVariantDependencyScope.TestFixtures);
+
+        Assert.False(result.IsComplete);
+        Assert.Empty(result.Dependencies);
+        Assert.Equal("AndroidTestFixturesDisabled", Assert.Single(result.Diagnostics).Code);
+    }
+
+    [Fact]
+    public void Does_not_assume_test_fixtures_are_enabled_when_configuration_is_unknown()
+    {
+        var module = CreateModule(Dependency("testFixturesImplementation", "fixture"));
+
+        var result = new AndroidVariantDependencySelector().Select(
+            module, "freeDebug", AndroidVariantDependencyScope.TestFixtures);
+
+        Assert.False(result.IsComplete);
+        Assert.Empty(result.Dependencies);
+        Assert.Equal("AndroidTestFixturesAvailabilityUnknown", Assert.Single(result.Diagnostics).Code);
     }
 
     [Fact]
@@ -115,6 +142,14 @@ public sealed class AndroidVariantDependencySelectorTests
         Assert.Single(result.Dependencies);
         Assert.Equal("AndroidVariantDependencyDeclarationsIncomplete", Assert.Single(result.Diagnostics).Code);
         Assert.True(result.Diagnostics[0].AffectsCoverage);
+    }
+
+    private static ProjectModuleContext CreateModuleWithTestFixturesEnabled(
+        params GradleBuildModel.Dependency[] dependencies)
+    {
+        var module = CreateModule(dependencies);
+        module.GradleBuildModel!.Android!.TestFixturesEnabled = true;
+        return module;
     }
 
     private static ProjectModuleContext CreateModule(

@@ -72,6 +72,8 @@ public sealed class GradleAndroidBuildModelTests
                 "package org.example.mobile\\nclass Main");
 
             var context = ProjectArchitectureContextDetector.Detect(root);
+            var rootModule = Assert.Single(context.Modules, candidate => candidate.Path == root);
+            Assert.Null(Assert.IsType<GradleBuildModel>(rootModule.GradleBuildModel).Android);
             var module = Assert.Single(context.Modules, candidate => candidate.Path == appDirectory);
             var model = Assert.IsType<GradleBuildModel>(module.GradleBuildModel);
             var android = Assert.IsType<GradleAndroidBuildModel>(model.Android);

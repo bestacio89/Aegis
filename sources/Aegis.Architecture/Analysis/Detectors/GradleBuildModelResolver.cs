@@ -168,10 +168,10 @@ internal static class GradleBuildModelResolver
             var androidModel = ParseAndroidBuildModel(
                 source, plugins, catalog, files, module.Path, owningRoot?.Path, sourceRoots, diagnostics, buildFile);
             var kotlinJvmPlugins = plugins
-                .Where(plugin => plugin.Id == "org.jetbrains.kotlin.jvm")
+                .Where(plugin => plugin.IsApplied && plugin.Id == "org.jetbrains.kotlin.jvm")
                 .ToArray();
             var kotlinAndroidPlugins = plugins
-                .Where(plugin => plugin.Id == "org.jetbrains.kotlin.android")
+                .Where(plugin => plugin.IsApplied && plugin.Id == "org.jetbrains.kotlin.android")
                 .ToArray();
             var kotlinCompilerPlugins = kotlinJvmPlugins
                 .Concat(kotlinAndroidPlugins)
@@ -196,11 +196,18 @@ internal static class GradleBuildModelResolver
                     buildFile));
             }
 
-            if (plugins.Any(plugin => plugin.Id == "org.jetbrains.kotlin.multiplatform"))
+            if (plugins.Any(plugin => plugin.IsApplied && plugin.Id == "org.jetbrains.kotlin.multiplatform"))
             {
                 diagnostics.Add(Diagnostic(
                     "GradleKotlinMultiplatformTargetNotStaticallyResolved",
                     "Kotlin Multiplatform targets are not treated as JVM source roots until target-specific source-set resolution is available.",
+                    buildFile));
+            }
+            else if (androidModel is not null && sourceRoots.Any(sourceRoot => sourceRoot.ContainsKotlinSources))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleKotlinAndroidTargetNotSupported",
+                    "Android Kotlin source analysis remains unsupported until variant ownership, SDK boot classpaths and Android-specific compilation are implemented.",
                     buildFile));
             }
             else if (kotlinAndroidPlugins.Length > 0)
@@ -225,9 +232,9 @@ internal static class GradleBuildModelResolver
             var kotlinCompilerOptions = ParseKotlinCompilerOptions(
                 source, kotlinPluginVersion, diagnostics, buildFile);
 
-            foreach (var plugin in plugins.Where(plugin =>
-                         plugin.Id.StartsWith("org.jetbrains.kotlin.plugin.", StringComparison.Ordinal)
-                         || plugin.Id is "org.jetbrains.kotlin.kapt" or "com.google.devtools.ksp"))
+            foreach (var plugin in plugins.Where(plugin => plugin.IsApplied
+                         && (plugin.Id.StartsWith("org.jetbrains.kotlin.plugin.", StringComparison.Ordinal)
+                             || plugin.Id is "org.jetbrains.kotlin.kapt" or "com.google.devtools.ksp")))
             {
                 diagnostics.Add(Diagnostic(
                     "GradleKotlinCompilerPluginNotExecuted",
@@ -275,7 +282,7 @@ internal static class GradleBuildModelResolver
         string buildFile)
     {
         var androidPlugins = plugins
-            .Where(plugin => plugin.Id is
+            .Where(plugin => plugin.IsApplied && plugin.Id is
                 "com.android.application"
                 or "com.android.library"
                 or "com.android.test"
@@ -384,11 +391,11 @@ internal static class GradleBuildModelResolver
                 ReadAndroidLiteral(entry.Block, "applicationIdSuffix")))
             .ToList();
 
-        var legacyKotlinAndroid = plugins.Any(plugin =>
-            plugin.Id.Equals("org.jetbrains.kotlin.android", StringComparison.Ordinal)
-            || plugin.Id.Equals("kotlin-android", StringComparison.Ordinal));
-        var builtInKotlinPlugin = plugins.Any(plugin =>
-            plugin.Id.Equals("com.android.built-in-kotlin", StringComparison.Ordinal));
+        var legacyKotlinAndroid = plugins.Any(plugin => plugin.IsApplied
+            && (plugin.Id.Equals("org.jetbrains.kotlin.android", StringComparison.Ordinal)
+                || plugin.Id.Equals("kotlin-android", StringComparison.Ordinal)));
+        var builtInKotlinPlugin = plugins.Any(plugin => plugin.IsApplied
+            && plugin.Id.Equals("com.android.built-in-kotlin", StringComparison.Ordinal));
         var builtInKotlinDisabled = ReadGradleProperty(
             files, modulePath, owningRootPath, "android.builtInKotlin")?.Equals(
                 "false", StringComparison.OrdinalIgnoreCase) == true;
@@ -658,6 +665,9 @@ internal static class GradleBuildModelResolver
 
     private sealed record NamedBlock(string Name, string Block);
 
+    private static bool IsPluginApplied(string declaration) =>
+        !Regex.IsMatch(declaration, @"\\bapply\\s+false\\b", RegexOptions.CultureInvariant);
+
     private static List<GradleBuildModel.Plugin> ParsePlugins(
         string? block,
         VersionCatalog catalog,
@@ -675,7 +685,7 @@ internal static class GradleBuildModelResolver
             {
                 var key = NormalizeAlias(alias.Groups["alias"].Value);
                 if (catalog.Plugins.TryGetValue(key, out var plugin))
-                    result.Add(new GradleBuildModel.Plugin(plugin.Id, plugin.Version, true));
+                    result.Add(new GradleBuildModel.Plugin(plugin.Id, plugin.Version, IsPluginApplied(line)));
                 else
                     diagnostics.Add(Diagnostic("GradlePluginAliasNotResolved",
                         $"Plugin alias '{key}' is not present in the discovered version catalog.", buildFile));
@@ -700,7 +710,7 @@ internal static class GradleBuildModelResolver
                 result.Add(new GradleBuildModel.Plugin(
                     "org.jetbrains.kotlin." + kotlinDslMatch.Groups["plugin"].Value,
                     version,
-                    true));
+                    IsPluginApplied(line)));
             }
             else
             {
@@ -713,7 +723,7 @@ internal static class GradleBuildModelResolver
                     result.Add(new GradleBuildModel.Plugin(
                         id,
                         match.Groups["version"].Success ? match.Groups["version"].Value : null,
-                        true));
+                        IsPluginApplied(line)));
                 }
                 else if (line.Contains("id(", StringComparison.Ordinal)
                          || line.Contains("alias(", StringComparison.Ordinal)

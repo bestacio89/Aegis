@@ -45,12 +45,11 @@ public sealed class JvmSourceRootResolverTests
         try
         {
             var consumer = Module(workspace.FullName, "consumer");
-            var testSupport = Module(
+            var testSupport = TestSupportModule(
                 workspace.FullName,
                 "test-support",
                 ("src/main/java", ProjectSourceRootOwnership.Production),
-                ("src/test/java", ProjectSourceRootOwnership.Test),
-                isTestSupport: true);
+                ("src/test/java", ProjectSourceRootOwnership.Test));
             var context = Context(
                 workspace.FullName,
                 [consumer, testSupport],
@@ -91,12 +90,11 @@ public sealed class JvmSourceRootResolverTests
                 workspace.FullName,
                 "transitive-production",
                 ("src/main/java", ProjectSourceRootOwnership.Production));
-            var transitiveTestSupport = Module(
+            var transitiveTestSupport = TestSupportModule(
                 workspace.FullName,
                 "transitive-test-support",
                 ("src/main/java", ProjectSourceRootOwnership.Production),
-                ("src/test/java", ProjectSourceRootOwnership.Test),
-                isTestSupport: true);
+                ("src/test/java", ProjectSourceRootOwnership.Test));
             var context = Context(
                 workspace.FullName,
                 [consumer, regularDependency, transitiveProduction, transitiveTestSupport],
@@ -132,18 +130,16 @@ public sealed class JvmSourceRootResolverTests
         try
         {
             var consumer = Module(workspace.FullName, "consumer");
-            var firstSupport = Module(
+            var firstSupport = TestSupportModule(
                 workspace.FullName,
                 "first-support",
                 ("src/main/java", ProjectSourceRootOwnership.Production),
-                ("src/test/java", ProjectSourceRootOwnership.Test),
-                isTestSupport: true);
-            var secondSupport = Module(
+                ("src/test/java", ProjectSourceRootOwnership.Test));
+            var secondSupport = TestSupportModule(
                 workspace.FullName,
                 "second-support",
                 ("src/main/java", ProjectSourceRootOwnership.Production),
-                ("src/test/java", ProjectSourceRootOwnership.Test),
-                isTestSupport: true);
+                ("src/test/java", ProjectSourceRootOwnership.Test));
             var context = Context(
                 workspace.FullName,
                 [consumer, firstSupport, secondSupport],
@@ -221,14 +217,20 @@ public sealed class JvmSourceRootResolverTests
         string workspace,
         string name,
         params (string Directory, ProjectSourceRootOwnership Ownership)[] roots) =>
-        Module(workspace, name, roots, isTestSupport: false, isTestProject: false);
+        CreateModule(workspace, name, isTestSupport: false, isTestProject: false, roots);
 
-    private static ProjectModuleContext Module(
+    private static ProjectModuleContext TestSupportModule(
         string workspace,
         string name,
-        (string Directory, ProjectSourceRootOwnership Ownership)[] roots,
-        bool isTestSupport = false,
-        bool isTestProject = false)
+        params (string Directory, ProjectSourceRootOwnership Ownership)[] roots) =>
+        CreateModule(workspace, name, isTestSupport: true, isTestProject: false, roots);
+
+    private static ProjectModuleContext CreateModule(
+        string workspace,
+        string name,
+        bool isTestSupport,
+        bool isTestProject,
+        (string Directory, ProjectSourceRootOwnership Ownership)[] roots)
     {
         var modulePath = Path.Combine(workspace, name);
         var sourceRoots = roots.Select(root =>

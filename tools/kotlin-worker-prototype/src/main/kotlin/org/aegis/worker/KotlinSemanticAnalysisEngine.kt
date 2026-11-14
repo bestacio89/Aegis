@@ -156,7 +156,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             languageVersion = request.languageVersion
             apiVersion = request.apiVersion
             moduleName = request.moduleName
-            pluginClasspaths = pluginClasspaths
+            this.pluginClasspaths = pluginClasspaths
             javaSourceRoots = paths.referencedSourceRoots.map(Path::toString).toTypedArray()
             freeArgs = paths.sourceFiles.map(Path::toString)
         }

@@ -97,6 +97,46 @@ public sealed class KotlinProjectDependencyPipelineTests
         }
     }
 
+    [Fact]
+    public async Task Preserves_resolved_classpath_precedence_before_project_outputs()
+    {
+        var workspace = Directory.CreateTempSubdirectory("aegis-kotlin-classpath-order-");
+        try
+        {
+            var module = CreateModule(
+                workspace.FullName,
+                "classpath-consumer",
+                [
+                    ("src/main/kotlin", ProjectSourceRootOwnership.Production, "Consumer.kt")
+                ]);
+            var firstEntry = Path.Combine(workspace.FullName, "z-first.jar");
+            var secondEntry = Path.Combine(workspace.FullName, "a-second.jar");
+            var adapter = new RecordingKotlinExecutionAdapter();
+            var orchestrator = new KotlinSemanticAnalysisOrchestrator(
+                [adapter],
+                new OrderedJvmClasspathResolver([firstEntry, secondEntry]),
+                NullLogger<KotlinSemanticAnalysisOrchestrator>.Instance);
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = module.Name,
+                RootPath = workspace.FullName,
+                Language = "Kotlin",
+                Modules = [module]
+            };
+            await using var executionContext = new SemanticAnalysisExecutionContext(
+                NullLogger<SemanticAnalysisExecutionContext>.Instance);
+
+            await orchestrator.AnalyzeAsync(context, executionContext);
+
+            var request = Assert.Single(adapter.Requests);
+            Assert.Equal([firstEntry, secondEntry], request.ClasspathEntries.Take(2));
+        }
+        finally
+        {
+            workspace.Delete(recursive: true);
+        }
+    }
+
     private static ProjectModuleContext CreateModule(
         string workspace,
         string name,
@@ -160,6 +200,16 @@ public sealed class KotlinProjectDependencyPipelineTests
             DependencyType = "GradleProjectDependency",
             Scope = scope
         };
+
+    private sealed class OrderedJvmClasspathResolver(IReadOnlyList<string> entries)
+        : IJvmClasspathResolver
+    {
+        public JvmClasspathResolution Resolve(
+            ProjectModuleContext module,
+            IReadOnlyCollection<ProjectModuleContext> projectModules,
+            bool includeTestCode) =>
+            new(entries, [], HasDeclaredDependencies: true, IsComplete: true);
+    }
 
     private sealed class EmptyJvmClasspathResolver : IJvmClasspathResolver
     {

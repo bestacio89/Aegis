@@ -88,6 +88,7 @@ public sealed class GradleAndroidBuildModelTests
             Assert.True(module.IsExecutable);
             Assert.Contains("Android", module.Frameworks);
             Assert.Equal("BuiltInDefault", android.KotlinIntegration);
+            Assert.True(android.NewDslEnabled);
             Assert.Equal("org.example.mobile", android.Namespace);
             Assert.Equal("35", android.CompileSdk);
             Assert.Equal("35.0.0", android.BuildToolsVersion);
@@ -403,6 +404,7 @@ public sealed class GradleAndroidBuildModelTests
                 Assert.IsType<GradleBuildModel>(discovered.GradleBuildModel).Android);
 
             Assert.False(android.IsComplete);
+            Assert.True(android.NewDslEnabled);
             Assert.Contains(android.Diagnostics, diagnostic =>
                 diagnostic.Code == "GradleAndroidLegacyKotlinPluginConflictsWithBuiltInKotlin");
             Assert.Contains(android.Diagnostics, diagnostic =>

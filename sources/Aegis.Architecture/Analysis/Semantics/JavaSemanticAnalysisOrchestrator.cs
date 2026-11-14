@@ -94,6 +94,12 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (TryGetUnsupportedAndroidTarget(module, out var androidPluginId))
+            {
+                context.SemanticAnalysisRuns.Add(CreateUnsupportedAndroidRun(module, androidPluginId));
+                continue;
+            }
+
             var sourceRoots = _sourceRootResolver.ResolveSourceRoots(module, "Java");
             if (sourceRoots.Count == 0)
             {
@@ -256,6 +262,51 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
             run.Symbols.Count,
             run.Relationships.Count,
             run.Diagnostics.Count);
+    }
+
+    private static bool TryGetUnsupportedAndroidTarget(
+        ProjectModuleContext module,
+        out string pluginId)
+    {
+        var androidPlugin = module.GradleBuildModel?.Plugins.FirstOrDefault(plugin =>
+            plugin.IsApplied
+            && plugin.Id is
+                "com.android.application"
+                or "com.android.library"
+                or "com.android.test"
+                or "com.android.dynamic-feature"
+                or "com.android.asset-pack");
+
+        pluginId = androidPlugin?.Id ?? string.Empty;
+        return androidPlugin is not null;
+    }
+
+    private static SemanticAnalysisRun CreateUnsupportedAndroidRun(
+        ProjectModuleContext module,
+        string pluginId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new SemanticAnalysisRun
+        {
+            RunId = Guid.NewGuid().ToString("N"),
+            Language = "Java",
+            EngineId = nameof(JavaSemanticAnalysisOrchestrator),
+            ProjectPath = module.Path,
+            Status = SemanticAnalysisStatus.Unsupported,
+            StartedAtUtc = now,
+            CompletedAtUtc = now,
+            Diagnostics =
+            [
+                new AnalysisDiagnostic
+                {
+                    Code = "JavaAndroidTargetNotSupported",
+                    Component = nameof(JavaSemanticAnalysisOrchestrator),
+                    Message = $"Android Java analysis is not enabled for '{pluginId}' until SDK platform classes, variant-specific classpaths and Android source ownership are modelled. The module will not be treated as a plain JVM project.",
+                    Target = module.Path,
+                    AffectsCoverage = true
+                }
+            ]
+        };
     }
 
     private static bool IsJavaModule(

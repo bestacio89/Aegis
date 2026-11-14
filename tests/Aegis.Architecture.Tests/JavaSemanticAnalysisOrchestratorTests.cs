@@ -62,6 +62,71 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
         }
     }
 
+    [Theory]
+    [InlineData("com.android.application")]
+    [InlineData("com.android.library")]
+    [InlineData("com.android.test")]
+    [InlineData("com.android.dynamic-feature")]
+    [InlineData("com.android.asset-pack")]
+    public async Task Does_not_send_android_java_modules_to_the_jvm_semantic_worker(string androidPluginId)
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var sourceRoot = Path.Combine(repository, "src", "main", "java");
+        Directory.CreateDirectory(sourceRoot);
+        await File.WriteAllTextAsync(Path.Combine(sourceRoot, "AndroidEntry.java"), "class AndroidEntry {}");
+
+        try
+        {
+            var module = new ProjectModuleContext
+            {
+                Name = "android-module",
+                Path = repository,
+                BuildSystem = ArchitectureBuildSystem.Gradle,
+                Languages = ["Java"],
+                GradleBuildModel = new GradleBuildModel
+                {
+                    Plugins = [new GradleBuildModel.Plugin(androidPluginId, "9.0.0", true)]
+                },
+                SourceRoots =
+                [
+                    new ProjectSourceRoot
+                    {
+                        Directory = sourceRoot,
+                        Ownership = ProjectSourceRootOwnership.Production,
+                        Origin = ProjectSourceRootOrigin.Conventional,
+                        ContainsJavaSources = true,
+                        Languages = ["Java"]
+                    }
+                ]
+            };
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "android-module",
+                RootPath = repository,
+                Language = "Java",
+                Modules = [module]
+            };
+            var adapter = new RecordingJavaAdapter();
+            var orchestrator = new JavaSemanticAnalysisOrchestrator(
+                [adapter],
+                new EmptyClasspathResolver(),
+                NullLogger<JavaSemanticAnalysisOrchestrator>.Instance);
+
+            await orchestrator.AnalyzeAsync(context);
+
+            var run = Assert.Single(context.SemanticAnalysisRuns);
+            Assert.Equal(SemanticAnalysisStatus.Unsupported, run.Status);
+            Assert.Contains(run.Diagnostics, diagnostic =>
+                diagnostic.Code == "JavaAndroidTargetNotSupported"
+                && diagnostic.AffectsCoverage);
+            Assert.Empty(adapter.Requests);
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task Supplies_only_declared_production_project_source_roots_to_jdt_and_projects_resolved_cross_module_edges()
     {

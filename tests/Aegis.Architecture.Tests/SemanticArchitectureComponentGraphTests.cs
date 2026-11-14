@@ -203,6 +203,119 @@ public sealed class SemanticArchitectureComponentGraphTests
 
 
     [Fact]
+    public void Projects_android_variants_and_keeps_instrumentation_relationships_out_of_production_graph()
+    {
+        var modulePath = Path.Combine(Path.GetTempPath(), $"aegis-android-projection-{Guid.NewGuid():N}");
+        var mainRoot = Path.Combine(modulePath, "src", "main", "java");
+        var androidTestRoot = Path.Combine(modulePath, "src", "androidTest", "java");
+        var mainFile = Path.Combine(mainRoot, "sample", "application", "MainActivity.kt");
+        var testFile = Path.Combine(androidTestRoot, "sample", "tests", "MainActivityTest.kt");
+        var module = new ProjectModuleContext
+        {
+            Name = "app",
+            Path = modulePath,
+            Languages = ["Kotlin"],
+            GradleBuildModel = new GradleBuildModel
+            {
+                Android = new GradleAndroidBuildModel
+                {
+                    PluginId = "com.android.application",
+                    ModuleKind = "Application",
+                    Variants = [new GradleAndroidVariant("debug", [], "debug"), new GradleAndroidVariant("release", [], "release")],
+                    SourceSets =
+                    [
+                        new GradleAndroidSourceSet
+                        {
+                            Name = "main",
+                            Ownership = ProjectSourceRootOwnership.Production,
+                            JavaSourceDirectories = [mainRoot],
+                            AppliesToVariants = ["debug", "release"]
+                        },
+                        new GradleAndroidSourceSet
+                        {
+                            Name = "androidTest",
+                            Ownership = ProjectSourceRootOwnership.Test,
+                            TestKind = GradleAndroidTestKind.Instrumentation,
+                            JavaSourceDirectories = [androidTestRoot],
+                            AppliesToVariants = ["debug", "release"]
+                        }
+                    ]
+                }
+            }
+        };
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "android-sample",
+            RootPath = modulePath,
+            Language = "Kotlin",
+            Modules = [module],
+            SemanticAnalysisRuns =
+            [
+                new SemanticAnalysisRun
+                {
+                    RunId = "android-run",
+                    Language = "Kotlin",
+                    EngineId = "kotlin-k2-ir",
+                    ProjectPath = modulePath,
+                    Status = SemanticAnalysisStatus.Completed,
+                    Symbols =
+                    [
+                        new SemanticSymbol
+                        {
+                            Id = "android-main",
+                            Name = "MainActivity",
+                            QualifiedName = "sample.application.MainActivity",
+                            ContainerName = "sample.application",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = modulePath,
+                            FilePath = mainFile,
+                            Origin = SemanticSymbolOrigin.Source
+                        },
+                        new SemanticSymbol
+                        {
+                            Id = "android-test",
+                            Name = "MainActivityTest",
+                            QualifiedName = "sample.tests.MainActivityTest",
+                            ContainerName = "sample.tests",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = modulePath,
+                            FilePath = testFile,
+                            Origin = SemanticSymbolOrigin.Source
+                        }
+                    ],
+                    Relationships =
+                    [
+                        new SemanticRelationship
+                        {
+                            Id = "instrumentation-uses-app",
+                            SourceSymbolId = "android-test",
+                            TargetSymbolId = "android-main",
+                            Kind = SemanticRelationshipKind.Calls,
+                            ResolutionStatus = SemanticResolutionStatus.Resolved
+                        }
+                    ]
+                }
+            ]
+        };
+
+        SemanticArchitectureComponentDetector.Analyze(context);
+
+        var production = Assert.Single(context.ProductionComponents);
+        Assert.Equal(["debug", "release"], production.AndroidVariants);
+        Assert.Equal(["main"], production.AndroidSourceSets);
+        Assert.Equal(["Application"], production.AndroidModuleKind is null ? [] : [production.AndroidModuleKind]);
+        Assert.Empty(context.ProductionComponentDependencies);
+        var testEdge = Assert.Single(context.TestComponentDependencies);
+        Assert.Equal("Test", testEdge.Scope);
+        Assert.Equal(["debug", "release"], testEdge.AndroidVariants);
+        Assert.Equal(["androidTest"], testEdge.AndroidSourceSets);
+        Assert.Equal(["Instrumentation"], testEdge.AndroidTestKinds);
+        Assert.Empty(context.ProductionComponentDependencies);
+    }
+
+    [Fact]
     public void Counts_relationships_without_provider_ids_and_exposes_the_traceability_gap()
     {
         var projectPath = Path.Combine(Path.GetTempPath(), $"aegis-unreferenced-graph-{Guid.NewGuid():N}");

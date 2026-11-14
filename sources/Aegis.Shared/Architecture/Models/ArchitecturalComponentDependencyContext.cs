@@ -18,6 +18,9 @@ public sealed class ArchitecturalComponentDependencyContext
 
     public string Scope { get; init; } = "Production";
 
+    /// <summary>Android variants represented by this logical dependency edge.</summary>
+    public List<string> AndroidVariants { get; init; } = [];
+
     public bool IsInternal { get; init; }
 
     public int RelationshipCount { get; init; }

@@ -73,7 +73,10 @@ public sealed class GradleAndroidBuildModelTests
 
             var context = ProjectArchitectureContextDetector.Detect(root);
             var rootModule = Assert.Single(context.Modules, candidate => candidate.Path == root);
-            Assert.Null(Assert.IsType<GradleBuildModel>(rootModule.GradleBuildModel).Android);
+            var rootGradleModel = Assert.IsType<GradleBuildModel>(rootModule.GradleBuildModel);
+            Assert.Null(rootGradleModel.Android);
+            Assert.Contains(rootGradleModel.Plugins, plugin =>
+                plugin.Id == "com.android.application" && !plugin.IsApplied);
             var module = Assert.Single(context.Modules, candidate => candidate.Path == appDirectory);
             var model = Assert.IsType<GradleBuildModel>(module.GradleBuildModel);
             var android = Assert.IsType<GradleAndroidBuildModel>(model.Android);
@@ -101,6 +104,134 @@ public sealed class GradleAndroidBuildModelTests
             Assert.Contains(android.BuildTypes, buildType => buildType.Name == "release" && buildType.IsMinifyEnabled == true);
             Assert.DoesNotContain(android.Diagnostics, diagnostic =>
                 diagnostic.Code == "GradleAndroidLegacyKotlinPluginConflictsWithBuiltInKotlin");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_resolves_android_plugin_alias_from_the_version_catalog()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidCatalog_{Guid.NewGuid():N}");
+        var module = Path.Combine(root, "app");
+        Directory.CreateDirectory(Path.Combine(root, "gradle"));
+        Directory.CreateDirectory(module);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-catalog\"");
+            File.WriteAllText(Path.Combine(root, "gradle", "libs.versions.toml"), """
+                [versions]
+                agp = "9.0.0"
+
+                [plugins]
+                android-application = { id = "com.android.application", version.ref = "agp" }
+                """);
+            File.WriteAllText(Path.Combine(module, "build.gradle.kts"), """
+                plugins {
+                    alias(libs.plugins.android.application)
+                }
+                android {
+                    namespace = "org.example.catalog"
+                    compileSdk = 35
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var discovered = Assert.Single(context.Modules, candidate => candidate.Path == module);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(discovered.GradleBuildModel).Android);
+
+            Assert.Equal("com.android.application", android.PluginId);
+            Assert.Equal("9.0.0", android.PluginVersion);
+            Assert.Equal("BuiltInDefault", android.KotlinIntegration);
+            Assert.True(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_honors_agp_9_builtin_kotlin_opt_out_for_legacy_plugin_modules()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidOptOut_{Guid.NewGuid():N}");
+        var module = Path.Combine(root, "app");
+        Directory.CreateDirectory(module);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle"), "rootProject.name = 'android-opt-out'");
+            File.WriteAllText(Path.Combine(root, "gradle.properties"), "android.builtInKotlin=false");
+            File.WriteAllText(Path.Combine(root, "build.gradle"), """
+                plugins {
+                    id 'com.android.application' version '9.0.0' apply false
+                }
+                """);
+            File.WriteAllText(Path.Combine(module, "build.gradle"), """
+                plugins {
+                    id 'com.android.application'
+                    id 'org.jetbrains.kotlin.android' version '2.2.10'
+                }
+                android {
+                    namespace 'org.example.optout'
+                    compileSdk 35
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var discovered = Assert.Single(context.Modules, candidate => candidate.Path == module);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(discovered.GradleBuildModel).Android);
+
+            Assert.Equal("LegacyKotlinAndroidPlugin", android.KotlinIntegration);
+            Assert.DoesNotContain(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidLegacyKotlinPluginConflictsWithBuiltInKotlin");
+            Assert.True(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_reports_conflicting_android_module_plugins()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidConflict_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-conflict\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3" apply false
+                }
+                """);
+            var module = Path.Combine(root, "app");
+            Directory.CreateDirectory(module);
+            File.WriteAllText(Path.Combine(module, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application")
+                    id("com.android.library")
+                }
+                android {
+                    namespace = "org.example.conflict"
+                    compileSdk = 35
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var discovered = Assert.Single(context.Modules, candidate => candidate.Path == module);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(discovered.GradleBuildModel).Android);
+
+            Assert.False(android.IsComplete);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidPluginConflict");
         }
         finally
         {

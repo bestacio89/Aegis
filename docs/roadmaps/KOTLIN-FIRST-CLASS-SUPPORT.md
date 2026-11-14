@@ -451,11 +451,21 @@ Implementation is split into independently reviewable slices:
 
 - **K7.4.2.1 — Project-scoped symbol identity:** accepted. Symbol IDs are resolved within project/language identity; external declarations use qualified names only with build-dependency evidence, and ambiguous matches are rejected.
 - **K7.4.2.2 — Transitive dependency attribution:** accepted. Qualified-name target resolution traverses transitive production dependencies and admits test-only dependency paths only for test relationships.
-- **K7.4.2.3 — Android variant compatibility:** implementation pushed; validation pending. Cross-module Android semantic edges require a non-empty intersection of source and target variant identities. Variant-incompatible or missing-variant Android-to-Android targets are rejected rather than guessed. Compatible variant identities remain attached to the edge and separate edge aggregation, so debug and release evidence cannot be merged into one undifferentiated relationship. When only one endpoint is an Android module, its known variant provenance is retained without inventing a variant identity for the non-Android endpoint.
+- **K7.4.2.3 — Android variant compatibility:** accepted after exact-head validation. Ambiguous external targets are rejected when the generic semantic contract cannot identify a unique target variant; variant compatibility is never inferred by filtering ambiguous declarations. Cross-module Android semantic edges require a non-empty intersection of source and target variant identities. Variant-incompatible or missing-variant Android-to-Android targets are rejected rather than guessed. Compatible variant identities remain attached to the edge and separate edge aggregation, so debug and release evidence cannot be merged into one undifferentiated relationship. When only one endpoint is an Android module, its known variant provenance is retained without inventing a variant identity for the non-Android endpoint.
 
 The current static model does not yet represent the full Gradle attribute-matching/fallback model, including flavor-dimension-aware matchingFallbacks. Therefore this slice intentionally uses exact derived variant-name intersection for Android-to-Android matching. Non-identical but Gradle-compatible variants remain unresolved until the model can prove compatibility from dimension and attribute evidence; they must not be inferred from names alone.
 
-**K7.4.2.3 acceptance:** fixtures prove matching debug and release relationships, reject a debug-to-release mismatch, preserve distinct variant evidence on edges, and retain Android variant provenance across Android/JVM module edges. All four required workflows must pass on the exact code head.
+**K7.4.2.3 acceptance:** the current fixture proves fail-closed behavior for ambiguous target-variant identity and retains known Android variant provenance without inventing target identity. Full positive cross-module target-variant resolution remains dependent on richer target provenance in the shared semantic contract. All four required workflows passed on exact head `3122ca748167ea7447049f907aacfcf8b2c2d6cb`.
+
+##### K7.4.3 — Variant-aware graph integrity and cycle metrics
+
+- Preserve Android variant identity when code-container dependencies are aggregated into logical architectural-component dependencies. Edges from different variants must not collapse into one unqualified edge.
+- Partition strongly connected-component analysis by both dependency scope and Android variant identity. A debug edge and a release edge must never combine to manufacture a cycle that exists in neither variant.
+- Retain the variant set on cycle evidence for both code-container and logical architectural projections.
+- Keep production and test scopes independent. Instrumentation-test evidence remains available for traceability but cannot contribute to production cycle metrics.
+
+**Acceptance:** Matching-variant cycles are detected independently; cross-variant-only paths do not form cycles; logical component aggregation preserves variant partitions; cycle evidence retains exact contributing relationships and variant identity. Existing JVM cycle behavior and production/test separation remain unchanged. All four required workflows must pass on the exact code head.
+
 
 #### K7.5 — Android SDK/classpath resolution and production validation
 

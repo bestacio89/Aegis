@@ -553,6 +553,7 @@ public sealed class GradleAndroidBuildModelTests
             Assert.Contains(android.Variants, variant => variant.Name == "paidDebug");
             Assert.Contains(android.Variants, variant => variant.Name == "paidRelease");
             Assert.Contains(android.Variants, variant => variant.Name == "freeStaging");
+            Assert.Equal(["freeDebug"], android.SourceSets.Single(sourceSet => sourceSet.Name == "freeDebug").AppliesToVariants);
 
             var main = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "main");
             Assert.Contains(main.ManifestFiles, file => file.EndsWith(
@@ -570,8 +571,14 @@ public sealed class GradleAndroidBuildModelTests
 
             var instrumentation = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "androidTest");
             Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test, instrumentation.Ownership);
+            Assert.Equal(Aegis.Shared.Architecture.Enums.GradleAndroidTestKind.Instrumentation, instrumentation.TestKind);
+            Assert.Equal(android.Variants.Select(variant => variant.Name).OrderBy(name => name), instrumentation.AppliesToVariants.OrderBy(name => name));
             var unitTests = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "testDebug");
             Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test, unitTests.Ownership);
+            Assert.Equal(Aegis.Shared.Architecture.Enums.GradleAndroidTestKind.Unit, unitTests.TestKind);
+            Assert.Equal(
+                android.Variants.Where(variant => variant.BuildType == "debug").Select(variant => variant.Name).OrderBy(name => name),
+                unitTests.AppliesToVariants.OrderBy(name => name));
 
             var mainRoot = Assert.Single(module.SourceRoots, sourceRoot =>
                 sourceRoot.Directory == Path.Combine(app, "src", "main", "java"));

@@ -248,7 +248,7 @@ internal static class GradleAndroidSourceSetResolver
             return [];
         }
 
-        var combinations = new List<List<string>> { [] };
+        var combinations = new List<List<string>> { new() };
         foreach (var dimensionChoices in choices)
         {
             combinations = combinations

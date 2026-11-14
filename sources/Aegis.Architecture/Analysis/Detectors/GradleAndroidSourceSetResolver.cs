@@ -29,6 +29,7 @@ internal static class GradleAndroidSourceSetResolver
 
         var variants = ResolveVariants(model, buildFile, diagnostics);
         var knownSourceSetNames = CreateExpectedSourceSetNames(model, variants);
+        var knownTestSourceSetNames = CreateExpectedTestSourceSetNames(model, variants);
         var sourceSetNames = new HashSet<string>(knownSourceSetNames, StringComparer.Ordinal);
         var explicitDirectories = ParseExplicitSourceSets(
             androidBlock, modulePath, analysisRoot, buildFile, diagnostics);
@@ -43,9 +44,17 @@ internal static class GradleAndroidSourceSetResolver
         var sourceRoots = new Dictionary<string, ProjectSourceRoot>(PathComparer);
         foreach (var name in sourceSetNames.OrderBy(value => value, StringComparer.Ordinal))
         {
-            var ownership = ResolveOwnership(name, knownSourceSetNames);
+            var ownership = ResolveOwnership(name, knownSourceSetNames, knownTestSourceSetNames);
             observed.TryGetValue(name, out var discovered);
             explicitDirectories.TryGetValue(name, out var explicitSet);
+            if (ownership == ProjectSourceRootOwnership.Unknown
+                && (discovered is not null || explicitSet is not null))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleAndroidSourceSetOwnershipUnknown",
+                    $"Android source set '{name}' is present but does not match a statically derived production or test source set.",
+                    buildFile));
+            }
 
             var javaDirectories = MergeDirectories(
                 discovered?.JavaSourceDirectories,
@@ -185,6 +194,30 @@ internal static class GradleAndroidSourceSetResolver
         }
 
         names.Add("testFixtures");
+        return names;
+    }
+
+    private static HashSet<string> CreateExpectedTestSourceSetNames(
+        GradleAndroidBuildModel model,
+        IReadOnlyCollection<GradleAndroidVariant> variants)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "test", "androidTest", "testFixtures"
+        };
+
+        foreach (var flavor in model.ProductFlavors)
+        {
+            names.Add("test" + Capitalize(flavor.Name));
+            names.Add("androidTest" + Capitalize(flavor.Name));
+        }
+
+        foreach (var variant in variants)
+        {
+            names.Add("test" + Capitalize(variant.Name));
+            names.Add("androidTest" + Capitalize(variant.Name));
+        }
+
         return names;
     }
 
@@ -440,29 +473,16 @@ internal static class GradleAndroidSourceSetResolver
 
     private static ProjectSourceRootOwnership ResolveOwnership(
         string name,
-        IReadOnlySet<string> expectedSourceSets)
+        IReadOnlySet<string> expectedSourceSets,
+        IReadOnlySet<string> expectedTestSourceSets)
     {
-        if (name.Equals("main", StringComparison.Ordinal)
-            || name.Equals("debug", StringComparison.Ordinal)
-            || name.Equals("release", StringComparison.Ordinal)
-            || expectedSourceSets.Contains(name)
-                && !IsTestSourceSet(name))
-            return ProjectSourceRootOwnership.Production;
-
-        if (IsTestSourceSet(name))
+        if (expectedTestSourceSets.Contains(name))
             return ProjectSourceRootOwnership.Test;
 
-        return ProjectSourceRootOwnership.Unknown;
+        return expectedSourceSets.Contains(name)
+            ? ProjectSourceRootOwnership.Production
+            : ProjectSourceRootOwnership.Unknown;
     }
-
-    private static bool IsTestSourceSet(string name) =>
-        name.Equals("test", StringComparison.OrdinalIgnoreCase)
-        || name.Equals("androidTest", StringComparison.OrdinalIgnoreCase)
-        || name.Equals("testFixtures", StringComparison.OrdinalIgnoreCase)
-        || name.StartsWith("test", StringComparison.OrdinalIgnoreCase)
-        || name.StartsWith("androidTest", StringComparison.OrdinalIgnoreCase)
-        || name.EndsWith("Test", StringComparison.OrdinalIgnoreCase)
-        || name.EndsWith("AndroidTest", StringComparison.OrdinalIgnoreCase);
 
     private static bool TryResolvePath(
         string value,

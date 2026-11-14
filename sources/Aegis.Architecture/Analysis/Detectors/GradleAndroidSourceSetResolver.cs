@@ -186,7 +186,11 @@ internal static class GradleAndroidSourceSetResolver
         }
 
         foreach (var buildType in model.BuildTypes)
+        {
             names.Add(buildType.Name);
+            names.Add("test" + Capitalize(buildType.Name));
+            names.Add("androidTest" + Capitalize(buildType.Name));
+        }
 
         foreach (var variant in variants)
         {
@@ -212,6 +216,12 @@ internal static class GradleAndroidSourceSetResolver
         {
             names.Add("test" + Capitalize(flavor.Name));
             names.Add("androidTest" + Capitalize(flavor.Name));
+        }
+
+        foreach (var buildType in model.BuildTypes)
+        {
+            names.Add("test" + Capitalize(buildType.Name));
+            names.Add("androidTest" + Capitalize(buildType.Name));
         }
 
         foreach (var variant in variants)

@@ -64,21 +64,25 @@ internal static class GradleAndroidSourceSetResolver
                     buildFile));
             }
 
-            var javaDirectories = MergeDirectories(
+            var javaDirectories = ResolveDirectories(
                 discovered?.JavaSourceDirectories,
-                explicitSet?.JavaSourceDirectories);
-            var kotlinDirectories = MergeDirectories(
+                explicitSet?.JavaSourceDirectories,
+                explicitSet?.ReplacesJavaSourceDirectories == true);
+            var kotlinDirectories = ResolveDirectories(
                 discovered?.KotlinSourceDirectories,
-                explicitSet?.KotlinSourceDirectories);
-            var resourceDirectories = MergeDirectories(
+                explicitSet?.KotlinSourceDirectories,
+                explicitSet?.ReplacesKotlinSourceDirectories == true);
+            var resourceDirectories = ResolveDirectories(
                 discovered?.ResourceDirectories,
-                explicitSet?.ResourceDirectories);
-            var assetDirectories = MergeDirectories(
+                explicitSet?.ResourceDirectories,
+                explicitSet?.ReplacesResourceDirectories == true);
+            var assetDirectories = ResolveDirectories(
                 discovered?.AssetDirectories,
-                explicitSet?.AssetDirectories);
-            var manifestFiles = MergeFiles(
-                discovered?.ManifestFiles,
-                explicitSet?.ManifestFiles);
+                explicitSet?.AssetDirectories,
+                explicitSet?.ReplacesAssetDirectories == true);
+            var manifestFiles = explicitSet?.ReplacesManifest == true
+                ? MergeFiles(explicitSet.ManifestFiles, null)
+                : MergeFiles(discovered?.ManifestFiles, explicitSet?.ManifestFiles);
             var generatedJavaDirectories = generatedSet?.JavaSourceDirectories ?? [];
             var generatedKotlinDirectories = generatedSet?.KotlinSourceDirectories ?? [];
 
@@ -117,10 +121,12 @@ internal static class GradleAndroidSourceSetResolver
                 EvidenceFile = buildFile
             });
 
-            AddSourceRoots(sourceRoots, discovered?.JavaSourceDirectories ?? [], "Java", ownership,
-                ProjectSourceRootOrigin.Conventional, buildFile);
-            AddSourceRoots(sourceRoots, discovered?.KotlinSourceDirectories ?? [], "Kotlin", ownership,
-                ProjectSourceRootOrigin.Conventional, buildFile);
+            if (explicitSet?.ReplacesJavaSourceDirectories != true)
+                AddSourceRoots(sourceRoots, discovered?.JavaSourceDirectories ?? [], "Java", ownership,
+                    ProjectSourceRootOrigin.Conventional, buildFile);
+            if (explicitSet?.ReplacesKotlinSourceDirectories != true)
+                AddSourceRoots(sourceRoots, discovered?.KotlinSourceDirectories ?? [], "Kotlin", ownership,
+                    ProjectSourceRootOrigin.Conventional, buildFile);
             AddSourceRoots(sourceRoots, explicitSet?.JavaSourceDirectories ?? [], "Java", ownership,
                 ProjectSourceRootOrigin.Explicit, buildFile);
             AddSourceRoots(sourceRoots, explicitSet?.KotlinSourceDirectories ?? [], "Kotlin", ownership,
@@ -576,15 +582,20 @@ internal static class GradleAndroidSourceSetResolver
 
             var sourceSet = GetOrAdd(result, name);
             ParseDirectoryDeclarations(body, "java", sourceSet.JavaSourceDirectories,
-                modulePath, analysisRoot, name, buildFile, diagnostics);
+                modulePath, analysisRoot, name, buildFile, diagnostics,
+                replaces => sourceSet.ReplacesJavaSourceDirectories = replaces);
             ParseDirectoryDeclarations(body, "kotlin", sourceSet.KotlinSourceDirectories,
-                modulePath, analysisRoot, name, buildFile, diagnostics);
+                modulePath, analysisRoot, name, buildFile, diagnostics,
+                replaces => sourceSet.ReplacesKotlinSourceDirectories = replaces);
             ParseDirectoryDeclarations(body, "res", sourceSet.ResourceDirectories,
-                modulePath, analysisRoot, name, buildFile, diagnostics);
+                modulePath, analysisRoot, name, buildFile, diagnostics,
+                replaces => sourceSet.ReplacesResourceDirectories = replaces);
             ParseDirectoryDeclarations(body, "assets", sourceSet.AssetDirectories,
-                modulePath, analysisRoot, name, buildFile, diagnostics);
+                modulePath, analysisRoot, name, buildFile, diagnostics,
+                replaces => sourceSet.ReplacesAssetDirectories = replaces);
             ParseManifestDeclaration(body, sourceSet.ManifestFiles,
-                modulePath, analysisRoot, name, buildFile, diagnostics);
+                modulePath, analysisRoot, name, buildFile, diagnostics,
+                () => sourceSet.ReplacesManifest = true);
         }
 
         return result;
@@ -598,10 +609,11 @@ internal static class GradleAndroidSourceSetResolver
         string analysisRoot,
         string sourceSetName,
         string buildFile,
-        ICollection<AnalysisDiagnostic> diagnostics)
+        ICollection<AnalysisDiagnostic> diagnostics,
+        Action<bool> setReplaces)
     {
         var declarationPattern = @"\b" + Regex.Escape(property)
-            + @"\s*\.\s*(?:srcDirs|srcDir|setSrcDirs)\s*(?:\(\s*(?<args>[^\n)]*)\)|=\s*(?<assignment>[^\n]+)|\s+(?<groovy>[^\n]+))";
+            + @"\s*\.\s*(?<operation>srcDirs|srcDir|setSrcDirs)\s*(?:\(\s*(?<args>[^\n)]*)\)|=\s*(?<assignment>[^\n]+)|\s+(?<groovy>[^\n]+))";
         var declarations = Regex.Matches(body, declarationPattern, RegexOptions.CultureInvariant);
         var declarationCount = Regex.Matches(
             body,
@@ -617,6 +629,11 @@ internal static class GradleAndroidSourceSetResolver
 
         foreach (Match declaration in declarations)
         {
+            var replaces = !declaration.Groups["operation"].Value.Equals("srcDir", StringComparison.Ordinal);
+            setReplaces(replaces);
+            if (replaces)
+                destination.Clear();
+
             var expression = declaration.Groups["args"].Success
                 ? declaration.Groups["args"].Value
                 : declaration.Groups["assignment"].Success
@@ -664,39 +681,383 @@ internal static class GradleAndroidSourceSetResolver
         string analysisRoot,
         string sourceSetName,
         string buildFile,
-        ICollection<AnalysisDiagnostic> diagnostics)
+        ICollection<AnalysisDiagnostic> diagnostics,
+        Action markOverride)
     {
-        var declaration = Regex.Match(
+        var declarations = Regex.Matches(
             body,
             @"\bmanifest\s*\.\s*srcFile\s*(?:\(\s*(?<path>[^)]+)\)|(?<assignment>[^\n]+))",
             RegexOptions.CultureInvariant);
-        if (!declaration.Success)
-            return;
-
-        var expression = declaration.Groups["path"].Success
-            ? declaration.Groups["path"].Value
-            : declaration.Groups["assignment"].Value;
-        var value = Regex.Match(expression, @"['""](?<path>[^'""]+)['""]");
-        if (!value.Success || value.Groups["path"].Value.Contains('$')
-            || !TryResolvePath(value.Groups["path"].Value, modulePath, analysisRoot, out var manifest))
+        foreach (Match declaration in declarations)
         {
-            diagnostics.Add(Diagnostic(
-                "GradleAndroidManifestNotStaticallyResolved",
-                $"Android manifest for source set '{sourceSetName}' uses a dynamic, unsupported or out-of-root path.",
-                buildFile));
-            return;
+            markOverride();
+            destination.Clear();
+            var expression = declaration.Groups["path"].Success
+                ? declaration.Groups["path"].Value
+                : declaration.Groups["assignment"].Value;
+            expression = Regex.Replace(expression, @"^\s*=\s*", string.Empty);
+            var values = Regex.Matches(expression, @"['""](?<path>[^'""]+)['""]");
+            var residue = Regex.Replace(
+                expression,
+                @"['""][^'""]+['""]|\bfile\b|\s|,|\(|\)",
+                string.Empty);
+            if (values.Count != 1
+                || residue.Length > 0
+                || values[0].Groups["path"].Value.Contains('
+
+    private static void AddSourceRoots(
+        IDictionary<string, ProjectSourceRoot> roots,
+        IEnumerable<string> directories,
+        string language,
+        ProjectSourceRootOwnership ownership,
+        ProjectSourceRootOrigin origin,
+        string buildFile,
+        bool isGenerated = false)
+    {
+        foreach (var directory in directories)
+        {
+            var fullDirectory = Path.GetFullPath(directory);
+            if (roots.TryGetValue(fullDirectory, out var existing))
+            {
+                var languages = existing.Languages.Append(language)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                var mergedOwnership = existing.Ownership == ownership
+                    ? ownership
+                    : ProjectSourceRootOwnership.Unknown;
+                roots[fullDirectory] = existing with
+                {
+                    Ownership = mergedOwnership,
+                    Origin = SelectOrigin(existing.Origin, origin),
+                    IsGenerated = existing.IsGenerated || isGenerated,
+                    Languages = languages,
+                    ContainsJavaSources = languages.Contains("Java", StringComparer.OrdinalIgnoreCase)
+                };
+                continue;
+            }
+
+            roots[fullDirectory] = new ProjectSourceRoot
+            {
+                Directory = fullDirectory,
+                Ownership = ownership,
+                Origin = origin,
+                IsGenerated = isGenerated,
+                Languages = [language],
+                ContainsJavaSources = language.Equals("Java", StringComparison.OrdinalIgnoreCase),
+                EvidenceFile = buildFile
+            };
+        }
+    }
+
+    private static GradleAndroidTestKind ResolveTestKind(
+        string name,
+        ProjectSourceRootOwnership ownership,
+        IReadOnlySet<string> expectedTestSourceSets)
+    {
+        if (ownership == ProjectSourceRootOwnership.Unknown)
+            return GradleAndroidTestKind.Unknown;
+        if (!expectedTestSourceSets.Contains(name))
+            return GradleAndroidTestKind.None;
+        if (name.Equals("testFixtures", StringComparison.Ordinal))
+            return GradleAndroidTestKind.Fixtures;
+        if (name.StartsWith("androidTest", StringComparison.Ordinal)
+            || name.EndsWith("AndroidTest", StringComparison.Ordinal))
+            return GradleAndroidTestKind.Instrumentation;
+
+        return GradleAndroidTestKind.Unit;
+    }
+
+    private static List<string> ResolveApplicableVariants(
+        string sourceSetName,
+        ProjectSourceRootOwnership ownership,
+        IReadOnlyCollection<GradleAndroidVariant> variants,
+        IReadOnlySet<string> expectedTestSourceSets)
+    {
+        if (ownership == ProjectSourceRootOwnership.Unknown)
+            return [];
+
+        if (sourceSetName is "main" or "test" or "androidTest" or "testFixtures")
+            return variants.Select(variant => variant.Name).ToList();
+
+        var isTest = expectedTestSourceSets.Contains(sourceSetName);
+        var testPrefix = sourceSetName.StartsWith("androidTest", StringComparison.Ordinal)
+            ? "androidTest"
+            : sourceSetName.StartsWith("test", StringComparison.Ordinal)
+                ? "test"
+                : string.Empty;
+        var targetName = isTest && testPrefix.Length > 0
+            ? sourceSetName[testPrefix.Length..]
+            : sourceSetName;
+
+        if (targetName.Length == 0)
+            return variants.Select(variant => variant.Name).ToList();
+
+        return variants
+            .Where(variant =>
+                variant.Name.Equals(targetName, StringComparison.OrdinalIgnoreCase)
+                || variant.BuildType.Equals(targetName, StringComparison.OrdinalIgnoreCase)
+                || variant.ProductFlavors.Any(flavor =>
+                    flavor.Equals(targetName, StringComparison.OrdinalIgnoreCase)))
+            .Select(variant => variant.Name)
+            .ToList();
+    }
+
+    private static ProjectSourceRootOrigin SelectOrigin(
+        ProjectSourceRootOrigin existing,
+        ProjectSourceRootOrigin incoming)
+    {
+        if (existing == ProjectSourceRootOrigin.Explicit || incoming == ProjectSourceRootOrigin.Explicit)
+            return ProjectSourceRootOrigin.Explicit;
+        if (existing == ProjectSourceRootOrigin.GeneratedConvention
+            || incoming == ProjectSourceRootOrigin.GeneratedConvention)
+            return ProjectSourceRootOrigin.GeneratedConvention;
+        if (existing == ProjectSourceRootOrigin.Observed || incoming == ProjectSourceRootOrigin.Observed)
+            return ProjectSourceRootOrigin.Observed;
+
+        return ProjectSourceRootOrigin.Conventional;
+    }
+
+    private static ProjectSourceRootOwnership ResolveOwnership(
+        string name,
+        IReadOnlySet<string> expectedSourceSets,
+        IReadOnlySet<string> expectedTestSourceSets)
+    {
+        if (expectedTestSourceSets.Contains(name))
+            return ProjectSourceRootOwnership.Test;
+
+        return expectedSourceSets.Contains(name)
+            ? ProjectSourceRootOwnership.Production
+            : ProjectSourceRootOwnership.Unknown;
+    }
+
+    private static bool TryResolvePath(
+        string value,
+        string modulePath,
+        string analysisRoot,
+        out string path)
+    {
+        path = string.Empty;
+        try
+        {
+            path = Path.GetFullPath(Path.IsPathRooted(value)
+                ? value
+                : Path.Combine(modulePath, value));
+            return IsSameOrDescendantPath(path, analysisRoot);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    private static List<string> ResolveDirectories(
+        IEnumerable<string>? conventional,
+        IEnumerable<string>? explicitDirectories,
+        bool replaceConventional) =>
+        replaceConventional
+            ? MergeDirectories(null, explicitDirectories)
+            : MergeDirectories(conventional, explicitDirectories);
+
+    private static List<string> MergeDirectories(
+        IEnumerable<string>? first,
+        IEnumerable<string>? second) =>
+        (first ?? [])
+            .Concat(second ?? [])
+            .Select(Path.GetFullPath)
+            .Distinct(PathComparer)
+            .OrderBy(path => path, PathComparer)
+            .ToList();
+
+    private static List<string> MergeFiles(
+        IEnumerable<string>? first,
+        IEnumerable<string>? second) =>
+        (first ?? [])
+            .Concat(second ?? [])
+            .Select(Path.GetFullPath)
+            .Distinct(PathComparer)
+            .OrderBy(path => path, PathComparer)
+            .ToList();
+
+    private static void AddDirectory(ICollection<string> values, string directory)
+    {
+        if (!values.Any(existing => PathComparer.Equals(existing, directory)))
+            values.Add(Path.GetFullPath(directory));
+    }
+
+    private static void AddFile(ICollection<string> values, string file)
+    {
+        if (!values.Any(existing => PathComparer.Equals(existing, file)))
+            values.Add(Path.GetFullPath(file));
+    }
+
+    private static ObservedSourceSet GetOrAdd(
+        IDictionary<string, ObservedSourceSet> values,
+        string name)
+    {
+        if (!values.TryGetValue(name, out var value))
+        {
+            value = new ObservedSourceSet();
+            values.Add(name, value);
         }
 
-        if (!Path.GetFileName(manifest).Equals("AndroidManifest.xml", StringComparison.OrdinalIgnoreCase))
+        return value;
+    }
+
+    private static ExplicitSourceSet GetOrAdd(
+        IDictionary<string, ExplicitSourceSet> values,
+        string name)
+    {
+        if (!values.TryGetValue(name, out var value))
         {
-            diagnostics.Add(Diagnostic(
-                "GradleAndroidManifestPathInvalid",
-                $"Android manifest for source set '{sourceSetName}' does not identify AndroidManifest.xml.",
-                buildFile));
-            return;
+            value = new ExplicitSourceSet();
+            values.Add(name, value);
         }
 
-        AddFile(destination, manifest);
+        return value;
+    }
+
+    private static GeneratedSourceSet GetOrAdd(
+        IDictionary<string, GeneratedSourceSet> values,
+        string name)
+    {
+        if (!values.TryGetValue(name, out var value))
+        {
+            value = new GeneratedSourceSet();
+            values.Add(name, value);
+        }
+
+        return value;
+    }
+
+    private static string? ExtractBlock(string? source, string name)
+    {
+        if (source is null)
+            return null;
+
+        var match = Regex.Match(source, @"\b" + Regex.Escape(name) + @"\s*\{",
+            RegexOptions.CultureInvariant);
+        return match.Success
+            ? ExtractBlockAt(source, source.IndexOf('{', match.Index))
+            : null;
+    }
+
+    private static string? ExtractBlockAt(string source, int opening)
+    {
+        if (opening < 0 || opening >= source.Length || source[opening] != '{')
+            return null;
+
+        var depth = 0;
+        var quote = '\0';
+        var inString = false;
+        var escaped = false;
+        for (var index = opening; index < source.Length; index++)
+        {
+            var current = source[index];
+            if (inString)
+            {
+                if (escaped)
+                    escaped = false;
+                else if (current == '\\')
+                    escaped = true;
+                else if (current == quote)
+                    inString = false;
+                continue;
+            }
+
+            if (current is '\'' or '"')
+            {
+                inString = true;
+                quote = current;
+            }
+            else if (current == '{')
+            {
+                depth++;
+            }
+            else if (current == '}' && --depth == 0)
+            {
+                return source[(opening + 1)..index];
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsSameOrDescendantPath(string path, string parent)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var fullParent = Path.GetFullPath(parent);
+        if (PathComparer.Equals(fullPath, fullParent))
+            return true;
+
+        var prefix = fullParent.EndsWith(Path.DirectorySeparatorChar)
+            ? fullParent
+            : fullParent + Path.DirectorySeparatorChar;
+        return fullPath.StartsWith(prefix,
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    }
+
+    private static string Capitalize(string value) =>
+        string.IsNullOrEmpty(value) ? value : char.ToUpperInvariant(value[0]) + value[1..];
+
+    private static AnalysisDiagnostic Diagnostic(string code, string message, string target) => new()
+    {
+        Code = code,
+        Component = "GradleAndroidSourceSetResolver",
+        Message = message,
+        Target = target,
+        AffectsCoverage = true
+    };
+
+    private sealed class GeneratedSourceSet
+    {
+        public List<string> JavaSourceDirectories { get; } = [];
+        public List<string> KotlinSourceDirectories { get; } = [];
+    }
+
+    private sealed class ObservedSourceSet
+    {
+        public List<string> JavaSourceDirectories { get; } = [];
+        public List<string> KotlinSourceDirectories { get; } = [];
+        public List<string> ManifestFiles { get; } = [];
+        public List<string> ResourceDirectories { get; } = [];
+        public List<string> AssetDirectories { get; } = [];
+    }
+
+    private sealed class ExplicitSourceSet
+    {
+        public List<string> JavaSourceDirectories { get; } = [];
+        public List<string> KotlinSourceDirectories { get; } = [];
+        public List<string> ManifestFiles { get; } = [];
+        public List<string> ResourceDirectories { get; } = [];
+        public List<string> AssetDirectories { get; } = [];
+        public bool ReplacesJavaSourceDirectories { get; set; }
+        public bool ReplacesKotlinSourceDirectories { get; set; }
+        public bool ReplacesManifest { get; set; }
+        public bool ReplacesResourceDirectories { get; set; }
+        public bool ReplacesAssetDirectories { get; set; }
+    }
+}
+)
+                || !TryResolvePath(values[0].Groups["path"].Value, modulePath, analysisRoot, out var manifest))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleAndroidManifestNotStaticallyResolved",
+                    $"Android manifest for source set '{sourceSetName}' uses a dynamic, unsupported or out-of-root path.",
+                    buildFile));
+                continue;
+            }
+
+            if (!Path.GetFileName(manifest).Equals("AndroidManifest.xml", StringComparison.OrdinalIgnoreCase))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleAndroidManifestPathInvalid",
+                    $"Android manifest for source set '{sourceSetName}' does not identify AndroidManifest.xml.",
+                    buildFile));
+                continue;
+            }
+
+            AddFile(destination, manifest);
+        }
     }
 
     private static void AddSourceRoots(

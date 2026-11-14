@@ -784,6 +784,10 @@ public sealed class GradleAndroidBuildModelTests
                 file == Path.Combine(app, "manifests", "main", "AndroidManifest.xml"));
             Assert.Contains(main.ResourceDirectories, directory =>
                 directory == Path.Combine(app, "resources", "main"));
+            var gradle = Assert.IsType<GradleBuildModel>(module.GradleBuildModel);
+            Assert.DoesNotContain(gradle.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleCustomSourceSetNotStaticallyResolved");
+            Assert.True(gradle.IsComplete);
             Assert.True(android.IsComplete);
         }
         finally

@@ -58,13 +58,21 @@ public sealed class AndroidVariantDependencySelector
         var selectedDependencies = build.Dependencies
             .Where(dependency => configurations.Contains(dependency.Configuration))
             .ToArray();
+        var isComplete = build.IsComplete && android.IsComplete;
+        if (!isComplete)
+        {
+            diagnostics.Add(CreateDiagnostic(
+                "AndroidVariantDependencyDeclarationsIncomplete",
+                "The static Gradle or Android build model is incomplete; selected dependency declarations may not represent the complete variant configuration.",
+                module.Path));
+        }
 
         return new AndroidVariantDependencySelection(
             variant.Name,
             scope,
             selectedDependencies,
             diagnostics,
-            build.IsComplete && android.IsComplete);
+            isComplete);
     }
 
     private static HashSet<string> GetApplicableConfigurations(

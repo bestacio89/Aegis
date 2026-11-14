@@ -223,6 +223,48 @@ public sealed class GradleBuildModelTests
     }
 
     [Fact]
+    public void Detect_treats_the_version_matched_compose_compiler_plugin_as_supported()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleCompose_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"compose-sample\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    kotlin("jvm") version "2.4.21"
+                    id("org.jetbrains.kotlin.plugin.compose") version "2.4.21"
+                    id("com.google.devtools.ksp") version "2.2.21-2.0.3"
+                }
+                dependencies {
+                    implementation("org.jetbrains.compose.runtime:runtime:1.10.0")
+                }
+                """);
+            var sourceRoot = Path.Combine(root, "src", "main", "kotlin");
+            Directory.CreateDirectory(sourceRoot);
+            File.WriteAllText(Path.Combine(sourceRoot, "Screen.kt"), "class Screen");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.Contains(model.Plugins, plugin =>
+                plugin.Id == "org.jetbrains.kotlin.plugin.compose" && plugin.Version == "2.4.21");
+            Assert.DoesNotContain(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleKotlinCompilerPluginNotExecuted"
+                && diagnostic.Message.Contains("'org.jetbrains.kotlin.plugin.compose'", StringComparison.Ordinal));
+            Assert.Contains(model.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleKotlinCompilerPluginNotExecuted"
+                && diagnostic.Message.Contains("'com.google.devtools.ksp'", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_marks_default_kotlin_compiler_options_as_inferred()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisGradleKotlinInferred_{Guid.NewGuid():N}");

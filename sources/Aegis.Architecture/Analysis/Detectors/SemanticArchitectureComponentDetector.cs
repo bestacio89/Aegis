@@ -421,20 +421,24 @@ internal static class SemanticArchitectureComponentDetector
 
                 var projectCandidates = qualifiedCandidates
                     .Where(component => !PathComparer.Equals(component.ModulePath, sourceProjectPath))
-                    .ToArray();
-                // Qualified names identify declarations, not project ownership.
-                // Attribute them only to modules reachable through the existing
-                // build dependency graph; never fall back to workspace-wide matching.
-                var selectedCandidates = projectCandidates
                     .Where(component => reachableDependencyPaths.Contains(component.ModulePath))
-                    .Where(component => TryResolveCompatibleAndroidVariants(sourceComponent, component, out _))
                     .ToArray();
 
-                foreach (var candidate in selectedCandidates)
-                {
-                    var identity = new SymbolIdentity(candidate.ModulePath, candidate.Language, candidate.SymbolId);
-                    candidates[identity] = candidate;
-                }
+                // A qualified name plus a reachable module does not identify a
+                // particular Android variant. Filtering by intersection first is
+                // unsafe: it can make a debug reference appear to target the debug
+                // declaration even when the compiler actually resolved a release
+                // declaration. Require one owner/declaration candidate before
+                // applying variant compatibility; otherwise fail closed.
+                if (projectCandidates.Length != 1)
+                    continue;
+
+                var candidate = projectCandidates[0];
+                if (!TryResolveCompatibleAndroidVariants(sourceComponent, candidate, out _))
+                    continue;
+
+                var identity = new SymbolIdentity(candidate.ModulePath, candidate.Language, candidate.SymbolId);
+                candidates[identity] = candidate;
             }
 
             return candidates.Count == 1 ? candidates.Values.Single() : null;

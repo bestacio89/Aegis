@@ -528,3 +528,16 @@ K5 builds on the shared JVM production/test orchestration and dependency resolve
 A K5 correctness gap was identified in semantic component metrics: the projection trusted only the provider's per-symbol `IsTestCode` flag when counting production and test symbols. A module already classified as a test project or test-support module must remain test-scoped even if a provider omits that flag. The projection now derives test ownership from both symbol evidence and authoritative module ownership. Focused tests cover test projects and test-support modules, production/test component counts, and traceable test-to-production relationships.
 
 K5 remains unaccepted until focused tests and all four required workflows pass on the exact PR head. Remaining K5 validation must cover source-set and module discovery, test-aware classpaths, framework attribution, test-to-production graph evidence, and exclusion of test evidence from production metrics.
+
+
+## K5 status — accepted
+
+K5 is accepted at exact head `7fc7324c104c74f53c58cc304c591eb3b597d125`. The four required workflows passed on that exact head.
+
+The accepted test-architecture work validates conventional and explicit Gradle Kotlin source sets, Maven Kotlin main/test roots, test-project and test-support ownership, production-before-test scheduling, scope-aware transitive dependency traversal, test-only framework evidence, test-to-production relationship traceability, and production/test component metric isolation. The module-ownership projection regression is covered for both test projects and test-support modules.
+
+## K6 implementation — in progress
+
+K6 is the JVM production-readiness pass: packaged-worker compatibility, deployment configuration validation, compiler/toolchain behavior, resource and process supervision, diagnostics and partial-result semantics, and representative Kotlin/JVM integration coverage.
+
+Initial review found that `KotlinWorkerClient` defines a heap-size validator but does not invoke it before composing JVM launch arguments. Configuration validation will be enforced before process launch and covered by regression tests. K6 remains open until its focused validation and all four required workflows pass on an exact PR head.

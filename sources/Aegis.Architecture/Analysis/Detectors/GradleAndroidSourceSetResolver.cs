@@ -64,13 +64,17 @@ internal static class GradleAndroidSourceSetResolver
                     buildFile));
             }
 
+            var explicitJavaDirectories = explicitSet?.JavaSourceDirectories ?? [];
+            var explicitKotlinDirectories = explicitSet?.KotlinSourceDirectories ?? [];
+            IncludeMixedLanguageDirectories(explicitJavaDirectories, explicitKotlinDirectories, files);
+
             var javaDirectories = ResolveDirectories(
                 discovered?.JavaSourceDirectories,
-                explicitSet?.JavaSourceDirectories,
+                explicitJavaDirectories,
                 explicitSet?.ReplacesJavaSourceDirectories == true);
             var kotlinDirectories = ResolveDirectories(
                 discovered?.KotlinSourceDirectories,
-                explicitSet?.KotlinSourceDirectories,
+                explicitKotlinDirectories,
                 explicitSet?.ReplacesKotlinSourceDirectories == true);
             var resourceDirectories = ResolveDirectories(
                 discovered?.ResourceDirectories,
@@ -109,8 +113,8 @@ internal static class GradleAndroidSourceSetResolver
                 AppliesToVariants = applicableVariants,
                 JavaSourceDirectories = javaDirectories,
                 KotlinSourceDirectories = kotlinDirectories,
-                ExplicitJavaSourceDirectories = explicitSet?.JavaSourceDirectories ?? [],
-                ExplicitKotlinSourceDirectories = explicitSet?.KotlinSourceDirectories ?? [],
+                ExplicitJavaSourceDirectories = explicitJavaDirectories,
+                ExplicitKotlinSourceDirectories = explicitKotlinDirectories,
                 GeneratedJavaSourceDirectories = generatedJavaDirectories,
                 GeneratedKotlinSourceDirectories = generatedKotlinDirectories,
                 ManifestFiles = manifestFiles,
@@ -128,9 +132,9 @@ internal static class GradleAndroidSourceSetResolver
             if (explicitSet?.ReplacesKotlinSourceDirectories != true)
                 AddSourceRoots(sourceRoots, discovered?.KotlinSourceDirectories ?? [], "Kotlin", ownership,
                     ProjectSourceRootOrigin.Conventional, buildFile);
-            AddSourceRoots(sourceRoots, explicitSet?.JavaSourceDirectories ?? [], "Java", ownership,
+            AddSourceRoots(sourceRoots, explicitJavaDirectories, "Java", ownership,
                 ProjectSourceRootOrigin.Explicit, buildFile);
-            AddSourceRoots(sourceRoots, explicitSet?.KotlinSourceDirectories ?? [], "Kotlin", ownership,
+            AddSourceRoots(sourceRoots, explicitKotlinDirectories, "Kotlin", ownership,
                 ProjectSourceRootOrigin.Explicit, buildFile);
             AddSourceRoots(sourceRoots, generatedJavaDirectories, "Java", ownership,
                 ProjectSourceRootOrigin.GeneratedConvention, buildFile, isGenerated: true);

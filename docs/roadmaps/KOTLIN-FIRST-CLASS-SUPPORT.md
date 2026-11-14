@@ -487,6 +487,29 @@ The current static model does not yet represent the full Gradle attribute-matchi
 
 **Acceptance:** Variant classpath fixtures prove deterministic ordering, no cross-variant leakage, correct project dependency outputs, and explicit partial coverage for unresolved artifacts.
 
+###### K7.5.2.1 — Variant-scoped dependency selection
+
+- Select only statically declared compile configurations applicable to the requested Android variant.
+- Include shared production configurations plus matching flavor, build-type and full-variant configurations.
+- Keep production, local unit-test, instrumentation-test and test-fixture dependency scopes independent; test scopes inherit the production compile declarations they require without leaking into one another.
+- Reject missing or ambiguous variant identities with coverage-affecting diagnostics.
+- Preserve the original Gradle dependency declarations and configuration names. This checkpoint selects declarations only; it does not resolve JAR/AAR files or claim a complete compiler classpath.
+
+**Acceptance:** Focused tests cover base/flavor/build-type/variant dependencies, each test scope, no cross-scope leakage, unknown variants and incomplete build-model propagation.
+
+###### K7.5.2.2 — Local JAR/AAR artifact resolution
+
+- Resolve selected external artifacts from explicit local Gradle/Maven cache evidence.
+- Handle JAR and AAR artifacts distinctly; extract only validated archive entries and preserve artifact provenance.
+- Keep unresolved versions, missing artifacts and unsupported packaging as explicit partial coverage.
+
+###### K7.5.2.3 — Project outputs and deterministic classpath assembly
+
+- Resolve in-workspace Android project dependencies only when module/variant compatibility and output provenance are explicit.
+- Assemble the selected variant classpath through the existing shared JVM classpath contract, with deterministic ordering and no production/test/variant leakage.
+- Do not infer outputs from conventional build directories or treat static project declarations as proof of successful compilation.
+
+
 ##### K7.5.3 — Android semantic enablement and production validation
 
 - Integrate the resolved SDK platform and variant classpath into Kotlin and Java semantic requests without duplicating the shared JVM worker or classpath contracts.

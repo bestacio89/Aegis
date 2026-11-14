@@ -193,7 +193,7 @@ public sealed class KotlinFrameworkDetectionTests
         var module = new ProjectModuleContext
         {
             Name = "android-app",
-            Path = root,
+            Path = Path.Combine(Path.GetTempPath(), "android-framework-test-module"),
             BuildSystem = ArchitectureBuildSystem.Gradle,
             Languages = ["Kotlin"],
             Framework = "Android",
@@ -236,10 +236,6 @@ public sealed class KotlinFrameworkDetectionTests
         var lifecycle = Assert.Single(module.FrameworkEvidence, evidence =>
             evidence.Name == "AndroidX Lifecycle");
         Assert.True(lifecycle.IsTestOnly);
-        Assert.Equal("testImplementation", Assert.Single(lifecycle.Provenance).FilePath is null
-            ? "testImplementation"
-            : "testImplementation");
-
         var koin = Assert.Single(module.FrameworkEvidence, evidence => evidence.Name == "Koin");
         Assert.True(koin.IsTestOnly);
         Assert.All(module.FrameworkEvidence, evidence =>

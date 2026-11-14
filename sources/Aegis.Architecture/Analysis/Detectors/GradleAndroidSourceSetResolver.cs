@@ -55,7 +55,7 @@ internal static class GradleAndroidSourceSetResolver
             generated.TryGetValue(name, out var generatedSet);
             explicitDirectories.TryGetValue(name, out var explicitSet);
             if (ownership == ProjectSourceRootOwnership.Unknown
-                && (discovered is not null || explicitSet is not null))
+                && (discovered is not null || generatedSet is not null || explicitSet is not null))
             {
                 diagnostics.Add(Diagnostic(
                     "GradleAndroidSourceSetOwnershipUnknown",

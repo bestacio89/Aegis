@@ -22,9 +22,8 @@ public sealed class GradleAndroidBuildModelTests
                 """);
             File.WriteAllText(Path.Combine(root, "gradle.properties"),
                 "android.builtInKotlin=true");
-            File.WriteAllText(Path.Combine(root, "app.build.gradle.kts.fixture"), string.Empty);
-            File.WriteAllText(Path.Combine(root, "build.gradle.kts.fixture"), string.Empty);
-            File.WriteAllText(Path.Combine(root, "app", "build.gradle.kts"), """
+            var appDirectory = Directory.CreateDirectory(Path.Combine(root, "app")).FullName;
+            File.WriteAllText(Path.Combine(appDirectory, "build.gradle.kts"), """
                 plugins {
                     id("com.android.application")
                 }
@@ -68,12 +67,12 @@ public sealed class GradleAndroidBuildModelTests
                     }
                 }
                 """);
-            Directory.CreateDirectory(Path.Combine(root, "app", "src", "main", "kotlin"));
-            File.WriteAllText(Path.Combine(root, "app", "src", "main", "kotlin", "Main.kt"),
+            Directory.CreateDirectory(Path.Combine(appDirectory, "src", "main", "kotlin"));
+            File.WriteAllText(Path.Combine(appDirectory, "src", "main", "kotlin", "Main.kt"),
                 "package org.example.mobile\\nclass Main");
 
             var context = ProjectArchitectureContextDetector.Detect(root);
-            var module = Assert.Single(context.Modules, candidate => candidate.Path == Path.Combine(root, "app"));
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == appDirectory);
             var model = Assert.IsType<GradleBuildModel>(module.GradleBuildModel);
             var android = Assert.IsType<GradleAndroidBuildModel>(model.Android);
 

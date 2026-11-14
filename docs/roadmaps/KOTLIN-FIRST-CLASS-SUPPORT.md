@@ -536,8 +536,17 @@ K5 is accepted at exact head `7fc7324c104c74f53c58cc304c591eb3b597d125`. The fou
 
 The accepted test-architecture work validates conventional and explicit Gradle Kotlin source sets, Maven Kotlin main/test roots, test-project and test-support ownership, production-before-test scheduling, scope-aware transitive dependency traversal, test-only framework evidence, test-to-production relationship traceability, and production/test component metric isolation. The module-ownership projection regression is covered for both test projects and test-support modules.
 
-## K6 implementation — in progress
+## K6 status — accepted
 
-K6 is the JVM production-readiness pass: packaged-worker compatibility, deployment configuration validation, compiler/toolchain behavior, resource and process supervision, diagnostics and partial-result semantics, and representative Kotlin/JVM integration coverage.
+K6 is accepted at exact head `3a050e83bf0c4a6950ca54fbdab356cdf1f6dd5a`. The Kotlin semantic worker, Java semantic worker, WPF build validation and non-WPF quality gates all passed on that exact head.
 
-Initial review found that `KotlinWorkerClient` defines a heap-size validator but does not invoke it before composing JVM launch arguments. Configuration validation will be enforced before process launch and covered by regression tests. K6 remains open until its focused validation and all four required workflows pass on an exact PR head.
+The production-readiness pass enforces positive, syntactically valid JVM heap settings and positive request timeouts before process launch. Regression tests cover malformed heap values and non-positive timeouts. Packaged worker execution, process supervision, diagnostics and partial-result behavior remain governed by the existing K0–K5 contracts.
+
+## K7.1 — Android project and build-model discovery — in progress
+
+**Scope:** Recognize Android Gradle modules from statically declared Android Gradle Plugin IDs; distinguish application, library, test, dynamic-feature and asset-pack module kinds; preserve AGP plugin version evidence from module declarations, version catalogs and root-level `apply false` declarations; and model literal namespace, compile SDK, build-tools version, default configuration, compile options, flavor dimensions, product flavors and build types.
+
+Kotlin integration must distinguish the legacy `org.jetbrains.kotlin.android` plugin from AGP 9+ built-in Kotlin support, including explicit opt-out and incompatible legacy-plugin combinations. Android configuration remains declaration evidence: this checkpoint does not resolve installed SDKs, `android.jar`, active variants, variant-specific classpaths or source ownership. No Gradle scripts or plugins are executed.
+
+**Acceptance:** Groovy and Kotlin DSL fixtures cover application and library modules, inherited AGP versions, AGP 9 built-in Kotlin, legacy Kotlin Android integration, literal SDK/default configuration, product flavors, build types, and dynamic or conflicting declarations. Unsupported or ambiguous configuration is surfaced as coverage diagnostics. Existing Kotlin/JVM behavior and the four required CI workflows remain green.
+

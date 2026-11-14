@@ -24,6 +24,8 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
 
         var kotlinMainFile = Path.Combine(kotlinMainRoot, "sample", "Service.kt");
         var kotlinTestFile = Path.Combine(kotlinTestRoot, "sample", "ServiceTests.kt");
+        Directory.CreateDirectory(Path.GetDirectoryName(kotlinMainFile)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(kotlinTestFile)!);
         await File.WriteAllTextAsync(kotlinMainFile, "package sample\nclass Service");
         await File.WriteAllTextAsync(kotlinTestFile, "package sample\nclass ServiceTests");
         await File.WriteAllTextAsync(Path.Combine(javaMainRoot, "JavaService.java"), "class JavaService {}");

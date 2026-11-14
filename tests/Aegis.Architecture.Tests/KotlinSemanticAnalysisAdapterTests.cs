@@ -92,7 +92,7 @@ public sealed class KotlinSemanticAnalysisAdapterTests
             pair => pair.Key,
             pair => pair.Value,
             StringComparer.Ordinal);
-        options["kotlin.compilerPluginsNotExecuted"] = "true";
+        options["kotlin.compilerPluginsNotExecuted"] = bool.TrueString;
         request = CopyWithOptions(request, options);
 
         var run = await adapter.AnalyzeAsync(request, executionContext);

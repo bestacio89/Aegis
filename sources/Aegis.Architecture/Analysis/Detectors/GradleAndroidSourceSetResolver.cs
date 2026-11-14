@@ -713,41 +713,47 @@ internal static class GradleAndroidSourceSetResolver
         ICollection<AnalysisDiagnostic> diagnostics,
         Action markOverride)
     {
-        var declaration = Regex.Match(
+        var declarations = Regex.Matches(
             body,
             @"\bmanifest\s*\.\s*srcFile\s*(?:\(\s*(?<path>[^)]+)\)|(?<assignment>[^\n]+))",
             RegexOptions.CultureInvariant);
-        if (!declaration.Success)
-            return;
-
-        destination.Clear();
-        markOverride();
-        var expression = declaration.Groups["path"].Success
-            ? declaration.Groups["path"].Value
-            : declaration.Groups["assignment"].Value;
-        var value = Regex.Match(expression, @"['""](?<path>[^'""]+)['""]");
-        if (!value.Success || value.Groups["path"].Value.Contains('$')
-            || !TryResolvePath(value.Groups["path"].Value, modulePath, analysisRoot, out var manifest))
+        foreach (Match declaration in declarations)
         {
-            diagnostics.Add(Diagnostic(
-                "GradleAndroidManifestNotStaticallyResolved",
-                $"Android manifest for source set '{sourceSetName}' uses a dynamic, unsupported or out-of-root path.",
-                buildFile));
-            return;
-        }
+            markOverride();
+            destination.Clear();
+            var expression = declaration.Groups["path"].Success
+                ? declaration.Groups["path"].Value
+                : declaration.Groups["assignment"].Value;
+            expression = Regex.Replace(expression, @"^\s*=\s*", string.Empty);
+            var values = Regex.Matches(expression, @"['""](?<path>[^'""]+)['""]");
+            var residue = Regex.Replace(
+                expression,
+                @"['""][^'""]+['""]|\bfile\b|\s|,|\(|\)",
+                string.Empty);
+            if (values.Count != 1
+                || residue.Length > 0
+                || values[0].Groups["path"].Value.Contains((char)36)
+                || !TryResolvePath(values[0].Groups["path"].Value, modulePath, analysisRoot, out var manifest))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleAndroidManifestNotStaticallyResolved",
+                    $"Android manifest for source set '{sourceSetName}' uses a dynamic, unsupported or out-of-root path.",
+                    buildFile));
+                continue;
+            }
 
-        if (!Path.GetFileName(manifest).Equals("AndroidManifest.xml", StringComparison.OrdinalIgnoreCase))
-        {
-            diagnostics.Add(Diagnostic(
-                "GradleAndroidManifestPathInvalid",
-                $"Android manifest for source set '{sourceSetName}' does not identify AndroidManifest.xml.",
-                buildFile));
-            return;
-        }
+            if (!Path.GetFileName(manifest).Equals("AndroidManifest.xml", StringComparison.OrdinalIgnoreCase))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleAndroidManifestPathInvalid",
+                    $"Android manifest for source set '{sourceSetName}' does not identify AndroidManifest.xml.",
+                    buildFile));
+                continue;
+            }
 
-        AddFile(destination, manifest);
+            AddFile(destination, manifest);
+        }
     }
-
     private static void AddSourceRoots(
         IDictionary<string, ProjectSourceRoot> roots,
         IEnumerable<string> directories,

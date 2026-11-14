@@ -145,6 +145,15 @@ internal static class GradleAndroidSourceSetResolver
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();
 
+        if (buildTypes.Length > MaximumDerivedVariants)
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleAndroidVariantMatrixLimitExceeded",
+                $"The declared build types exceed Aegis' static derivation limit of {MaximumDerivedVariants} variants.",
+                buildFile));
+            return [];
+        }
+
         var flavors = model.ProductFlavors;
         if (flavors.Count == 0)
         {

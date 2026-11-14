@@ -467,17 +467,40 @@ internal static class SemanticArchitectureComponentDetector
     {
         compatibleVariants = [];
 
-        // Variant matching is meaningful only when both endpoints are Android
-        // Gradle modules. A non-Android JVM dependency has no Android variant
-        // identity in this static model.
-        if (string.IsNullOrWhiteSpace(source.AndroidModuleKind)
-            || string.IsNullOrWhiteSpace(target.AndroidModuleKind))
+        var sourceIsAndroid = !string.IsNullOrWhiteSpace(source.AndroidModuleKind);
+        var targetIsAndroid = !string.IsNullOrWhiteSpace(target.AndroidModuleKind);
+
+        if (!sourceIsAndroid && !targetIsAndroid)
+            return true;
+
+        // Preserve the known Android endpoint's variant provenance when the
+        // opposite endpoint is a non-Android JVM module.
+        if (sourceIsAndroid && !targetIsAndroid)
         {
+            if (source.AndroidVariants.Count == 0)
+                return false;
+
+            compatibleVariants = source.AndroidVariants
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return true;
+        }
+
+        if (!sourceIsAndroid && targetIsAndroid)
+        {
+            if (target.AndroidVariants.Count == 0)
+                return false;
+
+            compatibleVariants = target.AndroidVariants
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             return true;
         }
 
         // Missing variant evidence is not proof of compatibility. Do not project
-        // an Android-to-Android semantic edge based only on a qualified-name match.
+        // an Android-to-Android edge based only on a qualified-name match.
         if (source.AndroidVariants.Count == 0 || target.AndroidVariants.Count == 0)
             return false;
 

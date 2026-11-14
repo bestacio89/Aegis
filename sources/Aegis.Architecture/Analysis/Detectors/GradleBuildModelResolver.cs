@@ -524,9 +524,6 @@ internal static class GradleBuildModelResolver
                 buildFile));
         }
 
-        foreach (var diagnostic in modelDiagnostics)
-            diagnostics.Add(diagnostic);
-
         var model = new GradleAndroidBuildModel
         {
             PluginId = androidPlugin?.Id ?? string.Empty,
@@ -548,6 +545,9 @@ internal static class GradleBuildModelResolver
         };
         GradleAndroidSourceSetResolver.Populate(
             modulePath, analysisRoot, files, androidBlock, buildFile, modelDiagnostics, model);
+        foreach (var diagnostic in modelDiagnostics)
+            diagnostics.Add(diagnostic);
+
         return model;
     }
 

@@ -261,7 +261,10 @@ internal static class GradleAndroidSourceSetResolver
         foreach (var combination in combinations)
         foreach (var buildType in buildTypes)
         {
-            var name = string.Concat(combination.Select(Capitalize)) + Capitalize(buildType);
+            var flavorPrefix = combination.Count == 0
+                ? string.Empty
+                : combination[0] + string.Concat(combination.Skip(1).Select(Capitalize));
+            var name = flavorPrefix + Capitalize(buildType);
             result.Add(new GradleAndroidVariant(name, combination, buildType));
         }
 

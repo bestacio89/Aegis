@@ -148,6 +148,17 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
         }
     }
 
+    private static bool IsValidHeapSize(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length < 2)
+            return false;
+
+        var suffix = char.ToLowerInvariant(value[^1]);
+        return suffix is 'k' or 'm' or 'g'
+            && long.TryParse(value.AsSpan(0, value.Length - 1), out var size)
+            && size > 0;
+    }
+
     private static JvmWorkerLaunchOptions CreateLaunchOptions(KotlinWorkerOptions options)
     {
         if (string.IsNullOrWhiteSpace(options.MaxHeapSize)

@@ -35,18 +35,6 @@ public sealed class KotlinWorkerOptions
             WorkerLibrariesDirectory,
             "gson-2.13.2.jar"));
 
-    private static bool IsValidHeapSize(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value) || value.Length < 2)
-            return false;
-
-        var suffix = char.ToLowerInvariant(value[^1]);
-        if (suffix is not ('k' or 'm' or 'g'))
-            return false;
-
-        return long.TryParse(value.AsSpan(0, value.Length - 1), out var size) && size > 0;
-    }
-
     private static string ResolveDefaultJavaExecutable()
     {
         var packageDirectory = ResolveJavaPackageDirectory();

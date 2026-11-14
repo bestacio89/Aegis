@@ -16,7 +16,9 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
     private readonly ILogger<KotlinSemanticAnalysisOrchestrator> _logger;
     private readonly JvmSourceRootResolver _sourceRootResolver;
 
-    public string Language => "Kotlin";
+    private const string KotlinLanguage = "Kotlin";
+
+    public string Language => KotlinLanguage;
 
     public int ExecutionOrder => 100;
 
@@ -65,7 +67,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
 
         if (modules.Length == 0
             && context.Modules.Count == 0
-            && context.Language.Equals(Language, StringComparison.OrdinalIgnoreCase))
+            && context.Language.Equals(KotlinLanguage, StringComparison.OrdinalIgnoreCase))
         {
             modules =
             [
@@ -79,9 +81,9 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         }
 
         if (modules.Length == 0
-            && (context.Language.Equals(Language, StringComparison.OrdinalIgnoreCase)
+            && (context.Language.Equals(KotlinLanguage, StringComparison.OrdinalIgnoreCase)
                 || context.Modules.Any(module => module.Languages.Any(language =>
-                    language.Equals(Language, StringComparison.OrdinalIgnoreCase)))))
+                    language.Equals(KotlinLanguage, StringComparison.OrdinalIgnoreCase)))))
         {
             context.DiscoveryDiagnostics.Add(new AnalysisDiagnostic
             {
@@ -267,7 +269,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             || Directory.Exists(Path.Combine(module.Path, "src", "main", "kotlin"))
             || Directory.Exists(Path.Combine(module.Path, "src", "test", "kotlin"));
         var hasKotlinLanguage = module.Languages.Any(language =>
-            language.Equals(Language, StringComparison.OrdinalIgnoreCase));
+            language.Equals(KotlinLanguage, StringComparison.OrdinalIgnoreCase));
         var ownsNestedModules = modules.Any(candidate =>
             !ReferenceEquals(candidate, module)
             && IsSameOrDescendantPath(Path.GetFullPath(candidate.Path), Path.GetFullPath(module.Path)));

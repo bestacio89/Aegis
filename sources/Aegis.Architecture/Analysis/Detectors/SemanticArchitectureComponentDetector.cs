@@ -264,6 +264,10 @@ internal static class SemanticArchitectureComponentDetector
                     context,
                     run,
                     relationship.TargetSymbolId!,
+                    relationship.IsTestCode || sourceSymbol.IsTestCode
+                        || sourceComponent.SourceOwnership == "Test"
+                        || sourceModule.IsTestProject
+                        || sourceModule.IsTestSupport,
                     symbolComponents,
                     symbolIdentitiesById,
                     symbolComponentsByQualifiedName);
@@ -349,6 +353,7 @@ internal static class SemanticArchitectureComponentDetector
         ProjectArchitectureContext context,
         SemanticAnalysisRun run,
         string targetSymbolId,
+        bool includeTestDependencies,
         IReadOnlyDictionary<SymbolIdentity, SymbolComponent> symbolComponents,
         IReadOnlyDictionary<string, SymbolIdentity[]> symbolIdentitiesById,
         IReadOnlyDictionary<QualifiedSymbolIdentity, SymbolComponent[]> symbolComponentsByQualifiedName)
@@ -366,13 +371,10 @@ internal static class SemanticArchitectureComponentDetector
         {
             var candidates = new Dictionary<SymbolIdentity, SymbolComponent>(SymbolIdentityComparer.Instance);
             var sourceProjectPath = NormalizePath(run.ProjectPath);
-            var declaredDependencyPaths = context.Dependencies
-                .Where(dependency =>
-                    !string.IsNullOrWhiteSpace(dependency.SourceProjectPath)
-                    && PathComparer.Equals(NormalizePath(dependency.SourceProjectPath), sourceProjectPath)
-                    && !string.IsNullOrWhiteSpace(dependency.TargetProjectPath))
-                .Select(dependency => NormalizePath(dependency.TargetProjectPath))
-                .ToHashSet(PathComparer);
+            var reachableDependencyPaths = ResolveReachableDependencyPaths(
+                context.Dependencies,
+                sourceProjectPath,
+                includeTestDependencies);
 
             foreach (var externalSymbol in externalSymbols.Where(symbol =>
                          !string.IsNullOrWhiteSpace(symbol.ProjectPath)))
@@ -411,11 +413,12 @@ internal static class SemanticArchitectureComponentDetector
                 var projectCandidates = qualifiedCandidates
                     .Where(component => !PathComparer.Equals(component.ModulePath, sourceProjectPath))
                     .ToArray();
-                var selectedCandidates = declaredDependencyPaths.Count > 0
-                    ? projectCandidates
-                        .Where(component => declaredDependencyPaths.Contains(component.ModulePath))
-                        .ToArray()
-                    : projectCandidates;
+                // Qualified names identify declarations, not project ownership.
+                // Attribute them only to modules reachable through the existing
+                // build dependency graph; never fall back to workspace-wide matching.
+                var selectedCandidates = projectCandidates
+                    .Where(component => reachableDependencyPaths.Contains(component.ModulePath))
+                    .ToArray();
 
                 foreach (var candidate in selectedCandidates)
                 {
@@ -442,6 +445,39 @@ internal static class SemanticArchitectureComponentDetector
             && symbolComponents.TryGetValue(identities[0], out var uniqueTarget)
                 ? uniqueTarget
                 : null;
+    }
+
+    private static HashSet<string> ResolveReachableDependencyPaths(
+        IReadOnlyCollection<ArchitectureDependencyContext> dependencies,
+        string sourceProjectPath,
+        bool includeTestDependencies)
+    {
+        var reachable = new HashSet<string>(PathComparer);
+        var pending = new Queue<string>();
+        pending.Enqueue(sourceProjectPath);
+
+        while (pending.TryDequeue(out var currentPath))
+        {
+            foreach (var dependency in dependencies.Where(dependency =>
+                         !string.IsNullOrWhiteSpace(dependency.SourceProjectPath)
+                         && !string.IsNullOrWhiteSpace(dependency.TargetProjectPath)
+                         && PathComparer.Equals(NormalizePath(dependency.SourceProjectPath), currentPath)
+                         && (dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase)
+                             || includeTestDependencies
+                                 && dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase))))
+            {
+                var targetPath = NormalizePath(dependency.TargetProjectPath);
+                if (PathComparer.Equals(targetPath, sourceProjectPath)
+                    || !reachable.Add(targetPath))
+                {
+                    continue;
+                }
+
+                pending.Enqueue(targetPath);
+            }
+        }
+
+        return reachable;
     }
 
     private static AndroidSourceOwnership ResolveAndroidSourceOwnership(

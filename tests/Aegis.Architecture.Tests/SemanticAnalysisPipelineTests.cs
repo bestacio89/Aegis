@@ -35,6 +35,28 @@ public sealed class SemanticAnalysisPipelineTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_respects_explicit_execution_order_for_jvm_interoperability()
+    {
+        var executionOrder = new List<string>();
+        var pipeline = new SemanticAnalysisPipeline(
+        [
+            new RecordingAnalyzer("Java", executionOrder, executionOrderValue: 200),
+            new RecordingAnalyzer("Kotlin", executionOrder, executionOrderValue: 100)
+        ],
+        NullLogger<SemanticAnalysisPipeline>.Instance);
+
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "MixedJvm",
+            RootPath = Path.GetTempPath()
+        };
+
+        await pipeline.AnalyzeAsync(context);
+
+        Assert.Equal(["Kotlin", "Java"], executionOrder);
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_isolates_provider_failures_and_continues_with_other_languages()
     {
         var executionOrder = new List<string>();

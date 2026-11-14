@@ -703,8 +703,28 @@ internal static class GradleAndroidSourceSetResolver
                 string.Empty);
             if (values.Count != 1
                 || residue.Length > 0
-                || values[0].Groups["path"].Value.Contains('
+                || values[0].Groups["path"].Value.Contains((char)36)
+                || !TryResolvePath(values[0].Groups["path"].Value, modulePath, analysisRoot, out var manifest))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleAndroidManifestNotStaticallyResolved",
+                    $"Android manifest for source set '{sourceSetName}' uses a dynamic, unsupported or out-of-root path.",
+                    buildFile));
+                continue;
+            }
 
+            if (!Path.GetFileName(manifest).Equals("AndroidManifest.xml", StringComparison.OrdinalIgnoreCase))
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleAndroidManifestPathInvalid",
+                    $"Android manifest for source set '{sourceSetName}' does not identify AndroidManifest.xml.",
+                    buildFile));
+                continue;
+            }
+
+            AddFile(destination, manifest);
+        }
+    }
     private static void AddSourceRoots(
         IDictionary<string, ProjectSourceRoot> roots,
         IEnumerable<string> directories,

@@ -292,7 +292,20 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
 
         if (unsupportedPlugin is null)
         {
-            unsupportedTarget = default;
+            var kotlinJvmPluginMissing =
+                module.GradleBuildModel?.Diagnostics.Any(diagnostic =>
+                    diagnostic.Code == "GradleKotlinJvmPluginNotDetected") == true
+                || module.MavenModel?.Diagnostics.Any(diagnostic =>
+                    diagnostic.Code == "MavenKotlinPluginNotDetected") == true;
+            if (kotlinJvmPluginMissing)
+            {
+                unsupportedTarget = (
+                    "KotlinJvmPluginNotDetected",
+                    "Kotlin sources were discovered, but no statically resolved Kotlin/JVM compiler plugin was found. Aegis will not infer a JVM target from source syntax alone.");
+                return true;
+            }
+
+            unsupportedTarget = (string.Empty, string.Empty);
             return false;
         }
 

@@ -228,6 +228,9 @@ internal static class SemanticArchitectureComponentDetector
                 var targetModule = ResolveModule(targetComponent.ModulePath, targetComponent.Language);
                 var isTest = relationship.IsTestCode
                     || sourceSymbol.IsTestCode
+                    || sourceComponent.SourceOwnership == "Test"
+                    || targetComponent.SourceOwnership == "Test"
+                    || sourceComponent.IsTestCode
                     || targetComponent.IsTestCode
                     || sourceModule.IsTestProject
                     || sourceModule.IsTestSupport

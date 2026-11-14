@@ -469,6 +469,32 @@ The current static model does not yet represent the full Gradle attribute-matchi
 
 #### K7.5 — Android SDK/classpath resolution and production validation
 
+##### K7.5.1 — Local SDK and compile-platform discovery
+
+- Resolve SDK roots in deterministic precedence order: explicit host configuration, nearest module/workspace `local.properties`, then `ANDROID_HOME` / `ANDROID_SDK_ROOT`.
+- Reject conflicting environment roots rather than choosing one arbitrarily.
+- Resolve only the exact platform selected by statically declared `compileSdk` / `compileSdkPreview`; require its `android.jar`.
+- Report absent SDK roots, invalid declarations and missing platform installations as coverage-affecting diagnostics.
+- Keep SDK discovery side-effect free: no Gradle invocation, SDK manager, network access, installation, or project-script execution.
+
+**Acceptance:** Unit tests cover explicit configuration precedence, nested `local.properties`, environment conflicts, exact platform selection, and missing SDK/platform evidence. SDK discovery must not mutate the project or claim semantic completeness when platform classes are unavailable.
+
+##### K7.5.2 — Variant-specific Android compile classpaths
+
+- Resolve selected-variant compile dependencies from local Gradle/Maven evidence, including project outputs and transitive artifacts only when their dependency provenance is explicit.
+- Preserve AAR/JAR, platform, generated-source and project-output provenance; never treat an AAR as a JAR without extracting its `classes.jar` and relevant embedded libraries safely.
+- Keep variant compile classpaths separate and maintain production/test/Android-test boundaries.
+
+**Acceptance:** Variant classpath fixtures prove deterministic ordering, no cross-variant leakage, correct project dependency outputs, and explicit partial coverage for unresolved artifacts.
+
+##### K7.5.3 — Android semantic enablement and production validation
+
+- Integrate the resolved SDK platform and variant classpath into Kotlin and Java semantic requests without duplicating the shared JVM worker or classpath contracts.
+- Enable only variants whose required SDK, classpath and generated-code inputs are sufficiently resolved; unresolved inputs remain partial/unsupported rather than silently complete.
+- Validate representative application/library projects, mixed Java/Kotlin compilation, worker safety, resource use and existing Java/Kotlin regression gates.
+
+**Acceptance:** Android SDK and variant classpaths are proven against representative fixtures and a real project corpus. No Android source is reported as semantically complete when required SDK, dependency or generated-code inputs are missing.
+
 - Resolve SDK roots from \`local.properties\`, configured SDK environment variables and explicit build metadata without executing project scripts.
 - Resolve the platform \`android.jar\` matching the selected compile SDK and the variant-specific compile classpath where local evidence is available.
 - Preserve AAR/JAR and generated-source evidence with explicit resolution provenance.

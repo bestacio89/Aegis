@@ -89,19 +89,35 @@ public sealed class AndroidSdkResolver
         if (localProperties is not null)
         {
             source = "LocalProperties";
-            if (!TryReadSdkDirectory(localProperties, out var sdkDirectory))
+            try
+            {
+                if (!TryReadSdkDirectory(localProperties, out var sdkDirectory))
+                {
+                    diagnostics.Add(Diagnostic(
+                        "AndroidSdkDirectoryNotDeclared",
+                        "The nearest local.properties file does not declare a valid sdk.dir value.",
+                        localProperties));
+                    return null;
+                }
+
+                var parent = Path.GetDirectoryName(localProperties)!;
+                return Path.GetFullPath(Path.IsPathRooted(sdkDirectory)
+                    ? sdkDirectory
+                    : Path.Combine(parent, sdkDirectory));
+            }
+            catch (Exception exception) when (
+                exception is IOException
+                or UnauthorizedAccessException
+                or ArgumentException
+                or NotSupportedException
+                or PathTooLongException)
             {
                 diagnostics.Add(Diagnostic(
-                    "AndroidSdkDirectoryNotDeclared",
-                    "The nearest local.properties file does not declare a valid sdk.dir value.",
+                    "AndroidSdkPropertiesUnreadable",
+                    "The Android SDK location in local.properties could not be read or normalized.",
                     localProperties));
                 return null;
             }
-
-            var parent = Path.GetDirectoryName(localProperties)!;
-            return Path.GetFullPath(Path.IsPathRooted(sdkDirectory)
-                ? sdkDirectory
-                : Path.Combine(parent, sdkDirectory));
         }
 
         var home = ReadEnvironment("ANDROID_HOME");
@@ -192,8 +208,8 @@ public sealed class AndroidSdkResolver
         }
 
         var value = compileSdk.Trim();
-        if (value.Contains(Path.DirectorySeparatorChar)
-            || value.Contains(Path.AltDirectorySeparatorChar)
+        if (value.Contains('/')
+            || value.Contains('\\')
             || value is "." or "..")
         {
             diagnostics.Add(Diagnostic(

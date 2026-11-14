@@ -268,6 +268,14 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         ProjectModuleContext module,
         out string pluginId)
     {
+        if (module.GradleBuildModel?.Android is { } androidModel)
+        {
+            pluginId = string.IsNullOrWhiteSpace(androidModel.PluginId)
+                ? "unresolved Android Gradle Plugin"
+                : androidModel.PluginId;
+            return true;
+        }
+
         var androidPlugin = module.GradleBuildModel?.Plugins.FirstOrDefault(plugin =>
             plugin.IsApplied
             && plugin.Id is

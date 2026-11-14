@@ -365,11 +365,20 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         ProjectModuleContext module,
         out (string Code, string Message) unsupportedTarget)
     {
+        if (module.GradleBuildModel?.Android is not null)
+        {
+            unsupportedTarget = (
+                "KotlinTargetPlatformNotSupported",
+                "Android Kotlin analysis is not enabled until Android variants, SDK boot classpaths and source-set ownership are modelled.");
+            return true;
+        }
+
         var plugins = module.GradleBuildModel?.Plugins ?? [];
         var unsupportedPlugin = plugins.FirstOrDefault(plugin =>
             plugin.IsApplied
             && (plugin.Id.Equals("org.jetbrains.kotlin.multiplatform", StringComparison.Ordinal)
             || plugin.Id.Equals("org.jetbrains.kotlin.android", StringComparison.Ordinal)
+            || plugin.Id.Equals("kotlin-android", StringComparison.Ordinal)
             || plugin.Id.Equals("com.android.application", StringComparison.Ordinal)
             || plugin.Id.Equals("com.android.library", StringComparison.Ordinal)
             || plugin.Id.Equals("com.android.test", StringComparison.Ordinal)

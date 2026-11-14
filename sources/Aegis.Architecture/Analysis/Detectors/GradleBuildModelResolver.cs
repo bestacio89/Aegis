@@ -140,6 +140,26 @@ internal static class GradleBuildModelResolver
 
             var diagnostics = new List<AnalysisDiagnostic>(catalogDiagnostics);
             var plugins = ParsePlugins(ExtractBlock(source, "plugins"), catalog, diagnostics, buildFile);
+            foreach (var legacyPlugin in ParseLegacyAppliedPlugins(source))
+            {
+                if (!plugins.Any(plugin => plugin.IsApplied
+                    && plugin.Id.Equals(legacyPlugin.Id, StringComparison.Ordinal)))
+                {
+                    plugins.Add(legacyPlugin);
+                }
+            }
+
+            for (var pluginIndex = 0; pluginIndex < plugins.Count; pluginIndex++)
+            {
+                var plugin = plugins[pluginIndex];
+                if (!plugin.IsApplied || !string.IsNullOrWhiteSpace(plugin.Version))
+                    continue;
+
+                var resolvedVersion = ReadBuildscriptPluginVersion(source, plugin.Id)
+                    ?? ResolveRootPluginVersion(plugin.Id, catalog, files, owningRoot?.Path);
+                if (!string.IsNullOrWhiteSpace(resolvedVersion))
+                    plugins[pluginIndex] = new GradleBuildModel.Plugin(plugin.Id, resolvedVersion, true);
+            }
             var dependencies = ParseDependencies(
                 ExtractBlock(source, "dependencies"), catalog, diagnostics, buildFile);
             var toolchainMatch = ToolchainVersion.Match(source);
@@ -281,6 +301,7 @@ internal static class GradleBuildModelResolver
         ICollection<AnalysisDiagnostic> diagnostics,
         string buildFile)
     {
+        var androidBlock = ExtractBlock(source, "android");
         var androidPlugins = plugins
             .Where(plugin => plugin.IsApplied && plugin.Id is
                 "com.android.application"
@@ -289,10 +310,17 @@ internal static class GradleBuildModelResolver
                 or "com.android.dynamic-feature"
                 or "com.android.asset-pack")
             .ToArray();
-        if (androidPlugins.Length == 0)
+        if (androidPlugins.Length == 0 && androidBlock is null)
             return null;
 
         var modelDiagnostics = new List<AnalysisDiagnostic>();
+        if (androidPlugins.Length == 0)
+        {
+            modelDiagnostics.Add(Diagnostic(
+                "GradleAndroidPluginNotStaticallyResolved",
+                "An android configuration block exists, but no statically resolved Android Gradle Plugin application was found.",
+                buildFile));
+        }
         if (androidPlugins.Select(plugin => plugin.Id).Distinct(StringComparer.Ordinal).Count() > 1)
         {
             modelDiagnostics.Add(Diagnostic(
@@ -301,13 +329,16 @@ internal static class GradleBuildModelResolver
                 buildFile));
         }
 
-        var androidPlugin = androidPlugins[0];
-        var declaredPluginVersion = androidPlugin.Version
-            ?? ResolveRootPluginVersion(androidPlugin.Id, catalog, files, owningRootPath);
+        var androidPlugin = androidPlugins.FirstOrDefault();
+        var declaredPluginVersion = androidPlugin is null
+            ? null
+            : androidPlugin.Version
+                ?? ReadBuildscriptPluginVersion(source, androidPlugin.Id)
+                ?? ResolveRootPluginVersion(androidPlugin.Id, catalog, files, owningRootPath);
         var pluginVersion = IsStaticAndroidPluginVersion(declaredPluginVersion)
             ? declaredPluginVersion
             : null;
-        if (pluginVersion is null)
+        if (androidPlugin is not null && pluginVersion is null)
         {
             modelDiagnostics.Add(Diagnostic(
                 "GradleAndroidPluginVersionNotStaticallyResolved",
@@ -315,7 +346,7 @@ internal static class GradleBuildModelResolver
                 buildFile));
         }
 
-        var moduleKind = androidPlugin.Id switch
+        var moduleKind = androidPlugin?.Id switch
         {
             "com.android.application" => "Application",
             "com.android.library" => "Library",
@@ -425,15 +456,17 @@ internal static class GradleBuildModelResolver
         }
 
         var moduleKotlinDisabled = ReadAndroidBoolean(androidBlock, "enableKotlin") == false;
-        var kotlinIntegration = builtInKotlinPlugin
-            ? "BuiltInPlugin"
-            : legacyKotlinAndroid
+        var kotlinIntegration = androidPlugin is null
+            ? "Unknown"
+            : builtInKotlinPlugin
+                ? "BuiltInPlugin"
+                : legacyKotlinAndroid
                 ? "LegacyKotlinAndroidPlugin"
-                : agpMajorVersion >= 9
-                    ? builtInKotlinDisabled || moduleKotlinDisabled ? "Disabled" : "BuiltInDefault"
-                    : agpMajorVersion > 0 ? "NotDeclared" : "Unknown";
+                    : agpMajorVersion >= 9
+                        ? builtInKotlinDisabled || moduleKotlinDisabled ? "Disabled" : "BuiltInDefault"
+                        : agpMajorVersion > 0 ? "NotDeclared" : "Unknown";
 
-        if (legacyKotlinAndroid && agpMajorVersion >= 9
+        if (androidPlugin is not null && legacyKotlinAndroid && agpMajorVersion >= 9
             && (!builtInKotlinDisabled || newDslEnabled != false))
         {
             modelDiagnostics.Add(Diagnostic(
@@ -456,7 +489,7 @@ internal static class GradleBuildModelResolver
 
         return new GradleAndroidBuildModel
         {
-            PluginId = androidPlugin.Id,
+            PluginId = androidPlugin?.Id ?? string.Empty,
             PluginVersion = pluginVersion,
             ModuleKind = moduleKind,
             KotlinIntegration = kotlinIntegration,
@@ -493,12 +526,13 @@ internal static class GradleBuildModelResolver
         try
         {
             var source = StripComments(File.ReadAllText(rootBuildFile));
-            var rootPlugins = ParsePlugins(
+                var rootPlugins = ParsePlugins(
                 ExtractBlock(source, "plugins"),
                 catalog,
                 new List<AnalysisDiagnostic>(),
                 rootBuildFile);
-            return rootPlugins.FirstOrDefault(plugin => plugin.Id.Equals(pluginId, StringComparison.Ordinal))?.Version;
+            return rootPlugins.FirstOrDefault(plugin => plugin.Id.Equals(pluginId, StringComparison.Ordinal))?.Version
+                ?? ReadBuildscriptPluginVersion(source, pluginId);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -702,6 +736,67 @@ internal static class GradleBuildModelResolver
 
     private static bool IsPluginApplied(string declaration) =>
         !Regex.IsMatch(declaration, @"\bapply\s+false\b", RegexOptions.CultureInvariant);
+
+    private static IReadOnlyList<GradleBuildModel.Plugin> ParseLegacyAppliedPlugins(string source)
+    {
+        var result = new List<GradleBuildModel.Plugin>();
+        var groovyApply = new Regex(
+            @"^\s*apply\s+plugin\s*:\s*['""](?<id>[^'""]+)['""]",
+            RegexOptions.CultureInvariant);
+        var kotlinApply = new Regex(
+            @"^\s*apply\s*\(\s*plugin\s*=\s*['""](?<id>[^'""]+)['""]\s*\)",
+            RegexOptions.CultureInvariant);
+
+        foreach (var line in source.Split('\n'))
+        {
+            var match = groovyApply.Match(line);
+            if (!match.Success)
+                match = kotlinApply.Match(line);
+            if (!match.Success)
+                continue;
+
+            var pluginId = match.Groups["id"].Value;
+            if (pluginId.Equals("kotlin-android", StringComparison.Ordinal))
+                pluginId = "org.jetbrains.kotlin.android";
+
+            result.Add(new GradleBuildModel.Plugin(
+                pluginId,
+                ReadBuildscriptPluginVersion(source, pluginId),
+                true));
+        }
+
+        return result;
+    }
+
+    private static string? ReadBuildscriptPluginVersion(string source, string pluginId)
+    {
+        var artifact = pluginId switch
+        {
+            "com.android.application"
+            or "com.android.library"
+            or "com.android.test"
+            or "com.android.dynamic-feature"
+            or "com.android.asset-pack" => "com.android.tools.build:gradle",
+            "org.jetbrains.kotlin.android"
+            or "org.jetbrains.kotlin.jvm"
+            or "org.jetbrains.kotlin.multiplatform" => "org.jetbrains.kotlin:kotlin-gradle-plugin",
+            _ => null
+        };
+        if (artifact is null)
+            return null;
+
+        var buildscript = ExtractBlock(source, "buildscript");
+        var dependencies = buildscript is null ? null : ExtractBlock(buildscript, "dependencies");
+        if (dependencies is null)
+            return null;
+
+        var match = Regex.Match(
+            dependencies,
+            @"\bclasspath\s*(?:\(\s*)?['""]" + Regex.Escape(artifact)
+            + @":(?<version>[^'""]+)['""]\s*\)?",
+            RegexOptions.CultureInvariant);
+        return match.Success ? match.Groups["version"].Value : null;
+    }
 
     private static List<GradleBuildModel.Plugin> ParsePlugins(
         string? block,

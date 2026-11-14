@@ -116,6 +116,88 @@ public sealed class GradleAndroidBuildModelTests
     }
 
     [Fact]
+    public void Detect_supports_legacy_apply_plugin_syntax_and_root_buildscript_versions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidLegacySyntax_{Guid.NewGuid():N}");
+        var module = Path.Combine(root, "app");
+        Directory.CreateDirectory(Path.Combine(module, "src", "main", "kotlin"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle"),
+                "rootProject.name = 'android-legacy-syntax'");
+            File.WriteAllText(Path.Combine(root, "build.gradle"), """
+                buildscript {
+                    repositories { google(); mavenCentral() }
+                    dependencies {
+                        classpath 'com.android.tools.build:gradle:8.7.3'
+                        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0'
+                    }
+                }
+                """);
+            File.WriteAllText(Path.Combine(module, "build.gradle"), """
+                apply plugin: 'com.android.application'
+                apply plugin: 'kotlin-android'
+                android {
+                    namespace 'org.example.legacy'
+                    compileSdkVersion 35
+                }
+                """);
+            File.WriteAllText(Path.Combine(module, "src", "main", "kotlin", "Legacy.kt"),
+                "package org.example.legacy\\nclass Legacy");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var discovered = Assert.Single(context.Modules, candidate => candidate.Path == module);
+            var gradle = Assert.IsType<GradleBuildModel>(discovered.GradleBuildModel);
+            var android = Assert.IsType<GradleAndroidBuildModel>(gradle.Android);
+
+            Assert.Equal("AndroidApplication", discovered.ProjectKind);
+            Assert.Equal("com.android.application", android.PluginId);
+            Assert.Equal("8.7.3", android.PluginVersion);
+            Assert.Equal("LegacyKotlinAndroidPlugin", android.KotlinIntegration);
+            Assert.Equal("2.1.0", gradle.KotlinPluginVersion);
+            Assert.True(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_keeps_android_dsl_modules_out_of_jvm_analysis_when_plugin_identity_is_unknown()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidUnknownPlugin_{Guid.NewGuid():N}");
+        var module = Path.Combine(root, "app");
+        Directory.CreateDirectory(module);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-unknown-plugin\"");
+            File.WriteAllText(Path.Combine(module, "build.gradle.kts"), """
+                android {
+                    namespace = "org.example.unknown"
+                    compileSdk = 35
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var discovered = Assert.Single(context.Modules, candidate => candidate.Path == module);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(discovered.GradleBuildModel).Android);
+
+            Assert.Equal("Unknown", android.ModuleKind);
+            Assert.Equal(string.Empty, android.PluginId);
+            Assert.False(android.IsComplete);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidPluginNotStaticallyResolved");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_does_not_treat_dynamic_agp_versions_as_resolved()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidDynamicAgp_{Guid.NewGuid():N}");

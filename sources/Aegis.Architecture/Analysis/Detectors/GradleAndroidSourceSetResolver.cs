@@ -76,6 +76,8 @@ internal static class GradleAndroidSourceSetResolver
             {
                 Name = name,
                 Ownership = ownership,
+                TestKind = ResolveTestKind(name, ownership, knownTestSourceSetNames),
+                AppliesToVariants = ResolveApplicableVariants(name, ownership, model, variants, knownTestSourceSetNames),
                 JavaSourceDirectories = javaDirectories,
                 KotlinSourceDirectories = kotlinDirectories,
                 ManifestFiles = manifestFiles,
@@ -469,6 +471,59 @@ internal static class GradleAndroidSourceSetResolver
                 EvidenceFile = buildFile
             };
         }
+    }
+
+    private static GradleAndroidTestKind ResolveTestKind(
+        string name,
+        ProjectSourceRootOwnership ownership,
+        IReadOnlySet<string> expectedTestSourceSets)
+    {
+        if (ownership == ProjectSourceRootOwnership.Unknown)
+            return GradleAndroidTestKind.Unknown;
+        if (!expectedTestSourceSets.Contains(name))
+            return GradleAndroidTestKind.None;
+        if (name.Equals("testFixtures", StringComparison.Ordinal))
+            return GradleAndroidTestKind.Fixtures;
+        if (name.StartsWith("androidTest", StringComparison.Ordinal)
+            || name.EndsWith("AndroidTest", StringComparison.Ordinal))
+            return GradleAndroidTestKind.Instrumentation;
+
+        return GradleAndroidTestKind.Unit;
+    }
+
+    private static List<string> ResolveApplicableVariants(
+        string sourceSetName,
+        ProjectSourceRootOwnership ownership,
+        GradleAndroidBuildModel model,
+        IReadOnlyCollection<GradleAndroidVariant> variants,
+        IReadOnlySet<string> expectedTestSourceSets)
+    {
+        if (ownership == ProjectSourceRootOwnership.Unknown)
+            return [];
+
+        if (sourceSetName is "main" or "test" or "androidTest" or "testFixtures")
+            return variants.Select(variant => variant.Name).ToList();
+
+        var isTest = expectedTestSourceSets.Contains(sourceSetName);
+        var testPrefix = sourceSetName.StartsWith("androidTest", StringComparison.Ordinal)
+            ? "androidTest"
+            : sourceSetName.StartsWith("test", StringComparison.Ordinal)
+                ? "test"
+                : string.Empty;
+        var targetName = isTest && testPrefix.Length > 0
+            ? sourceSetName[testPrefix.Length..]
+            : sourceSetName;
+
+        if (targetName.Length == 0)
+            return variants.Select(variant => variant.Name).ToList();
+
+        return variants
+            .Where(variant =>
+                variant.Name.Equals(targetName, StringComparison.Ordinal)
+                || variant.BuildType.Equals(targetName, StringComparison.Ordinal)
+                || variant.ProductFlavors.Contains(targetName, StringComparer.Ordinal))
+            .Select(variant => variant.Name)
+            .ToList();
     }
 
     private static ProjectSourceRootOwnership ResolveOwnership(

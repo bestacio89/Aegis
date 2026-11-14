@@ -374,22 +374,27 @@ internal static class SemanticArchitectureComponentDetector
                 .Select(dependency => NormalizePath(dependency.TargetProjectPath))
                 .ToHashSet(PathComparer);
 
+            foreach (var externalSymbol in externalSymbols.Where(symbol =>
+                         !string.IsNullOrWhiteSpace(symbol.ProjectPath)))
+            {
+                var externalProjectPath = NormalizePath(externalSymbol.ProjectPath!);
+                if (PathComparer.Equals(externalProjectPath, sourceProjectPath))
+                    continue;
+
+                var exactIdentity = new SymbolIdentity(
+                    externalProjectPath,
+                    string.IsNullOrWhiteSpace(externalSymbol.Language) ? run.Language : externalSymbol.Language,
+                    targetSymbolId);
+                if (symbolComponents.TryGetValue(exactIdentity, out var exactTarget))
+                    candidates[exactIdentity] = exactTarget;
+            }
+
+            // A provider-supplied target owner is stronger than name matching.
+            if (candidates.Count > 0)
+                return candidates.Count == 1 ? candidates.Values.Single() : null;
+
             foreach (var externalSymbol in externalSymbols)
             {
-                if (!string.IsNullOrWhiteSpace(externalSymbol.ProjectPath))
-                {
-                    var externalProjectPath = NormalizePath(externalSymbol.ProjectPath);
-                    if (!PathComparer.Equals(externalProjectPath, sourceProjectPath))
-                    {
-                        var exactIdentity = new SymbolIdentity(
-                            externalProjectPath,
-                            string.IsNullOrWhiteSpace(externalSymbol.Language) ? run.Language : externalSymbol.Language,
-                            targetSymbolId);
-                        if (symbolComponents.TryGetValue(exactIdentity, out var exactTarget))
-                            candidates[exactIdentity] = exactTarget;
-                    }
-                }
-
                 if (string.IsNullOrWhiteSpace(externalSymbol.QualifiedName))
                     continue;
 

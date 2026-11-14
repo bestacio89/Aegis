@@ -129,6 +129,21 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
             });
         }
 
+        if (ReadOption(request.ProviderOptions, "kotlin.compilerPluginsNotExecuted") == "true")
+        {
+            status = status == SemanticAnalysisStatus.Completed
+                ? SemanticAnalysisStatus.PartiallyCompleted
+                : status;
+            diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = "KotlinCompilerPluginsNotExecuted",
+                Component = nameof(KotlinSemanticAnalysisAdapter),
+                Message = "The build declares Kotlin compiler plugins or code generators that Aegis does not execute. Generated or transformed declarations may be missing from semantic evidence.",
+                Target = request.ProjectPath,
+                AffectsCoverage = true
+            });
+        }
+
         if (status == SemanticAnalysisStatus.Completed
             && result.CompilationSucceeded
             && !configurationInferred

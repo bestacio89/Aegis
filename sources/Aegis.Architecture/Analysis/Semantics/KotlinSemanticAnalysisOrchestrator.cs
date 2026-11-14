@@ -99,6 +99,12 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (TryGetUnsupportedTarget(module, out var unsupportedTarget))
+            {
+                context.SemanticAnalysisRuns.Add(CreateUnsupportedTargetRun(module, unsupportedTarget));
+                continue;
+            }
+
             var sourceRoots = _sourceRootResolver.ResolveSourceRoots(module, Language);
             if (sourceRoots.Count == 0)
             {
@@ -200,6 +206,11 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             .OrderBy(path => path, PathComparer)
             .ToArray();
 
+        var compilerPluginsNotExecuted = module.GradleBuildModel?.Diagnostics.Any(diagnostic =>
+                diagnostic.Code == "GradleKotlinCompilerPluginNotExecuted") == true
+            || module.MavenModel?.Diagnostics.Any(diagnostic =>
+                diagnostic.Code is "MavenKotlinCompilerPluginNotExecuted" or "MavenKotlinCodeGenerationNotExecuted") == true;
+
         var request = new SemanticAnalysisRequest
         {
             Language = Language,
@@ -242,7 +253,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 ["kotlin.apiVersion"] = apiVersion,
                 ["kotlin.jvmTarget"] = jvmTarget,
                 ["kotlin.moduleName"] = NormalizeModuleName(module.Name),
-                ["kotlin.configurationInferred"] = inferred.ToString()
+                ["kotlin.configurationInferred"] = inferred.ToString(),
+                ["kotlin.compilerPluginsNotExecuted"] = compilerPluginsNotExecuted.ToString()
             }
         };
 
@@ -259,6 +271,67 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             run.Symbols.Count,
             run.Relationships.Count,
             run.Diagnostics.Count);
+    }
+
+
+    private static bool TryGetUnsupportedTarget(
+        ProjectModuleContext module,
+        out (string Code, string Message) unsupportedTarget)
+    {
+        var plugins = module.GradleBuildModel?.Plugins ?? [];
+        var unsupportedPlugin = plugins.FirstOrDefault(plugin =>
+            plugin.Id.Equals("org.jetbrains.kotlin.multiplatform", StringComparison.Ordinal)
+            || plugin.Id.Equals("org.jetbrains.kotlin.android", StringComparison.Ordinal)
+            || plugin.Id.Equals("com.android.application", StringComparison.Ordinal)
+            || plugin.Id.Equals("com.android.library", StringComparison.Ordinal)
+            || plugin.Id.Equals("com.android.test", StringComparison.Ordinal)
+            || plugin.Id.Equals("org.jetbrains.kotlin.js", StringComparison.Ordinal)
+            || plugin.Id.StartsWith("org.jetbrains.kotlin.native", StringComparison.Ordinal)
+            || plugin.Id.StartsWith("org.jetbrains.kotlin.wasm", StringComparison.Ordinal));
+
+        if (unsupportedPlugin is null)
+        {
+            unsupportedTarget = default;
+            return false;
+        }
+
+        var message = unsupportedPlugin.Id.Equals("org.jetbrains.kotlin.multiplatform", StringComparison.Ordinal)
+            ? "Kotlin Multiplatform is not analysed as a single JVM module. Target-specific source sets, expect/actual relationships and per-target classpaths must be modelled first."
+            : unsupportedPlugin.Id.Contains("android", StringComparison.Ordinal)
+                || unsupportedPlugin.Id.StartsWith("com.android.", StringComparison.Ordinal)
+                    ? "Android Kotlin analysis is not enabled until Android variants, SDK boot classpaths and source-set ownership are modelled."
+                    : "This Kotlin target is not JVM bytecode. A target-specific semantic engine and dependency model are required.";
+
+        unsupportedTarget = ("KotlinTargetPlatformNotSupported", message);
+        return true;
+    }
+
+    private static SemanticAnalysisRun CreateUnsupportedTargetRun(
+        ProjectModuleContext module,
+        (string Code, string Message) unsupportedTarget)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new SemanticAnalysisRun
+        {
+            RunId = Guid.NewGuid().ToString("N"),
+            Language = KotlinLanguage,
+            EngineId = nameof(KotlinSemanticAnalysisOrchestrator),
+            ProjectPath = module.Path,
+            Status = SemanticAnalysisStatus.Unsupported,
+            StartedAtUtc = now,
+            CompletedAtUtc = now,
+            Diagnostics =
+            [
+                new AnalysisDiagnostic
+                {
+                    Code = unsupportedTarget.Code,
+                    Component = nameof(KotlinSemanticAnalysisOrchestrator),
+                    Message = unsupportedTarget.Message,
+                    Target = module.Path,
+                    AffectsCoverage = true
+                }
+            ]
+        };
     }
 
     private static bool IsKotlinModule(

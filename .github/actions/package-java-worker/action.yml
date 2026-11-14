@@ -1,5 +1,5 @@
-name: Package Eclipse JDT worker and private Java runtime
-description: Build, verify and package the isolated Eclipse JDT worker with a minimized Java 21 runtime.
+name: Package JVM semantic workers and private Java runtime
+description: Build, verify and package the isolated Eclipse JDT and Kotlin K2 workers with one minimized Java 21 runtime.
 
 runs:
   using: composite
@@ -10,8 +10,24 @@ runs:
         distribution: temurin
         java-version: '21'
         cache: maven
-        cache-dependency-path: tools/java-worker-prototype/pom.xml
+        cache-dependency-path: |
+          tools/java-worker-prototype/pom.xml
+          tools/kotlin-worker-prototype/pom.xml
 
     - name: Package Eclipse JDT worker and private runtime
       shell: pwsh
       run: ./tools/java-worker-prototype/packaging/Package-Worker.ps1 -OutputDirectory artifacts/java-worker-package
+
+    - name: Verify Kotlin K2 worker
+      shell: pwsh
+      run: mvn --batch-mode --no-transfer-progress -f tools/kotlin-worker-prototype/pom.xml verify
+
+    - name: Add Kotlin worker to the shared private JVM package
+      shell: pwsh
+      run: |
+        $kotlinPackage = Join-Path $PWD 'artifacts/java-worker-package/Java/Kotlin'
+        $kotlinLibraries = Join-Path $kotlinPackage 'lib'
+        New-Item -ItemType Directory -Path $kotlinLibraries -Force | Out-Null
+        Copy-Item -LiteralPath 'tools/kotlin-worker-prototype/target/runtime/kotlin-worker.jar' -Destination $kotlinPackage -Force
+        Copy-Item -Path 'tools/kotlin-worker-prototype/target/runtime/lib/*' -Destination $kotlinLibraries -Recurse -Force
+        Copy-Item -LiteralPath 'tools/kotlin-worker-prototype/target/bom.json' -Destination (Join-Path $kotlinPackage 'sbom.cdx.json') -Force

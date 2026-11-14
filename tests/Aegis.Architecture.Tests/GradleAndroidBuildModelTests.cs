@@ -792,6 +792,63 @@ public sealed class GradleAndroidBuildModelTests
         }
     }
 
+    [Fact]
+    public void Detect_assigns_generated_ksp_roots_to_android_production_and_unit_test_variants()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidGenerated_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-generated-sources\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                    id("org.jetbrains.kotlin.android") version "2.1.0"
+                }
+                android {
+                    namespace = "org.example.generated"
+                    compileSdk = 35
+                }
+                """);
+            WriteFile(app, "build/generated/ksp/debug/kotlin/GeneratedDebug.kt",
+                "package org.example.generated\nclass GeneratedDebug");
+            WriteFile(app, "build/generated/ksp/debugUnitTest/kotlin/GeneratedUnitTest.kt",
+                "package org.example.generated\nclass GeneratedUnitTest");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+            var production = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "debug");
+            var tests = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "testDebug");
+
+            Assert.Contains(production.GeneratedKotlinSourceDirectories, directory =>
+                directory == Path.Combine(app, "build", "generated", "ksp", "debug", "kotlin"));
+            Assert.Contains(tests.GeneratedKotlinSourceDirectories, directory =>
+                directory == Path.Combine(app, "build", "generated", "ksp", "debugUnitTest", "kotlin"));
+            Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production, production.Ownership);
+            Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test, tests.Ownership);
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "build", "generated", "ksp", "debug", "kotlin")
+                && sourceRoot.IsGenerated
+                && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.GeneratedConvention
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production);
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "build", "generated", "ksp", "debugUnitTest", "kotlin")
+                && sourceRoot.IsGenerated
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test);
+            Assert.DoesNotContain(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "build", "generated", "ksp")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Unknown);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static void WriteFile(string root, string relativePath, string content)
     {
         var path = Path.Combine(root, relativePath);

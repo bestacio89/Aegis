@@ -37,6 +37,9 @@ public sealed class GradleAndroidBuildModel
 
     public List<BuildType> BuildTypes { get; init; } = [];
 
+    /// <summary>Whether the Android test-fixtures feature is explicitly enabled; null means unresolved or not declared.</summary>
+    public bool? TestFixturesEnabled { get; set; }
+
     /// <summary>Statically derived Android build variants; this is a declared matrix, not Gradle's resolved variant graph.</summary>
     public List<GradleAndroidVariant> Variants { get; set; } = [];
 

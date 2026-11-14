@@ -108,7 +108,7 @@ internal static class SemanticArchitectureComponentDetector
                             modulePath,
                             run.Language,
                             Path.GetFullPath(symbol.FilePath!),
-                            symbol.IsTestCode);
+                            symbol.IsTestCode || module.IsTestProject || module.IsTestSupport);
                     });
             })
             .GroupBy(item => item.SymbolId, StringComparer.Ordinal)

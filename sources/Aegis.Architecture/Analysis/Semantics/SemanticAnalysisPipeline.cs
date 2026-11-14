@@ -23,7 +23,8 @@ public sealed class SemanticAnalysisPipeline
         ArgumentNullException.ThrowIfNull(logger);
 
         _analyzers = analyzers
-            .OrderBy(analyzer => analyzer.Language, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(analyzer => analyzer.ExecutionOrder)
+            .ThenBy(analyzer => analyzer.Language, StringComparer.OrdinalIgnoreCase)
             .ThenBy(analyzer => analyzer.GetType().FullName, StringComparer.Ordinal)
             .ToArray();
         _logger = logger;
@@ -35,6 +36,8 @@ public sealed class SemanticAnalysisPipeline
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        await using var executionContext = new SemanticAnalysisExecutionContext(_logger);
+
         foreach (var analyzer in _analyzers)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -42,7 +45,7 @@ public sealed class SemanticAnalysisPipeline
 
             try
             {
-                await analyzer.AnalyzeAsync(context, cancellationToken)
+                await analyzer.AnalyzeAsync(context, executionContext, cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

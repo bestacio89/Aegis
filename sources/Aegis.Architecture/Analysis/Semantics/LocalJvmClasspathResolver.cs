@@ -8,12 +8,12 @@ namespace Aegis.Architecture.Analysis.Semantics;
 /// dependencies. Any declared external dependency keeps the result partial
 /// until a complete resolved graph is supplied by a trusted provider.
 /// </summary>
-public sealed class LocalJavaClasspathResolver : IJavaClasspathResolver
+public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
 {
     private readonly string _mavenRepository;
     private readonly string _gradleArtifactCache;
 
-    public LocalJavaClasspathResolver(
+    public LocalJvmClasspathResolver(
         string? mavenRepository = null,
         string? gradleArtifactCache = null)
     {
@@ -36,7 +36,7 @@ public sealed class LocalJavaClasspathResolver : IJavaClasspathResolver
         }
     }
 
-    public JavaClasspathResolution Resolve(
+    public JvmClasspathResolution Resolve(
         ProjectModuleContext module,
         IReadOnlyCollection<ProjectModuleContext> projectModules,
         bool includeTestCode)
@@ -127,7 +127,7 @@ public sealed class LocalJavaClasspathResolver : IJavaClasspathResolver
 
         // The local cache contains direct declared artifacts only. Maven/Gradle
         // transitive graphs are intentionally not guessed from cache contents.
-        return new JavaClasspathResolution(
+        return new JvmClasspathResolution(
             orderedEntries,
             orderedUnresolved,
             hasDeclaredDependencies,

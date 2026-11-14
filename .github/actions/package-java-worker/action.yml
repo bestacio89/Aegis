@@ -1,5 +1,5 @@
-name: Package Eclipse JDT worker and private Java runtime
-description: Build, verify and package the isolated Eclipse JDT worker with a minimized Java 21 runtime.
+name: Package JVM semantic workers and private Java runtime
+description: Build, verify and package the isolated Eclipse JDT and Kotlin K2 workers with one minimized Java 21 runtime.
 
 runs:
   using: composite
@@ -10,8 +10,89 @@ runs:
         distribution: temurin
         java-version: '21'
         cache: maven
-        cache-dependency-path: tools/java-worker-prototype/pom.xml
+        cache-dependency-path: |
+          tools/java-worker-prototype/pom.xml
+          tools/kotlin-worker-prototype/pom.xml
 
-    - name: Package Eclipse JDT worker and private runtime
+    - name: Verify Kotlin K2 worker
+      shell: pwsh
+      run: mvn --batch-mode --no-transfer-progress -f tools/kotlin-worker-prototype/pom.xml verify
+
+    - name: Package Eclipse JDT worker and shared private runtime
       shell: pwsh
       run: ./tools/java-worker-prototype/packaging/Package-Worker.ps1 -OutputDirectory artifacts/java-worker-package
+
+    - name: Add Kotlin worker to the shared private JVM package
+      shell: pwsh
+      run: |
+        $kotlinPackage = Join-Path $PWD 'artifacts/java-worker-package/Java/Kotlin'
+        $kotlinLibraries = Join-Path $kotlinPackage 'lib'
+        New-Item -ItemType Directory -Path $kotlinLibraries -Force | Out-Null
+        Copy-Item -LiteralPath 'tools/kotlin-worker-prototype/target/runtime/kotlin-worker.jar' -Destination $kotlinPackage -Force
+        Copy-Item -Path 'tools/kotlin-worker-prototype/target/runtime/lib/*' -Destination $kotlinLibraries -Recurse -Force
+        Copy-Item -LiteralPath 'tools/kotlin-worker-prototype/target/bom.json' -Destination (Join-Path $kotlinPackage 'sbom.cdx.json') -Force
+
+        $requiredLibraries = @(
+          'kotlin-compiler-embeddable-2.4.21.jar',
+          'kotlin-stdlib-2.4.21.jar',
+          'gson-2.13.2.jar'
+        )
+        foreach ($library in $requiredLibraries) {
+          if (-not (Test-Path -LiteralPath (Join-Path $kotlinLibraries $library))) {
+            throw "The Kotlin worker package is missing required library '$library'."
+          }
+        }
+
+        $sbomPath = Join-Path $kotlinPackage 'sbom.cdx.json'
+        $sbom = Get-Content -LiteralPath $sbomPath -Raw | ConvertFrom-Json
+        $components = @($sbom.components)
+        if ($components.Count -eq 0) {
+          throw 'The Kotlin worker CycloneDX SBOM contains no dependency components.'
+        }
+
+        $noticeLines = [System.Collections.Generic.List[string]]::new()
+        $noticeLines.Add('# Kotlin worker third-party notices')
+        $noticeLines.Add('')
+        $noticeLines.Add('Dependency inventory derived from sbom.cdx.json. Consult the SBOM and upstream license texts for complete license terms.')
+        $noticeLines.Add('')
+        $missingLicenseMetadataCount = 0
+        foreach ($component in ($components | Sort-Object name, version)) {
+          $licenseNames = @(
+            foreach ($license in @($component.licenses)) {
+              if ($license.expression) { $license.expression }
+              elseif ($license.license.id) { $license.license.id }
+              elseif ($license.license.name) { $license.license.name }
+            }
+          ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique
+
+          if ($licenseNames.Count -eq 0) {
+            $licenseText = 'License metadata not supplied by the SBOM'
+            $missingLicenseMetadataCount++
+          }
+          else {
+            $licenseText = $licenseNames -join ', '
+          }
+
+          $componentName = if ($component.name) { $component.name } else { 'unknown component' }
+          $componentVersion = if ($component.version) { $component.version } else { 'unknown version' }
+          $noticeLines.Add("- $componentName $componentVersion — $licenseText")
+        }
+        $noticeLines | Set-Content -LiteralPath (Join-Path $kotlinPackage 'THIRD-PARTY-NOTICES.md') -Encoding utf8
+
+        $javaManifestPath = Join-Path $PWD 'artifacts/java-worker-package/Java/worker/worker-manifest.json'
+        $javaManifest = Get-Content -LiteralPath $javaManifestPath -Raw | ConvertFrom-Json
+        $kotlinManifest = [ordered]@{
+          engineId = 'kotlin-k2-ir'
+          engineVersion = '2.4.21'
+          protocolVersion = 1
+          javaRuntimeFeature = 21
+          runtimeModules = @($javaManifest.runtimeModules)
+          dependencyCount = $components.Count
+          licenseMetadataMissingCount = $missingLicenseMetadataCount
+          workerJar = 'kotlin-worker.jar'
+          librariesDirectory = 'lib'
+          sbom = 'sbom.cdx.json'
+          thirdPartyNotices = 'THIRD-PARTY-NOTICES.md'
+          sharedRuntime = '../runtime'
+        }
+        $kotlinManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $kotlinPackage 'worker-manifest.json') -Encoding utf8

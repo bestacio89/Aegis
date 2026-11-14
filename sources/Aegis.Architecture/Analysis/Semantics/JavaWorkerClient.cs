@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Aegis.Shared.Architecture.Enums;
@@ -21,7 +20,7 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
     private readonly IOptionsMonitor<JavaWorkerOptions> _options;
     private readonly ILogger<JavaWorkerClient> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private Process? _process;
+    private readonly JvmWorkerProcess _workerProcess;
     private bool _disposed;
 
     public JavaWorkerClient(
@@ -32,6 +31,7 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
         ArgumentNullException.ThrowIfNull(logger);
         _options = options;
         _logger = logger;
+        _workerProcess = new JvmWorkerProcess(logger);
     }
 
     public bool IsConfigured => _options.CurrentValue.IsConfigured;
@@ -53,10 +53,11 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(options.RequestTimeout);
+            var launchOptions = CreateLaunchOptions(options);
 
             try
             {
-                await EnsureStartedAsync(options, timeout.Token).ConfigureAwait(false);
+                await _workerProcess.StartAsync(launchOptions, timeout.Token).ConfigureAwait(false);
                 var startedAt = DateTimeOffset.UtcNow;
                 var sourceManifestPath = Path.Combine(Path.GetTempPath(), $"aegis-java-sources-{Guid.NewGuid():N}.json");
                 try
@@ -80,7 +81,7 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
                         includeGeneratedCode = request.IncludeGeneratedCode
                     };
 
-                    var result = await SendRequestAsync("analyze", payload, options.MaxFrameBytes, options.MaxResponseBytes, timeout.Token)
+                    var result = await _workerProcess.SendAsync(launchOptions, "analyze", payload, timeout.Token)
                         .ConfigureAwait(false);
                     return MapResult(result, request, startedAt);
                 }
@@ -99,13 +100,13 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                await StopWorkerAsync().ConfigureAwait(false);
+                await _workerProcess.StopAsync().ConfigureAwait(false);
                 throw new TimeoutException(
                     $"Eclipse JDT analysis exceeded the configured timeout of {options.RequestTimeout}.");
             }
             catch
             {
-                await StopWorkerAsync().ConfigureAwait(false);
+                await _workerProcess.StopAsync().ConfigureAwait(false);
                 throw;
             }
         }
@@ -115,131 +116,22 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
         }
     }
 
-    private async Task EnsureStartedAsync(
-        JavaWorkerOptions options,
-        CancellationToken cancellationToken)
+    private static JvmWorkerLaunchOptions CreateLaunchOptions(JavaWorkerOptions options)
     {
-        if (_process is { HasExited: false })
-            return;
-
-        await StopWorkerAsync().ConfigureAwait(false);
-
         var classpath = string.Join(
             Path.PathSeparator,
             options.WorkerClassesDirectory,
             Path.Combine(options.WorkerLibrariesDirectory, "*"));
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = options.JavaExecutablePath,
-            WorkingDirectory = AppContext.BaseDirectory,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        startInfo.ArgumentList.Add("-cp");
-        startInfo.ArgumentList.Add(classpath);
-        startInfo.ArgumentList.Add("org.aegis.worker.WorkerMain");
-
-        var process = new Process { StartInfo = startInfo };
-        process.ErrorDataReceived += (_, eventArgs) =>
-        {
-            if (!string.IsNullOrWhiteSpace(eventArgs.Data))
-                _logger.LogWarning("Java semantic worker stderr: {WorkerMessage}", eventArgs.Data);
-        };
-
-        if (!process.Start())
-        {
-            process.Dispose();
-            throw new InvalidOperationException("The Eclipse JDT worker process could not be started.");
-        }
-
-        process.BeginErrorReadLine();
-        _process = process;
-
-        using var startupTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        startupTimeout.CancelAfter(options.StartupTimeout);
-        var handshake = await SendRequestAsync(
-            "handshake",
-            null,
+        return new JvmWorkerLaunchOptions(
+            options.JavaExecutablePath,
+            AppContext.BaseDirectory,
+            ["-cp", classpath, "org.aegis.worker.WorkerMain"],
+            ProtocolVersion,
+            options.StartupTimeout,
             options.MaxFrameBytes,
             options.MaxResponseBytes,
-            startupTimeout.Token).ConfigureAwait(false);
-
-        if (!handshake.TryGetProperty("protocolVersion", out var version)
-            || version.GetInt32() != ProtocolVersion)
-        {
-            throw new InvalidDataException("The Java worker returned an incompatible protocol handshake.");
-        }
-
-        _logger.LogInformation(
-            "Started Eclipse JDT semantic worker using protocol {ProtocolVersion}.",
-            ProtocolVersion);
-    }
-
-    private async Task<JsonElement> SendRequestAsync(
-        string operation,
-        object? payload,
-        int maxFrameBytes,
-        int maxResponseBytes,
-        CancellationToken cancellationToken)
-    {
-        var process = _process
-            ?? throw new InvalidOperationException("The Java worker process is not running.");
-
-        var requestId = Guid.NewGuid().ToString("N");
-        var frame = JsonSerializer.Serialize(
-            new
-            {
-                protocolVersion = ProtocolVersion,
-                requestId,
-                operation,
-                payload
-            },
-            JsonOptions);
-
-        if (Encoding.UTF8.GetByteCount(frame) > maxFrameBytes)
-            throw new InvalidDataException(
-                $"The Java worker request exceeds the configured {maxFrameBytes}-byte frame limit.");
-
-        await process.StandardInput.WriteLineAsync(frame.AsMemory(), cancellationToken)
-            .ConfigureAwait(false);
-        await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-        var responseLine = await process.StandardOutput.ReadLineAsync(cancellationToken)
-            .ConfigureAwait(false);
-        if (responseLine is null)
-            throw new EndOfStreamException("The Java worker closed stdout before returning a response.");
-
-        if (Encoding.UTF8.GetByteCount(responseLine) > maxResponseBytes)
-            throw new InvalidDataException(
-                $"The Java worker response exceeds the configured {maxResponseBytes}-byte response limit.");
-
-        using var document = JsonDocument.Parse(responseLine);
-        var response = document.RootElement;
-        if (!response.TryGetProperty("requestId", out var responseId)
-            || responseId.GetString() != requestId)
-        {
-            throw new InvalidDataException("The Java worker response correlation identifier is invalid.");
-        }
-
-        if (!response.TryGetProperty("status", out var status)
-            || status.GetString() != "ok")
-        {
-            var code = response.TryGetProperty("error", out var error)
-                && error.TryGetProperty("code", out var errorCode)
-                    ? errorCode.GetString()
-                    : "UNKNOWN_WORKER_ERROR";
-            var message = response.TryGetProperty("error", out error)
-                && error.TryGetProperty("message", out var errorMessage)
-                    ? errorMessage.GetString()
-                    : "The Java worker rejected the request.";
-            throw new InvalidOperationException($"Java worker error {code}: {message}");
-        }
-
-        return response.GetProperty("result").Clone();
+            "Java semantic worker");
     }
 
     private static SemanticAnalysisRun MapResult(
@@ -271,36 +163,6 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
             ? JsonSerializer.Deserialize<List<T>>(value.GetRawText(), JsonOptions) ?? []
             : [];
 
-    private async Task StopWorkerAsync()
-    {
-        var process = _process;
-        _process = null;
-        if (process is null)
-            return;
-
-        try
-        {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            }
-        }
-        catch (InvalidOperationException)
-        {
-            // The process exited between the state check and termination.
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogWarning("Java semantic worker did not terminate within five seconds.");
-        }
-        finally
-        {
-            process.Dispose();
-        }
-    }
-
     public async ValueTask DisposeAsync()
     {
         if (_disposed)
@@ -310,7 +172,7 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
         try
         {
             _disposed = true;
-            await StopWorkerAsync().ConfigureAwait(false);
+            await _workerProcess.DisposeAsync().ConfigureAwait(false);
         }
         finally
         {

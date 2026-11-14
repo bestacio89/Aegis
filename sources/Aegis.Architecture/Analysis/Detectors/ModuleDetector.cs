@@ -514,12 +514,50 @@ internal static class ModuleDetector
         foreach (var module in modules)
         {
             var hasKotlin = module.Languages.Contains("Kotlin", StringComparer.OrdinalIgnoreCase);
+            var hasJava = module.Languages.Contains("Java", StringComparer.OrdinalIgnoreCase);
+            var android = module.GradleBuildModel?.Android;
+
+            if (android is not null)
+            {
+                if (!hasJava)
+                {
+                    module.Frameworks.RemoveAll(framework =>
+                        framework.Equals("Java", StringComparison.OrdinalIgnoreCase));
+                }
+                else
+                {
+                    AddFramework(module, "Java");
+                }
+
+                if (hasKotlin)
+                    AddFramework(module, "Kotlin");
+
+                AddFramework(module, "Android");
+                module.ProjectKind = android.ModuleKind switch
+                {
+                    "Application" => "AndroidApplication",
+                    "Library" => "AndroidLibrary",
+                    "Test" => "AndroidTest",
+                    "DynamicFeature" => "AndroidDynamicFeature",
+                    "AssetPack" => "AndroidAssetPack",
+                    _ => "Unknown"
+                };
+                module.IsExecutable = android.ModuleKind == "Application";
+                module.IsLibrary = android.ModuleKind == "Library";
+                module.IsTestProject = module.IsTestProject || android.ModuleKind == "Test";
+                module.Framework = module.Frameworks.Count switch
+                {
+                    0 => null,
+                    1 => module.Frameworks[0],
+                    _ => "Multi-Framework"
+                };
+                continue;
+            }
+
             if (!hasKotlin)
                 continue;
 
-            var hasJava = module.Languages.Contains("Java", StringComparer.OrdinalIgnoreCase);
             AddFramework(module, "Kotlin");
-
             if (!hasJava)
             {
                 module.Frameworks.RemoveAll(framework =>

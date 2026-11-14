@@ -282,9 +282,9 @@ public sealed class JavaFrameworkDetectionTests
             });
     }
 
-    private sealed class EmptyJavaClasspathResolver : IJavaClasspathResolver
+    private sealed class EmptyJavaClasspathResolver : IJvmClasspathResolver
     {
-        public JavaClasspathResolution Resolve(
+        public JvmClasspathResolution Resolve(
             ProjectModuleContext module,
             IReadOnlyCollection<ProjectModuleContext> projectModules,
             bool includeTestCode) =>

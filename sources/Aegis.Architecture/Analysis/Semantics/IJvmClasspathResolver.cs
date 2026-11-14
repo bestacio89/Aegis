@@ -2,9 +2,9 @@ using Aegis.Shared.Architecture.Models;
 
 namespace Aegis.Architecture.Analysis.Semantics;
 
-public interface IJavaClasspathResolver
+public interface IJvmClasspathResolver
 {
-    JavaClasspathResolution Resolve(
+    JvmClasspathResolution Resolve(
         ProjectModuleContext module,
         IReadOnlyCollection<ProjectModuleContext> projectModules,
         bool includeTestCode);

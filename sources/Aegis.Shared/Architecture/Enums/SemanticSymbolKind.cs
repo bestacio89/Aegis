@@ -20,5 +20,6 @@ public enum SemanticSymbolKind
     Constructor = 10,
     Field = 11,
     Property = 12,
-    Parameter = 13
+    Parameter = 13,
+    TypeAlias = 14
 }

@@ -11,23 +11,21 @@ namespace Aegis.Architecture.Analysis.Semantics;
 /// </summary>
 public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectAnalyzer
 {
-    private static readonly HashSet<string> ExcludedDirectoryNames =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".git", ".gradle", ".idea", "bin", "build", "node_modules", "obj", "out", "target"
-        };
-
     private readonly SemanticAnalysisCoordinator _coordinator;
-    private readonly IJavaClasspathResolver _classpathResolver;
+    private readonly IJvmClasspathResolver _classpathResolver;
     private readonly ILogger<JavaSemanticAnalysisOrchestrator> _logger;
+    private readonly JvmSourceRootResolver _sourceRootResolver;
 
     public string Language => "Java";
 
+    public int ExecutionOrder => 200;
+
     public JavaSemanticAnalysisOrchestrator(
         IEnumerable<ISemanticAnalysisAdapter> adapters,
-        IJavaClasspathResolver classpathResolver,
+        IJvmClasspathResolver classpathResolver,
         ILogger<JavaSemanticAnalysisOrchestrator> logger,
-        SemanticAnalysisCoordinator? coordinator = null)
+        SemanticAnalysisCoordinator? coordinator = null,
+        JvmSourceRootResolver? sourceRootResolver = null)
     {
         ArgumentNullException.ThrowIfNull(adapters);
         ArgumentNullException.ThrowIfNull(classpathResolver);
@@ -36,11 +34,27 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         _coordinator = coordinator ?? new SemanticAnalysisCoordinator(adapters);
         _classpathResolver = classpathResolver;
         _logger = logger;
+        _sourceRootResolver = sourceRootResolver ?? new JvmSourceRootResolver();
     }
 
-    public async Task AnalyzeAsync(
+    public Task AnalyzeAsync(
         ProjectArchitectureContext context,
+        CancellationToken cancellationToken = default) =>
+        AnalyzeCoreAsync(context, null, cancellationToken);
+
+    public Task AnalyzeAsync(
+        ProjectArchitectureContext context,
+        SemanticAnalysisExecutionContext executionContext,
         CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(executionContext);
+        return AnalyzeCoreAsync(context, executionContext, cancellationToken);
+    }
+
+    private async Task AnalyzeCoreAsync(
+        ProjectArchitectureContext context,
+        SemanticAnalysisExecutionContext? executionContext,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -80,7 +94,13 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var sourceRoots = ResolveSourceRoots(module);
+            if (TryGetUnsupportedAndroidTarget(module, out var androidPluginId))
+            {
+                context.SemanticAnalysisRuns.Add(CreateUnsupportedAndroidRun(module, androidPluginId));
+                continue;
+            }
+
+            var sourceRoots = _sourceRootResolver.ResolveSourceRoots(module, "Java");
             if (sourceRoots.Count == 0)
             {
                 context.DiscoveryDiagnostics.Add(new AnalysisDiagnostic
@@ -104,6 +124,7 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
                     sourceRoots,
                     includeTestCode: true,
                     includeTestDependencies: module.IsTestProject || module.IsTestSupport,
+                    executionContext,
                     cancellationToken).ConfigureAwait(false);
                 continue;
             }
@@ -125,6 +146,7 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
                 productionRoots,
                 includeTestCode: false,
                 includeTestDependencies: false,
+                executionContext,
                 cancellationToken).ConfigureAwait(false);
             await AnalyzeScopeAsync(
                 module,
@@ -132,6 +154,7 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
                 testRoots,
                 includeTestCode: true,
                 includeTestDependencies: true,
+                executionContext,
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -146,14 +169,17 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         IReadOnlyCollection<ProjectSourceRoot> sourceRoots,
         bool includeTestCode,
         bool includeTestDependencies,
+        SemanticAnalysisExecutionContext? executionContext,
         CancellationToken cancellationToken)
     {
         if (sourceRoots.Count == 0)
             return;
 
-        var sourceFiles = EnumerateJavaFiles(
+        var sourceFiles = _sourceRootResolver.EnumerateSourceFiles(
             module.Path,
             sourceRoots,
+            ".java",
+            "Java",
             context.DiscoveryDiagnostics);
         if (sourceFiles.Count == 0)
         {
@@ -169,6 +195,16 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         }
 
         var classpath = _classpathResolver.Resolve(module, context.Modules, includeTestCode);
+        var dependencyPaths = JvmModuleDependencyResolver.ResolveDependencyPaths(
+            module.Path,
+            context.Modules,
+            context.Dependencies,
+            includeTestDependencies);
+        var compilationOutputs = executionContext?.GetCompilationOutputs(
+            module.Path,
+            dependencyPaths.Production,
+            dependencyPaths.Test,
+            includeTestCode) ?? Array.Empty<string>();
         var request = new SemanticAnalysisRequest
         {
             Language = "Java",
@@ -178,8 +214,11 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
             BuildSystem = module.BuildSystem.ToString(),
             SourceFiles = sourceFiles,
             SourceRoots = sourceRoots.Select(root => root.Directory).ToArray(),
-            ReferencedSourceRoots = ResolveReferencedSourceRoots(module, context, includeTestDependencies)
-                .Concat(includeTestCode ? ResolveOwnProductionSourceRoots(module, context) : Array.Empty<string>())
+            ReferencedSourceRoots = _sourceRootResolver.ResolveReferencedSourceRoots(
+                    module, context, includeTestDependencies, "Java")
+                .Concat(includeTestCode
+                    ? _sourceRootResolver.ResolveOwnSourceRoots(module, context, "Java", includeTestCode: false)
+                    : Array.Empty<string>())
                 .Distinct(PathComparer)
                 .OrderBy(path => path, PathComparer)
                 .ToArray(),
@@ -195,7 +234,12 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
                 .Where(root => root.IsGenerated)
                 .Select(root => root.Directory)
                 .ToArray(),
-            ClasspathEntries = classpath.Entries,
+            // Keep resolver precedence intact; sorting can silently select a
+            // different binary when classpath entries contain duplicate names.
+            ClasspathEntries = classpath.Entries
+                .Concat(compilationOutputs)
+                .Distinct(PathComparer)
+                .ToArray(),
             UnresolvedClasspathDependencies = classpath.UnresolvedDependencies,
             ClasspathResolutionComplete = classpath.IsComplete,
             BuildFiles = module.ProjectFiles.ToArray(),
@@ -220,6 +264,59 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
             run.Diagnostics.Count);
     }
 
+    private static bool TryGetUnsupportedAndroidTarget(
+        ProjectModuleContext module,
+        out string pluginId)
+    {
+        if (module.GradleBuildModel?.Android is { } androidModel)
+        {
+            pluginId = string.IsNullOrWhiteSpace(androidModel.PluginId)
+                ? "unresolved Android Gradle Plugin"
+                : androidModel.PluginId;
+            return true;
+        }
+
+        var androidPlugin = module.GradleBuildModel?.Plugins.FirstOrDefault(plugin =>
+            plugin.IsApplied
+            && (plugin.Id is
+                "com.android.application"
+                or "com.android.library"
+                or "com.android.test"
+                or "com.android.dynamic-feature"
+                or "com.android.asset-pack"));
+
+        pluginId = androidPlugin?.Id ?? string.Empty;
+        return androidPlugin is not null;
+    }
+
+    private static SemanticAnalysisRun CreateUnsupportedAndroidRun(
+        ProjectModuleContext module,
+        string pluginId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new SemanticAnalysisRun
+        {
+            RunId = Guid.NewGuid().ToString("N"),
+            Language = "Java",
+            EngineId = nameof(JavaSemanticAnalysisOrchestrator),
+            ProjectPath = module.Path,
+            Status = SemanticAnalysisStatus.Unsupported,
+            StartedAtUtc = now,
+            CompletedAtUtc = now,
+            Diagnostics =
+            [
+                new AnalysisDiagnostic
+                {
+                    Code = "JavaAndroidTargetNotSupported",
+                    Component = nameof(JavaSemanticAnalysisOrchestrator),
+                    Message = $"Android Java analysis is not enabled for '{pluginId}' until SDK platform classes, variant-specific classpaths and Android source ownership are modelled. The module will not be treated as a plain JVM project.",
+                    Target = module.Path,
+                    AffectsCoverage = true
+                }
+            ]
+        };
+    }
+
     private static bool IsJavaModule(
         ProjectModuleContext module,
         IReadOnlyCollection<ProjectModuleContext> modules)
@@ -237,219 +334,6 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         // sources just because repository-level language detection saw Java.
         return hasOwnedJavaRoots || (hasJavaLanguage && !ownsNestedModules);
     }
-
-    private static IReadOnlyList<string> ResolveOwnProductionSourceRoots(
-        ProjectModuleContext module,
-        ProjectArchitectureContext context)
-    {
-        if (module.IsTestProject || module.IsTestSupport)
-            return Array.Empty<string>();
-
-        var workspaceRoot = Path.GetFullPath(context.RootPath);
-        return ResolveSourceRoots(module)
-            .Where(root => root.ContainsJavaSources
-                && root.Ownership == ProjectSourceRootOwnership.Production
-                && IsSameOrDescendantPath(Path.GetFullPath(root.Directory), workspaceRoot))
-            .Select(root => Path.GetFullPath(root.Directory))
-            .Distinct(PathComparer)
-            .OrderBy(path => path, PathComparer)
-            .ToArray();
-    }
-
-    private static IReadOnlyList<string> ResolveReferencedSourceRoots(
-        ProjectModuleContext module,
-        ProjectArchitectureContext context,
-        bool includeTestDependencies)
-    {
-        var modulePath = Path.GetFullPath(module.Path);
-        var pending = new Stack<string>(
-            context.Dependencies
-                .Where(dependency => !string.IsNullOrWhiteSpace(dependency.SourceProjectPath)
-                    && PathsEqual(dependency.SourceProjectPath, modulePath))
-                .Where(dependency =>
-                    dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase)
-                    || (includeTestDependencies
-                        && dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase)))
-                .Select(dependency => dependency.TargetProjectPath)
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .Distinct(PathComparer)
-                .OrderByDescending(path => path, PathComparer));
-        var visitedModules = new HashSet<string>(PathComparer);
-        var sourceRoots = new HashSet<string>(PathComparer);
-
-        while (pending.TryPop(out var targetPath))
-        {
-            var normalizedTargetPath = Path.GetFullPath(targetPath);
-            if (!visitedModules.Add(normalizedTargetPath))
-                continue;
-
-            var targetModules = context.Modules
-                .Where(candidate => PathsEqual(candidate.Path, normalizedTargetPath))
-                .Take(2)
-                .ToArray();
-            if (targetModules.Length != 1)
-                continue;
-
-            var targetModule = targetModules[0];
-            var workspaceRoot = Path.GetFullPath(context.RootPath);
-            foreach (var sourceRoot in ResolveSourceRoots(targetModule).Where(root =>
-                         root.ContainsJavaSources
-                         && IsSameOrDescendantPath(Path.GetFullPath(root.Directory), workspaceRoot)
-                         && (root.Ownership == ProjectSourceRootOwnership.Production
-                             || (includeTestDependencies && root.Ownership == ProjectSourceRootOwnership.Test))))
-            {
-                sourceRoots.Add(Path.GetFullPath(sourceRoot.Directory));
-            }
-
-            foreach (var dependency in context.Dependencies.Where(dependency =>
-                         !string.IsNullOrWhiteSpace(dependency.SourceProjectPath)
-                         && PathsEqual(dependency.SourceProjectPath, targetModule.Path)))
-            {
-                if (!dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase)
-                    && !(includeTestDependencies
-                        && dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase)))
-                    continue;
-
-                if (!string.IsNullOrWhiteSpace(dependency.TargetProjectPath))
-                    pending.Push(dependency.TargetProjectPath);
-            }
-        }
-
-        return sourceRoots
-            .OrderBy(path => path, PathComparer)
-            .ToArray();
-    }
-
-    private static List<ProjectSourceRoot> ResolveSourceRoots(ProjectModuleContext module)
-    {
-        var roots = module.SourceRoots
-            .Where(root => !string.IsNullOrWhiteSpace(root.Directory))
-            .Where(root => Directory.Exists(root.Directory))
-            .GroupBy(root => Path.GetFullPath(root.Directory), PathComparer)
-            .Select(group => group.First() with { Directory = Path.GetFullPath(group.Key) })
-            .ToList();
-
-        if (roots.Count > 0)
-            return roots;
-
-        var modulePath = Path.GetFullPath(module.Path);
-        var conventionalRoots = new[]
-        {
-            new ProjectSourceRoot
-            {
-                Directory = Path.Combine(modulePath, "src", "main", "java"),
-                Ownership = ProjectSourceRootOwnership.Production,
-                Origin = ProjectSourceRootOrigin.Conventional,
-                ContainsJavaSources = true
-            },
-            new ProjectSourceRoot
-            {
-                Directory = Path.Combine(modulePath, "src", "test", "java"),
-                Ownership = ProjectSourceRootOwnership.Test,
-                Origin = ProjectSourceRootOrigin.Conventional,
-                ContainsJavaSources = true
-            }
-        };
-
-        roots.AddRange(conventionalRoots.Where(root => Directory.Exists(root.Directory)));
-        if (roots.Count == 0 && Directory.Exists(modulePath))
-        {
-            roots.Add(new ProjectSourceRoot
-            {
-                Directory = modulePath,
-                Ownership = ProjectSourceRootOwnership.Unknown,
-                Origin = ProjectSourceRootOrigin.Observed,
-                ContainsJavaSources = true
-            });
-        }
-
-        return roots;
-    }
-
-    private static IReadOnlyList<string> EnumerateJavaFiles(
-        string modulePath,
-        IReadOnlyCollection<ProjectSourceRoot> sourceRoots,
-        ICollection<AnalysisDiagnostic> diagnostics)
-    {
-        var files = new HashSet<string>(PathComparer);
-        var normalizedModulePath = Path.GetFullPath(modulePath);
-
-        foreach (var sourceRoot in sourceRoots)
-        {
-            var root = Path.GetFullPath(sourceRoot.Directory);
-            if (!IsSameOrDescendantPath(root, normalizedModulePath))
-            {
-                diagnostics.Add(new AnalysisDiagnostic
-                {
-                    Code = "JavaSourceRootOutsideModule",
-                    Component = nameof(JavaSemanticAnalysisOrchestrator),
-                    Message = "A Java source root is outside its owning project module and was excluded.",
-                    Target = root,
-                    AffectsCoverage = true
-                });
-                continue;
-            }
-
-            var pending = new Stack<string>();
-            pending.Push(root);
-            while (pending.Count > 0)
-            {
-                var directory = pending.Pop();
-                try
-                {
-                    if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
-                        continue;
-
-                    foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
-                    {
-                        if (Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase))
-                            files.Add(Path.GetFullPath(file));
-                    }
-
-                    foreach (var child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
-                    {
-                        if (ExcludedDirectoryNames.Contains(Path.GetFileName(child)))
-                            continue;
-
-                        try
-                        {
-                            if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0)
-                                pending.Push(child);
-                        }
-                        catch (IOException exception)
-                        {
-                            diagnostics.Add(CreateDiscoveryDiagnostic(child, exception));
-                        }
-                        catch (UnauthorizedAccessException exception)
-                        {
-                            diagnostics.Add(CreateDiscoveryDiagnostic(child, exception));
-                        }
-                    }
-                }
-                catch (IOException exception)
-                {
-                    diagnostics.Add(CreateDiscoveryDiagnostic(directory, exception));
-                }
-                catch (UnauthorizedAccessException exception)
-                {
-                    diagnostics.Add(CreateDiscoveryDiagnostic(directory, exception));
-                }
-            }
-        }
-
-        return files.OrderBy(file => file, PathComparer).ToArray();
-    }
-
-    private static AnalysisDiagnostic CreateDiscoveryDiagnostic(string path, Exception exception) =>
-        new()
-        {
-            Code = "JavaSourceDiscoveryFailed",
-            Component = nameof(JavaSemanticAnalysisOrchestrator),
-            Message = "A Java source directory could not be inspected; its files were not analysed.",
-            Target = path,
-            ExceptionType = exception.GetType().Name,
-            AffectsCoverage = true
-        };
 
     private static string ResolveSourceLevel(ProjectModuleContext module)
     {
@@ -487,11 +371,6 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
                 && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                 && !relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal));
     }
-
-    private static bool PathsEqual(string left, string right) =>
-        PathComparer.Equals(
-            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
 
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;

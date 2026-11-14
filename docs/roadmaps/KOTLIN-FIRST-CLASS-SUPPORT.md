@@ -445,6 +445,18 @@ The accepted implementation also ensures Android source-set ownership takes prec
 
 **Acceptance:** Representative multi-module Android fixtures produce consistent module, package and architectural-component graphs with traceable variant-aware relationships and isolated test metrics.
 
+##### K7.4.2 — Variant-aware semantic relationship projection
+
+Implementation is split into independently reviewable slices:
+
+- **K7.4.2.1 — Project-scoped symbol identity:** accepted. Symbol IDs are resolved within project/language identity; external declarations use qualified names only with build-dependency evidence, and ambiguous matches are rejected.
+- **K7.4.2.2 — Transitive dependency attribution:** accepted. Qualified-name target resolution traverses transitive production dependencies and admits test-only dependency paths only for test relationships.
+- **K7.4.2.3 — Android variant compatibility:** implementation pushed; validation pending. Cross-module Android semantic edges require a non-empty intersection of source and target variant identities. Variant-incompatible or missing-variant Android-to-Android targets are rejected rather than guessed. Compatible variant identities remain attached to the edge and separate edge aggregation, so debug and release evidence cannot be merged into one undifferentiated relationship. When only one endpoint is an Android module, its known variant provenance is retained without inventing a variant identity for the non-Android endpoint.
+
+The current static model does not yet represent the full Gradle attribute-matching/fallback model, including flavor-dimension-aware matchingFallbacks. Therefore this slice intentionally uses exact derived variant-name intersection for Android-to-Android matching. Non-identical but Gradle-compatible variants remain unresolved until the model can prove compatibility from dimension and attribute evidence; they must not be inferred from names alone.
+
+**K7.4.2.3 acceptance:** fixtures prove matching debug and release relationships, reject a debug-to-release mismatch, preserve distinct variant evidence on edges, and retain Android variant provenance across Android/JVM module edges. All four required workflows must pass on the exact code head.
+
 #### K7.5 — Android SDK/classpath resolution and production validation
 
 - Resolve SDK roots from \`local.properties\`, configured SDK environment variables and explicit build metadata without executing project scripts.

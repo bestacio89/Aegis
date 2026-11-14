@@ -25,8 +25,16 @@ public sealed class KotlinProjectDependencyPipelineTests
                 workspace.FullName,
                 "m-production-dependency",
                 [
-                    ("src/main/kotlin", ProjectSourceRootOwnership.Production, "Dependency.kt")
+                    ("src/main/kotlin", ProjectSourceRootOwnership.Production, "Dependency.kt"),
+                    ("src/test/kotlin", ProjectSourceRootOwnership.Test, "DependencyTest.kt")
                 ]);
+            var javaBridge = new ProjectModuleContext
+            {
+                Name = "java-bridge",
+                Path = Path.Combine(workspace.FullName, "java-bridge"),
+                BuildSystem = ArchitectureBuildSystem.Gradle,
+                Languages = ["Java"]
+            };
             var testSupport = CreateModule(
                 workspace.FullName,
                 "z-test-support",
@@ -40,10 +48,11 @@ public sealed class KotlinProjectDependencyPipelineTests
                 ProjectName = "kotlin-multi-module",
                 RootPath = workspace.FullName,
                 Language = "Kotlin",
-                Modules = [consumer, dependency, testSupport],
+                Modules = [consumer, dependency, testSupport, javaBridge],
                 Dependencies =
                 [
-                    ProjectDependency(consumer, dependency, "Production"),
+                    ProjectDependency(consumer, javaBridge, "Production"),
+                    ProjectDependency(javaBridge, dependency, "Production"),
                     ProjectDependency(consumer, testSupport, "Test")
                 ]
             };
@@ -61,6 +70,7 @@ public sealed class KotlinProjectDependencyPipelineTests
                 [
                     ("m-production-dependency", false),
                     ("a-consumer", false),
+                    ("m-production-dependency", true),
                     ("z-test-support", true),
                     ("a-consumer", true)
                 ],

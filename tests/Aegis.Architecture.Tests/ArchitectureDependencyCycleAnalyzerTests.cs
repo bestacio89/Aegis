@@ -32,6 +32,37 @@ public sealed class ArchitectureDependencyCycleAnalyzerTests
     }
 
     [Fact]
+    public void Does_not_join_edges_from_different_android_variants_into_a_cycle()
+    {
+        var context = new ProjectArchitectureContext
+        {
+            ArchitectureComponentDependencies =
+            [
+                Edge("a", "b", "Production", "debug-run", "debug-ab", "debug"),
+                Edge("b", "a", "Production", "release-run", "release-ba", "release")
+            ]
+        };
+
+        ArchitectureDependencyCycleAnalyzer.Analyze(context);
+        Assert.Empty(context.ArchitectureComponentCycles);
+
+        context.ArchitectureComponentDependencies =
+        [
+            Edge("a", "b", "Production", "debug-run", "debug-ab", "debug"),
+            Edge("b", "a", "Production", "debug-run", "debug-ba", "debug"),
+            Edge("a", "b", "Production", "release-run", "release-ab", "release"),
+            Edge("b", "a", "Production", "release-run", "release-ba", "release")
+        ];
+
+        ArchitectureDependencyCycleAnalyzer.Analyze(context);
+
+        Assert.Equal(2, context.ArchitectureComponentCycles.Count);
+        Assert.Contains(context.ArchitectureComponentCycles, cycle => cycle.AndroidVariants.SequenceEqual(["debug"]));
+        Assert.Contains(context.ArchitectureComponentCycles, cycle => cycle.AndroidVariants.SequenceEqual(["release"]));
+        Assert.All(context.ArchitectureComponentCycles, cycle => Assert.Equal(2, cycle.RelationshipCount));
+    }
+
+    [Fact]
     public void Detects_self_dependency_as_a_single_node_cycle()
     {
         var context = new ProjectArchitectureContext
@@ -104,7 +135,8 @@ public sealed class ArchitectureDependencyCycleAnalyzerTests
         string target,
         string scope,
         string runId,
-        string relationshipId) =>
+        string relationshipId,
+        params string[] androidVariants) =>
         new()
         {
             SourceComponentId = source,
@@ -112,6 +144,7 @@ public sealed class ArchitectureDependencyCycleAnalyzerTests
             TargetComponentId = target,
             TargetComponentName = target,
             Scope = scope,
+            AndroidVariants = androidVariants.ToList(),
             RelationshipCount = 1,
             ContributingRelationships =
             [

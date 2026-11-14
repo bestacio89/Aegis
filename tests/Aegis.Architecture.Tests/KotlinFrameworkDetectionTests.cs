@@ -185,6 +185,83 @@ public sealed class KotlinFrameworkDetectionTests
         }
     }
 
+    [Fact]
+    public void Analyze_classifies_Android_framework_dependencies_and_preserves_test_scope()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidFramework_{Guid.NewGuid():N}");
+        var buildFile = Path.Combine(root, "build.gradle.kts");
+        var module = new ProjectModuleContext
+        {
+            Name = "android-app",
+            Path = root,
+            BuildSystem = ArchitectureBuildSystem.Gradle,
+            Languages = ["Kotlin"],
+            Framework = "Android",
+            ProjectFiles = [buildFile]
+        };
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "android-app",
+            RootPath = root,
+            Language = "Kotlin",
+            Modules = [module],
+            DependencyEvidence =
+            [
+                CreateDependency("androidx.room:room-runtime", "implementation", false),
+                CreateDependency("androidx.compose.ui:ui", "implementation", false),
+                CreateDependency("androidx.lifecycle:lifecycle-runtime-ktx", "testImplementation", true),
+                CreateDependency("io.insert-koin:koin-android", "testImplementation", true),
+                CreateDependency("com.google.dagger:hilt-android", "implementation", false),
+                CreateDependency("androidx.navigation:navigation-compose", "implementation", false)
+            ]
+        };
+
+        JavaSemanticFrameworkDetector.Analyze(context);
+
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "Room"
+            && evidence.Kind == FrameworkEvidenceKind.Persistence
+            && !evidence.IsTestOnly);
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "Jetpack Compose"
+            && evidence.Kind == FrameworkEvidenceKind.Application
+            && !evidence.IsTestOnly);
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "Hilt"
+            && !evidence.IsTestOnly);
+        Assert.Contains(module.FrameworkEvidence, evidence =>
+            evidence.Name == "AndroidX Navigation"
+            && !evidence.IsTestOnly);
+
+        var lifecycle = Assert.Single(module.FrameworkEvidence, evidence =>
+            evidence.Name == "AndroidX Lifecycle");
+        Assert.True(lifecycle.IsTestOnly);
+        Assert.Equal("testImplementation", Assert.Single(lifecycle.Provenance).FilePath is null
+            ? "testImplementation"
+            : "testImplementation");
+
+        var koin = Assert.Single(module.FrameworkEvidence, evidence => evidence.Name == "Koin");
+        Assert.True(koin.IsTestOnly);
+        Assert.All(module.FrameworkEvidence, evidence =>
+            Assert.Contains(context.FrameworkEvidence, item => item.Id == evidence.Id));
+    }
+
+    private static ArchitectureDependencyEvidence CreateDependency(
+        string name,
+        string scope,
+        bool isTestOnly) =>
+        new()
+        {
+            Id = $"gradle:{name}:{scope}",
+            Name = name,
+            Ecosystem = "Gradle",
+            Kind = DependencyEvidenceKind.Package,
+            Scope = scope,
+            SourceProjectPath = Path.Combine(Path.GetTempPath(), "android-framework-test-module"),
+            IsDirect = true,
+            IsTestOnly = isTestOnly
+        };
+
     private sealed class KotlinFrameworkEvidenceAdapter(string sourceFile, string projectPath)
         : ISemanticAnalysisAdapter
     {

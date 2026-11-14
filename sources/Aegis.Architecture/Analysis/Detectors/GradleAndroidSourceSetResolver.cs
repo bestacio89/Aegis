@@ -210,14 +210,36 @@ internal static class GradleAndroidSourceSetResolver
                 "GradleAndroidFlavorDimensionNotStaticallyResolved",
                 "One or more product flavors have no statically resolved dimension; the complete variant matrix cannot be derived.",
                 buildFile));
+            return [];
         }
 
-        if (dimensions.Count == 0 || dimensions.Any(dimension =>
-                !flavors.Any(flavor => string.Equals(flavor.Dimension, dimension, StringComparison.Ordinal))))
+        if (model.FlavorDimensions.Count == 0 && dimensions.Count > 1)
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleAndroidFlavorDimensionOrderNotStaticallyResolved",
+                "Multiple product-flavor dimensions are present without a statically declared flavorDimensions order; variant names cannot be derived safely.",
+                buildFile));
+            return [];
+        }
+
+        if (model.FlavorDimensions.Count != model.FlavorDimensions.Distinct(StringComparer.Ordinal).Count())
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleAndroidFlavorDimensionConflict",
+                "The declared flavorDimensions list contains duplicate dimensions; variant derivation is ambiguous.",
+                buildFile));
+            return [];
+        }
+
+        var declaredDimensions = dimensions.ToHashSet(StringComparer.Ordinal);
+        if (dimensions.Count == 0
+            || dimensions.Any(dimension =>
+                !flavors.Any(flavor => string.Equals(flavor.Dimension, dimension, StringComparison.Ordinal)))
+            || flavors.Any(flavor => !declaredDimensions.Contains(flavor.Dimension!)))
         {
             diagnostics.Add(Diagnostic(
                 "GradleAndroidVariantMatrixIncomplete",
-                "The declared product flavors do not provide at least one statically resolved flavor for every flavor dimension.",
+                "The declared product flavors do not map exactly to the statically resolved flavor dimensions.",
                 buildFile));
             return [];
         }
@@ -274,11 +296,11 @@ internal static class GradleAndroidSourceSetResolver
             result.Add(new GradleAndroidVariant(name, combination, buildType));
         }
 
-        if (result.Select(variant => variant.Name).Distinct(StringComparer.Ordinal).Count() != result.Count)
+        if (result.Select(variant => variant.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != result.Count)
         {
             diagnostics.Add(Diagnostic(
                 "GradleAndroidVariantNameConflict",
-                "Multiple flavor combinations produce the same Android variant name; variant-to-source-set mapping is ambiguous.",
+                "Multiple flavor combinations produce case-insensitive Android variant/task name collisions; variant-to-source-set mapping is ambiguous.",
                 buildFile));
             return [];
         }

@@ -600,6 +600,207 @@ public sealed class SemanticArchitectureComponentGraphTests
     }
 
     [Fact]
+    public void Projects_cross_module_android_relationships_only_for_matching_variants()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"aegis-android-variant-edges-{Guid.NewGuid():N}");
+        var appPath = Path.Combine(root, "app");
+        var libraryPath = Path.Combine(root, "library");
+
+        ProjectModuleContext CreateAndroidModule(string name, string path, string pluginId)
+        {
+            var debugRoot = Path.Combine(path, "src", "debug", "java");
+            var releaseRoot = Path.Combine(path, "src", "release", "java");
+            return new ProjectModuleContext
+            {
+                Name = name,
+                Path = path,
+                Languages = ["Kotlin"],
+                GradleBuildModel = new GradleBuildModel
+                {
+                    Android = new GradleAndroidBuildModel
+                    {
+                        PluginId = pluginId,
+                        ModuleKind = pluginId == "com.android.application" ? "Application" : "Library",
+                        Variants =
+                        [
+                            new GradleAndroidVariant("debug", [], "debug"),
+                            new GradleAndroidVariant("release", [], "release")
+                        ],
+                        SourceSets =
+                        [
+                            new GradleAndroidSourceSet
+                            {
+                                Name = "debug",
+                                Ownership = ProjectSourceRootOwnership.Production,
+                                JavaSourceDirectories = [debugRoot],
+                                AppliesToVariants = ["debug"]
+                            },
+                            new GradleAndroidSourceSet
+                            {
+                                Name = "release",
+                                Ownership = ProjectSourceRootOwnership.Production,
+                                JavaSourceDirectories = [releaseRoot],
+                                AppliesToVariants = ["release"]
+                            }
+                        ]
+                    }
+                }
+            };
+        }
+
+        var app = CreateAndroidModule("app", appPath, "com.android.application");
+        var library = CreateAndroidModule("library", libraryPath, "com.android.library");
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "android-multi-module",
+            RootPath = root,
+            Language = "Kotlin",
+            Modules = [app, library],
+            Dependencies =
+            [
+                new ArchitectureDependencyContext
+                {
+                    Source = "app",
+                    SourceProjectPath = appPath,
+                    Target = "library",
+                    TargetProjectPath = libraryPath,
+                    DependencyType = "GradleProjectDependency",
+                    Scope = "Production"
+                }
+            ],
+            SemanticAnalysisRuns =
+            [
+                new SemanticAnalysisRun
+                {
+                    RunId = "app-run",
+                    Language = "Kotlin",
+                    EngineId = "kotlin-test-provider",
+                    ProjectPath = appPath,
+                    Status = SemanticAnalysisStatus.Completed,
+                    Symbols =
+                    [
+                        new SemanticSymbol
+                        {
+                            Id = "app-debug",
+                            Name = "AppService",
+                            QualifiedName = "sample.app.AppService",
+                            ContainerName = "sample.app",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = appPath,
+                            FilePath = Path.Combine(appPath, "src", "debug", "java", "AppService.kt"),
+                            Origin = SemanticSymbolOrigin.Source
+                        },
+                        new SemanticSymbol
+                        {
+                            Id = "app-release",
+                            Name = "AppService",
+                            QualifiedName = "sample.app.AppService",
+                            ContainerName = "sample.app",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = appPath,
+                            FilePath = Path.Combine(appPath, "src", "release", "java", "AppService.kt"),
+                            Origin = SemanticSymbolOrigin.Source
+                        },
+                        new SemanticSymbol
+                        {
+                            Id = "library-debug-external",
+                            Name = "LibraryService",
+                            QualifiedName = "sample.library.LibraryService",
+                            Language = "Kotlin",
+                            ProjectPath = appPath,
+                            Origin = SemanticSymbolOrigin.External
+                        },
+                        new SemanticSymbol
+                        {
+                            Id = "library-release-external",
+                            Name = "LibraryService",
+                            QualifiedName = "sample.library.LibraryService",
+                            Language = "Kotlin",
+                            ProjectPath = appPath,
+                            Origin = SemanticSymbolOrigin.External
+                        }
+                    ],
+                    Relationships =
+                    [
+                        new SemanticRelationship
+                        {
+                            Id = "debug-to-debug",
+                            SourceSymbolId = "app-debug",
+                            TargetSymbolId = "library-debug-external",
+                            Kind = SemanticRelationshipKind.Calls,
+                            ResolutionStatus = SemanticResolutionStatus.Resolved
+                        },
+                        new SemanticRelationship
+                        {
+                            Id = "debug-to-release",
+                            SourceSymbolId = "app-debug",
+                            TargetSymbolId = "library-release-external",
+                            Kind = SemanticRelationshipKind.Calls,
+                            ResolutionStatus = SemanticResolutionStatus.Resolved
+                        },
+                        new SemanticRelationship
+                        {
+                            Id = "release-to-release",
+                            SourceSymbolId = "app-release",
+                            TargetSymbolId = "library-release-external",
+                            Kind = SemanticRelationshipKind.Calls,
+                            ResolutionStatus = SemanticResolutionStatus.Resolved
+                        }
+                    ]
+                },
+                new SemanticAnalysisRun
+                {
+                    RunId = "library-run",
+                    Language = "Kotlin",
+                    EngineId = "kotlin-test-provider",
+                    ProjectPath = libraryPath,
+                    Status = SemanticAnalysisStatus.Completed,
+                    Symbols =
+                    [
+                        new SemanticSymbol
+                        {
+                            Id = "library-debug",
+                            Name = "LibraryService",
+                            QualifiedName = "sample.library.LibraryService",
+                            ContainerName = "sample.library",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = libraryPath,
+                            FilePath = Path.Combine(libraryPath, "src", "debug", "java", "LibraryService.kt"),
+                            Origin = SemanticSymbolOrigin.Source
+                        },
+                        new SemanticSymbol
+                        {
+                            Id = "library-release",
+                            Name = "LibraryService",
+                            QualifiedName = "sample.library.LibraryService",
+                            ContainerName = "sample.library",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = libraryPath,
+                            FilePath = Path.Combine(libraryPath, "src", "release", "java", "LibraryService.kt"),
+                            Origin = SemanticSymbolOrigin.Source
+                        }
+                    ]
+                }
+            ]
+        };
+
+        SemanticArchitectureComponentDetector.Analyze(context);
+
+        var edges = context.ProductionComponentDependencies;
+        Assert.Equal(2, edges.Count);
+        Assert.All(edges, edge => Assert.Equal("library", context.ProductionComponents
+            .Single(component => component.Id == edge.TargetComponentId).BuildModuleName));
+        Assert.Contains(edges, edge => edge.AndroidVariants.SequenceEqual(["debug"]));
+        Assert.Contains(edges, edge => edge.AndroidVariants.SequenceEqual(["release"]));
+        Assert.DoesNotContain(edges, edge => edge.ContributingRelationships
+            .Any(reference => reference.RelationshipId == "debug-to-release"));
+    }
+
+    [Fact]
     public void Projects_android_variants_and_keeps_instrumentation_relationships_out_of_production_graph()
     {
         var modulePath = Path.Combine(Path.GetTempPath(), $"aegis-android-projection-{Guid.NewGuid():N}");

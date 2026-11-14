@@ -651,6 +651,94 @@ public sealed class GradleAndroidBuildModelTests
         }
     }
 
+    [Fact]
+    public void Detect_builds_cartesian_variant_matrix_across_multiple_flavor_dimensions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidMultiDimension_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-multi-dimension\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.multidimension"
+                    compileSdk = 35
+                    flavorDimensions += listOf("tier", "api")
+                    productFlavors {
+                        create("free") { dimension = "tier" }
+                        create("paid") { dimension = "tier" }
+                        create("minApi24") { dimension = "api" }
+                        create("maxApi35") { dimension = "api" }
+                    }
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+
+            Assert.Equal(8, android.Variants.Count);
+            Assert.Contains(android.Variants, variant => variant.Name == "freeMinApi24Debug");
+            Assert.Contains(android.Variants, variant => variant.Name == "freeMaxApi35Release");
+            Assert.Contains(android.Variants, variant => variant.Name == "paidMinApi24Release");
+            Assert.Contains(android.Variants, variant => variant.Name == "paidMaxApi35Debug");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_keeps_unmapped_android_source_sets_unknown_instead_of_assuming_production()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidUnknownSourceSet_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-unknown-source-set\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.unknownsourceset"
+                    compileSdk = 35
+                }
+                """);
+            WriteFile(app, "src/custom/java/CustomSource.java", "package org.example; class CustomSource {}");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var gradle = Assert.IsType<GradleBuildModel>(module.GradleBuildModel);
+            var android = Assert.IsType<GradleAndroidBuildModel>(gradle.Android);
+            var custom = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "custom");
+
+            Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Unknown, custom.Ownership);
+            Assert.Equal(Aegis.Shared.Architecture.Enums.GradleAndroidTestKind.Unknown, custom.TestKind);
+            Assert.Empty(custom.AppliesToVariants);
+            Assert.False(android.IsComplete);
+            Assert.False(gradle.IsComplete);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidSourceSetOwnershipUnknown" && diagnostic.AffectsCoverage);
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "src", "custom", "java")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Unknown);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static void WriteFile(string root, string relativePath, string content)
     {
         var path = Path.Combine(root, relativePath);

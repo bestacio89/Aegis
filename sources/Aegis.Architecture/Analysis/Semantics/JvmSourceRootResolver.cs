@@ -186,7 +186,6 @@ public sealed class JvmSourceRootResolver
         visitedTestArtifactModules.Add(rootModulePath);
         var pending = new Queue<(string Path, bool IncludeTestEdges, bool IncludeTestRoots)>();
 
-        AddSourceRoots(module, includeTestDependencies);
         EnqueueDependencies(module.Path, includeTestDependencies);
 
         while (pending.TryDequeue(out var current))

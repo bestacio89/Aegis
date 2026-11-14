@@ -35,7 +35,7 @@ public sealed class JvmModuleDependencyResolverTests
         Assert.Empty(blockedProduction);
         Assert.Empty(blockedTest);
         Assert.Equal(
-            ["m-production-dependency", "a-consumer", "z-test-support"],
+            ["m-production-dependency", "a-consumer"],
             productionOrder.Select(module => module.Name));
         Assert.Equal(
             ["z-test-support", "a-consumer"],

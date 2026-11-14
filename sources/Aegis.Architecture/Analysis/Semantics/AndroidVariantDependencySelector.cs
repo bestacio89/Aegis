@@ -121,7 +121,12 @@ public sealed class AndroidVariantDependencySelector
     private static void AddCompileConfigurations(HashSet<string> configurations, string prefix)
     {
         foreach (var suffix in CompileConfigurationSuffixes)
-            configurations.Add($"{prefix}{suffix}");
+        {
+            var configuration = string.IsNullOrEmpty(prefix)
+                ? char.ToLowerInvariant(suffix[0]) + suffix[1..]
+                : $"{prefix}{suffix}";
+            configurations.Add(configuration);
+        }
     }
 
     private static string Capitalize(string value) =>

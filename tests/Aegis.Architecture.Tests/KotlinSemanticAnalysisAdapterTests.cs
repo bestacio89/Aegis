@@ -37,7 +37,7 @@ public sealed class KotlinSemanticAnalysisAdapterTests
         await using var executionContext = new SemanticAnalysisExecutionContext(
             NullLogger<SemanticAnalysisExecutionContext>.Instance);
         var request = CreateRequest();
-        var options = new Dictionary<string, string>(request.ProviderOptions, StringComparer.Ordinal)
+        var options = request.ProviderOptions.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal)
         {
             ["kotlin.configurationInferred"] = "true"
         };
@@ -87,7 +87,7 @@ public sealed class KotlinSemanticAnalysisAdapterTests
         await using var executionContext = new SemanticAnalysisExecutionContext(
             NullLogger<SemanticAnalysisExecutionContext>.Instance);
         var request = CreateRequest();
-        var options = new Dictionary<string, string>(request.ProviderOptions, StringComparer.Ordinal)
+        var options = request.ProviderOptions.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal)
         {
             ["kotlin.compilerPluginsNotExecuted"] = "true"
         };

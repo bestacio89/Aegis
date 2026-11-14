@@ -134,6 +134,7 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
             Languages = ["Kotlin", "Java"],
             GradleBuildModel = new GradleBuildModel
             {
+                Plugins = [new GradleBuildModel.Plugin("org.jetbrains.kotlin.jvm", "2.4.21", true)],
                 KotlinPluginVersion = "2.4.21",
                 KotlinLanguageVersion = "2.4",
                 KotlinApiVersion = "2.4",

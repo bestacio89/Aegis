@@ -328,6 +328,7 @@ internal static class GradleBuildModelResolver
 
             foreach (var plugin in plugins.Where(plugin => plugin.IsApplied
                          && (plugin.Id.StartsWith("org.jetbrains.kotlin.plugin.", StringComparison.Ordinal)
+                             && plugin.Id != "org.jetbrains.kotlin.plugin.compose"
                              || plugin.Id is "org.jetbrains.kotlin.kapt" or "com.google.devtools.ksp")))
             {
                 diagnostics.Add(Diagnostic(

@@ -165,10 +165,16 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
             });
         }
 
-        if (status == SemanticAnalysisStatus.Completed
-            && result.CompilationSucceeded
+        var compilerPluginsWereSkipped = bool.TryParse(
+                ReadOption(request.ProviderOptions, "kotlin.compilerPluginsNotExecuted"),
+                out var skippedCompilerPlugins)
+            && skippedCompilerPlugins;
+        var canPublishBindingOutput = result.CompilationSucceeded
+            && run.Status is SemanticAnalysisStatus.Completed or SemanticAnalysisStatus.PartiallyCompleted
             && !configurationInferred
-            && (!request.HasDeclaredDependencies || request.ClasspathResolutionComplete))
+            && !compilerPluginsWereSkipped;
+
+        if (canPublishBindingOutput)
         {
             if (string.IsNullOrWhiteSpace(result.CompilationOutputDirectory))
             {

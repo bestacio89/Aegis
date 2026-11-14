@@ -72,7 +72,7 @@ public sealed class SemanticAnalysisExecutionContext : IAsyncDisposable
             throw new InvalidOperationException("The compiler output directory is missing or is a reparse point.");
         }
 
-        var key = Path.GetFullPath(modulePath);
+        var key = NormalizeModulePath(modulePath);
         (isTestCode ? _testOutputs : _productionOutputs)[key] = normalizedOutput;
     }
 
@@ -80,20 +80,61 @@ public sealed class SemanticAnalysisExecutionContext : IAsyncDisposable
     /// Returns successful same-module compiler outputs suitable for the
     /// requested production/test scope.
     /// </summary>
-    public IReadOnlyList<string> GetCompilationOutputs(string modulePath, bool includeTestCode)
+    public IReadOnlyList<string> GetCompilationOutputs(string modulePath, bool includeTestCode) =>
+        GetCompilationOutputs(
+            modulePath,
+            Array.Empty<string>(),
+            Array.Empty<string>(),
+            includeTestCode);
+
+    /// <summary>
+    /// Returns this module's outputs and the outputs of its explicit project
+    /// dependencies. Test outputs are included only for test-scoped dependencies.
+    /// </summary>
+    public IReadOnlyList<string> GetCompilationOutputs(
+        string modulePath,
+        IReadOnlyCollection<string> productionDependencyPaths,
+        IReadOnlyCollection<string> testDependencyPaths,
+        bool includeTestCode)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(modulePath);
+        ArgumentNullException.ThrowIfNull(productionDependencyPaths);
+        ArgumentNullException.ThrowIfNull(testDependencyPaths);
 
-        var key = Path.GetFullPath(modulePath);
-        var outputs = new List<string>(2);
-        if (_productionOutputs.TryGetValue(key, out var production))
-            outputs.Add(production);
-        if (includeTestCode && _testOutputs.TryGetValue(key, out var test))
-            outputs.Add(test);
+        var outputs = new HashSet<string>(PathComparer);
+        AddOutput(_productionOutputs, modulePath, outputs);
 
-        return outputs;
+        foreach (var dependencyPath in productionDependencyPaths)
+            AddOutput(_productionOutputs, dependencyPath, outputs);
+
+        if (includeTestCode)
+        {
+            AddOutput(_testOutputs, modulePath, outputs);
+            foreach (var dependencyPath in testDependencyPaths)
+            {
+                AddOutput(_productionOutputs, dependencyPath, outputs);
+                AddOutput(_testOutputs, dependencyPath, outputs);
+            }
+        }
+
+        return outputs.OrderBy(path => path, PathComparer).ToArray();
     }
+
+    private static void AddOutput(
+        ConcurrentDictionary<string, string> outputsByModule,
+        string modulePath,
+        ISet<string> outputs)
+    {
+        if (string.IsNullOrWhiteSpace(modulePath))
+            return;
+
+        if (outputsByModule.TryGetValue(NormalizeModulePath(modulePath), out var output))
+            outputs.Add(output);
+    }
+
+    private static string NormalizeModulePath(string modulePath) =>
+        Path.GetFullPath(modulePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     public ValueTask DisposeAsync()
     {

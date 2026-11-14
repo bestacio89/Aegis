@@ -54,7 +54,7 @@ public sealed class KotlinSemanticAnalysisAdapterTests
     }
 
     [Fact]
-    public async Task Marks_incomplete_external_classpath_partial_and_does_not_publish_output()
+    public async Task Marks_incomplete_external_classpath_partial_but_publishes_successful_binding_output()
     {
         var adapter = new KotlinSemanticAnalysisAdapter(
             new RecordingKotlinWorkerClient(),
@@ -76,7 +76,7 @@ public sealed class KotlinSemanticAnalysisAdapterTests
         Assert.Contains(run.Diagnostics, diagnostic =>
             diagnostic.Code == "KotlinExternalClasspathUnavailable"
             && diagnostic.AffectsCoverage);
-        Assert.Empty(executionContext.GetCompilationOutputs(request.ProjectPath, includeTestCode: true));
+        Assert.Single(executionContext.GetCompilationOutputs(request.ProjectPath, includeTestCode: true));
     }
 
     [Fact]

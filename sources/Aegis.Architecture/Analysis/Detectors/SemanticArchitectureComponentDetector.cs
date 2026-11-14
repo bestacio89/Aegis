@@ -100,10 +100,9 @@ internal static class SemanticArchitectureComponentDetector
                         var modulePath = NormalizePath(run.ProjectPath);
                         var componentId = CreateComponentId(modulePath, run.Language, componentKind, componentName);
                         var sourceOwnership = ResolveAndroidSourceOwnership(module, symbol.FilePath!, run.Language);
-                        var isTestCode = symbol.IsTestCode
-                            || module.IsTestProject
-                            || module.IsTestSupport
-                            || sourceOwnership.Ownership == "Test";
+                        if (symbol.IsTestCode || module.IsTestProject || module.IsTestSupport)
+                            sourceOwnership = sourceOwnership with { Ownership = "Test" };
+                        var isTestCode = sourceOwnership.Ownership == "Test";
                         return new SymbolComponent(
                             symbol.Id,
                             componentId,
@@ -499,8 +498,11 @@ internal static class SemanticArchitectureComponentDetector
             UnreferencedRelationshipCount = _unreferencedRelationships.Count,
             RelationshipKinds = _relationshipKinds.OrderBy(kind => kind).ToList(),
             EvidenceFiles = _evidenceFiles.OrderBy(file => file, PathComparer).ToList(),
-            AndroidVariants = _source.AndroidVariants.Concat(_target.AndroidVariants)
-                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+            AndroidVariants = _source.AndroidVariants.Count > 0 && _target.AndroidVariants.Count > 0
+                ? _source.AndroidVariants.Intersect(_target.AndroidVariants, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList()
+                : _source.AndroidVariants.Concat(_target.AndroidVariants)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
             AndroidSourceSets = new[] { _source.SourceSetName, _target.SourceSetName }
                 .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),

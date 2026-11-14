@@ -173,6 +173,66 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
         }
     }
 
+    [Fact]
+    public async Task Does_not_send_android_dsl_modules_with_unresolved_plugin_identity_to_the_jvm_worker()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(repository);
+        try
+        {
+            var module = new ProjectModuleContext
+            {
+                Name = "android-module",
+                Path = repository,
+                Languages = ["Kotlin"],
+                GradleBuildModel = new GradleBuildModel
+                {
+                    Android = new GradleAndroidBuildModel
+                    {
+                        ModuleKind = "Unknown",
+                        Diagnostics =
+                        [
+                            new AnalysisDiagnostic
+                            {
+                                Code = "GradleAndroidPluginNotStaticallyResolved",
+                                Component = "GradleBuildModelResolver",
+                                Message = "Android plugin identity is unresolved.",
+                                Target = repository,
+                                AffectsCoverage = true
+                            }
+                        ],
+                        IsComplete = false
+                    }
+                }
+            };
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "android-module",
+                RootPath = repository,
+                Language = "Kotlin",
+                Modules = [module]
+            };
+            var adapter = new RecordingKotlinAdapter();
+            var orchestrator = new KotlinSemanticAnalysisOrchestrator(
+                [adapter],
+                new EmptyClasspathResolver(),
+                NullLogger<KotlinSemanticAnalysisOrchestrator>.Instance);
+
+            await orchestrator.AnalyzeAsync(context);
+
+            var run = Assert.Single(context.SemanticAnalysisRuns);
+            Assert.Equal(SemanticAnalysisStatus.Unsupported, run.Status);
+            Assert.Contains(run.Diagnostics, diagnostic =>
+                diagnostic.Code == "KotlinTargetPlatformNotSupported"
+                && diagnostic.AffectsCoverage);
+            Assert.Empty(adapter.Requests);
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
     private static ProjectModuleContext CreateModule(
         string modulePath,
         string kotlinMainRoot,

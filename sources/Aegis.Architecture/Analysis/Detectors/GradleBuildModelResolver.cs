@@ -214,6 +214,10 @@ internal static class GradleBuildModelResolver
                         Ownership = existing.Ownership == androidRoot.Ownership
                             ? existing.Ownership
                             : ProjectSourceRootOwnership.Unknown,
+                        Origin = existing.Origin == ProjectSourceRootOrigin.Explicit
+                            || androidRoot.Origin == ProjectSourceRootOrigin.Explicit
+                                ? ProjectSourceRootOrigin.Explicit
+                                : existing.Origin,
                         Languages = languages,
                         ContainsJavaSources = existing.ContainsJavaSources
                             || androidRoot.ContainsJavaSources

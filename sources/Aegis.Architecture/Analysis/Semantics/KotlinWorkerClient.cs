@@ -162,12 +162,12 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
 
     private static JvmWorkerLaunchOptions CreateLaunchOptions(KotlinWorkerOptions options)
     {
-        if (string.IsNullOrWhiteSpace(options.MaxHeapSize)
-            || options.MaxHeapSize.Any(character => !char.IsAsciiLetterOrDigit(character))
-            || !char.IsAsciiDigit(options.MaxHeapSize[0]))
-        {
-            throw new InvalidOperationException("The Kotlin worker maximum heap size is invalid.");
-        }
+        if (!IsValidHeapSize(options.MaxHeapSize))
+            throw new InvalidOperationException(
+                "The Kotlin worker maximum heap size must be a positive integer followed by K, M or G.");
+
+        if (options.RequestTimeout <= TimeSpan.Zero)
+            throw new InvalidOperationException("The Kotlin worker request timeout must be positive.");
 
         return new JvmWorkerLaunchOptions(
             options.JavaExecutablePath,

@@ -196,8 +196,28 @@ internal static class GradleBuildModelResolver
             {
                 foreach (var androidRoot in androidModel.SourceRoots)
                 {
-                    if (!sourceRoots.Any(existing => PathsEqual(existing.Directory, androidRoot.Directory)))
+                    var existingIndex = sourceRoots.FindIndex(existing =>
+                        PathsEqual(existing.Directory, androidRoot.Directory));
+                    if (existingIndex < 0)
+                    {
                         sourceRoots.Add(androidRoot);
+                        continue;
+                    }
+
+                    var existing = sourceRoots[existingIndex];
+                    var languages = existing.Languages
+                        .Concat(androidRoot.Languages)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    sourceRoots[existingIndex] = existing with
+                    {
+                        Ownership = existing.Ownership == androidRoot.Ownership
+                            ? existing.Ownership
+                            : ProjectSourceRootOwnership.Unknown,
+                        Languages = languages,
+                        ContainsJavaSources = existing.ContainsJavaSources
+                            || androidRoot.ContainsJavaSources
+                    };
                 }
             }
             var kotlinJvmPlugins = plugins

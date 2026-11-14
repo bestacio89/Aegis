@@ -6,18 +6,20 @@ namespace Aegis.Architecture.Analysis.Semantics;
 /// Resolves explicit JVM project-module dependency order and scope-aware
 /// compilation-output inputs. It never infers dependencies from source names.
 /// </summary>
-public static class JvmModuleDependencyResolver
+internal static class JvmModuleDependencyResolver
 {
     private const string MavenProjectDependency = "MavenProjectDependency";
     private const string GradleProjectDependency = "GradleProjectDependency";
 
-    public static IReadOnlyList<ProjectModuleContext> OrderModules(
+    internal static IReadOnlyList<ProjectModuleContext> OrderModules(
         IReadOnlyCollection<ProjectModuleContext> modules,
+        IReadOnlyCollection<ProjectModuleContext> allProjectModules,
         IReadOnlyCollection<ArchitectureDependencyContext> dependencies,
         bool includeTestDependencies,
         out IReadOnlyCollection<string> blockedModulePaths)
     {
         ArgumentNullException.ThrowIfNull(modules);
+        ArgumentNullException.ThrowIfNull(allProjectModules);
         ArgumentNullException.ThrowIfNull(dependencies);
 
         var groups = modules
@@ -41,26 +43,29 @@ public static class JvmModuleDependencyResolver
             _ => new HashSet<string>(PathComparer),
             PathComparer);
 
-        foreach (var edge in GetProjectEdges(dependencies, modulesByPath, includeTestDependencies))
+        // Build the ordering graph from the complete project graph, not only
+        // the language-specific subset. A Kotlin module may depend on another
+        // Kotlin module through one or more Java modules.
+        foreach (var module in modulesByPath.Values)
         {
-            // A test-scoped dependency on an ordinary module consumes that
-            // module's production output, which is already available before
-            // test analysis. Only explicit test artifacts need test ordering.
-            if (edge.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase)
-                && !edge.IsTestArtifact)
-            {
-                continue;
-            }
+            var resolvedPaths = ResolveDependencyPaths(
+                module.Path,
+                allProjectModules,
+                dependencies,
+                includeTestDependencies);
+            var pathsToOrder = includeTestDependencies
+                ? resolvedPaths.Test
+                : resolvedPaths.Production;
 
-            if (!modulesByPath.ContainsKey(edge.SourcePath)
-                || !modulesByPath.ContainsKey(edge.TargetPath)
-                || PathsEqual(edge.SourcePath, edge.TargetPath))
+            foreach (var dependencyPath in pathsToOrder)
             {
-                continue;
-            }
+                var normalizedDependencyPath = NormalizePath(dependencyPath);
+                if (!modulesByPath.ContainsKey(normalizedDependencyPath))
+                    continue;
 
-            if (dependencyPaths[edge.SourcePath].Add(edge.TargetPath))
-                dependents[edge.TargetPath].Add(edge.SourcePath);
+                if (dependencyPaths[module.Path].Add(normalizedDependencyPath))
+                    dependents[normalizedDependencyPath].Add(module.Path);
+            }
         }
 
         var remainingDependencies = dependencyPaths.ToDictionary(
@@ -196,7 +201,7 @@ public static class JvmModuleDependencyResolver
             var targetPath = NormalizePath(dependency.TargetProjectPath);
             var isTestArtifact = isTest
                 && modulesByPath.TryGetValue(targetPath, out var targetModule)
-                && (targetModule.IsTestProject || targetModule.IsTestSupport);
+                && IsTestArtifact(targetModule);
 
             yield return new DependencyEdge(
                 sourcePath,
@@ -206,11 +211,11 @@ public static class JvmModuleDependencyResolver
         }
     }
 
+    internal static bool IsTestArtifact(ProjectModuleContext module) =>
+        module.IsTestProject || module.IsTestSupport;
+
     private static string NormalizePath(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-    private static bool PathsEqual(string left, string right) =>
-        PathComparer.Equals(NormalizePath(left), NormalizePath(right));
 
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;

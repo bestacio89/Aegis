@@ -136,6 +136,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             .ToArray();
         var productionOrder = JvmModuleDependencyResolver.OrderModules(
             productionModules,
+            context.Modules,
             context.Dependencies,
             includeTestDependencies: false,
             out var blockedProductionModules);
@@ -172,6 +173,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             .ToArray();
         var testOrder = JvmModuleDependencyResolver.OrderModules(
             testModules,
+            context.Modules,
             context.Dependencies,
             includeTestDependencies: true,
             out var blockedTestModules);

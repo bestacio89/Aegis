@@ -20,11 +20,13 @@ public sealed class JvmModuleDependencyResolverTests
         };
 
         var productionOrder = JvmModuleDependencyResolver.OrderModules(
+            [consumer, productionDependency],
             [consumer, productionDependency, testSupport],
             dependencies,
             includeTestDependencies: false,
             out var blockedProduction);
         var testOrder = JvmModuleDependencyResolver.OrderModules(
+            [consumer, testSupport],
             [consumer, productionDependency, testSupport],
             dependencies,
             includeTestDependencies: true,
@@ -36,7 +38,7 @@ public sealed class JvmModuleDependencyResolverTests
             ["m-production-dependency", "a-consumer", "z-test-support"],
             productionOrder.Select(module => module.Name));
         Assert.Equal(
-            ["m-production-dependency", "z-test-support", "a-consumer"],
+            ["z-test-support", "a-consumer"],
             testOrder.Select(module => module.Name));
     }
 
@@ -97,6 +99,58 @@ public sealed class JvmModuleDependencyResolverTests
         Assert.Equal(
             new[] { testDependency.Path, transitiveTestDependency.Path }.Select(Path.GetFullPath),
             testPaths.Test);
+    }
+
+    [Fact]
+    public void Orders_kotlin_modules_through_intermediate_java_modules()
+    {
+        var consumer = Module("a-kotlin-consumer");
+        var javaIntermediate = Module("m-java-intermediate");
+        var dependency = Module("z-kotlin-dependency");
+        var dependencies = new[]
+        {
+            Dependency(consumer, javaIntermediate, "Production"),
+            Dependency(javaIntermediate, dependency, "Production")
+        };
+
+        var order = JvmModuleDependencyResolver.OrderModules(
+            [consumer, dependency],
+            [consumer, javaIntermediate, dependency],
+            dependencies,
+            includeTestDependencies: false,
+            out var blocked);
+
+        Assert.Empty(blocked);
+        Assert.Equal(
+            ["z-kotlin-dependency", "a-kotlin-consumer"],
+            order.Select(module => module.Name));
+    }
+
+    [Fact]
+    public void Orders_test_support_modules_through_intermediate_test_support_modules()
+    {
+        var consumer = Module("a-kotlin-test-consumer");
+        var javaTestSupport = Module("m-java-test-support");
+        javaTestSupport.IsTestSupport = true;
+        var kotlinTestSupport = Module("z-kotlin-test-support");
+        kotlinTestSupport.IsTestSupport = true;
+        var dependencies = new[]
+        {
+            Dependency(consumer, javaTestSupport, "Test"),
+            Dependency(javaTestSupport, kotlinTestSupport, "Test")
+        };
+
+        var order = JvmModuleDependencyResolver.OrderModules(
+            [consumer, kotlinTestSupport],
+            [consumer, javaTestSupport, kotlinTestSupport],
+            dependencies,
+            includeTestDependencies: true,
+            out var blocked);
+
+        Assert.Empty(blocked);
+        Assert.Equal(
+            ["z-kotlin-test-support", "a-kotlin-test-consumer"],
+            order.Select(module => module.Name));
     }
 
     [Fact]

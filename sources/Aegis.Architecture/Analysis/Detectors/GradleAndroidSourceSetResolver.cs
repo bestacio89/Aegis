@@ -64,21 +64,25 @@ internal static class GradleAndroidSourceSetResolver
                     buildFile));
             }
 
-            var javaDirectories = MergeDirectories(
+            var javaDirectories = ResolveDirectories(
                 discovered?.JavaSourceDirectories,
-                explicitSet?.JavaSourceDirectories);
-            var kotlinDirectories = MergeDirectories(
+                explicitSet?.JavaSourceDirectories,
+                explicitSet?.ReplacesJavaSourceDirectories == true);
+            var kotlinDirectories = ResolveDirectories(
                 discovered?.KotlinSourceDirectories,
-                explicitSet?.KotlinSourceDirectories);
-            var resourceDirectories = MergeDirectories(
+                explicitSet?.KotlinSourceDirectories,
+                explicitSet?.ReplacesKotlinSourceDirectories == true);
+            var resourceDirectories = ResolveDirectories(
                 discovered?.ResourceDirectories,
-                explicitSet?.ResourceDirectories);
-            var assetDirectories = MergeDirectories(
+                explicitSet?.ResourceDirectories,
+                explicitSet?.ReplacesResourceDirectories == true);
+            var assetDirectories = ResolveDirectories(
                 discovered?.AssetDirectories,
-                explicitSet?.AssetDirectories);
-            var manifestFiles = MergeFiles(
-                discovered?.ManifestFiles,
-                explicitSet?.ManifestFiles);
+                explicitSet?.AssetDirectories,
+                explicitSet?.ReplacesAssetDirectories == true);
+            var manifestFiles = explicitSet?.ReplacesManifest == true
+                ? MergeFiles(explicitSet.ManifestFiles, null)
+                : MergeFiles(discovered?.ManifestFiles, explicitSet?.ManifestFiles);
             var generatedJavaDirectories = generatedSet?.JavaSourceDirectories ?? [];
             var generatedKotlinDirectories = generatedSet?.KotlinSourceDirectories ?? [];
 
@@ -117,10 +121,12 @@ internal static class GradleAndroidSourceSetResolver
                 EvidenceFile = buildFile
             });
 
-            AddSourceRoots(sourceRoots, discovered?.JavaSourceDirectories ?? [], "Java", ownership,
-                ProjectSourceRootOrigin.Conventional, buildFile);
-            AddSourceRoots(sourceRoots, discovered?.KotlinSourceDirectories ?? [], "Kotlin", ownership,
-                ProjectSourceRootOrigin.Conventional, buildFile);
+            if (explicitSet?.ReplacesJavaSourceDirectories != true)
+                AddSourceRoots(sourceRoots, discovered?.JavaSourceDirectories ?? [], "Java", ownership,
+                    ProjectSourceRootOrigin.Conventional, buildFile);
+            if (explicitSet?.ReplacesKotlinSourceDirectories != true)
+                AddSourceRoots(sourceRoots, discovered?.KotlinSourceDirectories ?? [], "Kotlin", ownership,
+                    ProjectSourceRootOrigin.Conventional, buildFile);
             AddSourceRoots(sourceRoots, explicitSet?.JavaSourceDirectories ?? [], "Java", ownership,
                 ProjectSourceRootOrigin.Explicit, buildFile);
             AddSourceRoots(sourceRoots, explicitSet?.KotlinSourceDirectories ?? [], "Kotlin", ownership,
@@ -576,15 +582,20 @@ internal static class GradleAndroidSourceSetResolver
 
             var sourceSet = GetOrAdd(result, name);
             ParseDirectoryDeclarations(body, "java", sourceSet.JavaSourceDirectories,
-                modulePath, analysisRoot, name, buildFile, diagnostics);
+                modulePath, analysisRoot, name, buildFile, diagnostics,
+                replaces => sourceSet.ReplacesJavaSourceDirectories = replaces);
             ParseDirectoryDeclarations(body, "kotlin", sourceSet.KotlinSourceDirectories,
-                modulePath, analysisRoot, name, buildFile, diagnostics);
+                modulePath, analysisRoot, name, buildFile, diagnostics,
+                replaces => sourceSet.ReplacesKotlinSourceDirectories = replaces);
             ParseDirectoryDeclarations(body, "res", sourceSet.ResourceDirectories,
-                modulePath, analysisRoot, name, buildFile, diagnostics);
+                modulePath, analysisRoot, name, buildFile, diagnostics,
+                replaces => sourceSet.ReplacesResourceDirectories = replaces);
             ParseDirectoryDeclarations(body, "assets", sourceSet.AssetDirectories,
-                modulePath, analysisRoot, name, buildFile, diagnostics);
+                modulePath, analysisRoot, name, buildFile, diagnostics,
+                replaces => sourceSet.ReplacesAssetDirectories = replaces);
             ParseManifestDeclaration(body, sourceSet.ManifestFiles,
-                modulePath, analysisRoot, name, buildFile, diagnostics);
+                modulePath, analysisRoot, name, buildFile, diagnostics,
+                () => sourceSet.ReplacesManifest = true);
         }
 
         return result;
@@ -598,10 +609,11 @@ internal static class GradleAndroidSourceSetResolver
         string analysisRoot,
         string sourceSetName,
         string buildFile,
-        ICollection<AnalysisDiagnostic> diagnostics)
+        ICollection<AnalysisDiagnostic> diagnostics,
+        Action<bool> setReplaces)
     {
         var declarationPattern = @"\b" + Regex.Escape(property)
-            + @"\s*\.\s*(?:srcDirs|srcDir|setSrcDirs)\s*(?:\(\s*(?<args>[^\n)]*)\)|=\s*(?<assignment>[^\n]+)|\s+(?<groovy>[^\n]+))";
+            + @"\s*\.\s*(?<operation>srcDirs|srcDir|setSrcDirs)\s*(?:\(\s*(?<args>[^\n)]*)\)|\+=\s*(?<appendAssignment>[^\n]+)|=\s*(?<assignment>[^\n]+)|\s+(?<groovy>[^\n]+))";
         var declarations = Regex.Matches(body, declarationPattern, RegexOptions.CultureInvariant);
         var declarationCount = Regex.Matches(
             body,
@@ -617,11 +629,22 @@ internal static class GradleAndroidSourceSetResolver
 
         foreach (Match declaration in declarations)
         {
+            var operation = declaration.Groups["operation"].Value;
+            var replaces = declaration.Groups["assignment"].Success
+                || operation.Equals("setSrcDirs", StringComparison.Ordinal);
+            if (replaces)
+            {
+                destination.Clear();
+                setReplaces(true);
+            }
+
             var expression = declaration.Groups["args"].Success
                 ? declaration.Groups["args"].Value
-                : declaration.Groups["assignment"].Success
-                    ? declaration.Groups["assignment"].Value
-                    : declaration.Groups["groovy"].Value;
+                : declaration.Groups["appendAssignment"].Success
+                    ? declaration.Groups["appendAssignment"].Value
+                    : declaration.Groups["assignment"].Success
+                        ? declaration.Groups["assignment"].Value
+                        : declaration.Groups["groovy"].Value;
             var values = Regex.Matches(expression, @"['""](?<path>[^'""]+)['""]")
                 .Cast<Match>()
                 .Select(match => match.Groups["path"].Value)
@@ -664,7 +687,8 @@ internal static class GradleAndroidSourceSetResolver
         string analysisRoot,
         string sourceSetName,
         string buildFile,
-        ICollection<AnalysisDiagnostic> diagnostics)
+        ICollection<AnalysisDiagnostic> diagnostics,
+        Action markOverride)
     {
         var declaration = Regex.Match(
             body,
@@ -673,6 +697,8 @@ internal static class GradleAndroidSourceSetResolver
         if (!declaration.Success)
             return;
 
+        destination.Clear();
+        markOverride();
         var expression = declaration.Groups["path"].Success
             ? declaration.Groups["path"].Value
             : declaration.Groups["assignment"].Value;
@@ -843,6 +869,14 @@ internal static class GradleAndroidSourceSetResolver
             return false;
         }
     }
+
+    private static List<string> ResolveDirectories(
+        IEnumerable<string>? conventional,
+        IEnumerable<string>? explicitDirectories,
+        bool replaceConventional) =>
+        replaceConventional
+            ? MergeDirectories(null, explicitDirectories)
+            : MergeDirectories(conventional, explicitDirectories);
 
     private static List<string> MergeDirectories(
         IEnumerable<string>? first,
@@ -1016,5 +1050,10 @@ internal static class GradleAndroidSourceSetResolver
         public List<string> ManifestFiles { get; } = [];
         public List<string> ResourceDirectories { get; } = [];
         public List<string> AssetDirectories { get; } = [];
+        public bool ReplacesJavaSourceDirectories { get; set; }
+        public bool ReplacesKotlinSourceDirectories { get; set; }
+        public bool ReplacesManifest { get; set; }
+        public bool ReplacesResourceDirectories { get; set; }
+        public bool ReplacesAssetDirectories { get; set; }
     }
 }

@@ -537,6 +537,7 @@ public sealed class GradleAndroidBuildModelTests
                         release { isMinifyEnabled = true }
                         create("staging") { }
                     }
+                    testFixtures { enable = true }
                 }
                 """);
 
@@ -565,6 +566,7 @@ public sealed class GradleAndroidBuildModelTests
             Assert.Contains(android.Variants, variant => variant.Name == "paidDebug");
             Assert.Contains(android.Variants, variant => variant.Name == "paidRelease");
             Assert.Contains(android.Variants, variant => variant.Name == "freeStaging");
+            Assert.True(android.TestFixturesEnabled);
             Assert.Equal(["freeDebug"], android.SourceSets.Single(sourceSet => sourceSet.Name == "freeDebug").AppliesToVariants);
             var freeFlavor = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "free");
             Assert.Equal(["freeDebug", "freeRelease", "freeStaging"], freeFlavor.AppliesToVariants);

@@ -143,8 +143,16 @@ internal static class SemanticArchitectureComponentDetector
                 item => item.Components[0],
                 SymbolIdentityComparer.Instance);
 
-        var symbolComponentsById = symbolComponents.Values
-            .GroupBy(item => item.SymbolId, StringComparer.Ordinal)
+        var symbolIdentitiesById = semanticRuns
+            .SelectMany(run => run.Symbols
+                .Where(IsProjectSourceSymbol)
+                .Where(symbol => !string.IsNullOrWhiteSpace(symbol.Id))
+                .Select(symbol => new SymbolIdentity(
+                    NormalizePath(run.ProjectPath),
+                    run.Language,
+                    symbol.Id)))
+            .Distinct(SymbolIdentityComparer.Instance)
+            .GroupBy(identity => identity.SymbolId, StringComparer.Ordinal)
             .ToDictionary(
                 group => group.Key,
                 group => group.ToArray(),
@@ -245,7 +253,7 @@ internal static class SemanticArchitectureComponentDetector
                     run,
                     relationship.TargetSymbolId!,
                     symbolComponents,
-                    symbolComponentsById);
+                    symbolIdentitiesById);
                 if (targetComponent is null)
                     continue;
 
@@ -328,7 +336,7 @@ internal static class SemanticArchitectureComponentDetector
         SemanticAnalysisRun run,
         string targetSymbolId,
         IReadOnlyDictionary<SymbolIdentity, SymbolComponent> symbolComponents,
-        IReadOnlyDictionary<string, SymbolComponent[]> symbolComponentsById)
+        IReadOnlyDictionary<string, SymbolIdentity[]> symbolIdentitiesById)
     {
         // Providers may include a referenced dependency declaration in the
         // consumer run as an External symbol. Its ProjectPath supplies the
@@ -362,9 +370,10 @@ internal static class SemanticArchitectureComponentDetector
         // Older Java/C# providers may expose only the target ID in a relationship.
         // Preserve that contract when the ID is unambiguous across the workspace;
         // never choose arbitrarily when multiple projects own the same ID.
-        return symbolComponentsById.TryGetValue(targetSymbolId, out var candidates)
+        return symbolIdentitiesById.TryGetValue(targetSymbolId, out var candidates)
             && candidates.Length == 1
-                ? candidates[0]
+            && symbolComponents.TryGetValue(candidates[0], out var uniqueTarget)
+                ? uniqueTarget
                 : null;
     }
 

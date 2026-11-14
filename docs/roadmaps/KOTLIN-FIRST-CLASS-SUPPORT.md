@@ -507,3 +507,24 @@ Implementation rules:
 - Overloaded Java/Kotlin methods, constructors, properties/accessors, top-level functions/file facades, extension functions, suspend functions, `@JvmName`, value classes and companion/object bridges.
 - Ambiguous, unresolved and incomplete classpath cases; each must remain partial/unbound rather than being joined by display name.
 - Architecture component graph and relationship-ledger assertions proving that cross-language edges retain exact source provenance and are not double-counted.
+
+
+## K3 status — accepted
+
+K3 is accepted at exact head `c0efa12ed0441aa2edc9b5dfd302dc56ebef7783`. The Kotlin and Java semantic workers, WPF build validation and non-WPF quality gates passed on that exact head.
+
+The accepted implementation establishes dependency-first execution across explicit mixed Java/Kotlin project edges, production-before-test scheduling, scope-aware transitive project outputs, preservation of classpath precedence, and bidirectional mixed-language binding tests. The semantic graph and relationship-ledger projection retain the accepted cross-provider provenance and collision-aware binding behavior.
+
+## K4 status — accepted
+
+K4 is accepted at exact head `a75aeac463e27583783916231bb59ee05d2b53bc`. All four required workflows passed on that exact head.
+
+Kotlin framework intelligence reuses the Java semantic framework evidence pipeline rather than introducing a parallel detector. It keeps module-owned declared dependency evidence distinct from compiler-confirmed source usage, classifies Ktor, kotlinx.coroutines, kotlinx.serialization and Exposed, and recognizes Kotlin test libraries including Kotest, MockK, Kotlin Test and kotlinx-coroutines-test. Declared versions and build-model provenance remain separate from compiler provenance; test-scoped dependencies are represented as test-only evidence.
+
+## K5 implementation — in progress
+
+K5 builds on the shared JVM production/test orchestration and dependency resolver. The existing implementation already discovers conventional and explicit Gradle source sets, Maven Kotlin main/test roots, test projects and test-support modules; it runs production before test, supplies successful production outputs to test compilation, resolves test-scoped project outputs, and projects test relationships separately from production dependencies.
+
+A K5 correctness gap was identified in semantic component metrics: the projection trusted only the provider's per-symbol `IsTestCode` flag when counting production and test symbols. A module already classified as a test project or test-support module must remain test-scoped even if a provider omits that flag. The projection now derives test ownership from both symbol evidence and authoritative module ownership. Focused tests cover test projects and test-support modules, production/test component counts, and traceable test-to-production relationships.
+
+K5 remains unaccepted until focused tests and all four required workflows pass on the exact PR head. Remaining K5 validation must cover source-set and module discovery, test-aware classpaths, framework attribution, test-to-production graph evidence, and exclusion of test evidence from production metrics.

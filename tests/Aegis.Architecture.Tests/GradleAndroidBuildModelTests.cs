@@ -890,6 +890,46 @@ public sealed class GradleAndroidBuildModelTests
     }
 
     [Fact]
+    public void Detect_rejects_case_insensitive_build_type_collisions_without_product_flavors()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidBuildTypeCollision_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-build-type-collision\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.buildtypecollision"
+                    compileSdk = 35
+                    buildTypes {
+                        create("Debug") { }
+                    }
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+
+            Assert.Empty(android.Variants);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidVariantNameConflict"
+                && diagnostic.AffectsCoverage);
+            Assert.False(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_rejects_case_insensitive_android_variant_and_task_name_collisions()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidVariantCollision_{Guid.NewGuid():N}");

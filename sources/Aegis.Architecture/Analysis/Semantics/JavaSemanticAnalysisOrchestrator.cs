@@ -189,6 +189,15 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         }
 
         var classpath = _classpathResolver.Resolve(module, context.Modules, includeTestCode);
+        var dependencyPaths = JvmModuleDependencyResolver.ResolveDependencyPaths(
+            module.Path,
+            context.Dependencies,
+            includeTestDependencies);
+        var compilationOutputs = executionContext?.GetCompilationOutputs(
+            module.Path,
+            dependencyPaths.Production,
+            dependencyPaths.Test,
+            includeTestCode) ?? Array.Empty<string>();
         var request = new SemanticAnalysisRequest
         {
             Language = "Java",
@@ -219,8 +228,7 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
                 .Select(root => root.Directory)
                 .ToArray(),
             ClasspathEntries = classpath.Entries
-                .Concat(executionContext?.GetCompilationOutputs(module.Path, includeTestCode)
-                    ?? Array.Empty<string>())
+                .Concat(compilationOutputs)
                 .Distinct(PathComparer)
                 .OrderBy(path => path, PathComparer)
                 .ToArray(),

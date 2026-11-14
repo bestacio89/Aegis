@@ -62,7 +62,6 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
 
         var modules = context.Modules
             .Where(module => IsKotlinModule(module, context.Modules))
-            .OrderBy(module => module.Path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         if (modules.Length == 0
@@ -95,6 +94,9 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             });
         }
 
+        var sourceRootsByModule = new Dictionary<string, IReadOnlyList<ProjectSourceRoot>>(PathComparer);
+        var unsupportedModulePaths = new HashSet<string>(PathComparer);
+
         foreach (var module in modules)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -102,6 +104,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             if (TryGetUnsupportedTarget(module, out var unsupportedTarget))
             {
                 context.SemanticAnalysisRuns.Add(CreateUnsupportedTargetRun(module, unsupportedTarget));
+                unsupportedModulePaths.Add(NormalizeModulePath(module.Path));
                 continue;
             }
 
@@ -119,29 +122,34 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 continue;
             }
 
-            if (sourceRoots.Any(root => root.Ownership == ProjectSourceRootOwnership.Unknown))
-            {
-                await AnalyzeScopeAsync(
-                    module,
-                    context,
-                    sourceRoots,
-                    includeTestCode: true,
-                    includeTestDependencies: module.IsTestProject || module.IsTestSupport,
-                    executionContext,
-                    cancellationToken).ConfigureAwait(false);
-                continue;
-            }
+            sourceRootsByModule[NormalizeModulePath(module.Path)] = sourceRoots;
+        }
 
-            IReadOnlyCollection<ProjectSourceRoot> productionRoots = module.IsTestProject || module.IsTestSupport
-                ? Array.Empty<ProjectSourceRoot>()
-                : sourceRoots
-                    .Where(root => root.Ownership != ProjectSourceRootOwnership.Test)
-                    .ToArray();
-            IReadOnlyCollection<ProjectSourceRoot> testRoots = module.IsTestProject || module.IsTestSupport
-                ? sourceRoots
-                : sourceRoots
-                    .Where(root => root.Ownership == ProjectSourceRootOwnership.Test)
-                    .ToArray();
+        var productionModules = modules
+            .Where(module =>
+                !unsupportedModulePaths.Contains(NormalizeModulePath(module.Path))
+                && sourceRootsByModule.TryGetValue(NormalizeModulePath(module.Path), out var roots)
+                && !module.IsTestProject
+                && !module.IsTestSupport
+                && roots.All(root => root.Ownership != ProjectSourceRootOwnership.Unknown))
+            .ToArray();
+        var productionOrder = JvmModuleDependencyResolver.OrderModules(
+            productionModules,
+            context.Dependencies,
+            includeTestDependencies: false,
+            out var blockedProductionModules);
+        AddDependencyOrderDiagnostics(context, blockedProductionModules, includeTestDependencies: false);
+
+        foreach (var module in productionOrder)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var roots = sourceRootsByModule[NormalizeModulePath(module.Path)];
+            var productionRoots = roots
+                .Where(root => root.Ownership != ProjectSourceRootOwnership.Test)
+                .ToArray();
+            if (productionRoots.Length == 0)
+                continue;
 
             await AnalyzeScopeAsync(
                 module,
@@ -151,6 +159,47 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 includeTestDependencies: false,
                 executionContext,
                 cancellationToken).ConfigureAwait(false);
+        }
+
+        var testModules = modules
+            .Where(module =>
+                !unsupportedModulePaths.Contains(NormalizeModulePath(module.Path))
+                && sourceRootsByModule.TryGetValue(NormalizeModulePath(module.Path), out var roots)
+                && (module.IsTestProject
+                    || module.IsTestSupport
+                    || roots.Any(root => root.Ownership is ProjectSourceRootOwnership.Test or ProjectSourceRootOwnership.Unknown)))
+            .ToArray();
+        var testOrder = JvmModuleDependencyResolver.OrderModules(
+            testModules,
+            context.Dependencies,
+            includeTestDependencies: true,
+            out var blockedTestModules);
+        AddDependencyOrderDiagnostics(context, blockedTestModules, includeTestDependencies: true);
+
+        foreach (var module in testOrder)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var roots = sourceRootsByModule[NormalizeModulePath(module.Path)];
+            if (roots.Any(root => root.Ownership == ProjectSourceRootOwnership.Unknown))
+            {
+                await AnalyzeScopeAsync(
+                    module,
+                    context,
+                    roots,
+                    includeTestCode: true,
+                    includeTestDependencies: module.IsTestProject || module.IsTestSupport,
+                    executionContext,
+                    cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
+            var testRoots = module.IsTestProject || module.IsTestSupport
+                ? roots
+                : roots.Where(root => root.Ownership == ProjectSourceRootOwnership.Test).ToArray();
+            if (testRoots.Count == 0)
+                continue;
+
             await AnalyzeScopeAsync(
                 module,
                 context,
@@ -163,6 +212,29 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
 
         ModuleRoleDetector.Analyze(context.Modules);
     }
+
+    private static void AddDependencyOrderDiagnostics(
+        ProjectArchitectureContext context,
+        IReadOnlyCollection<string> blockedModulePaths,
+        bool includeTestDependencies)
+    {
+        foreach (var modulePath in blockedModulePaths)
+        {
+            context.DiscoveryDiagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = includeTestDependencies
+                    ? "KotlinTestDependencyOrderBlocked"
+                    : "KotlinProductionDependencyOrderBlocked",
+                Component = nameof(KotlinSemanticAnalysisOrchestrator),
+                Message = "The explicit JVM project-dependency graph contains a cycle or an ambiguous module path. This scope was skipped because a dependency-first compilation order could not be established.",
+                Target = modulePath,
+                AffectsCoverage = true
+            });
+        }
+    }
+
+    private static string NormalizeModulePath(string path) =>
+        Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     private async Task AnalyzeScopeAsync(
         ProjectModuleContext module,
@@ -206,6 +278,16 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             .OrderBy(path => path, PathComparer)
             .ToArray();
 
+        var dependencyPaths = JvmModuleDependencyResolver.ResolveDependencyPaths(
+            module.Path,
+            context.Dependencies,
+            includeTestDependencies);
+        var compilationOutputs = executionContext?.GetCompilationOutputs(
+            module.Path,
+            dependencyPaths.Production,
+            dependencyPaths.Test,
+            includeTestCode) ?? Array.Empty<string>();
+
         var compilerPluginsNotExecuted = module.GradleBuildModel?.Diagnostics.Any(diagnostic =>
                 diagnostic.Code == "GradleKotlinCompilerPluginNotExecuted") == true
             || module.MavenModel?.Diagnostics.Any(diagnostic =>
@@ -234,8 +316,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 .Select(root => Path.GetFullPath(root.Directory))
                 .ToArray(),
             ClasspathEntries = classpath.Entries
-                .Concat(executionContext?.GetCompilationOutputs(module.Path, includeTestCode: false)
-                    ?? Array.Empty<string>())
+                .Concat(compilationOutputs)
                 .Distinct(PathComparer)
                 .OrderBy(path => path, PathComparer)
                 .ToArray(),

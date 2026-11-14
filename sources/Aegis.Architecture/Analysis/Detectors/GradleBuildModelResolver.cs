@@ -249,6 +249,8 @@ internal static class GradleBuildModelResolver
                 KotlinLanguageVersion = kotlinCompilerOptions.LanguageVersion,
                 KotlinApiVersion = kotlinCompilerOptions.ApiVersion,
                 KotlinJvmTarget = kotlinCompilerOptions.JvmTarget,
+                KotlinCompilerConfigurationInferred = kotlinPluginVersion is null
+                    || kotlinCompilerOptions.ConfigurationInferred,
                 Diagnostics = diagnostics,
                 IsComplete = diagnostics.Count == 0
             };
@@ -1236,7 +1238,11 @@ internal static class GradleBuildModelResolver
             ? jvmTargetMatch.Groups["version"].Value.Replace('_', '.')
             : kotlinPluginVersion is null ? null : "1.8";
 
-        return new KotlinCompilerOptions(languageVersion, apiVersion, jvmTarget);
+        return new KotlinCompilerOptions(
+            languageVersion,
+            apiVersion,
+            jvmTarget,
+            !languageMatch.Success || !apiMatch.Success || !jvmTargetMatch.Success);
     }
 
     private static string? InferKotlinLanguageVersion(string? compilerVersion)
@@ -1253,7 +1259,8 @@ internal static class GradleBuildModelResolver
     private sealed record KotlinCompilerOptions(
         string? LanguageVersion,
         string? ApiVersion,
-        string? JvmTarget);
+        string? JvmTarget,
+        bool ConfigurationInferred);
 
     private static List<GradleBuildModel.SourceSet> MergeSourceSets(
         IReadOnlyCollection<GradleBuildModel.SourceSet> conventional,

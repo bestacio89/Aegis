@@ -398,6 +398,10 @@ internal static class MavenProjectModelResolver
             var kotlinJvmTarget = kotlinOptions.JvmTarget
                 ?? parentModel?.KotlinJvmTarget
                 ?? "1.8";
+            var kotlinCompilerConfigurationInferred =
+                parentModel?.KotlinCompilerConfigurationInferred == true
+                || string.IsNullOrWhiteSpace(kotlinPlugin?.Version)
+                || kotlinOptions.ConfigurationInferred;
 
             var processorPaths = parentModel?.AnnotationProcessorPaths
                 .Select(dependency => dependency with { IsInherited = true })
@@ -467,6 +471,7 @@ internal static class MavenProjectModelResolver
                 KotlinApiVersion = kotlinApiVersion,
                 KotlinJvmTarget = kotlinJvmTarget,
                 KotlinJdkRelease = kotlinOptions.JdkRelease ?? parentModel?.KotlinJdkRelease,
+                KotlinCompilerConfigurationInferred = kotlinCompilerConfigurationInferred,
                 KotlinMainSourceDirectoryExpressions = kotlinOptions.MainSourceDirectoryExpressions,
                 KotlinTestSourceDirectoryExpressions = kotlinOptions.TestSourceDirectoryExpressions,
                 KotlinExtensionsEnabled = kotlinOptions.ExtensionsEnabled,
@@ -871,7 +876,11 @@ internal static class MavenProjectModelResolver
         languageVersion ??= parentModel?.KotlinLanguageVersion;
         apiVersion ??= parentModel?.KotlinApiVersion;
         jdkRelease ??= parentModel?.KotlinJdkRelease;
-        jvmTarget ??= parentModel?.KotlinJvmTarget ?? "1.8";
+        jvmTarget ??= parentModel?.KotlinJvmTarget;
+        var configurationInferred = languageVersion is null
+            || apiVersion is null
+            || (jvmTarget is null && jdkRelease is null);
+        jvmTarget ??= "1.8";
 
         return new KotlinBuildOptions(
             mainDirectories.Distinct(PathComparer).ToList(),
@@ -882,7 +891,8 @@ internal static class MavenProjectModelResolver
             jdkRelease,
             mainExpressions.Distinct(StringComparer.Ordinal).ToList(),
             testExpressions.Distinct(StringComparer.Ordinal).ToList(),
-            extensionsEnabled);
+            extensionsEnabled,
+            configurationInferred);
     }
 
     private static List<string> ParseKotlinSourceDirectories(
@@ -1433,7 +1443,8 @@ internal static class MavenProjectModelResolver
         string? JdkRelease,
         List<string> MainSourceDirectoryExpressions,
         List<string> TestSourceDirectoryExpressions,
-        bool ExtensionsEnabled);
+        bool ExtensionsEnabled,
+        bool ConfigurationInferred);
 
 
     private static AnalysisDiagnostic Diagnostic(string code, string message, string path) =>

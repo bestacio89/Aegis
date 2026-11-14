@@ -31,6 +31,8 @@ public sealed class GradleBuildModel
 
     public string? KotlinJvmTarget { get; init; }
 
+    public bool KotlinCompilerConfigurationInferred { get; init; }
+
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];
 
     public bool IsComplete { get; init; }

@@ -379,7 +379,9 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             maven?.KotlinJdkRelease);
         var jvmTarget = declaredJvmTarget ?? FirstNonBlank(gradle?.JavaToolchainVersion);
 
-        var inferred = compilerVersion is null
+        var inferred = gradle?.KotlinCompilerConfigurationInferred == true
+            || maven?.KotlinCompilerConfigurationInferred == true
+            || compilerVersion is null
             || languageVersion is null
             || apiVersion is null
             || declaredJvmTarget is null;

@@ -211,13 +211,21 @@ internal static class GradleBuildModelResolver
                         .ToList();
                     sourceRoots[existingIndex] = existing with
                     {
-                        Ownership = existing.Ownership == androidRoot.Ownership
-                            ? existing.Ownership
-                            : ProjectSourceRootOwnership.Unknown,
+                        Ownership = existing.Ownership == ProjectSourceRootOwnership.Unknown
+                            ? androidRoot.Ownership
+                            : androidRoot.Ownership == ProjectSourceRootOwnership.Unknown
+                                ? existing.Ownership
+                                : existing.Ownership == androidRoot.Ownership
+                                    ? existing.Ownership
+                                    : ProjectSourceRootOwnership.Unknown,
                         Origin = existing.Origin == ProjectSourceRootOrigin.Explicit
                             || androidRoot.Origin == ProjectSourceRootOrigin.Explicit
                                 ? ProjectSourceRootOrigin.Explicit
-                                : existing.Origin,
+                                : existing.Origin == ProjectSourceRootOrigin.GeneratedConvention
+                                  || androidRoot.Origin == ProjectSourceRootOrigin.GeneratedConvention
+                                    ? ProjectSourceRootOrigin.GeneratedConvention
+                                    : existing.Origin,
+                        IsGenerated = existing.IsGenerated || androidRoot.IsGenerated,
                         Languages = languages,
                         ContainsJavaSources = existing.ContainsJavaSources
                             || androidRoot.ContainsJavaSources

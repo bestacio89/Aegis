@@ -48,7 +48,7 @@ public sealed class GradleAndroidBuildModel
 
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];
 
-    public bool IsComplete { get; init; }
+    public bool IsComplete { get; set; }
 
     public sealed record AndroidDefaultConfig(
         string? ApplicationId,

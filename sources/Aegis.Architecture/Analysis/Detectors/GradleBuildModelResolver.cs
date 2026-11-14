@@ -242,13 +242,10 @@ internal static class GradleBuildModelResolver
                         .ToList();
                     sourceRoots[existingIndex] = existing with
                     {
-                        Ownership = existing.Ownership == ProjectSourceRootOwnership.Unknown
-                            ? androidRoot.Ownership
-                            : androidRoot.Ownership == ProjectSourceRootOwnership.Unknown
-                                ? existing.Ownership
-                                : existing.Ownership == androidRoot.Ownership
-                                    ? existing.Ownership
-                                    : ProjectSourceRootOwnership.Unknown,
+                        // The Android source-set projection is authoritative for Android modules.
+                        // Generic Gradle generated-source discovery cannot distinguish Android
+                        // variant and test-module ownership reliably.
+                        Ownership = androidRoot.Ownership,
                         Origin = existing.Origin == ProjectSourceRootOrigin.Explicit
                             || androidRoot.Origin == ProjectSourceRootOrigin.Explicit
                                 ? ProjectSourceRootOrigin.Explicit

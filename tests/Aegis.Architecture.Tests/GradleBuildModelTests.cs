@@ -182,6 +182,7 @@ public sealed class GradleBuildModelTests
             Assert.Equal("2.4", model.KotlinLanguageVersion);
             Assert.Equal("2.4", model.KotlinApiVersion);
             Assert.Equal("21", model.KotlinJvmTarget);
+            Assert.False(model.KotlinCompilerConfigurationInferred);
             Assert.Contains(model.Plugins, plugin =>
                 plugin.Id == "org.jetbrains.kotlin.jvm" && plugin.Version == "2.4.21");
             Assert.Contains(model.SourceSets, sourceSet =>
@@ -214,6 +215,40 @@ public sealed class GradleBuildModelTests
             Assert.True(generatedKaptSourceRoot.ContainsKotlinSources);
             Assert.Equal(ProjectSourceRootOwnership.Test, generatedKaptSourceRoot.Ownership);
             Assert.True(model.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_marks_default_kotlin_compiler_options_as_inferred()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisGradleKotlinInferred_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"kotlin-inferred\"");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    kotlin("jvm") version "2.4.21"
+                }
+                """);
+            var sourceRoot = Path.Combine(root, "src", "main", "kotlin");
+            Directory.CreateDirectory(sourceRoot);
+            File.WriteAllText(Path.Combine(sourceRoot, "Service.kt"), "class Service");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<Aegis.Shared.Architecture.Models.GradleBuildModel>(module.GradleBuildModel);
+
+            Assert.Equal("2.4.21", model.KotlinPluginVersion);
+            Assert.Equal("2.4", model.KotlinLanguageVersion);
+            Assert.Equal("2.4", model.KotlinApiVersion);
+            Assert.Equal("1.8", model.KotlinJvmTarget);
+            Assert.True(model.KotlinCompilerConfigurationInferred);
         }
         finally
         {

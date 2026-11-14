@@ -129,6 +129,15 @@ internal static class GradleAndroidSourceSetResolver
         string buildFile,
         ICollection<AnalysisDiagnostic> diagnostics)
     {
+        if (model.ModuleKind == "Unknown")
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleAndroidVariantModuleKindUnknown",
+                "Android variant derivation is unavailable because the Android Gradle Plugin module kind was not statically resolved.",
+                buildFile));
+            return [];
+        }
+
         var buildTypes = model.BuildTypes
             .Select(buildType => buildType.Name)
             .Concat(["debug", "release"])
@@ -235,9 +244,14 @@ internal static class GradleAndroidSourceSetResolver
     {
         var names = new HashSet<string>(StringComparer.Ordinal)
         {
-            "main", "test", "androidTest", "debug", "release"
+            "main", "test", "androidTest", "testFixtures"
         };
 
+        if (model.ModuleKind == "Unknown")
+            return names;
+
+        names.Add("debug");
+        names.Add("release");
         foreach (var flavor in model.ProductFlavors)
         {
             names.Add(flavor.Name);
@@ -271,6 +285,9 @@ internal static class GradleAndroidSourceSetResolver
         {
             "test", "androidTest", "testFixtures"
         };
+
+        if (model.ModuleKind == "Unknown")
+            return names;
 
         foreach (var flavor in model.ProductFlavors)
         {

@@ -179,10 +179,12 @@ public sealed class JvmSourceRootResolver
         var workspaceRoot = Path.GetFullPath(context.RootPath);
         var sourceRoots = new List<string>();
         var seenSourceRoots = new HashSet<string>(PathComparer);
-        var visitedProductionModules = new HashSet<string>(PathComparer);
-        var visitedTestArtifactModules = new HashSet<string>(PathComparer);
+        var rootModulePath = NormalizePath(module.Path);
+        visitedProductionModules.Add(rootModulePath);
+        visitedTestArtifactModules.Add(rootModulePath);
         var pending = new Queue<(string Path, bool IncludeTestEdges, bool IncludeTestRoots)>();
 
+        AddSourceRoots(module, includeTestDependencies);
         EnqueueDependencies(module.Path, includeTestDependencies);
 
         while (pending.TryDequeue(out var current))
@@ -196,6 +198,14 @@ public sealed class JvmSourceRootResolver
                 continue;
             }
 
+            AddSourceRoots(targetModule, current.IncludeTestRoots);
+            EnqueueDependencies(targetModule.Path, current.IncludeTestEdges);
+        }
+
+        return sourceRoots;
+
+        void AddSourceRoots(ProjectModuleContext targetModule, bool includeTestRoots)
+        {
             foreach (var sourceRoot in ResolveSourceRoots(targetModule, language))
             {
                 if (!sourceRoot.ContainsLanguage(language))
@@ -206,16 +216,12 @@ public sealed class JvmSourceRootResolver
                     continue;
 
                 var isAllowedScope = sourceRoot.Ownership == ProjectSourceRootOwnership.Production
-                    || (current.IncludeTestRoots
+                    || (includeTestRoots
                         && sourceRoot.Ownership == ProjectSourceRootOwnership.Test);
                 if (isAllowedScope && seenSourceRoots.Add(normalizedRoot))
                     sourceRoots.Add(normalizedRoot);
             }
-
-            EnqueueDependencies(targetModule.Path, current.IncludeTestEdges);
         }
-
-        return sourceRoots;
 
         void EnqueueDependencies(string sourcePath, bool allowTestEdges)
         {

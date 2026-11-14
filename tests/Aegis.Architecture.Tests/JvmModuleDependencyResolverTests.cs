@@ -102,6 +102,27 @@ public sealed class JvmModuleDependencyResolverTests
     }
 
     [Fact]
+    public void Normalizes_module_paths_before_building_the_ordering_graph()
+    {
+        var consumer = Module("a-consumer");
+        var dependency = Module("z-dependency");
+        var dependencies = new[] { Dependency(consumer, dependency, "Production") };
+        consumer.Path += Path.DirectorySeparatorChar;
+
+        var order = JvmModuleDependencyResolver.OrderModules(
+            [consumer, dependency],
+            [consumer, dependency],
+            dependencies,
+            includeTestDependencies: false,
+            out var blocked);
+
+        Assert.Empty(blocked);
+        Assert.Equal(
+            ["z-dependency", "a-consumer"],
+            order.Select(module => module.Name));
+    }
+
+    [Fact]
     public void Orders_kotlin_modules_through_intermediate_java_modules()
     {
         var consumer = Module("a-kotlin-consumer");

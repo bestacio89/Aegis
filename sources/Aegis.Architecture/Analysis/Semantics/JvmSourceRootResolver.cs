@@ -179,6 +179,8 @@ public sealed class JvmSourceRootResolver
         var workspaceRoot = Path.GetFullPath(context.RootPath);
         var sourceRoots = new List<string>();
         var seenSourceRoots = new HashSet<string>(PathComparer);
+        var visitedProductionModules = new HashSet<string>(PathComparer);
+        var visitedTestArtifactModules = new HashSet<string>(PathComparer);
         var rootModulePath = NormalizePath(module.Path);
         visitedProductionModules.Add(rootModulePath);
         visitedTestArtifactModules.Add(rootModulePath);
@@ -192,11 +194,11 @@ public sealed class JvmSourceRootResolver
             var visited = current.IncludeTestEdges
                 ? visitedTestArtifactModules
                 : visitedProductionModules;
-            if (!visited.Add(current.Path)
-                || !moduleGroups.TryGetValue(current.Path, out var targetModule))
-            {
+            if (!visited.Add(current.Path))
                 continue;
-            }
+
+            if (!moduleGroups.TryGetValue(current.Path, out var targetModule))
+                continue;
 
             AddSourceRoots(targetModule, current.IncludeTestRoots);
             EnqueueDependencies(targetModule.Path, current.IncludeTestEdges);

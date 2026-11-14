@@ -46,10 +46,10 @@ internal static class JvmModuleDependencyResolver
         // Build the ordering graph from the complete project graph, not only
         // the language-specific subset. A Kotlin module may depend on another
         // Kotlin module through one or more Java modules.
-        foreach (var module in modulesByPath.Values)
+        foreach (var modulePath in modulesByPath.Keys)
         {
             var resolvedPaths = ResolveDependencyPaths(
-                module.Path,
+                modulePath,
                 allProjectModules,
                 dependencies,
                 includeTestDependencies);
@@ -63,8 +63,8 @@ internal static class JvmModuleDependencyResolver
                 if (!modulesByPath.ContainsKey(normalizedDependencyPath))
                     continue;
 
-                if (dependencyPaths[module.Path].Add(normalizedDependencyPath))
-                    dependents[normalizedDependencyPath].Add(module.Path);
+                if (dependencyPaths[modulePath].Add(normalizedDependencyPath))
+                    dependents[normalizedDependencyPath].Add(modulePath);
             }
         }
 

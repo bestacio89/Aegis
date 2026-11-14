@@ -798,6 +798,137 @@ public sealed class GradleAndroidBuildModelTests
     }
 
     [Fact]
+    public void Detect_rejects_variant_derivation_when_multiple_flavor_dimensions_have_no_declared_order()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidUnorderedDimensions_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-unordered-dimensions\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.unordered"
+                    compileSdk = 35
+                    productFlavors {
+                        create("free") { dimension = "tier" }
+                        create("minApi24") { dimension = "api" }
+                    }
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+
+            Assert.Empty(android.Variants);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidFlavorDimensionOrderNotStaticallyResolved"
+                && diagnostic.AffectsCoverage);
+            Assert.False(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_rejects_case_insensitive_android_variant_and_task_name_collisions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidVariantCollision_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-variant-collision\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.collision"
+                    compileSdk = 35
+                    flavorDimensions += "tier"
+                    productFlavors {
+                        create("free") { dimension = "tier" }
+                        create("Free") { dimension = "tier" }
+                    }
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+
+            Assert.Empty(android.Variants);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidVariantNameConflict"
+                && diagnostic.AffectsCoverage);
+            Assert.False(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_bounds_the_cartesian_variant_matrix_before_materializing_combinations()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidVariantLimit_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-variant-limit\"");
+            var build = new System.Text.StringBuilder();
+            build.AppendLine("""
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.variantlimit"
+                    compileSdk = 35
+                    flavorDimensions += listOf("tier", "api")
+                    productFlavors {
+                """);
+            for (var index = 0; index < 17; index++)
+                build.AppendLine($"create(\"tier{index}\") {{ dimension = \"tier\" }}");
+            for (var index = 0; index < 17; index++)
+                build.AppendLine($"create(\"api{index}\") {{ dimension = \"api\" }}");
+            build.AppendLine("""
+                    }
+                }
+                """);
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), build.ToString());
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+
+            Assert.Empty(android.Variants);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidVariantMatrixLimitExceeded"
+                && diagnostic.AffectsCoverage);
+            Assert.False(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_builds_cartesian_variant_matrix_across_multiple_flavor_dimensions()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidMultiDimension_{Guid.NewGuid():N}");

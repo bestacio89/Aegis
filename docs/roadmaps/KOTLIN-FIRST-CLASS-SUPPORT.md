@@ -411,15 +411,16 @@ K7.1 deliberately does not resolve active variants, Android manifests/resources,
 
 #### K7.2 — Variant-aware source and test ownership — in progress
 
-- Derive the bounded Cartesian variant matrix from build types and ordered product-flavor dimensions without executing Gradle.
+- Derive the bounded Cartesian variant matrix from build types and ordered product-flavor dimensions without executing Gradle. Missing dimension order, undeclared dimensions, case-insensitive variant/task-name collisions and matrices above the 512-variant safety limit remain incomplete.
 - Associate conventional, flavor, build-type and variant-specific source sets with the variants they contribute to.
 - Discover Java/Kotlin roots, including mixed-language directories and common materialized KSP/KAPT/generated-source layouts.
 - Model Android manifests, resources and assets by source set; accept supported literal Android DSL overrides in Groovy and Kotlin.
+- Preserve Gradle source-directory semantics: `srcDir` and `+=` append, while `srcDirs` and `setSrcDirs` replace the configured roots. A literal `manifest.srcFile` replaces the conventional manifest; dynamic or unsupported paths produce coverage diagnostics rather than false literal evidence.
 - Distinguish production, local unit-test, instrumentation-test and test-fixture ownership. Unmapped custom source sets remain unknown rather than being inferred as production.
 - Preserve source-root provenance, generated state, variant applicability and test ownership in the shared project model.
 - Bound variant derivation and report ambiguous or unsupported declarations as coverage diagnostics.
 
-**Acceptance:** Application and library fixtures prove single- and multi-dimension variant matrices, debug/release/flavor/variant source ownership, manifest/resource/asset overlays, Groovy/Kotlin DSL overrides, Java/Kotlin mixed roots, generated-source ownership, unit-test versus instrumentation-test separation, test-fixture classification and conservative handling of unknown source sets. All four required workflows must pass on the exact accepted code head.
+**Acceptance:** Application and library fixtures prove single- and multi-dimension variant matrices, repeated flavor-dimension declarations, variant-name collision and matrix-limit handling, debug/release/flavor/variant source ownership, source-directory append/replace semantics, manifest/resource/asset overlays, Groovy/Kotlin DSL overrides, Java/Kotlin mixed roots, generated-source ownership, unit-test versus instrumentation-test separation, test-fixture classification and conservative handling of unknown source sets. All four required workflows must pass on the exact accepted code head.
 
 
 #### K7.3 — Android framework and Jetpack Compose intelligence

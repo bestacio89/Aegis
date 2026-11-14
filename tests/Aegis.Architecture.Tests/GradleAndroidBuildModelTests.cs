@@ -143,7 +143,7 @@ public sealed class GradleAndroidBuildModelTests
                 }
                 """);
             File.WriteAllText(Path.Combine(module, "src", "main", "kotlin", "Legacy.kt"),
-                "package org.example.legacy\\nclass Legacy");
+                "package org.example.legacy\nclass Legacy");
 
             var context = ProjectArchitectureContextDetector.Detect(root);
             var discovered = Assert.Single(context.Modules, candidate => candidate.Path == module);

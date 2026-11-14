@@ -191,7 +191,8 @@ internal static class GradleBuildModelResolver
                 .Where(plugin => plugin.IsApplied && plugin.Id == "org.jetbrains.kotlin.jvm")
                 .ToArray();
             var kotlinAndroidPlugins = plugins
-                .Where(plugin => plugin.IsApplied && plugin.Id == "org.jetbrains.kotlin.android")
+                .Where(plugin => plugin.IsApplied
+                    && plugin.Id is "org.jetbrains.kotlin.android" or "kotlin-android")
                 .ToArray();
             var kotlinCompilerPlugins = kotlinJvmPlugins
                 .Concat(kotlinAndroidPlugins)
@@ -356,7 +357,6 @@ internal static class GradleBuildModelResolver
             _ => "Unknown"
         };
 
-        var androidBlock = ExtractBlock(source, "android");
         if (androidBlock is null)
         {
             modelDiagnostics.Add(Diagnostic(
@@ -526,7 +526,7 @@ internal static class GradleBuildModelResolver
         try
         {
             var source = StripComments(File.ReadAllText(rootBuildFile));
-                var rootPlugins = ParsePlugins(
+            var rootPlugins = ParsePlugins(
                 ExtractBlock(source, "plugins"),
                 catalog,
                 new List<AnalysisDiagnostic>(),
@@ -778,6 +778,7 @@ internal static class GradleBuildModelResolver
             or "com.android.dynamic-feature"
             or "com.android.asset-pack" => "com.android.tools.build:gradle",
             "org.jetbrains.kotlin.android"
+            or "kotlin-android"
             or "org.jetbrains.kotlin.jvm"
             or "org.jetbrains.kotlin.multiplatform" => "org.jetbrains.kotlin:kotlin-gradle-plugin",
             _ => null

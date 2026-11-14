@@ -179,12 +179,23 @@ public sealed class GradleAndroidBuildModelTests
                     compileSdk = 35
                 }
                 """);
+            WriteFile(module, "src/debug/java/UnresolvedAndroid.java",
+                "package org.example.unknown; class UnresolvedAndroid {}");
 
             var context = ProjectArchitectureContextDetector.Detect(root);
             var discovered = Assert.Single(context.Modules, candidate => candidate.Path == module);
             var android = Assert.IsType<GradleAndroidBuildModel>(
                 Assert.IsType<GradleBuildModel>(discovered.GradleBuildModel).Android);
 
+            Assert.Empty(android.Variants);
+            var unresolvedSourceSet = Assert.Single(android.SourceSets,
+                sourceSet => sourceSet.Name == "debug");
+            Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Unknown,
+                unresolvedSourceSet.Ownership);
+            Assert.Empty(unresolvedSourceSet.AppliesToVariants);
+            Assert.Contains(discovered.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(module, "src", "debug", "java")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Unknown);
             Assert.Equal("Unknown", android.ModuleKind);
             Assert.Equal(string.Empty, android.PluginId);
             Assert.False(android.IsComplete);

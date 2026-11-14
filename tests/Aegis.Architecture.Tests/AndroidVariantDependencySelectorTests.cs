@@ -24,7 +24,7 @@ public sealed class AndroidVariantDependencySelectorTests
 
         Assert.True(result.IsComplete);
         Assert.Equal(
-            ["base", "api", "flavor", "build-type", "variant"],
+            new string?[] { "base", "api", "flavor", "build-type", "variant" },
             result.Dependencies.Select(dependency => dependency.Artifact));
         Assert.Empty(result.Diagnostics);
     }
@@ -45,7 +45,7 @@ public sealed class AndroidVariantDependencySelectorTests
             module, "freeDebug", AndroidVariantDependencyScope.UnitTest);
 
         Assert.Equal(
-            ["base", "variant", "unit-test", "build-type-unit-test", "variant-unit-test"],
+            new string?[] { "base", "variant", "unit-test", "build-type-unit-test", "variant-unit-test" },
             result.Dependencies.Select(dependency => dependency.Artifact));
     }
 
@@ -64,7 +64,7 @@ public sealed class AndroidVariantDependencySelectorTests
             module, "freeDebug", AndroidVariantDependencyScope.AndroidTest);
 
         Assert.Equal(
-            ["base", "android-test", "build-type-android-test", "variant-android-test"],
+            new string?[] { "base", "android-test", "build-type-android-test", "variant-android-test" },
             result.Dependencies.Select(dependency => dependency.Artifact));
     }
 
@@ -83,7 +83,7 @@ public sealed class AndroidVariantDependencySelectorTests
             module, "freeDebug", AndroidVariantDependencyScope.TestFixtures);
 
         Assert.Equal(
-            ["base", "fixture", "build-type-fixture", "variant-fixture"],
+            new string?[] { "base", "fixture", "build-type-fixture", "variant-fixture" },
             result.Dependencies.Select(dependency => dependency.Artifact));
     }
 

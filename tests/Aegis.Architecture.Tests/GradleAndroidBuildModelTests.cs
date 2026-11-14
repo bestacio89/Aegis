@@ -805,6 +805,50 @@ public sealed class GradleAndroidBuildModelTests
     }
 
     [Fact]
+    public void Detect_does_not_reinterpret_root_relative_manifest_expressions_as_module_relative_paths()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidRootManifest_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-root-manifest\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.rootmanifest"
+                    compileSdk = 35
+                    sourceSets {
+                        getByName("main") {
+                            manifest.srcFile(rootProject.file("manifests/AndroidManifest.xml"))
+                        }
+                    }
+                }
+                """);
+            WriteFile(app, "src/main/AndroidManifest.xml", "<manifest />");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+            var main = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "main");
+
+            Assert.Empty(main.ManifestFiles);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidManifestNotStaticallyResolved"
+                && diagnostic.AffectsCoverage);
+            Assert.False(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_rejects_variant_derivation_when_multiple_flavor_dimensions_have_no_declared_order()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidUnorderedDimensions_{Guid.NewGuid():N}");

@@ -26,6 +26,7 @@ internal static class ArchitectureDependencyCycleAnalyzer
                 edge.TargetComponentId,
                 edge.TargetComponentName,
                 edge.Scope,
+                edge.AndroidVariants,
                 edge.RelationshipCount,
                 edge.ContributingRelationships,
                 edge.UnreferencedRelationshipCount));
@@ -37,6 +38,7 @@ internal static class ArchitectureDependencyCycleAnalyzer
                 edge.TargetComponentId,
                 edge.TargetComponentName,
                 edge.Scope,
+                edge.AndroidVariants,
                 edge.RelationshipCount,
                 edge.ContributingRelationships,
                 edge.UnreferencedRelationshipCount));
@@ -56,16 +58,22 @@ internal static class ArchitectureDependencyCycleAnalyzer
                 !string.IsNullOrWhiteSpace(edge.SourceId)
                 && !string.IsNullOrWhiteSpace(edge.TargetId))
             .OrderBy(edge => edge.Scope, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(edge => CreateAndroidVariantKey(edge.AndroidVariants), StringComparer.Ordinal)
             .ThenBy(edge => edge.SourceId, StringComparer.Ordinal)
             .ThenBy(edge => edge.TargetId, StringComparer.Ordinal)
             .ToArray();
 
         var results = new List<ArchitectureDependencyCycleContext>();
 
-        foreach (var scopeGroup in edges.GroupBy(edge => edge.Scope, StringComparer.OrdinalIgnoreCase)
-                     .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase))
+        foreach (var scopeGroup in edges
+                     .GroupBy(edge => new CycleGroupKey(edge.Scope, CreateAndroidVariantKey(edge.AndroidVariants)))
+                     .OrderBy(group => group.Key.Scope, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(group => group.Key.AndroidVariantKey, StringComparer.Ordinal))
         {
             var scopedEdges = scopeGroup.ToArray();
+            var androidVariants = scopedEdges.SelectMany(edge => edge.AndroidVariants)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(variant => variant, StringComparer.OrdinalIgnoreCase).ToList();
             var names = new Dictionary<string, string>(StringComparer.Ordinal);
 
             foreach (var edge in scopedEdges)
@@ -120,7 +128,8 @@ internal static class ArchitectureDependencyCycleAnalyzer
                 results.Add(new ArchitectureDependencyCycleContext
                 {
                     Projection = projection,
-                    Scope = scopeGroup.Key,
+                    Scope = scopeGroup.Key.Scope,
+                    AndroidVariants = androidVariants,
                     ComponentIds = componentIds,
                     ComponentNames = componentIds.Select(id => names[id]).ToList(),
                     DependencyEdgeCount = internalEdges.Length,
@@ -135,6 +144,7 @@ internal static class ArchitectureDependencyCycleAnalyzer
 
         return results
             .OrderBy(cycle => cycle.Scope, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(cycle => CreateAndroidVariantKey(cycle.AndroidVariants), StringComparer.Ordinal)
             .ThenBy(cycle => cycle.ComponentNames[0], StringComparer.OrdinalIgnoreCase)
             .ThenBy(cycle => cycle.ComponentIds[0], StringComparer.Ordinal)
             .ToArray();
@@ -212,12 +222,20 @@ internal static class ArchitectureDependencyCycleAnalyzer
         return components;
     }
 
+    private static string CreateAndroidVariantKey(IEnumerable<string> variants) =>
+        string.Join("|", variants.Where(variant => !string.IsNullOrWhiteSpace(variant))
+            .Select(variant => variant.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal).OrderBy(variant => variant, StringComparer.Ordinal));
+
+    private sealed record CycleGroupKey(string Scope, string AndroidVariantKey);
+
     private sealed record DependencyEdge(
         string SourceId,
         string SourceName,
         string TargetId,
         string TargetName,
         string Scope,
+        IReadOnlyList<string> AndroidVariants,
         int RelationshipCount,
         IReadOnlyList<SemanticRelationshipReference> Relationships,
         int UnreferencedRelationshipCount);

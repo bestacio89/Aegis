@@ -117,8 +117,9 @@ public sealed class KotlinJavaInteropPipelineTests
             Assert.Equal(["Kotlin", "Kotlin", "Java", "Java"], executionOrder);
             var javaProduction = Assert.Single(javaAdapter.Requests.Where(request => !request.IncludeTestCode));
             var javaTest = Assert.Single(javaAdapter.Requests.Where(request => request.IncludeTestCode));
-            var kotlinProductionOutput = Assert.Single(kotlinAdapter.OutputDirectories.Where((_, index) => index == 0));
-            var kotlinTestOutput = Assert.Single(kotlinAdapter.OutputDirectories.Where((_, index) => index == 1));
+            Assert.Equal(2, kotlinAdapter.OutputDirectories.Count);
+            var kotlinProductionOutput = kotlinAdapter.OutputDirectories[0];
+            var kotlinTestOutput = kotlinAdapter.OutputDirectories[1];
 
             Assert.Contains(kotlinProductionOutput, javaProduction.ClasspathEntries);
             Assert.DoesNotContain(kotlinTestOutput, javaProduction.ClasspathEntries);

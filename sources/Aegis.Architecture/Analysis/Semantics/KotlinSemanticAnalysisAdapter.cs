@@ -192,7 +192,11 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
                         artifactRoot,
                         result.CompilationOutputDirectory);
                 }
-                catch (InvalidOperationException exception)
+                catch (Exception exception) when (
+                    exception is InvalidOperationException
+                    or ArgumentException
+                    or IOException
+                    or UnauthorizedAccessException)
                 {
                     status = SemanticAnalysisStatus.Failed;
                     diagnostics.Add(new AnalysisDiagnostic

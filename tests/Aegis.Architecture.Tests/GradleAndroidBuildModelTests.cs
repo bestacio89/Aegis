@@ -640,6 +640,9 @@ public sealed class GradleAndroidBuildModelTests
                 }
                 """);
 
+            WriteFile(app, "src/shared/java/Shared.java", "package org.example; class SharedJava {}");
+            WriteFile(app, "src/shared/java/Shared.kt", "package org.example\nclass SharedKotlin");
+
             var context = ProjectArchitectureContextDetector.Detect(root);
             var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
             var android = Assert.IsType<GradleAndroidBuildModel>(
@@ -663,6 +666,16 @@ public sealed class GradleAndroidBuildModelTests
                 sourceRoot.Directory == Path.Combine(app, "src", "shared", "kotlin")
                 && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production
                 && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Explicit);
+            Assert.Contains(main.KotlinSourceDirectories, directory =>
+                directory == Path.Combine(app, "src", "shared", "java"));
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "src", "shared", "java")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production
+                && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Explicit
+                && sourceRoot.Languages.Contains("Java")
+                && sourceRoot.Languages.Contains("Kotlin"));
+            Assert.DoesNotContain(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidSourceSetOwnershipUnknown");
         }
         finally
         {

@@ -190,7 +190,16 @@ internal static class GradleBuildModelResolver
             var testTasks = ParseTestTasks(source, sourceSets);
             var sourceRoots = DiscoverSourceRoots(module.Path, files, sourceSets, buildFile, diagnostics);
             var androidModel = ParseAndroidBuildModel(
-                source, plugins, catalog, files, module.Path, owningRoot?.Path, sourceRoots, diagnostics, buildFile);
+                source, plugins, catalog, files, module.Path, context.RootPath, owningRoot?.Path,
+                sourceRoots, diagnostics, buildFile);
+            if (androidModel is not null)
+            {
+                foreach (var androidRoot in androidModel.SourceRoots)
+                {
+                    if (!sourceRoots.Any(existing => PathsEqual(existing.Directory, androidRoot.Directory)))
+                        sourceRoots.Add(androidRoot);
+                }
+            }
             var kotlinJvmPlugins = plugins
                 .Where(plugin => plugin.IsApplied && plugin.Id == "org.jetbrains.kotlin.jvm")
                 .ToArray();
@@ -301,6 +310,7 @@ internal static class GradleBuildModelResolver
         VersionCatalog catalog,
         IReadOnlyCollection<string> files,
         string modulePath,
+        string analysisRoot,
         string? owningRootPath,
         IReadOnlyCollection<ProjectSourceRoot> sourceRoots,
         ICollection<AnalysisDiagnostic> diagnostics,
@@ -497,7 +507,7 @@ internal static class GradleBuildModelResolver
         foreach (var diagnostic in modelDiagnostics)
             diagnostics.Add(diagnostic);
 
-        return new GradleAndroidBuildModel
+        var model = new GradleAndroidBuildModel
         {
             PluginId = androidPlugin?.Id ?? string.Empty,
             PluginVersion = pluginVersion,
@@ -516,6 +526,9 @@ internal static class GradleBuildModelResolver
             Diagnostics = modelDiagnostics,
             IsComplete = modelDiagnostics.Count == 0
         };
+        GradleAndroidSourceSetResolver.Populate(
+            modulePath, analysisRoot, files, androidBlock, buildFile, modelDiagnostics, model);
+        return model;
     }
 
     private static string? ResolveRootPluginVersion(

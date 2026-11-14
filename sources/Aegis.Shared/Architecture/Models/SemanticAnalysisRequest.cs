@@ -38,6 +38,10 @@ public sealed class SemanticAnalysisRequest
 
     public IReadOnlyList<string> BuildFiles { get; init; } = Array.Empty<string>();
 
+    /// <summary>Namespaced, non-executable options interpreted only by the selected provider.</summary>
+    public IReadOnlyDictionary<string, string> ProviderOptions { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
     /// <summary>Stable capability identifiers requested from the selected adapter.</summary>
     public IReadOnlyList<string> RequestedCapabilities { get; init; } = Array.Empty<string>();
 

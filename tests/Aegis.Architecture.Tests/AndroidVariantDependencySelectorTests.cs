@@ -133,7 +133,7 @@ public sealed class AndroidVariantDependencySelectorTests
     [Fact]
     public void Preserves_partial_build_model_status_in_the_selection()
     {
-        var module = CreateModule(Dependency("implementation", "base"), isComplete: false);
+        var module = CreateModule([Dependency("implementation", "base")], isComplete: false);
 
         var result = new AndroidVariantDependencySelector().Select(
             module, "freeDebug", AndroidVariantDependencyScope.Production);

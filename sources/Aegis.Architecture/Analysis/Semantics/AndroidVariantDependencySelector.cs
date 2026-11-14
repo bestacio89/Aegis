@@ -54,6 +54,20 @@ public sealed class AndroidVariantDependencySelector
         }
 
         var variant = matchingVariants[0];
+        if (scope == AndroidVariantDependencyScope.TestFixtures
+            && android.TestFixturesEnabled != true)
+        {
+            diagnostics.Add(CreateDiagnostic(
+                android.TestFixturesEnabled == false
+                    ? "AndroidTestFixturesDisabled"
+                    : "AndroidTestFixturesAvailabilityUnknown",
+                android.TestFixturesEnabled == false
+                    ? "Android test fixtures are explicitly disabled for this module."
+                    : "Android test-fixture availability is not statically established for this module.",
+                module.Path));
+            return Incomplete(variant.Name, scope, diagnostics);
+        }
+
         var configurations = GetApplicableConfigurations(variant, scope);
         var selectedDependencies = build.Dependencies
             .Where(dependency => configurations.Contains(dependency.Configuration))

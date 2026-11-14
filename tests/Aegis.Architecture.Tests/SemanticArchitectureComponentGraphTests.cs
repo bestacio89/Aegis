@@ -224,6 +224,13 @@ public sealed class SemanticArchitectureComponentGraphTests
                     Name = "unrelated-library",
                     Path = Path.Combine(root, "unrelated-library"),
                     Languages = ["Kotlin"]
+                },
+                new ProjectModuleContext
+                {
+                    Name = "test-support",
+                    Path = Path.Combine(root, "test-support"),
+                    Languages = ["Kotlin"],
+                    IsTestSupport = true
                 }
             ],
             Dependencies =
@@ -245,6 +252,15 @@ public sealed class SemanticArchitectureComponentGraphTests
                     TargetProjectPath = secondLibraryPath,
                     DependencyType = "GradleProjectDependency",
                     Scope = "Production"
+                },
+                new ArchitectureDependencyContext
+                {
+                    Source = "app",
+                    SourceProjectPath = appPath,
+                    Target = "test-support",
+                    TargetProjectPath = Path.Combine(root, "test-support"),
+                    DependencyType = "GradleProjectDependency",
+                    Scope = "Test"
                 }
             ],
             SemanticAnalysisRuns =
@@ -283,6 +299,17 @@ public sealed class SemanticArchitectureComponentGraphTests
                             // identify the dependency module without trusting this path.
                             ProjectPath = appPath,
                             Origin = SemanticSymbolOrigin.External
+                        },
+                        new SemanticSymbol
+                        {
+                            Id = "test-support-external-symbol",
+                            Name = "TestSupport",
+                            QualifiedName = "sample.test.Support",
+                            ContainerName = "sample.test",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = appPath,
+                            Origin = SemanticSymbolOrigin.External
                         }
                     ],
                     Relationships =
@@ -292,6 +319,14 @@ public sealed class SemanticArchitectureComponentGraphTests
                             Id = "app-uses-library",
                             SourceSymbolId = "app-service",
                             TargetSymbolId = "shared-library-symbol",
+                            Kind = SemanticRelationshipKind.Calls,
+                            ResolutionStatus = SemanticResolutionStatus.Resolved
+                        },
+                        new SemanticRelationship
+                        {
+                            Id = "app-uses-test-support",
+                            SourceSymbolId = "app-service",
+                            TargetSymbolId = "test-support-external-symbol",
                             Kind = SemanticRelationshipKind.Calls,
                             ResolutionStatus = SemanticResolutionStatus.Resolved
                         }
@@ -339,6 +374,29 @@ public sealed class SemanticArchitectureComponentGraphTests
                             Language = "Kotlin",
                             ProjectPath = Path.Combine(root, "unrelated-library"),
                             FilePath = Path.Combine(root, "unrelated-library", "LibraryService.kt"),
+                            Origin = SemanticSymbolOrigin.Source
+                        }
+                    ]
+                },
+                new SemanticAnalysisRun
+                {
+                    RunId = "test-support-run",
+                    Language = "Kotlin",
+                    EngineId = "kotlin-k2-test-provider",
+                    ProjectPath = Path.Combine(root, "test-support"),
+                    Status = SemanticAnalysisStatus.Completed,
+                    Symbols =
+                    [
+                        new SemanticSymbol
+                        {
+                            Id = "test-support-source-symbol",
+                            Name = "TestSupport",
+                            QualifiedName = "sample.test.Support",
+                            ContainerName = "sample.test",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = Path.Combine(root, "test-support"),
+                            FilePath = Path.Combine(root, "test-support", "Support.kt"),
                             Origin = SemanticSymbolOrigin.Source
                         }
                     ]

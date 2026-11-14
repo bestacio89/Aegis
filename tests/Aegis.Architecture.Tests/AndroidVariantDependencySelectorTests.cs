@@ -12,9 +12,11 @@ public sealed class AndroidVariantDependencySelectorTests
         var module = CreateModule(
             Dependency("implementation", "base"),
             Dependency("api", "api"),
+            Dependency("compileOnly", "compile-only"),
             Dependency("freeImplementation", "flavor"),
             Dependency("debugImplementation", "build-type"),
             Dependency("freeDebugImplementation", "variant"),
+            Dependency("releaseImplementation", "other-variant"),
             Dependency("testImplementation", "unit-test"),
             Dependency("androidTestImplementation", "android-test"),
             Dependency("testFixturesImplementation", "test-fixtures"));
@@ -24,7 +26,7 @@ public sealed class AndroidVariantDependencySelectorTests
 
         Assert.True(result.IsComplete);
         Assert.Equal(
-            new string?[] { "base", "api", "flavor", "build-type", "variant" },
+            new string?[] { "base", "api", "compile-only", "flavor", "build-type", "variant" },
             result.Dependencies.Select(dependency => dependency.Artifact));
         Assert.Empty(result.Diagnostics);
     }
@@ -111,6 +113,8 @@ public sealed class AndroidVariantDependencySelectorTests
 
         Assert.False(result.IsComplete);
         Assert.Single(result.Dependencies);
+        Assert.Equal("AndroidVariantDependencyDeclarationsIncomplete", Assert.Single(result.Diagnostics).Code);
+        Assert.True(result.Diagnostics[0].AffectsCoverage);
     }
 
     private static ProjectModuleContext CreateModule(

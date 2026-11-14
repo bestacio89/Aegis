@@ -62,7 +62,10 @@ internal static class SemanticArchitectureComponentDetector
             {
                 var languageMatch = candidates.FirstOrDefault(module =>
                     module.Languages.Contains(language, StringComparer.OrdinalIgnoreCase));
-                return languageMatch ?? candidates[0];
+                var androidMatch = candidates.FirstOrDefault(module =>
+                    module.GradleBuildModel?.Android is not null
+                    && module.Languages.Contains(language, StringComparer.OrdinalIgnoreCase));
+                return androidMatch ?? languageMatch ?? candidates[0];
             }
 
             var moduleName = Path.GetFileName(modulePath);
@@ -302,7 +305,11 @@ internal static class SemanticArchitectureComponentDetector
         var android = module.GradleBuildModel?.Android;
         if (android is null)
         {
-            var ownership = module.IsTestProject || module.IsTestSupport ? "Test" : "Production";
+            var isAndroidModule = string.Equals(module.Framework, "Android", StringComparison.OrdinalIgnoreCase)
+                || module.Frameworks.Contains("Android", StringComparer.OrdinalIgnoreCase);
+            var ownership = isAndroidModule
+                ? "Unknown"
+                : module.IsTestProject || module.IsTestSupport ? "Test" : "Production";
             return new AndroidSourceOwnership(ownership, null, [], null, null);
         }
 

@@ -104,7 +104,7 @@ internal static class GradleAndroidSourceSetResolver
             {
                 Name = name,
                 Ownership = ownership,
-                TestKind = ResolveTestKind(name, ownership, knownTestSourceSetNames),
+                TestKind = ResolveTestKind(name, ownership, knownTestSourceSetNames, model.ModuleKind),
                 AppliesToVariants = applicableVariants,
                 JavaSourceDirectories = javaDirectories,
                 KotlinSourceDirectories = kotlinDirectories,
@@ -355,6 +355,9 @@ internal static class GradleAndroidSourceSetResolver
         {
             "test", "androidTest", "testFixtures"
         };
+
+        if (model.ModuleKind == "Test")
+            names.Add("main");
 
         if (model.ModuleKind == "Unknown")
             return names;
@@ -800,7 +803,8 @@ internal static class GradleAndroidSourceSetResolver
     private static GradleAndroidTestKind ResolveTestKind(
         string name,
         ProjectSourceRootOwnership ownership,
-        IReadOnlySet<string> expectedTestSourceSets)
+        IReadOnlySet<string> expectedTestSourceSets,
+        string moduleKind)
     {
         if (ownership == ProjectSourceRootOwnership.Unknown)
             return GradleAndroidTestKind.Unknown;
@@ -808,6 +812,8 @@ internal static class GradleAndroidSourceSetResolver
             return GradleAndroidTestKind.None;
         if (name.Equals("testFixtures", StringComparison.Ordinal))
             return GradleAndroidTestKind.Fixtures;
+        if (moduleKind == "Test" && name.Equals("main", StringComparison.Ordinal))
+            return GradleAndroidTestKind.Instrumentation;
         if (name.StartsWith("androidTest", StringComparison.Ordinal)
             || name.EndsWith("AndroidTest", StringComparison.Ordinal))
             return GradleAndroidTestKind.Instrumentation;

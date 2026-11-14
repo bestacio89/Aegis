@@ -87,6 +87,10 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
         }
         catch (Exception exception)
         {
+            _logger.LogError(
+                exception,
+                "Kotlin semantic analysis failed for module {ProjectPath}.",
+                request.ProjectPath);
             return CreateUnavailableRun(
                 request,
                 SemanticAnalysisStatus.Failed,
@@ -129,7 +133,10 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
             });
         }
 
-        if (ReadOption(request.ProviderOptions, "kotlin.compilerPluginsNotExecuted") == "true")
+        if (bool.TryParse(
+                ReadOption(request.ProviderOptions, "kotlin.compilerPluginsNotExecuted"),
+                out var compilerPluginsNotExecuted)
+            && compilerPluginsNotExecuted)
         {
             status = status == SemanticAnalysisStatus.Completed
                 ? SemanticAnalysisStatus.PartiallyCompleted
@@ -139,6 +146,20 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
                 Code = "KotlinCompilerPluginsNotExecuted",
                 Component = nameof(KotlinSemanticAnalysisAdapter),
                 Message = "The build declares Kotlin compiler plugins or code generators that Aegis does not execute. Generated or transformed declarations may be missing from semantic evidence.",
+                Target = request.ProjectPath,
+                AffectsCoverage = true
+            });
+        }
+
+        if (status == SemanticAnalysisStatus.Completed
+            && !result.CompilationSucceeded)
+        {
+            status = SemanticAnalysisStatus.Failed;
+            diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = "KotlinCompilationOutputNotProduced",
+                Component = nameof(KotlinSemanticAnalysisAdapter),
+                Message = "The Kotlin worker reported a completed analysis without a successful compiler result. Its semantic output cannot be treated as complete.",
                 Target = request.ProjectPath,
                 AffectsCoverage = true
             });
@@ -163,11 +184,31 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
             }
             else
             {
-                executionContext.RegisterCompilationOutput(
-                    request.ProjectPath,
-                    request.IncludeTestCode,
-                    artifactRoot,
-                    result.CompilationOutputDirectory);
+                try
+                {
+                    executionContext.RegisterCompilationOutput(
+                        request.ProjectPath,
+                        request.IncludeTestCode,
+                        artifactRoot,
+                        result.CompilationOutputDirectory);
+                }
+                catch (InvalidOperationException exception)
+                {
+                    status = SemanticAnalysisStatus.Failed;
+                    diagnostics.Add(new AnalysisDiagnostic
+                    {
+                        Code = "KotlinCompilationArtifactRejected",
+                        Component = nameof(KotlinSemanticAnalysisAdapter),
+                        Message = "The Kotlin compiler output failed host-side artifact ownership validation and was not exposed to downstream analyzers.",
+                        Target = request.ProjectPath,
+                        ExceptionType = exception.GetType().Name,
+                        AffectsCoverage = true
+                    });
+                    _logger.LogError(
+                        exception,
+                        "Rejected Kotlin compiler output for module {ProjectPath}.",
+                        request.ProjectPath);
+                }
             }
         }
 

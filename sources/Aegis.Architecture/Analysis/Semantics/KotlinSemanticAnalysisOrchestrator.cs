@@ -373,16 +373,16 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         var compilerVersion = FirstNonBlank(gradle?.KotlinPluginVersion, maven?.KotlinPluginVersion);
         var languageVersion = FirstNonBlank(gradle?.KotlinLanguageVersion, maven?.KotlinLanguageVersion);
         var apiVersion = FirstNonBlank(gradle?.KotlinApiVersion, maven?.KotlinApiVersion);
-        var jvmTarget = FirstNonBlank(
+        var declaredJvmTarget = FirstNonBlank(
             gradle?.KotlinJvmTarget,
             maven?.KotlinJvmTarget,
-            maven?.KotlinJdkRelease,
-            gradle?.JavaToolchainVersion);
+            maven?.KotlinJdkRelease);
+        var jvmTarget = declaredJvmTarget ?? FirstNonBlank(gradle?.JavaToolchainVersion);
 
         var inferred = compilerVersion is null
             || languageVersion is null
             || apiVersion is null
-            || jvmTarget is null;
+            || declaredJvmTarget is null;
 
         return (
             compilerVersion ?? "2.4.21",

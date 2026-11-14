@@ -55,23 +55,33 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
                 throw new InvalidOperationException(
                     "The Kotlin K2 worker is not deployed. Configure its worker JAR, pinned libraries and shared Java 21 runtime.");
 
+            var launchOptions = CreateLaunchOptions(options);
+            var normalizedArtifactRoot = Path.GetFullPath(artifactRoot);
+            if (!Directory.Exists(normalizedArtifactRoot)
+                || (File.GetAttributes(normalizedArtifactRoot) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException(
+                    "The Kotlin worker artifact root must be an existing host-owned directory.");
+            }
+
+            var sourceManifestPath = Path.Combine(normalizedArtifactRoot, "source-manifest.json");
+            if (File.Exists(sourceManifestPath))
+                throw new InvalidOperationException("The Kotlin worker artifact root already contains a source manifest.");
+
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(options.RequestTimeout);
-            var launchOptions = CreateLaunchOptions(options);
 
             try
             {
+                var sourceManifest = JsonSerializer.Serialize(request.SourceFiles, JsonOptions);
+                await File.WriteAllTextAsync(
+                    sourceManifestPath,
+                    sourceManifest,
+                    Encoding.UTF8,
+                    timeout.Token).ConfigureAwait(false);
+
                 await _workerProcess.StartAsync(launchOptions, timeout.Token).ConfigureAwait(false);
                 var startedAt = DateTimeOffset.UtcNow;
-                var normalizedArtifactRoot = Path.GetFullPath(artifactRoot);
-                if (!Directory.Exists(normalizedArtifactRoot)
-                    || (File.GetAttributes(normalizedArtifactRoot) & FileAttributes.ReparsePoint) != 0)
-                {
-                    throw new InvalidOperationException(
-                        "The Kotlin worker artifact root must be an existing host-owned directory.");
-                }
-
-                var sourceManifestPath = Path.Combine(normalizedArtifactRoot, "source-manifest.json");
                 try
                 {
                     var sourceManifest = JsonSerializer.Serialize(request.SourceFiles, JsonOptions);

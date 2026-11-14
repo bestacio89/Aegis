@@ -129,12 +129,18 @@ internal static class SemanticArchitectureComponentDetector
             .GroupBy(
                 item => new SymbolIdentity(item.ModulePath, item.Language, item.SymbolId),
                 SymbolIdentityComparer.Instance)
-            .ToDictionary(
-                group => group.Key,
-                group => group
+            .Select(group => new
+            {
+                group.Key,
+                Components = group
                     .GroupBy(item => item.ComponentId, StringComparer.Ordinal)
                     .Select(componentGroup => componentGroup.First())
-                    .Single(),
+                    .ToArray()
+            })
+            .Where(item => item.Components.Length == 1)
+            .ToDictionary(
+                item => item.Key,
+                item => item.Components[0],
                 SymbolIdentityComparer.Instance);
 
         var symbolComponentsById = symbolComponents.Values

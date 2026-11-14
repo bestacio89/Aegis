@@ -910,7 +910,7 @@ public sealed class GradleAndroidBuildModelTests
             var fixtures = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "testFixtures");
 
             Assert.Equal("Library", android.ModuleKind);
-            Assert.True(android.TestFixturesEnabled);
+            Assert.Equal(true, android.TestFixturesEnabled);
             Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test, fixtures.Ownership);
             Assert.Equal(Aegis.Shared.Architecture.Enums.GradleAndroidTestKind.Fixtures, fixtures.TestKind);
             Assert.Equal(["debug", "release"], fixtures.AppliesToVariants);

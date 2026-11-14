@@ -100,7 +100,10 @@ class KotlinComposeCompilerIntegrationTests {
                 composables.map { it.get("qualifiedName").asString }.toSet()
             )
             assertTrue(composables.all { it.get("origin").asInt == 1 })
-            assertTrue(composables.all { it.get("filePath").asString == source.toString() })
+            assertTrue(composables.all {
+                Path.of(it.get("filePath").asString).toAbsolutePath().normalize()
+                    == source.toAbsolutePath().normalize()
+            })
 
             URLClassLoader(
                 arrayOf(classes.toUri().toURL()),

@@ -899,6 +899,19 @@ internal static class GradleAndroidSourceSetResolver
         return value;
     }
 
+    private static GeneratedSourceSet GetOrAdd(
+        IDictionary<string, GeneratedSourceSet> values,
+        string name)
+    {
+        if (!values.TryGetValue(name, out var value))
+        {
+            value = new GeneratedSourceSet();
+            values.Add(name, value);
+        }
+
+        return value;
+    }
+
     private static string? ExtractBlock(string? source, string name)
     {
         if (source is null)

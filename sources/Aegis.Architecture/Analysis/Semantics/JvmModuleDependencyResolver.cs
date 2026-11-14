@@ -41,8 +41,17 @@ public static class JvmModuleDependencyResolver
             _ => new HashSet<string>(PathComparer),
             PathComparer);
 
-        foreach (var edge in GetProjectEdges(dependencies, includeTestDependencies))
+        foreach (var edge in GetProjectEdges(dependencies, modulesByPath, includeTestDependencies))
         {
+            // A test-scoped dependency on an ordinary module consumes that
+            // module's production output, which is already available before
+            // test analysis. Only explicit test artifacts need test ordering.
+            if (edge.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase)
+                && !edge.IsTestArtifact)
+            {
+                continue;
+            }
+
             if (!modulesByPath.ContainsKey(edge.SourcePath)
                 || !modulesByPath.ContainsKey(edge.TargetPath)
                 || PathsEqual(edge.SourcePath, edge.TargetPath))
@@ -91,19 +100,26 @@ public static class JvmModuleDependencyResolver
 
     /// <summary>
     /// Returns transitive project outputs required by a module. Production
-    /// outputs are always included; test outputs are included only along
-    /// explicitly test-scoped dependency edges.
+    /// outputs are always included; test outputs are included only for
+    /// explicitly identified test-project or test-support dependencies.
     /// </summary>
     public static (IReadOnlyList<string> Production, IReadOnlyList<string> Test) ResolveDependencyPaths(
         string modulePath,
+        IReadOnlyCollection<ProjectModuleContext> projectModules,
         IReadOnlyCollection<ArchitectureDependencyContext> dependencies,
         bool includeTestDependencies)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modulePath);
+        ArgumentNullException.ThrowIfNull(projectModules);
         ArgumentNullException.ThrowIfNull(dependencies);
 
+        var modulesByPath = projectModules
+            .Where(module => !string.IsNullOrWhiteSpace(module.Path))
+            .GroupBy(module => NormalizePath(module.Path), PathComparer)
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single(), PathComparer);
         var rootPath = NormalizePath(modulePath);
-        var edgesBySource = GetProjectEdges(dependencies, includeTestDependencies)
+        var edgesBySource = GetProjectEdges(dependencies, modulesByPath, includeTestDependencies)
             .GroupBy(edge => edge.SourcePath, PathComparer)
             .ToDictionary(
                 group => group.Key,
@@ -134,7 +150,7 @@ public static class JvmModuleDependencyResolver
             foreach (var edge in outgoing)
             {
                 productionPaths.Add(edge.TargetPath);
-                if (edge.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase))
+                if (edge.IsTestArtifact)
                 {
                     testPaths.Add(edge.TargetPath);
                     pending.Enqueue((edge.TargetPath, true));
@@ -153,6 +169,7 @@ public static class JvmModuleDependencyResolver
 
     private static IEnumerable<DependencyEdge> GetProjectEdges(
         IReadOnlyCollection<ArchitectureDependencyContext> dependencies,
+        IReadOnlyDictionary<string, ProjectModuleContext> modulesByPath,
         bool includeTestDependencies)
     {
         foreach (var dependency in dependencies)
@@ -174,10 +191,17 @@ public static class JvmModuleDependencyResolver
                 continue;
             }
 
+            var sourcePath = NormalizePath(dependency.SourceProjectPath);
+            var targetPath = NormalizePath(dependency.TargetProjectPath);
+            var isTestArtifact = isTest
+                && modulesByPath.TryGetValue(targetPath, out var targetModule)
+                && (targetModule.IsTestProject || targetModule.IsTestSupport);
+
             yield return new DependencyEdge(
-                NormalizePath(dependency.SourceProjectPath),
-                NormalizePath(dependency.TargetProjectPath),
-                isTest ? "Test" : "Production");
+                sourcePath,
+                targetPath,
+                isTest ? "Test" : "Production",
+                isTestArtifact);
         }
     }
 
@@ -190,5 +214,9 @@ public static class JvmModuleDependencyResolver
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
-    private sealed record DependencyEdge(string SourcePath, string TargetPath, string Scope);
+    private sealed record DependencyEdge(
+        string SourcePath,
+        string TargetPath,
+        string Scope,
+        bool IsTestArtifact);
 }

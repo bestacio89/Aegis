@@ -408,11 +408,14 @@ internal static class SemanticArchitectureComponentDetector
                     continue;
                 }
 
+                var projectCandidates = qualifiedCandidates
+                    .Where(component => !PathComparer.Equals(component.ModulePath, sourceProjectPath))
+                    .ToArray();
                 var selectedCandidates = declaredDependencyPaths.Count > 0
-                    ? qualifiedCandidates
+                    ? projectCandidates
                         .Where(component => declaredDependencyPaths.Contains(component.ModulePath))
                         .ToArray()
-                    : qualifiedCandidates;
+                    : projectCandidates;
 
                 foreach (var candidate in selectedCandidates)
                 {

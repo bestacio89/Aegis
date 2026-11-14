@@ -408,11 +408,10 @@ internal static class SemanticArchitectureComponentDetector
                     continue;
                 }
 
-                var dependencyCandidates = qualifiedCandidates
-                    .Where(component => declaredDependencyPaths.Contains(component.ModulePath))
-                    .ToArray();
-                var selectedCandidates = dependencyCandidates.Length > 0
-                    ? dependencyCandidates
+                var selectedCandidates = declaredDependencyPaths.Count > 0
+                    ? qualifiedCandidates
+                        .Where(component => declaredDependencyPaths.Contains(component.ModulePath))
+                        .ToArray()
                     : qualifiedCandidates;
 
                 foreach (var candidate in selectedCandidates)

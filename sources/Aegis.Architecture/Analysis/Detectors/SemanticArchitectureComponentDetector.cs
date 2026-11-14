@@ -99,6 +99,11 @@ internal static class SemanticArchitectureComponentDetector
                                 : symbol.ContainerName.Trim();
                         var modulePath = NormalizePath(run.ProjectPath);
                         var componentId = CreateComponentId(modulePath, run.Language, componentKind, componentName);
+                        var sourceOwnership = ResolveAndroidSourceOwnership(module, symbol.FilePath!, run.Language);
+                        var isTestCode = symbol.IsTestCode
+                            || module.IsTestProject
+                            || module.IsTestSupport
+                            || sourceOwnership.Ownership == "Test";
                         return new SymbolComponent(
                             symbol.Id,
                             componentId,
@@ -108,7 +113,12 @@ internal static class SemanticArchitectureComponentDetector
                             modulePath,
                             run.Language,
                             Path.GetFullPath(symbol.FilePath!),
-                            symbol.IsTestCode || module.IsTestProject || module.IsTestSupport);
+                            isTestCode,
+                            sourceOwnership.Ownership,
+                            sourceOwnership.SourceSetName,
+                            sourceOwnership.Variants,
+                            sourceOwnership.ModuleKind,
+                            sourceOwnership.TestKind);
                     });
             })
             .GroupBy(item => item.SymbolId, StringComparer.Ordinal)
@@ -128,8 +138,8 @@ internal static class SemanticArchitectureComponentDetector
             .Select(group =>
             {
                 var first = group.First();
-                var productionSymbols = group.Where(item => !item.IsTestCode).ToArray();
-                var testSymbols = group.Where(item => item.IsTestCode).ToArray();
+                var productionSymbols = group.Where(item => item.SourceOwnership == "Production").ToArray();
+                var testSymbols = group.Where(item => item.SourceOwnership == "Test").ToArray();
                 var files = group.Select(item => item.FilePath)
                     .Distinct(PathComparer)
                     .OrderBy(path => path, PathComparer)
@@ -144,6 +154,17 @@ internal static class SemanticArchitectureComponentDetector
                     ComponentKind = first.ComponentKind,
                     BuildModuleName = first.ModuleName,
                     BuildModulePath = first.ModulePath,
+                    AndroidModuleKind = first.AndroidModuleKind,
+                    AndroidVariants = group.SelectMany(item => item.AndroidVariants)
+                        .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+                    AndroidSourceSets = group.Select(item => item.SourceSetName)
+                        .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+                    SourceOwnerships = group.Select(item => item.SourceOwnership)
+                        .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+                    AndroidTestKinds = group.Select(item => item.AndroidTestKind)
+                        .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
                     SourceFileCount = files.Count,
                     ProductionSourceFileCount = productionSymbols
                         .Select(item => item.FilePath)
@@ -209,7 +230,11 @@ internal static class SemanticArchitectureComponentDetector
                     || targetModule?.IsTestProject == true
                     || targetModule?.IsTestSupport == true;
 
-                var scope = isTest ? "Test" : "Production";
+                var hasUnknownAndroidOwnership = sourceComponent.SourceOwnership == "Unknown"
+                    || targetComponent.SourceOwnership == "Unknown";
+                var scope = hasUnknownAndroidOwnership
+                    ? "Unknown"
+                    : isTest ? "Test" : "Production";
                 var key = new EdgeKey(sourceComponent.ComponentId, targetComponent.ComponentId, scope);
                 if (!edges.TryGetValue(key, out var accumulator))
                 {
@@ -268,6 +293,73 @@ internal static class SemanticArchitectureComponentDetector
             $"Semantic architectural component projection: runs={semanticRuns.Length}; sourceSymbols={sourceSymbolCount}; componentSymbols={componentSymbolCount}; components={componentNodes.Count}; candidateRelationships={candidateRelationshipCount}; projectedEdges={edges.Count}; productionEdges={context.ProductionComponentDependencies.Count}; testEdges={context.TestComponentDependencies.Count}.");
     }
 
+    private static AndroidSourceOwnership ResolveAndroidSourceOwnership(
+        ProjectModuleContext module,
+        string filePath,
+        string language)
+    {
+        var android = module.GradleBuildModel?.Android;
+        if (android is null)
+        {
+            var ownership = module.IsTestProject || module.IsTestSupport ? "Test" : "Production";
+            return new AndroidSourceOwnership(ownership, null, [], null, null);
+        }
+
+        var normalizedFile = NormalizePath(filePath);
+        var matchingSourceSets = android.SourceSets
+            .Select(sourceSet => new
+            {
+                SourceSet = sourceSet,
+                Directories = sourceSet.JavaSourceDirectories
+                    .Concat(sourceSet.KotlinSourceDirectories)
+                    .Concat(sourceSet.GeneratedJavaSourceDirectories)
+                    .Concat(sourceSet.GeneratedKotlinSourceDirectories)
+                    .Select(NormalizePath)
+                    .Distinct(PathComparer)
+                    .Where(directory => IsPathWithin(normalizedFile, directory))
+                    .OrderByDescending(directory => directory.Length)
+                    .ToArray()
+            })
+            .Where(item => item.Directories.Length > 0)
+            .OrderByDescending(item => item.Directories[0].Length)
+            .ToArray();
+
+        if (matchingSourceSets.Length == 0
+            || matchingSourceSets.Length > 1
+            && matchingSourceSets[0].Directories[0].Length == matchingSourceSets[1].Directories[0].Length)
+        {
+            return new AndroidSourceOwnership("Unknown", null, [], android.ModuleKind, null);
+        }
+
+        var match = matchingSourceSets[0].SourceSet;
+        return new AndroidSourceOwnership(
+            match.Ownership.ToString(),
+            match.Name,
+            match.AppliesToVariants,
+            android.ModuleKind,
+            match.TestKind.ToString());
+    }
+
+    private static bool IsPathWithin(string filePath, string directory)
+    {
+        var relativePath = Path.GetRelativePath(directory, filePath);
+        return !Path.IsPathRooted(relativePath)
+            && relativePath != "."
+            && relativePath != ".."
+            && !relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", PathComparison)
+            && !relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", PathComparison);
+    }
+
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    private sealed record AndroidSourceOwnership(
+        string Ownership,
+        string? SourceSetName,
+        IReadOnlyList<string> Variants,
+        string? ModuleKind,
+        string? TestKind);
+
     private static string CreateComponentId(string modulePath, string language, string componentKind, string componentName) =>
         $"{language.ToLowerInvariant()}-{componentKind.ToLowerInvariant()}:{modulePath}:{componentName}";
 
@@ -325,7 +417,12 @@ internal static class SemanticArchitectureComponentDetector
         string ModulePath,
         string Language,
         string FilePath,
-        bool IsTestCode);
+        bool IsTestCode,
+        string SourceOwnership,
+        string? SourceSetName,
+        IReadOnlyList<string> AndroidVariants,
+        string? AndroidModuleKind,
+        string? AndroidTestKind);
 
     private sealed record EdgeKey(string SourceComponentId, string TargetComponentId, string Scope);
 
@@ -401,7 +498,18 @@ internal static class SemanticArchitectureComponentDetector
                 .ToList(),
             UnreferencedRelationshipCount = _unreferencedRelationships.Count,
             RelationshipKinds = _relationshipKinds.OrderBy(kind => kind).ToList(),
-            EvidenceFiles = _evidenceFiles.OrderBy(file => file, PathComparer).ToList()
+            EvidenceFiles = _evidenceFiles.OrderBy(file => file, PathComparer).ToList(),
+            AndroidVariants = _source.AndroidVariants.Concat(_target.AndroidVariants)
+                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+            AndroidSourceSets = new[] { _source.SourceSetName, _target.SourceSetName }
+                .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+            AndroidModuleKinds = new[] { _source.AndroidModuleKind, _target.AndroidModuleKind }
+                .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+            AndroidTestKinds = new[] { _source.AndroidTestKind, _target.AndroidTestKind }
+                .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList()
         };
     }
 }

@@ -102,35 +102,42 @@ public sealed class SemanticAnalysisExecutionContext : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(productionDependencyPaths);
         ArgumentNullException.ThrowIfNull(testDependencyPaths);
 
-        var outputs = new HashSet<string>(PathComparer);
-        AddOutput(_productionOutputs, modulePath, outputs);
+        // Classpath order is meaningful (for example, when duplicate binary
+        // names exist). Preserve the explicit dependency traversal order.
+        var outputs = new List<string>();
+        var seenOutputs = new HashSet<string>(PathComparer);
+        AddOutput(_productionOutputs, modulePath, outputs, seenOutputs);
 
         foreach (var dependencyPath in productionDependencyPaths)
-            AddOutput(_productionOutputs, dependencyPath, outputs);
+            AddOutput(_productionOutputs, dependencyPath, outputs, seenOutputs);
 
         if (includeTestCode)
         {
-            AddOutput(_testOutputs, modulePath, outputs);
+            AddOutput(_testOutputs, modulePath, outputs, seenOutputs);
             foreach (var dependencyPath in testDependencyPaths)
             {
-                AddOutput(_productionOutputs, dependencyPath, outputs);
-                AddOutput(_testOutputs, dependencyPath, outputs);
+                AddOutput(_productionOutputs, dependencyPath, outputs, seenOutputs);
+                AddOutput(_testOutputs, dependencyPath, outputs, seenOutputs);
             }
         }
 
-        return outputs.OrderBy(path => path, PathComparer).ToArray();
+        return outputs;
     }
 
     private static void AddOutput(
         ConcurrentDictionary<string, string> outputsByModule,
         string modulePath,
-        ISet<string> outputs)
+        ICollection<string> outputs,
+        ISet<string> seenOutputs)
     {
         if (string.IsNullOrWhiteSpace(modulePath))
             return;
 
-        if (outputsByModule.TryGetValue(NormalizeModulePath(modulePath), out var output))
+        if (outputsByModule.TryGetValue(NormalizeModulePath(modulePath), out var output)
+            && seenOutputs.Add(output))
+        {
             outputs.Add(output);
+        }
     }
 
     private static string NormalizeModulePath(string modulePath) =>

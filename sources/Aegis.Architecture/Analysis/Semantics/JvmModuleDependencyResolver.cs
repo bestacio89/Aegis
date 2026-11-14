@@ -124,13 +124,13 @@ public static class JvmModuleDependencyResolver
             .ToDictionary(
                 group => group.Key,
                 group => group
-                    .OrderBy(edge => edge.TargetPath, PathComparer)
-                    .ThenBy(edge => edge.Scope, StringComparer.Ordinal)
                     .ToArray(),
                 PathComparer);
 
-        var productionPaths = new HashSet<string>(PathComparer);
-        var testPaths = new HashSet<string>(PathComparer);
+        var productionPaths = new List<string>();
+        var testPaths = new List<string>();
+        var seenProductionPaths = new HashSet<string>(PathComparer);
+        var seenTestPaths = new HashSet<string>(PathComparer);
         var visitedProductionChain = new HashSet<string>(PathComparer);
         var visitedTestChain = new HashSet<string>(PathComparer);
         var pending = new Queue<(string Path, bool IncludeTestEdges)>();
@@ -149,10 +149,13 @@ public static class JvmModuleDependencyResolver
 
             foreach (var edge in outgoing)
             {
-                productionPaths.Add(edge.TargetPath);
+                if (seenProductionPaths.Add(edge.TargetPath))
+                    productionPaths.Add(edge.TargetPath);
+
                 if (edge.IsTestArtifact)
                 {
-                    testPaths.Add(edge.TargetPath);
+                    if (seenTestPaths.Add(edge.TargetPath))
+                        testPaths.Add(edge.TargetPath);
                     pending.Enqueue((edge.TargetPath, true));
                 }
                 else
@@ -162,9 +165,7 @@ public static class JvmModuleDependencyResolver
             }
         }
 
-        return (
-            productionPaths.OrderBy(path => path, PathComparer).ToArray(),
-            testPaths.OrderBy(path => path, PathComparer).ToArray());
+        return (productionPaths, testPaths);
     }
 
     private static IEnumerable<DependencyEdge> GetProjectEdges(

@@ -81,26 +81,22 @@ public sealed class JvmModuleDependencyResolverTests
             includeTestDependencies: true);
 
         Assert.Equal(
-            new[] { productionDependency.Path, transitiveProduction.Path }
-                .Select(Path.GetFullPath)
-                .OrderBy(path => path, PathComparer),
-            productionPaths.Production.OrderBy(path => path, PathComparer));
+            new[] { productionDependency.Path, transitiveProduction.Path }.Select(Path.GetFullPath),
+            productionPaths.Production);
         Assert.Empty(productionPaths.Test);
         Assert.Equal(
             new[]
             {
                 productionDependency.Path,
-                transitiveProduction.Path,
                 testDependency.Path,
+                transitiveProduction.Path,
                 testDependencyProduction.Path,
                 transitiveTestDependency.Path
-            }.Select(Path.GetFullPath).OrderBy(path => path, PathComparer),
-            testPaths.Production.OrderBy(path => path, PathComparer));
+            }.Select(Path.GetFullPath),
+            testPaths.Production);
         Assert.Equal(
-            new[] { testDependency.Path, transitiveTestDependency.Path }
-                .Select(Path.GetFullPath)
-                .OrderBy(path => path, PathComparer),
-            testPaths.Test.OrderBy(path => path, PathComparer));
+            new[] { testDependency.Path, transitiveTestDependency.Path }.Select(Path.GetFullPath),
+            testPaths.Test);
     }
 
     [Fact]

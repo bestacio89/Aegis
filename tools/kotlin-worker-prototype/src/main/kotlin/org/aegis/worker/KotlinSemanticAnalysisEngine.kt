@@ -157,6 +157,11 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             apiVersion = request.apiVersion
             moduleName = request.moduleName
             this.pluginClasspaths = pluginClasspaths
+            this.pluginOptions = if (request.composeCompilerPluginEnabled) {
+                arrayOf("plugin:androidx.compose.compiler.plugins.kotlin:sourceInformation=true")
+            } else {
+                emptyArray()
+            }
             javaSourceRoots = paths.referencedSourceRoots.map(Path::toString).toTypedArray()
             freeArgs = paths.sourceFiles.map(Path::toString)
         }

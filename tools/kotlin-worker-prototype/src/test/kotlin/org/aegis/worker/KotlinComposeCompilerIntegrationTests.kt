@@ -75,6 +75,9 @@ class KotlinComposeCompilerIntegrationTests {
                 apiVersion = "2.4"
                 moduleName = "compose-semantic-fixture"
                 pluginClasspaths = arrayOf(composePluginPath.toString(), workerPluginPath.toString())
+                pluginOptions = arrayOf(
+                    "plugin:androidx.compose.compiler.plugins.kotlin:sourceInformation=true"
+                )
                 freeArgs = listOf(source.toString())
             }
             val messages = PrintingMessageCollector(

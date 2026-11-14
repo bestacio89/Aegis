@@ -77,7 +77,7 @@ internal static class GradleAndroidSourceSetResolver
                 Name = name,
                 Ownership = ownership,
                 TestKind = ResolveTestKind(name, ownership, knownTestSourceSetNames),
-                AppliesToVariants = ResolveApplicableVariants(name, ownership, model, variants, knownTestSourceSetNames),
+                AppliesToVariants = ResolveApplicableVariants(name, ownership, variants, knownTestSourceSetNames),
                 JavaSourceDirectories = javaDirectories,
                 KotlinSourceDirectories = kotlinDirectories,
                 ManifestFiles = manifestFiles,
@@ -494,7 +494,6 @@ internal static class GradleAndroidSourceSetResolver
     private static List<string> ResolveApplicableVariants(
         string sourceSetName,
         ProjectSourceRootOwnership ownership,
-        GradleAndroidBuildModel model,
         IReadOnlyCollection<GradleAndroidVariant> variants,
         IReadOnlySet<string> expectedTestSourceSets)
     {
@@ -519,9 +518,10 @@ internal static class GradleAndroidSourceSetResolver
 
         return variants
             .Where(variant =>
-                variant.Name.Equals(targetName, StringComparison.Ordinal)
-                || variant.BuildType.Equals(targetName, StringComparison.Ordinal)
-                || variant.ProductFlavors.Contains(targetName, StringComparer.Ordinal))
+                variant.Name.Equals(targetName, StringComparison.OrdinalIgnoreCase)
+                || variant.BuildType.Equals(targetName, StringComparison.OrdinalIgnoreCase)
+                || variant.ProductFlavors.Any(flavor =>
+                    flavor.Equals(targetName, StringComparison.OrdinalIgnoreCase)))
             .Select(variant => variant.Name)
             .ToList();
     }

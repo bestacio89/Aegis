@@ -193,8 +193,19 @@ internal static class GradleAndroidSourceSetResolver
         var flavors = model.ProductFlavors;
         if (flavors.Count == 0)
         {
-            return buildTypes.Select(buildType =>
+            var buildTypeVariants = buildTypes.Select(buildType =>
                 new GradleAndroidVariant(buildType, [], buildType)).ToList();
+            if (buildTypeVariants.Select(variant => variant.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Count() != buildTypeVariants.Count)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleAndroidVariantNameConflict",
+                    "Declared build types produce case-insensitive Android variant/task name collisions.",
+                    buildFile));
+                return [];
+            }
+
+            return buildTypeVariants;
         }
 
         var dimensions = model.FlavorDimensions.Count > 0

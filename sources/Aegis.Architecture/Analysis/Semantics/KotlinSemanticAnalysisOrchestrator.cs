@@ -319,10 +319,11 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 .Where(root => root.IsGenerated)
                 .Select(root => Path.GetFullPath(root.Directory))
                 .ToArray(),
+            // Classpath order is semantically significant when binary names
+            // collide. Preserve resolver order, then append ordered project outputs.
             ClasspathEntries = classpath.Entries
                 .Concat(compilationOutputs)
                 .Distinct(PathComparer)
-                .OrderBy(path => path, PathComparer)
                 .ToArray(),
             UnresolvedClasspathDependencies = classpath.UnresolvedDependencies,
             ClasspathResolutionComplete = classpath.IsComplete,

@@ -2236,6 +2236,100 @@ internal static class GradleBuildModelResolver
     /// Inspects only Gradle's generated Java source subtree. These files remain
     /// excluded from repository-wide governed-file analysis and file counts.
     /// </summary>
+    private static IReadOnlyCollection<string> DiscoverGeneratedAndroidJavaFiles(
+        string modulePath,
+        ICollection<AnalysisDiagnostic> diagnostics)
+    {
+        const int maximumFiles = 50_000;
+        const int maximumDepth = 64;
+        var generatedDirectories = new[]
+        {
+            Path.Combine(modulePath, "build", "generated", "source"),
+            Path.Combine(modulePath, "build", "generated", "ksp"),
+            Path.Combine(modulePath, "build", "generated", "ap_generated_sources")
+        };
+        var result = new HashSet<string>(PathComparer);
+
+        foreach (var generatedDirectory in generatedDirectories)
+        {
+            if (!Directory.Exists(generatedDirectory))
+                continue;
+
+            var root = Path.GetFullPath(generatedDirectory);
+            try
+            {
+                if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+                    continue;
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                diagnostics.Add(Diagnostic(
+                    "GradleGeneratedSourceDiscoveryFailed",
+                    $"Generated Android Java source directory '{root}' could not be inspected: {exception.Message}",
+                    root));
+                continue;
+            }
+
+            var pending = new Stack<(string Directory, int Depth)>();
+            pending.Push((root, 0));
+            while (pending.Count > 0)
+            {
+                var (directory, depth) = pending.Pop();
+                if (depth > maximumDepth)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleGeneratedSourceDepthLimitReached",
+                        $"Generated Android Java source discovery exceeded its maximum depth of {maximumDepth}.",
+                        directory));
+                    continue;
+                }
+
+                try
+                {
+                    foreach (var file in Directory.EnumerateFiles(
+                                 directory, "*", SearchOption.TopDirectoryOnly))
+                    {
+                        if (!Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        var fullPath = Path.GetFullPath(file);
+                        if (!IsSameOrDescendantPath(fullPath, root)
+                            || (File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0)
+                            continue;
+
+                        result.Add(fullPath);
+                        if (result.Count >= maximumFiles)
+                        {
+                            diagnostics.Add(Diagnostic(
+                                "GradleGeneratedSourceLimitReached",
+                                $"Generated Android Java source discovery reached its {maximumFiles}-file safety limit.",
+                                root));
+                            return result.OrderBy(value => value, PathComparer).ToArray();
+                        }
+                    }
+
+                    foreach (var child in Directory.EnumerateDirectories(
+                                 directory, "*", SearchOption.TopDirectoryOnly))
+                    {
+                        if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0)
+                            pending.Push((child, depth + 1));
+                    }
+                }
+                catch (Exception exception) when (
+                    exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleGeneratedSourceDiscoveryFailed",
+                        $"Generated Android Java source discovery could not inspect '{directory}': {exception.Message}",
+                        directory));
+                }
+            }
+        }
+
+        return result.OrderBy(value => value, PathComparer).ToArray();
+    }
+
     private static IReadOnlyCollection<string> DiscoverGeneratedKotlinFiles(
         string modulePath,
         ICollection<AnalysisDiagnostic> diagnostics)

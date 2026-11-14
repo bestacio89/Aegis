@@ -322,6 +322,7 @@ internal static class SemanticArchitectureComponentDetector
                     .Concat(sourceSet.KotlinSourceDirectories)
                     .Concat(sourceSet.GeneratedJavaSourceDirectories)
                     .Concat(sourceSet.GeneratedKotlinSourceDirectories)
+                    .Where(directory => !string.IsNullOrWhiteSpace(directory))
                     .Select(NormalizePath)
                     .Distinct(PathComparer)
                     .Where(directory => IsPathWithin(normalizedFile, directory))

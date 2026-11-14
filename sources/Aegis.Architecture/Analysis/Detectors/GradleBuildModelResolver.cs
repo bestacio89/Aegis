@@ -198,9 +198,14 @@ internal static class GradleBuildModelResolver
             }
 
             var testTasks = ParseTestTasks(source, sourceSets);
-            var sourceRoots = DiscoverSourceRoots(module.Path, files, sourceSets, buildFile, diagnostics);
+            var sourceRoots = DiscoverSourceRoots(
+                module.Path, files, sourceSets, buildFile, diagnostics, isAndroidModule,
+                out var generatedSourceFiles);
+            var androidFiles = files.Concat(generatedSourceFiles)
+                .Distinct(PathComparer)
+                .ToArray();
             var androidModel = ParseAndroidBuildModel(
-                source, plugins, catalog, files, module.Path, context.RootPath, owningRoot?.Path,
+                source, plugins, catalog, androidFiles, module.Path, context.RootPath, owningRoot?.Path,
                 sourceRoots, diagnostics, buildFile);
             if (androidModel is not null)
             {
@@ -1997,7 +2002,9 @@ internal static class GradleBuildModelResolver
         IReadOnlyCollection<string> files,
         IReadOnlyCollection<GradleBuildModel.SourceSet> sourceSets,
         string buildFile,
-        ICollection<AnalysisDiagnostic> diagnostics)
+        ICollection<AnalysisDiagnostic> diagnostics,
+        bool isAndroidModule,
+        out IReadOnlyCollection<string> generatedSourceFiles)
     {
         var roots = new Dictionary<string, ProjectSourceRoot>(PathComparer);
         var ownershipConflicts = new HashSet<string>(PathComparer);
@@ -2120,8 +2127,16 @@ internal static class GradleBuildModelResolver
             }
         }
 
-        var generatedSourceFiles = DiscoverGeneratedJavaFiles(modulePath, diagnostics);
-        foreach (var sourceFile in generatedSourceFiles)
+        var generatedJavaFiles = DiscoverGeneratedJavaFiles(modulePath, diagnostics).ToList();
+        if (isAndroidModule)
+            generatedJavaFiles.AddRange(DiscoverGeneratedAndroidJavaFiles(modulePath, diagnostics));
+        var generatedKotlinFiles = DiscoverGeneratedKotlinFiles(modulePath, diagnostics);
+        generatedSourceFiles = generatedJavaFiles
+            .Concat(generatedKotlinFiles)
+            .Distinct(PathComparer)
+            .ToArray();
+
+        foreach (var sourceFile in generatedJavaFiles)
         {
             var relative = Path.GetRelativePath(modulePath, sourceFile)
                 .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -2182,7 +2197,7 @@ internal static class GradleBuildModelResolver
                 generatedLanguage: "Java");
         }
 
-        foreach (var sourceFile in DiscoverGeneratedKotlinFiles(modulePath, diagnostics))
+        foreach (var sourceFile in generatedKotlinFiles)
         {
             if (!TryResolveGeneratedKotlinRoot(
                     modulePath, sourceFile, out var directory, out var ownership))

@@ -334,6 +334,53 @@ public sealed class SemanticArchitectureComponentGraphTests
                 },
                 new SemanticAnalysisRun
                 {
+                    RunId = "app-test-run",
+                    Language = "Kotlin",
+                    EngineId = "kotlin-k2-test-provider",
+                    ProjectPath = appPath,
+                    Status = SemanticAnalysisStatus.Completed,
+                    Symbols =
+                    [
+                        new SemanticSymbol
+                        {
+                            Id = "app-test-service",
+                            Name = "AppTestService",
+                            QualifiedName = "sample.app.tests.AppTestService",
+                            ContainerName = "sample.app.tests",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = appPath,
+                            FilePath = Path.Combine(appPath, "AppTestService.kt"),
+                            Origin = SemanticSymbolOrigin.Source,
+                            IsTestCode = true
+                        },
+                        new SemanticSymbol
+                        {
+                            Id = "test-support-external-symbol",
+                            Name = "TestSupport",
+                            QualifiedName = "sample.test.Support",
+                            ContainerName = "sample.test",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = appPath,
+                            Origin = SemanticSymbolOrigin.External
+                        }
+                    ],
+                    Relationships =
+                    [
+                        new SemanticRelationship
+                        {
+                            Id = "app-test-uses-test-support",
+                            SourceSymbolId = "app-test-service",
+                            TargetSymbolId = "test-support-external-symbol",
+                            Kind = SemanticRelationshipKind.Calls,
+                            ResolutionStatus = SemanticResolutionStatus.Resolved,
+                            IsTestCode = true
+                        }
+                    ]
+                },
+                new SemanticAnalysisRun
+                {
                     RunId = "first-library-run",
                     Language = "Kotlin",
                     EngineId = "kotlin-k2-test-provider",
@@ -434,7 +481,9 @@ public sealed class SemanticArchitectureComponentGraphTests
             .Single(component => component.Id == edge.SourceComponentId).BuildModuleName);
         Assert.Equal("second-library", context.ProductionComponents
             .Single(component => component.Id == edge.TargetComponentId).BuildModuleName);
-        Assert.Empty(context.TestComponentDependencies);
+        var testEdge = Assert.Single(context.TestComponentDependencies);
+        Assert.Equal("test-support", context.TestComponents
+            .Single(component => component.Id == testEdge.TargetComponentId).BuildModuleName);
         Assert.Equal(3, context.Dependencies.Count);
         Assert.All(context.Dependencies, dependency =>
             Assert.Equal("GradleProjectDependency", dependency.DependencyType));

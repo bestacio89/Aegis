@@ -115,7 +115,6 @@ internal static class JavaSemanticFrameworkDetector
         foreach (var dependency in context.DependencyEvidence.Where(dependency =>
                      dependency.Ecosystem is "Maven" or "Gradle"
                      && dependency.Kind == DependencyEvidenceKind.Package
-                     && !dependency.IsTestOnly
                      && !string.IsNullOrWhiteSpace(dependency.Name)))
         {
             var separator = dependency.Name.IndexOf(':');
@@ -142,7 +141,7 @@ internal static class JavaSemanticFrameworkDetector
                 Version = dependency.ResolvedVersion ?? dependency.DeclaredVersion,
                 Kind = kind,
                 ProjectPath = Path.GetFullPath(module.Path),
-                IsTestOnly = module.IsTestProject || module.IsTestSupport,
+                IsTestOnly = dependency.IsTestOnly || module.IsTestProject || module.IsTestSupport,
                 Provenance = dependency.Provenance.Select(item => new SemanticEvidenceProvenance
                 {
                     AnalyzerId = item.AnalyzerId,
@@ -317,6 +316,44 @@ internal static class JavaSemanticFrameworkDetector
 
         if (groupId.Equals("org.jetbrains.exposed", StringComparison.OrdinalIgnoreCase))
             return ("Exposed", FrameworkEvidenceKind.Persistence);
+
+        // AndroidX integrations are classified from exact Maven coordinates.
+        // Declared dependency evidence is intentionally separate from compiler-confirmed usage.
+        if (groupId.Equals("androidx.core", StringComparison.OrdinalIgnoreCase)
+            && (artifactId.Equals("core", StringComparison.OrdinalIgnoreCase)
+                || artifactId.Equals("core-ktx", StringComparison.OrdinalIgnoreCase)))
+            return ("AndroidX Core", FrameworkEvidenceKind.Runtime);
+
+        if (groupId.Equals("androidx.lifecycle", StringComparison.OrdinalIgnoreCase))
+            return ("AndroidX Lifecycle", FrameworkEvidenceKind.Runtime);
+
+        if (groupId.Equals("androidx.navigation", StringComparison.OrdinalIgnoreCase))
+            return ("AndroidX Navigation", FrameworkEvidenceKind.Application);
+
+        if (groupId.Equals("androidx.room", StringComparison.OrdinalIgnoreCase))
+            return ("Room", FrameworkEvidenceKind.Persistence);
+
+        if (groupId.Equals("androidx.compose", StringComparison.OrdinalIgnoreCase))
+            return ("Jetpack Compose", FrameworkEvidenceKind.Application);
+
+        if (groupId.Equals("androidx.activity", StringComparison.OrdinalIgnoreCase)
+            && artifactId.Equals("activity-compose", StringComparison.OrdinalIgnoreCase))
+            return ("Jetpack Compose", FrameworkEvidenceKind.Application);
+
+        if (groupId.Equals("androidx.hilt", StringComparison.OrdinalIgnoreCase))
+            return ("Hilt", FrameworkEvidenceKind.Application);
+
+        if (groupId.Equals("com.google.dagger", StringComparison.OrdinalIgnoreCase))
+        {
+            if (artifactId.StartsWith("hilt-", StringComparison.OrdinalIgnoreCase))
+                return ("Hilt", FrameworkEvidenceKind.Application);
+            if (artifactId.Equals("dagger", StringComparison.OrdinalIgnoreCase)
+                || artifactId.Equals("dagger-compiler", StringComparison.OrdinalIgnoreCase))
+                return ("Dagger", FrameworkEvidenceKind.Application);
+        }
+
+        if (groupId.Equals("io.insert-koin", StringComparison.OrdinalIgnoreCase))
+            return ("Koin", FrameworkEvidenceKind.Application);
 
         return null;
     }

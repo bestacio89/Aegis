@@ -53,8 +53,11 @@ internal static class JvmModuleDependencyResolver
                 allProjectModules,
                 dependencies,
                 includeTestDependencies);
+            // Test compilation still requires every production dependency.
+            // Test-scoped dependencies are additional ordering constraints,
+            // not a replacement for the production dependency graph.
             var pathsToOrder = includeTestDependencies
-                ? resolvedPaths.Test
+                ? resolvedPaths.Production.Concat(resolvedPaths.Test)
                 : resolvedPaths.Production;
 
             foreach (var dependencyPath in pathsToOrder)

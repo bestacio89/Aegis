@@ -835,6 +835,8 @@ public sealed class GradleAndroidBuildModelTests
                 """);
             WriteFile(app, "build/generated/ksp/debug/kotlin/GeneratedDebug.kt",
                 "package org.example.generated\nclass GeneratedDebug");
+            WriteFile(app, "build/generated/source/kapt/debug/GeneratedKapt.java",
+                "package org.example.generated; class GeneratedKapt {}");
             WriteFile(app, "build/generated/ksp/debugUnitTest/kotlin/GeneratedUnitTest.kt",
                 "package org.example.generated\nclass GeneratedUnitTest");
 
@@ -847,6 +849,8 @@ public sealed class GradleAndroidBuildModelTests
 
             Assert.Contains(production.GeneratedKotlinSourceDirectories, directory =>
                 directory == Path.Combine(app, "build", "generated", "ksp", "debug", "kotlin"));
+            Assert.Contains(production.GeneratedJavaSourceDirectories, directory =>
+                directory == Path.Combine(app, "build", "generated", "source", "kapt", "debug"));
             Assert.Contains(tests.GeneratedKotlinSourceDirectories, directory =>
                 directory == Path.Combine(app, "build", "generated", "ksp", "debugUnitTest", "kotlin"));
             Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production, production.Ownership);
@@ -855,6 +859,10 @@ public sealed class GradleAndroidBuildModelTests
                 sourceRoot.Directory == Path.Combine(app, "build", "generated", "ksp", "debug", "kotlin")
                 && sourceRoot.IsGenerated
                 && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.GeneratedConvention
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production);
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "build", "generated", "source", "kapt", "debug")
+                && sourceRoot.IsGenerated
                 && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production);
             Assert.Contains(module.SourceRoots, sourceRoot =>
                 sourceRoot.Directory == Path.Combine(app, "build", "generated", "ksp", "debugUnitTest", "kotlin")

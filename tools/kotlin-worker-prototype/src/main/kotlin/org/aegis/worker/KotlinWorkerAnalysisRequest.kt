@@ -18,7 +18,8 @@ data class KotlinWorkerAnalysisRequest(
     val apiVersion: String,
     val jvmTarget: String,
     val moduleName: String,
-    val includeTestCode: Boolean
+    val includeTestCode: Boolean,
+    val composeCompilerPluginEnabled: Boolean
 ) {
     companion object {
         fun from(payload: JsonObject): KotlinWorkerAnalysisRequest = KotlinWorkerAnalysisRequest(
@@ -37,7 +38,9 @@ data class KotlinWorkerAnalysisRequest(
             apiVersion = payload.requiredString("apiVersion"),
             jvmTarget = payload.requiredString("jvmTarget"),
             moduleName = payload.optionalString("moduleName") ?: "aegis-module",
-            includeTestCode = payload.get("includeTestCode")?.takeUnless { it.isJsonNull }?.asBoolean ?: false
+            includeTestCode = payload.get("includeTestCode")?.takeUnless { it.isJsonNull }?.asBoolean ?: false,
+            composeCompilerPluginEnabled = payload.get("composeCompilerPluginEnabled")
+                ?.takeUnless { it.isJsonNull }?.asBoolean ?: false
         )
 
         private fun JsonObject.requiredString(name: String): String =

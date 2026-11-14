@@ -3,6 +3,7 @@ package org.aegis.worker
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import androidx.compose.compiler.plugins.kotlin.ComposePluginRegistrar
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
@@ -109,6 +110,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             add("relationships")
             add("compiler-diagnostics")
             add("jvm-interop")
+            if (request.composeCompilerPluginEnabled) add("jetpack-compose")
         })
         result.addProperty("status", statusForExitCode(exitCode))
         return result
@@ -133,6 +135,18 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             .distinct()
             .joinToString(File.pathSeparator) { it.toString() }
 
+        val pluginClasspaths = buildList {
+            add(compilerPluginPath.toString())
+            if (request.composeCompilerPluginEnabled) {
+                add(
+                    Path.of(ComposePluginRegistrar::class.java.protectionDomain.codeSource.location.toURI())
+                        .toAbsolutePath()
+                        .normalize()
+                        .toString()
+                )
+            }
+        }.distinct().toTypedArray()
+
         return K2JVMCompilerArguments().apply {
             destination = classesDirectory.toString()
             this.classpath = classpath
@@ -142,7 +156,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             languageVersion = request.languageVersion
             apiVersion = request.apiVersion
             moduleName = request.moduleName
-            pluginClasspaths = arrayOf(compilerPluginPath.toString())
+            pluginClasspaths = pluginClasspaths
             javaSourceRoots = paths.referencedSourceRoots.map(Path::toString).toTypedArray()
             freeArgs = paths.sourceFiles.map(Path::toString)
         }

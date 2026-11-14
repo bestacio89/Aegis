@@ -100,7 +100,12 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
                     apiVersion = configuration.ApiVersion,
                     jvmTarget = configuration.JvmTarget,
                     moduleName = configuration.ModuleName,
-                    includeTestCode = request.IncludeTestCode
+                    includeTestCode = request.IncludeTestCode,
+                    composeCompilerPluginEnabled = request.ProviderOptions.TryGetValue(
+                        "kotlin.composeCompilerPluginEnabled",
+                        out var composePluginEnabled)
+                        && bool.TryParse(composePluginEnabled, out var isComposePluginEnabled)
+                        && isComposePluginEnabled
                 };
 
                 var result = await _workerProcess.SendAsync(

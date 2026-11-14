@@ -24,6 +24,20 @@ internal static class JavaSemanticFrameworkDetector
                 .GroupBy(symbol => symbol.Id, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
+            foreach (var composable in symbols.Values.Where(symbol =>
+                         symbol.Modifiers.Contains("Composable", StringComparer.OrdinalIgnoreCase)))
+            {
+                AddCompilerFrameworkEvidence(
+                    context,
+                    module,
+                    run,
+                    composable,
+                    composable.Provenance,
+                    ("Jetpack Compose", FrameworkEvidenceKind.Application),
+                    composable.IsTestCode,
+                    composable.Id);
+            }
+
             foreach (var relationship in run.Relationships.Where(relationship =>
                          (relationship.Kind == SemanticRelationshipKind.UsesAnnotation
                              || run.Language.Equals("Kotlin", StringComparison.OrdinalIgnoreCase)
@@ -34,50 +48,21 @@ internal static class JavaSemanticFrameworkDetector
                 if (!symbols.TryGetValue(relationship.TargetSymbolId!, out var annotationSymbol))
                     continue;
 
-                var classification = Classify(annotationSymbol.QualifiedName);
+                var classification = annotationSymbol.Modifiers.Contains("Composable", StringComparer.OrdinalIgnoreCase)
+                    ? ("Jetpack Compose", FrameworkEvidenceKind.Application)
+                    : Classify(annotationSymbol.QualifiedName);
                 if (classification is null)
                     continue;
 
-                var (framework, kind) = classification.Value;
-                var provenance = relationship.Provenance.Select(item => new SemanticEvidenceProvenance
-                {
-                    AnalyzerId = run.EngineId,
-                    Source = item.Source == SemanticEvidenceSource.Unknown
-                        ? SemanticEvidenceSource.Compiler
-                        : item.Source,
-                    FilePath = item.FilePath,
-                    StartLine = item.StartLine,
-                    StartColumn = item.StartColumn,
-                    Confidence = item.Confidence > 0 ? item.Confidence : 1.0
-                }).ToList();
-
-                var evidenceKey = string.Join(
-                    "|",
-                    module.Path,
-                    framework,
-                    annotationSymbol.QualifiedName,
-                    string.Join(",", provenance.Select(item =>
-                        $"{item.FilePath}:{item.StartLine}:{item.StartColumn}")));
-                var evidence = new FrameworkEvidence
-                {
-                    Id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(evidenceKey))).ToLowerInvariant(),
-                    Name = framework,
-                    Kind = kind,
-                    ProjectPath = Path.GetFullPath(module.Path),
-                    IsTestOnly = kind == FrameworkEvidenceKind.Testing
-                        || relationship.IsTestCode
-                        || module.IsTestProject
-                        || module.IsTestSupport,
-                    Provenance = provenance
-                };
-
-                if (module.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
-                    module.FrameworkEvidence.Add(evidence);
-                if (context.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
-                    context.FrameworkEvidence.Add(evidence);
-
-                AddDistinct(module.Frameworks, framework);
-                AddDistinct(context.DetectedFrameworks, framework);
+                AddCompilerFrameworkEvidence(
+                    context,
+                    module,
+                    run,
+                    annotationSymbol,
+                    relationship.Provenance,
+                    classification.Value,
+                    relationship.IsTestCode,
+                    relationship.Id);
             }
 
             if (string.Equals(module.Framework, "Java SE", StringComparison.OrdinalIgnoreCase))
@@ -108,6 +93,58 @@ internal static class JavaSemanticFrameworkDetector
                 _ => "Multi-Framework"
             };
         }
+    }
+
+    private static void AddCompilerFrameworkEvidence(
+        ProjectArchitectureContext context,
+        ProjectModuleContext module,
+        SemanticAnalysisRun run,
+        SemanticSymbol symbol,
+        IEnumerable<SemanticEvidenceProvenance> sourceEvidence,
+        (string Name, FrameworkEvidenceKind Kind) classification,
+        bool isTestCode,
+        string evidenceIdentity)
+    {
+        var provenance = sourceEvidence.Select(item => new SemanticEvidenceProvenance
+        {
+            AnalyzerId = run.EngineId,
+            Source = item.Source == SemanticEvidenceSource.Unknown
+                ? SemanticEvidenceSource.Compiler
+                : item.Source,
+            FilePath = item.FilePath,
+            StartLine = item.StartLine,
+            StartColumn = item.StartColumn,
+            Confidence = item.Confidence > 0 ? item.Confidence : 1.0
+        }).ToList();
+        var (framework, kind) = classification;
+        var evidenceKey = string.Join(
+            "|",
+            module.Path,
+            framework,
+            symbol.QualifiedName,
+            evidenceIdentity,
+            string.Join(",", provenance.Select(item =>
+                $"{item.FilePath}:{item.StartLine}:{item.StartColumn}")));
+        var evidence = new FrameworkEvidence
+        {
+            Id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(evidenceKey))).ToLowerInvariant(),
+            Name = framework,
+            Kind = kind,
+            ProjectPath = Path.GetFullPath(module.Path),
+            IsTestOnly = kind == FrameworkEvidenceKind.Testing
+                || isTestCode
+                || module.IsTestProject
+                || module.IsTestSupport,
+            Provenance = provenance
+        };
+
+        if (module.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
+            module.FrameworkEvidence.Add(evidence);
+        if (context.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
+            context.FrameworkEvidence.Add(evidence);
+
+        AddDistinct(module.Frameworks, framework);
+        AddDistinct(context.DetectedFrameworks, framework);
     }
 
     private static void AnalyzeDeclaredFrameworkDependencies(ProjectArchitectureContext context)
@@ -631,6 +668,9 @@ internal static class JavaSemanticFrameworkDetector
 
     private static (string Name, FrameworkEvidenceKind Kind)? Classify(string qualifiedName)
     {
+        if (qualifiedName.StartsWith("androidx.compose.", StringComparison.Ordinal))
+            return ("Jetpack Compose", FrameworkEvidenceKind.Application);
+
         if (qualifiedName.StartsWith("org.junit.jupiter.api.", StringComparison.Ordinal)
             || qualifiedName.StartsWith("org.junit.platform.", StringComparison.Ordinal)
             || qualifiedName.StartsWith("org.junit.vintage.", StringComparison.Ordinal))

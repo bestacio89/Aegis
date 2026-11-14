@@ -25,6 +25,17 @@
       <version>${kotlin.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-compose-compiler-plugin-embeddable</artifactId>
+      <version>${kotlin.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.compose.runtime</groupId>
+      <artifactId>runtime-desktop</artifactId>
+      <version>1.10.0</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
       <version>${gson.version}</version>

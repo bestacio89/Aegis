@@ -293,7 +293,42 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             dependencyPaths.Test,
             includeTestCode) ?? Array.Empty<string>();
 
-        var compilerPluginsNotExecuted = module.GradleBuildModel?.Diagnostics.Any(diagnostic =>
+        var composePlugin = module.GradleBuildModel?.Plugins.FirstOrDefault(plugin =>
+            plugin.IsApplied
+            && plugin.Id.Equals("org.jetbrains.kotlin.plugin.compose", StringComparison.Ordinal));
+        var composePluginEnabled = composePlugin?.Version is { } composePluginVersion
+            && composePluginVersion.Equals(compilerVersion, StringComparison.OrdinalIgnoreCase);
+        var composeDependencyDeclared = module.GradleBuildModel?.Dependencies.Any(dependency =>
+            dependency.Group?.StartsWith("androidx.compose", StringComparison.OrdinalIgnoreCase) == true
+            || dependency.Group?.Equals("androidx.activity", StringComparison.OrdinalIgnoreCase) == true
+                && dependency.Artifact?.Equals("activity-compose", StringComparison.OrdinalIgnoreCase) == true) == true;
+        var composePluginNotExecuted = composeDependencyDeclared && !composePluginEnabled
+            || composePlugin is not null && !composePluginEnabled;
+        if (composePlugin is not null && !composePluginEnabled)
+        {
+            context.DiscoveryDiagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = "KotlinComposeCompilerPluginVersionMismatch",
+                Component = nameof(KotlinSemanticAnalysisOrchestrator),
+                Message = "The applied Compose compiler plugin version is missing or does not match the Kotlin compiler version selected for this analysis. Compose compiler transformations were not executed.",
+                Target = module.Path,
+                AffectsCoverage = true
+            });
+        }
+        else if (composeDependencyDeclared && !composePluginEnabled)
+        {
+            context.DiscoveryDiagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = "KotlinComposeCompilerPluginNotApplied",
+                Component = nameof(KotlinSemanticAnalysisOrchestrator),
+                Message = "Compose dependencies are declared, but the module does not apply the Kotlin Compose compiler plugin. Composable compiler transformations and validation are unavailable.",
+                Target = module.Path,
+                AffectsCoverage = true
+            });
+        }
+
+        var compilerPluginsNotExecuted = composePluginNotExecuted
+            || module.GradleBuildModel?.Diagnostics.Any(diagnostic =>
                 diagnostic.Code == "GradleKotlinCompilerPluginNotExecuted") == true
             || module.MavenModel?.Diagnostics.Any(diagnostic =>
                 diagnostic.Code is "MavenKotlinCompilerPluginNotExecuted" or "MavenKotlinCodeGenerationNotExecuted") == true;
@@ -341,7 +376,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 ["kotlin.jvmTarget"] = jvmTarget,
                 ["kotlin.moduleName"] = NormalizeModuleName(module.Name),
                 ["kotlin.configurationInferred"] = inferred.ToString(),
-                ["kotlin.compilerPluginsNotExecuted"] = compilerPluginsNotExecuted.ToString()
+                ["kotlin.compilerPluginsNotExecuted"] = compilerPluginsNotExecuted.ToString(),
+                ["kotlin.composeCompilerPluginEnabled"] = composePluginEnabled.ToString()
             }
         };
 

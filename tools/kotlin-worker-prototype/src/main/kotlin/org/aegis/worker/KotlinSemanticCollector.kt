@@ -261,8 +261,8 @@ class KotlinSemanticCollector(
             symbol.addProperty("startColumn", if (isSource) file.fileEntry.getColumnNumber(offset) + 1 else null)
             symbol.addProperty("containingSymbolId", containingSymbolId)
             symbol.addProperty("origin", when {
-                !isSource -> 3
-                isGenerated(file) -> 2
+                file == null -> 3
+                !isSource || isGenerated(file) -> 2
                 else -> 1
             })
             symbol.addProperty("isTestCode", isTestCode)
@@ -601,6 +601,9 @@ class KotlinSemanticCollector(
             }
         )
         symbol.addProperty("receiverType", receiverType(declaration))
+        symbol.add("modifiers", JsonArray().apply {
+            declarationModifiers(declaration).forEach(::add)
+        })
         symbol.add("provenance", JsonArray())
         symbols[id] = symbol
     }
@@ -995,6 +998,7 @@ class KotlinSemanticCollector(
     }
 
     private fun declarationModifiers(declaration: IrDeclaration): List<String> = buildList {
+        if (declaration is IrFunction && isComposable(declaration)) add("Composable")
         when (declaration) {
             is IrClass -> {
                 if (declaration.isData) add("data")
@@ -1022,6 +1026,12 @@ class KotlinSemanticCollector(
             }
         }
     }
+
+    private fun isComposable(declaration: IrFunction): Boolean =
+        declaration.annotations.any { annotation ->
+            val annotationClass = annotation.symbol.owner.parent as? IrClass
+            annotationClass?.fqNameWhenAvailable?.asString() == "androidx.compose.runtime.Composable"
+        }
 
     private fun declarationKind(declaration: IrDeclaration): String = when (declaration) {
         is IrClass -> when {

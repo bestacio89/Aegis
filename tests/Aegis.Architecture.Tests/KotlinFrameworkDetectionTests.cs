@@ -186,6 +186,115 @@ public sealed class KotlinFrameworkDetectionTests
     }
 
     [Fact]
+    public void Analyze_classifies_compiler_confirmed_composable_declarations_and_calls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisComposeFramework_{Guid.NewGuid():N}");
+        var module = new ProjectModuleContext
+        {
+            Name = "android-app",
+            Path = root,
+            BuildSystem = ArchitectureBuildSystem.Gradle,
+            Languages = ["Kotlin"],
+            Framework = "Android"
+        };
+        var source = new SemanticSymbol
+        {
+            Id = "kotlin:function:sample.Screen()",
+            Name = "Screen",
+            QualifiedName = "sample.Screen",
+            Language = "Kotlin",
+            ProjectPath = root,
+            FilePath = Path.Combine(root, "Screen.kt"),
+            StartLine = 4,
+            Modifiers = ["Composable"],
+            Provenance =
+            [
+                new SemanticEvidenceProvenance
+                {
+                    AnalyzerId = "kotlin-k2-ir",
+                    Source = SemanticEvidenceSource.Compiler,
+                    FilePath = Path.Combine(root, "Screen.kt"),
+                    StartLine = 4,
+                    StartColumn = 1,
+                    Confidence = 1.0
+                }
+            ]
+        };
+        var child = new SemanticSymbol
+        {
+            Id = "kotlin:function:sample.Child()",
+            Name = "Child",
+            QualifiedName = "sample.Child",
+            Language = "Kotlin",
+            ProjectPath = root,
+            FilePath = Path.Combine(root, "Screen.kt"),
+            StartLine = 2,
+            Modifiers = ["Composable"],
+            Provenance =
+            [
+                new SemanticEvidenceProvenance
+                {
+                    AnalyzerId = "kotlin-k2-ir",
+                    Source = SemanticEvidenceSource.Compiler,
+                    FilePath = Path.Combine(root, "Screen.kt"),
+                    StartLine = 2,
+                    StartColumn = 1,
+                    Confidence = 1.0
+                }
+            ]
+        };
+        var run = new SemanticAnalysisRun
+        {
+            Language = "Kotlin",
+            EngineId = "kotlin-k2-ir",
+            ProjectPath = root,
+            Status = SemanticAnalysisStatus.Completed,
+            Symbols = [source, child],
+            Relationships =
+            [
+                new SemanticRelationship
+                {
+                    Id = "compose-call",
+                    SourceSymbolId = source.Id,
+                    TargetSymbolId = child.Id,
+                    Kind = SemanticRelationshipKind.Calls,
+                    ResolutionStatus = SemanticResolutionStatus.Resolved,
+                    Provenance =
+                    [
+                        new SemanticEvidenceProvenance
+                        {
+                            AnalyzerId = "kotlin-k2-ir",
+                            Source = SemanticEvidenceSource.Compiler,
+                            FilePath = source.FilePath,
+                            StartLine = 5,
+                            StartColumn = 5,
+                            Confidence = 1.0
+                        }
+                    ]
+                }
+            ]
+        };
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "android-app",
+            RootPath = root,
+            Language = "Kotlin",
+            Modules = [module],
+            SemanticAnalysisRuns = [run]
+        };
+
+        JavaSemanticFrameworkDetector.Analyze(context);
+
+        Assert.Equal(2, module.FrameworkEvidence.Count(evidence =>
+            evidence.Name == "Jetpack Compose"
+            && evidence.Provenance.Any(item => item.Source == SemanticEvidenceSource.Compiler)));
+        Assert.Contains(module.Frameworks, framework => framework == "Jetpack Compose");
+        Assert.All(
+            module.FrameworkEvidence.Where(evidence => evidence.Name == "Jetpack Compose"),
+            evidence => Assert.False(evidence.IsTestOnly));
+    }
+
+    [Fact]
     public void Analyze_classifies_Android_framework_dependencies_and_preserves_test_scope()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidFramework_{Guid.NewGuid():N}");

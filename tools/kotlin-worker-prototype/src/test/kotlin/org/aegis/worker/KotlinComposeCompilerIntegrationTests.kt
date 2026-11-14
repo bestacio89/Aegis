@@ -101,8 +101,7 @@ class KotlinComposeCompilerIntegrationTests {
             )
             assertTrue(composables.all { it.get("origin").asInt == 1 })
             assertTrue(composables.all {
-                Path.of(it.get("filePath").asString).toAbsolutePath().normalize()
-                    == source.toAbsolutePath().normalize()
+                Path.of(it.get("filePath").asString).toAbsolutePath().normalize() == source.toAbsolutePath().normalize()
             })
 
             URLClassLoader(

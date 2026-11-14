@@ -519,12 +519,20 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
 
             await orchestrator.AnalyzeAsync(context);
 
-            var spring = Assert.Single(module.FrameworkEvidence.Where(evidence => evidence.Name == "Spring Boot"));
+            var springEvidence = module.FrameworkEvidence
+                .Where(evidence => evidence.Name == "Spring Boot")
+                .ToArray();
+            var spring = Assert.Single(springEvidence, evidence => !evidence.IsTestOnly);
             Assert.Equal("3.4.1", spring.Version);
             Assert.Equal(FrameworkEvidenceKind.Web, spring.Kind);
-            Assert.False(spring.IsTestOnly);
             Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(spring.Provenance).Source);
             Assert.Equal(pomFile, spring.Provenance[0].FilePath);
+
+            var testSpring = Assert.Single(springEvidence, evidence => evidence.IsTestOnly);
+            Assert.Equal("3.5.0", testSpring.Version);
+            Assert.Equal(FrameworkEvidenceKind.Web, testSpring.Kind);
+            Assert.Equal(SemanticEvidenceSource.BuildModel, Assert.Single(testSpring.Provenance).Source);
+            Assert.Equal(pomFile, testSpring.Provenance[0].FilePath);
 
             var hibernate = Assert.Single(module.FrameworkEvidence.Where(evidence => evidence.Name == "Hibernate"));
             Assert.Equal("6.6.8.Final", hibernate.Version);

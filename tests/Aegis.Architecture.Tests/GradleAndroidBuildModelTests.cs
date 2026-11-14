@@ -1294,6 +1294,8 @@ public sealed class GradleAndroidBuildModelTests
                 """);
             WriteFile(testModule, "src/main/java/InstrumentationTest.java",
                 "package org.example.instrumentation; class InstrumentationTest {}");
+            WriteFile(testModule, "build/generated/ksp/main/kotlin/GeneratedInstrumentation.kt",
+                "package org.example.instrumentation\nclass GeneratedInstrumentation");
 
             var context = ProjectArchitectureContextDetector.Detect(root);
             var module = Assert.Single(context.Modules, candidate => candidate.Path == testModule);
@@ -1309,6 +1311,10 @@ public sealed class GradleAndroidBuildModelTests
                 main.AppliesToVariants.OrderBy(name => name));
             Assert.Contains(module.SourceRoots, sourceRoot =>
                 sourceRoot.Directory == Path.Combine(testModule, "src", "main", "java")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test);
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(testModule, "build", "generated", "ksp", "main", "kotlin")
+                && sourceRoot.IsGenerated
                 && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test);
         }
         finally

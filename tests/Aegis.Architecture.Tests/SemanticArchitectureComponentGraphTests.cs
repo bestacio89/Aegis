@@ -263,7 +263,10 @@ public sealed class SemanticArchitectureComponentGraphTests
                             ContainerName = "sample.second",
                             ContainerKind = "Package",
                             Language = "Kotlin",
-                            ProjectPath = secondLibraryPath,
+                            // The Kotlin worker currently records the consumer run path
+                            // for external symbols; qualified-name attribution must
+                            // identify the dependency module without trusting this path.
+                            ProjectPath = appPath,
                             Origin = SemanticSymbolOrigin.External
                         }
                     ],

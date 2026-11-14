@@ -34,6 +34,48 @@ public sealed class SemanticAnalysisExecutionContextTests
     }
 
     [Fact]
+    public async Task Resolves_dependency_outputs_without_leaking_production_dependencies_test_outputs()
+    {
+        await using var context = new SemanticAnalysisExecutionContext(
+            NullLogger<SemanticAnalysisExecutionContext>.Instance);
+        var consumerPath = Path.Combine(Path.GetTempPath(), "aegis-consumer");
+        var productionDependencyPath = Path.Combine(Path.GetTempPath(), "aegis-production-dependency");
+        var testDependencyPath = Path.Combine(Path.GetTempPath(), "aegis-test-dependency");
+
+        var consumerProduction = RegisterOutput(context, consumerPath, isTestCode: false);
+        var consumerTest = RegisterOutput(context, consumerPath, isTestCode: true);
+        var productionDependency = RegisterOutput(context, productionDependencyPath, isTestCode: false);
+        var productionDependencyTest = RegisterOutput(context, productionDependencyPath, isTestCode: true);
+        var testDependencyProduction = RegisterOutput(context, testDependencyPath, isTestCode: false);
+        var testDependencyTest = RegisterOutput(context, testDependencyPath, isTestCode: true);
+
+        var outputs = context.GetCompilationOutputs(
+            consumerPath,
+            [productionDependencyPath, testDependencyPath],
+            [testDependencyPath],
+            includeTestCode: true);
+
+        Assert.Contains(consumerProduction, outputs);
+        Assert.Contains(consumerTest, outputs);
+        Assert.Contains(productionDependency, outputs);
+        Assert.Contains(testDependencyProduction, outputs);
+        Assert.Contains(testDependencyTest, outputs);
+        Assert.DoesNotContain(productionDependencyTest, outputs);
+    }
+
+    private static string RegisterOutput(
+        SemanticAnalysisExecutionContext context,
+        string modulePath,
+        bool isTestCode)
+    {
+        var artifactRoot = context.CreateArtifactRoot();
+        var output = Path.Combine(artifactRoot, "classes");
+        Directory.CreateDirectory(output);
+        context.RegisterCompilationOutput(modulePath, isTestCode, artifactRoot, output);
+        return output;
+    }
+
+    [Fact]
     public async Task Rejects_compilation_outputs_outside_owned_artifact_root()
     {
         var context = new SemanticAnalysisExecutionContext(

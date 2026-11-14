@@ -169,8 +169,11 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
                 ReadOption(request.ProviderOptions, "kotlin.compilerPluginsNotExecuted"),
                 out var skippedCompilerPlugins)
             && skippedCompilerPlugins;
+        // A successful compiler result is a safe binding artifact even when
+        // the host cannot prove the complete transitive dependency closure.
+        // The run remains partial and downstream compilers must resolve each use.
         var canPublishBindingOutput = result.CompilationSucceeded
-            && run.Status is SemanticAnalysisStatus.Completed or SemanticAnalysisStatus.PartiallyCompleted
+            && (run.Status is SemanticAnalysisStatus.Completed or SemanticAnalysisStatus.PartiallyCompleted)
             && !configurationInferred
             && !compilerPluginsWereSkipped;
 

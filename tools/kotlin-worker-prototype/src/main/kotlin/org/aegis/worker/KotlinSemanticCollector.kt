@@ -1087,12 +1087,11 @@ class KotlinSemanticCollector(
         val parameters = declaration.parameters
         val receiver = parameters.firstOrNull {
             it.kind == IrParameterKind.ExtensionReceiver
-                && it.origin == IrDeclarationOrigin.DEFINED
+                && !isComposeCompilerParameter(it)
         }?.type?.let(::typeIdentity)
         val parameterTypes = parameters
             .filter {
                 (it.kind == IrParameterKind.Regular || it.kind == IrParameterKind.Context)
-                    && it.origin == IrDeclarationOrigin.DEFINED
                     && !isComposeCompilerParameter(it)
             }
             .joinToString(",") { typeIdentity(it.type) }

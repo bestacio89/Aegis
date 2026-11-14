@@ -220,6 +220,18 @@ public sealed class SemanticArchitectureComponentGraphTests
                 new ProjectModuleContext { Name = "first-library", Path = firstLibraryPath, Languages = ["Kotlin"] },
                 new ProjectModuleContext { Name = "second-library", Path = secondLibraryPath, Languages = ["Kotlin"] }
             ],
+            Dependencies =
+            [
+                new ArchitectureDependencyContext
+                {
+                    Source = "app",
+                    SourceProjectPath = appPath,
+                    Target = "second-library",
+                    TargetProjectPath = secondLibraryPath,
+                    DependencyType = "GradleProjectDependency",
+                    Scope = "Production"
+                }
+            ],
             SemanticAnalysisRuns =
             [
                 new SemanticAnalysisRun
@@ -324,7 +336,8 @@ public sealed class SemanticArchitectureComponentGraphTests
         Assert.Equal("second-library", context.ProductionComponents
             .Single(component => component.Id == edge.TargetComponentId).BuildModuleName);
         Assert.Empty(context.TestComponentDependencies);
-        Assert.Empty(context.Dependencies);
+        var moduleDependency = Assert.Single(context.Dependencies);
+        Assert.Equal("GradleProjectDependency", moduleDependency.DependencyType);
     }
 
     [Fact]

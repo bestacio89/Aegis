@@ -278,12 +278,12 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
 
         var androidPlugin = module.GradleBuildModel?.Plugins.FirstOrDefault(plugin =>
             plugin.IsApplied
-            && plugin.Id is
+            && (plugin.Id is
                 "com.android.application"
                 or "com.android.library"
                 or "com.android.test"
                 or "com.android.dynamic-feature"
-                or "com.android.asset-pack");
+                or "com.android.asset-pack"));
 
         pluginId = androidPlugin?.Id ?? string.Empty;
         return androidPlugin is not null;

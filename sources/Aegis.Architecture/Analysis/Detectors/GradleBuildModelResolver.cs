@@ -152,8 +152,12 @@ internal static class GradleBuildModelResolver
             for (var pluginIndex = 0; pluginIndex < plugins.Count; pluginIndex++)
             {
                 var plugin = plugins[pluginIndex];
-                if (!plugin.IsApplied || !string.IsNullOrWhiteSpace(plugin.Version))
+                if (!plugin.IsApplied
+                    || !string.IsNullOrWhiteSpace(plugin.Version)
+                    || !RequiresStaticGradlePluginVersion(plugin.Id))
+                {
                     continue;
+                }
 
                 var resolvedVersion = ReadBuildscriptPluginVersion(source, plugin.Id)
                     ?? ResolveRootPluginVersion(plugin.Id, catalog, files, owningRoot?.Path);
@@ -192,7 +196,7 @@ internal static class GradleBuildModelResolver
                 .ToArray();
             var kotlinAndroidPlugins = plugins
                 .Where(plugin => plugin.IsApplied
-                    && plugin.Id is "org.jetbrains.kotlin.android" or "kotlin-android")
+                    && (plugin.Id is "org.jetbrains.kotlin.android" or "kotlin-android"))
                 .ToArray();
             var kotlinCompilerPlugins = kotlinJvmPlugins
                 .Concat(kotlinAndroidPlugins)
@@ -304,12 +308,13 @@ internal static class GradleBuildModelResolver
     {
         var androidBlock = ExtractBlock(source, "android");
         var androidPlugins = plugins
-            .Where(plugin => plugin.IsApplied && plugin.Id is
-                "com.android.application"
-                or "com.android.library"
-                or "com.android.test"
-                or "com.android.dynamic-feature"
-                or "com.android.asset-pack")
+            .Where(plugin => plugin.IsApplied
+                && (plugin.Id is
+                    "com.android.application"
+                    or "com.android.library"
+                    or "com.android.test"
+                    or "com.android.dynamic-feature"
+                    or "com.android.asset-pack"))
             .ToArray();
         if (androidPlugins.Length == 0 && androidBlock is null)
             return null;
@@ -456,15 +461,20 @@ internal static class GradleBuildModelResolver
         }
 
         var moduleKotlinDisabled = ReadAndroidBoolean(androidBlock, "enableKotlin") == false;
-        var kotlinIntegration = androidPlugin is null
-            ? "Unknown"
-            : builtInKotlinPlugin
-                ? "BuiltInPlugin"
-                : legacyKotlinAndroid
-                ? "LegacyKotlinAndroidPlugin"
-                    : agpMajorVersion >= 9
-                        ? builtInKotlinDisabled || moduleKotlinDisabled ? "Disabled" : "BuiltInDefault"
-                        : agpMajorVersion > 0 ? "NotDeclared" : "Unknown";
+        var kotlinIntegration = "Unknown";
+        if (androidPlugin is not null)
+        {
+            if (builtInKotlinPlugin)
+                kotlinIntegration = "BuiltInPlugin";
+            else if (legacyKotlinAndroid)
+                kotlinIntegration = "LegacyKotlinAndroidPlugin";
+            else if (agpMajorVersion >= 9)
+                kotlinIntegration = builtInKotlinDisabled || moduleKotlinDisabled
+                    ? "Disabled"
+                    : "BuiltInDefault";
+            else if (agpMajorVersion > 0)
+                kotlinIntegration = "NotDeclared";
+        }
 
         if (androidPlugin is not null && legacyKotlinAndroid && agpMajorVersion >= 9
             && (!builtInKotlinDisabled || newDslEnabled != false))
@@ -476,7 +486,7 @@ internal static class GradleBuildModelResolver
         }
 
         if (sourceRoots.Any(root => root.ContainsKotlinSources)
-            && kotlinIntegration is "Disabled" or "NotDeclared" or "Unknown")
+            && (kotlinIntegration is "Disabled" or "NotDeclared" or "Unknown"))
         {
             modelDiagnostics.Add(Diagnostic(
                 "GradleAndroidKotlinIntegrationNotResolved",
@@ -736,6 +746,18 @@ internal static class GradleBuildModelResolver
 
     private static bool IsPluginApplied(string declaration) =>
         !Regex.IsMatch(declaration, @"\bapply\s+false\b", RegexOptions.CultureInvariant);
+
+    private static bool RequiresStaticGradlePluginVersion(string pluginId) =>
+        pluginId is
+            "com.android.application"
+            or "com.android.library"
+            or "com.android.test"
+            or "com.android.dynamic-feature"
+            or "com.android.asset-pack"
+            or "org.jetbrains.kotlin.android"
+            or "kotlin-android"
+            or "org.jetbrains.kotlin.jvm"
+            or "org.jetbrains.kotlin.multiplatform";
 
     private static IReadOnlyList<GradleBuildModel.Plugin> ParseLegacyAppliedPlugins(string source)
     {

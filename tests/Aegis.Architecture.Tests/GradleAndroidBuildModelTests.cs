@@ -739,6 +739,53 @@ public sealed class GradleAndroidBuildModelTests
         }
     }
 
+    [Fact]
+    public void Detect_reads_groovy_android_source_set_overrides()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidGroovySourceSets_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle"),
+                "rootProject.name = 'android-groovy-source-sets'");
+            File.WriteAllText(Path.Combine(app, "build.gradle"), """
+                plugins {
+                    id 'com.android.library' version '8.7.3'
+                }
+                android {
+                    namespace 'org.example.groovy'
+                    compileSdk 35
+                    sourceSets {
+                        main {
+                            java.srcDirs 'src/shared/java'
+                            manifest.srcFile 'manifests/main/AndroidManifest.xml'
+                            res.srcDirs 'resources/main'
+                        }
+                    }
+                }
+                """);
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+            var main = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "main");
+
+            Assert.Contains(main.JavaSourceDirectories, directory =>
+                directory == Path.Combine(app, "src", "shared", "java"));
+            Assert.Contains(main.ManifestFiles, file =>
+                file == Path.Combine(app, "manifests", "main", "AndroidManifest.xml"));
+            Assert.Contains(main.ResourceDirectories, directory =>
+                directory == Path.Combine(app, "resources", "main"));
+            Assert.True(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static void WriteFile(string root, string relativePath, string content)
     {
         var path = Path.Combine(root, relativePath);

@@ -432,3 +432,78 @@ The K2 worker's current symbol IDs are provider-local. For example, a Java type 
 K3 must introduce a normalized JVM interop identity and a collision-aware binder. The identity must account for module/artifact scope, owner binary name, JVM member name, erased JVM descriptor, constructor/static semantics and relevant Kotlin lowering such as extension receivers, property accessors, `@JvmName`, value-class mangling and companion/object bridges. Original provider IDs and run-scoped evidence references remain intact; interop identity is an additional join key, never a replacement for provenance.
 
 Until that binder is implemented, K2's Java source binding proves that Kotlin analysis can resolve Java declarations, but it does not prove that Java and Kotlin worker records are already unified in the shared semantic graph.
+
+
+## K2 status — accepted
+
+K2 is accepted at exact head `6cda4b1a11ee33811d5cbfc2d2d380d72d6d600a`. All four required workflows passed on that exact commit: Kotlin semantic worker, Java semantic worker, WPF build validation and non-WPF quality gates.
+
+The accepted host integration includes:
+
+- Shared `JvmWorkerProcess` supervision for JDT and Kotlin, with bounded request/response protocol handling, timeouts, cancellation, process-tree termination and graceful shutdown.
+- A Kotlin adapter and module-scoped orchestrator registered through the existing semantic coordinator/pipeline.
+- Shared JVM source-root and local classpath resolution, with Java regression coverage.
+- Host-owned per-invocation compiler artifact roots, output-path validation and deterministic cleanup.
+- Production-before-test Kotlin analysis; successful production output is supplied to same-module test analysis.
+- Kotlin-before-Java execution, with successful same-module Kotlin output supplied to JDT.
+- Explicit partial/unsupported results for inferred compiler configuration, incomplete dependency metadata, unexecuted compiler plugins and unsupported non-JVM targets.
+- Packaged worker validation on Windows and Linux without adding Kotlin compiler dependencies to the .NET application.
+
+K2 acceptance proves same-module Kotlin/Java interoperability and the host lifecycle. It does **not** prove cross-module output ordering or canonical cross-provider symbol identity; those remain K3.
+
+## K3 implementation decisions — 2026-11-14
+
+### Module dependency execution
+
+- Use only explicit Maven/Gradle project-dependency edges already represented in `ProjectArchitectureContext.Dependencies`. Do not infer module dependencies from directory names, package names or source imports.
+- Order Kotlin production modules dependency-first using production edges.
+- Complete production analysis for all Kotlin modules before starting test analysis.
+- Order test analysis dependency-first using both production and test edges. A test-only dependency must not affect production compilation order or production classpaths.
+- Resolve transitive project outputs by scope. Production consumers receive production outputs only. Test consumers receive production outputs plus test outputs reachable through explicit test-dependency edges.
+- A project-dependency cycle or ambiguous module target is a coverage diagnostic, not a reason to fall back to alphabetical ordering and claim complete resolution.
+
+### Compiler output eligibility
+
+A successful compiler output is a **binding artifact**, not proof that the complete dependency graph was resolved.
+
+- The Kotlin compiler must report successful compilation with no compiler errors.
+- Compiler configuration must be explicit and compatible with the pinned worker.
+- Declared compiler plugins/code generators must not have been skipped when they can affect the module ABI.
+- The host must validate that the output remains inside its invocation-owned artifact root.
+- A run may remain `PartiallyCompleted` because the local classpath resolver cannot prove transitive closure. A successfully compiled output can still be supplied as a binding artifact; downstream compilers must independently resolve each use and retain their own unresolved diagnostics.
+- Failed compilation, inferred compiler settings, unsupported targets, or skipped ABI-affecting plugins never publish binding artifacts.
+
+This distinction permits useful cross-module binding without relabelling a partial semantic run as complete. It does not upgrade missing external dependencies to resolved evidence.
+
+### Canonical JVM identity
+
+Provider IDs remain opaque and run-scoped. Add an additional, optional JVM ABI identity for cross-provider joins.
+
+The identity must include:
+
+- Owning module or resolved artifact scope.
+- JVM binary owner name.
+- JVM member kind and exact member name.
+- Erased JVM field or method descriptor.
+- Static/instance semantics where applicable.
+
+A source symbol may expose multiple JVM identities when Kotlin lowering creates multiple callable ABI entries. This is required for properties/accessors, file facades, `@JvmName`, overload bridges and companion/object bridges.
+
+Implementation rules:
+
+- Java identities come from resolved JDT bindings and erased JVM descriptors.
+- Kotlin identities must reflect the compiler's actual JVM ABI. Do not approximate value-class mangling, suspend lowering, extension receivers, property accessors or file-facade names from qualified names alone.
+- In-workspace source symbols are scoped to their owning build module. External library symbols are scoped to a resolved artifact. Unknown ownership remains unbound.
+- Preserve the original provider symbol IDs, relationship IDs and run-scoped provenance. JVM identity is an additional join key only.
+- Bind an external relationship endpoint to an in-workspace source symbol only when the complete identity resolves to exactly one source declaration. Ambiguous or missing matches remain external and produce no internal architecture edge.
+- The semantic architecture projection must use this binder for cross-language edges; it must not discard a compiler-resolved relationship merely because the target was represented as an external symbol by the consuming compiler.
+
+### K3 acceptance corpus
+
+- Kotlin module depending on another Kotlin module, including transitive project dependencies.
+- Java module depending on a Kotlin module and Kotlin module depending on Java source modules.
+- Production and test-only project dependencies, including test-support modules.
+- Duplicate qualified names in separate modules to prove that scope prevents false joins.
+- Overloaded Java/Kotlin methods, constructors, properties/accessors, top-level functions/file facades, extension functions, suspend functions, `@JvmName`, value classes and companion/object bridges.
+- Ambiguous, unresolved and incomplete classpath cases; each must remain partial/unbound rather than being joined by display name.
+- Architecture component graph and relationship-ledger assertions proving that cross-language edges retain exact source provenance and are not double-counted.

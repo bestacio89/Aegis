@@ -671,6 +671,133 @@ public sealed class GradleAndroidBuildModelTests
     }
 
     [Fact]
+    public void Detect_respects_replace_and_append_semantics_for_explicit_source_directories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidSourceDirectorySemantics_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-source-directory-semantics\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.sources"
+                    compileSdk = 35
+                    sourceSets {
+                        getByName("main") {
+                            java.srcDirs("src/overridden/java")
+                            kotlin.srcDir("src/additional/kotlin")
+                            manifest.srcFile("manifests/custom/AndroidManifest.xml")
+                            res.srcDirs("resources/replaced")
+                            assets.srcDir("assets/additional")
+                        }
+                    }
+                }
+                """);
+
+            WriteFile(app, "src/main/java/Default.java", "package org.example; class Default {}");
+            WriteFile(app, "src/overridden/java/Overridden.java", "package org.example; class Overridden {}");
+            WriteFile(app, "src/main/kotlin/Default.kt", "package org.example\nclass DefaultKotlin");
+            WriteFile(app, "src/additional/kotlin/Additional.kt", "package org.example\nclass AdditionalKotlin");
+            WriteFile(app, "src/main/AndroidManifest.xml", "<manifest />");
+            WriteFile(app, "src/main/res/values/default.xml", "<resources />");
+            WriteFile(app, "resources/replaced/values/custom.xml", "<resources />");
+            WriteFile(app, "src/main/assets/default.json", "{}");
+            WriteFile(app, "assets/additional/custom.json", "{}");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+            var main = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "main");
+
+            Assert.Equal(
+                [Path.Combine(app, "src", "overridden", "java")],
+                main.JavaSourceDirectories);
+            Assert.DoesNotContain(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "src", "main", "java"));
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "src", "overridden", "java")
+                && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Explicit);
+
+            Assert.Contains(main.KotlinSourceDirectories, directory =>
+                directory == Path.Combine(app, "src", "main", "kotlin"));
+            Assert.Contains(main.KotlinSourceDirectories, directory =>
+                directory == Path.Combine(app, "src", "additional", "kotlin"));
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "src", "main", "kotlin")
+                && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Conventional);
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(app, "src", "additional", "kotlin")
+                && sourceRoot.Origin == Aegis.Shared.Architecture.Enums.ProjectSourceRootOrigin.Explicit);
+
+            Assert.Equal(
+                [Path.Combine(app, "resources", "replaced")],
+                main.ResourceDirectories);
+            Assert.Contains(main.AssetDirectories, directory =>
+                directory == Path.Combine(app, "src", "main", "assets"));
+            Assert.Contains(main.AssetDirectories, directory =>
+                directory == Path.Combine(app, "assets", "additional"));
+            Assert.Equal(
+                [Path.Combine(app, "manifests", "custom", "AndroidManifest.xml")],
+                main.ManifestFiles);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_does_not_treat_dynamic_manifest_paths_as_literal_source_evidence()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidDynamicManifest_{Guid.NewGuid():N}");
+        var app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-dynamic-manifest\"");
+            File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.application") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.dynamicmanifest"
+                    compileSdk = 35
+                    sourceSets {
+                        getByName("main") {
+                            manifest.srcFile(layout.projectDirectory.file("manifests/\u0024{variant.name}/AndroidManifest.xml"))
+                        }
+                    }
+                }
+                """);
+            WriteFile(app, "src/main/AndroidManifest.xml", "<manifest />");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == app);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+            var main = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "main");
+
+            Assert.Empty(main.ManifestFiles);
+            Assert.Empty(main.ExplicitManifestFiles);
+            Assert.Contains(android.Diagnostics, diagnostic =>
+                diagnostic.Code == "GradleAndroidManifestNotStaticallyResolved"
+                && diagnostic.AffectsCoverage);
+            Assert.False(android.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_builds_cartesian_variant_matrix_across_multiple_flavor_dimensions()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidMultiDimension_{Guid.NewGuid():N}");

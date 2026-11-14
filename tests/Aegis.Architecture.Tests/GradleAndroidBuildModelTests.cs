@@ -89,8 +89,8 @@ public sealed class GradleAndroidBuildModelTests
             Assert.Equal("androidx.test.runner.AndroidJUnitRunner", android.DefaultConfig.TestInstrumentationRunner);
             Assert.Equal("JavaVersion.VERSION_17", android.CompileOptions!.SourceCompatibility);
             Assert.Equal("JavaVersion.VERSION_17", android.CompileOptions.TargetCompatibility);
-            Assert.True(android.CompileOptions.CoreLibraryDesugaringEnabled);
-            Assert.Equal(["tier"], android.FlavorDimensions);
+            Assert.Equal(true, android.CompileOptions.CoreLibraryDesugaringEnabled);
+            Assert.Equal(new[] { "tier" }, android.FlavorDimensions);
             Assert.Contains(android.ProductFlavors, flavor =>
                 flavor.Name == "free" && flavor.Dimension == "tier" && flavor.ApplicationIdSuffix == ".free");
             Assert.Contains(android.ProductFlavors, flavor =>

@@ -535,7 +535,7 @@ internal static class GradleBuildModelResolver
             var match = Regex.Match(
                 block,
                 @"\b" + Regex.Escape(name)
-                + @"\b\s*(?:=\s*|\(\s*|\s+)(?<value>['""](?<quoted>[^'""]+)['""]|(?<token>\\d+(?:\\.\\d+)*|[A-Z][A-Za-z0-9_.-]*))\s*\)?",
+                + @"\b\s*(?:=\s*|\(\s*|\s+)(?<value>['""](?<quoted>[^'""]+)['""]|(?<token>\d+(?:\.\d+)*|[A-Z][A-Za-z0-9_.-]*))\s*\)?",
                 RegexOptions.CultureInvariant);
             if (match.Success)
                 return match.Groups["quoted"].Success

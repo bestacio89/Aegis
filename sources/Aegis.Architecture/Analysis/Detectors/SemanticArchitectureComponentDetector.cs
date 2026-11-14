@@ -264,6 +264,7 @@ internal static class SemanticArchitectureComponentDetector
                     context,
                     run,
                     relationship.TargetSymbolId!,
+                    sourceComponent,
                     relationship.IsTestCode || sourceSymbol.IsTestCode
                         || sourceComponent.SourceOwnership == "Test"
                         || sourceModule.IsTestProject
@@ -271,8 +272,11 @@ internal static class SemanticArchitectureComponentDetector
                     symbolComponents,
                     symbolIdentitiesById,
                     symbolComponentsByQualifiedName);
-                if (targetComponent is null)
+                if (targetComponent is null
+                    || !TryResolveCompatibleAndroidVariants(sourceComponent, targetComponent, out var compatibleAndroidVariants))
+                {
                     continue;
+                }
 
                 var targetModule = ResolveModule(targetComponent.ModulePath, targetComponent.Language);
                 var isTest = relationship.IsTestCode
@@ -291,10 +295,11 @@ internal static class SemanticArchitectureComponentDetector
                 var scope = hasUnknownAndroidOwnership
                     ? "Unknown"
                     : isTest ? "Test" : "Production";
-                var key = new EdgeKey(sourceComponent.ComponentId, targetComponent.ComponentId, scope);
+                var variantKey = string.Join("|", compatibleAndroidVariants);
+                var key = new EdgeKey(sourceComponent.ComponentId, targetComponent.ComponentId, scope, variantKey);
                 if (!edges.TryGetValue(key, out var accumulator))
                 {
-                    accumulator = new EdgeAccumulator(sourceComponent, targetComponent);
+                    accumulator = new EdgeAccumulator(sourceComponent, targetComponent, compatibleAndroidVariants);
                     edges.Add(key, accumulator);
                 }
 
@@ -353,6 +358,7 @@ internal static class SemanticArchitectureComponentDetector
         ProjectArchitectureContext context,
         SemanticAnalysisRun run,
         string targetSymbolId,
+        SymbolComponent sourceComponent,
         bool includeTestDependencies,
         IReadOnlyDictionary<SymbolIdentity, SymbolComponent> symbolComponents,
         IReadOnlyDictionary<string, SymbolIdentity[]> symbolIdentitiesById,
@@ -387,8 +393,11 @@ internal static class SemanticArchitectureComponentDetector
                     externalProjectPath,
                     string.IsNullOrWhiteSpace(externalSymbol.Language) ? run.Language : externalSymbol.Language,
                     targetSymbolId);
-                if (symbolComponents.TryGetValue(exactIdentity, out var exactTarget))
+                if (symbolComponents.TryGetValue(exactIdentity, out var exactTarget)
+                    && TryResolveCompatibleAndroidVariants(sourceComponent, exactTarget, out _))
+                {
                     candidates[exactIdentity] = exactTarget;
+                }
             }
 
             // A provider-supplied target owner is stronger than name matching.
@@ -418,6 +427,7 @@ internal static class SemanticArchitectureComponentDetector
                 // build dependency graph; never fall back to workspace-wide matching.
                 var selectedCandidates = projectCandidates
                     .Where(component => reachableDependencyPaths.Contains(component.ModulePath))
+                    .Where(component => TryResolveCompatibleAndroidVariants(sourceComponent, component, out _))
                     .ToArray();
 
                 foreach (var candidate in selectedCandidates)
@@ -435,8 +445,11 @@ internal static class SemanticArchitectureComponentDetector
             NormalizePath(run.ProjectPath),
             run.Language,
             targetSymbolId);
-        if (symbolComponents.TryGetValue(sameProjectTarget, out var localTarget))
+        if (symbolComponents.TryGetValue(sameProjectTarget, out var localTarget)
+            && TryResolveCompatibleAndroidVariants(sourceComponent, localTarget, out _))
+        {
             return localTarget;
+        }
 
         // Preserve the existing Java/C# relationship contract when the target ID
         // is unique across the workspace. Never choose arbitrarily across projects.
@@ -445,6 +458,38 @@ internal static class SemanticArchitectureComponentDetector
             && symbolComponents.TryGetValue(identities[0], out var uniqueTarget)
                 ? uniqueTarget
                 : null;
+    }
+
+    private static bool TryResolveCompatibleAndroidVariants(
+        SymbolComponent source,
+        SymbolComponent target,
+        out IReadOnlyList<string> compatibleVariants)
+    {
+        compatibleVariants = [];
+
+        // Variant matching is meaningful only when both endpoints are Android
+        // Gradle modules. A non-Android JVM dependency has no Android variant
+        // identity in this static model.
+        if (string.IsNullOrWhiteSpace(source.AndroidModuleKind)
+            || string.IsNullOrWhiteSpace(target.AndroidModuleKind))
+        {
+            return true;
+        }
+
+        // Missing variant evidence is not proof of compatibility. Do not project
+        // an Android-to-Android semantic edge based only on a qualified-name match.
+        if (source.AndroidVariants.Count == 0 || target.AndroidVariants.Count == 0)
+            return false;
+
+        var intersection = source.AndroidVariants
+            .Intersect(target.AndroidVariants, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (intersection.Length == 0)
+            return false;
+
+        compatibleVariants = intersection;
+        return true;
     }
 
     private static HashSet<string> ResolveReachableDependencyPaths(
@@ -655,12 +700,13 @@ internal static class SemanticArchitectureComponentDetector
         string? AndroidModuleKind,
         string? AndroidTestKind);
 
-    private sealed record EdgeKey(string SourceComponentId, string TargetComponentId, string Scope);
+    private sealed record EdgeKey(string SourceComponentId, string TargetComponentId, string Scope, string AndroidVariantKey);
 
     private sealed class EdgeAccumulator
     {
         private readonly SymbolComponent _source;
         private readonly SymbolComponent _target;
+        private readonly IReadOnlyList<string> _compatibleAndroidVariants;
         private readonly HashSet<string> _relationshipIds = new(StringComparer.Ordinal);
         private readonly List<SemanticRelationshipReference> _relationshipReferences = [];
         private readonly HashSet<SemanticRelationship> _unreferencedRelationships = [];
@@ -669,10 +715,14 @@ internal static class SemanticArchitectureComponentDetector
         private int _resolvedRelationshipCount;
         private int _partiallyResolvedRelationshipCount;
 
-        public EdgeAccumulator(SymbolComponent source, SymbolComponent target)
+        public EdgeAccumulator(
+            SymbolComponent source,
+            SymbolComponent target,
+            IReadOnlyList<string> compatibleAndroidVariants)
         {
             _source = source;
             _target = target;
+            _compatibleAndroidVariants = compatibleAndroidVariants;
         }
 
         public void Add(string runId, SemanticRelationship relationship)
@@ -730,11 +780,7 @@ internal static class SemanticArchitectureComponentDetector
             UnreferencedRelationshipCount = _unreferencedRelationships.Count,
             RelationshipKinds = _relationshipKinds.OrderBy(kind => kind).ToList(),
             EvidenceFiles = _evidenceFiles.OrderBy(file => file, PathComparer).ToList(),
-            AndroidVariants = _source.AndroidVariants.Count > 0 && _target.AndroidVariants.Count > 0
-                ? _source.AndroidVariants.Intersect(_target.AndroidVariants, StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList()
-                : _source.AndroidVariants.Concat(_target.AndroidVariants)
-                    .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+            AndroidVariants = _compatibleAndroidVariants.ToList(),
             AndroidSourceSets = new[] { _source.SourceSetName, _target.SourceSetName }
                 .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),

@@ -162,7 +162,9 @@ internal static class SemanticArchitectureComponentDetector
                     SourceOwnerships = group.Select(item => item.SourceOwnership)
                         .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
                     AndroidTestKinds = group.Select(item => item.AndroidTestKind)
-                        .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Where(value => !string.IsNullOrWhiteSpace(value)
+                            && !value.Equals(nameof(GradleAndroidTestKind.None), StringComparison.OrdinalIgnoreCase))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
                         .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
                     SourceFileCount = files.Count,
                     ProductionSourceFileCount = productionSymbols
@@ -510,7 +512,9 @@ internal static class SemanticArchitectureComponentDetector
                 .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
             AndroidTestKinds = new[] { _source.AndroidTestKind, _target.AndroidTestKind }
-                .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(value => !string.IsNullOrWhiteSpace(value)
+                    && !value.Equals(nameof(GradleAndroidTestKind.None), StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList()
         };
     }

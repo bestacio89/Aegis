@@ -535,6 +535,7 @@ public sealed class GradleAndroidBuildModelTests
             WriteFile(app, "src/freeDebug/kotlin/FreeDebug.kt", "package org.example\nclass FreeDebug");
             WriteFile(app, "src/testDebug/kotlin/DebugUnitTest.kt", "package org.example\nclass DebugUnitTest");
             WriteFile(app, "src/androidTest/java/InstrumentedTest.kt", "package org.example\nclass InstrumentedTest");
+            WriteFile(app, "src/testFixtures/java/Fixture.java", "package org.example; class Fixture {}");
             WriteFile(app, "src/main/AndroidManifest.xml", "<manifest />");
             WriteFile(app, "src/freeDebug/AndroidManifest.xml", "<manifest />");
             WriteFile(app, "src/freeDebug/res/values/strings.xml", "<resources />");
@@ -554,6 +555,11 @@ public sealed class GradleAndroidBuildModelTests
             Assert.Contains(android.Variants, variant => variant.Name == "paidRelease");
             Assert.Contains(android.Variants, variant => variant.Name == "freeStaging");
             Assert.Equal(["freeDebug"], android.SourceSets.Single(sourceSet => sourceSet.Name == "freeDebug").AppliesToVariants);
+            var freeFlavor = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "free");
+            Assert.Equal(["freeDebug", "freeRelease", "freeStaging"], freeFlavor.AppliesToVariants);
+            var fixtures = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "testFixtures");
+            Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test, fixtures.Ownership);
+            Assert.Equal(Aegis.Shared.Architecture.Enums.GradleAndroidTestKind.Fixtures, fixtures.TestKind);
 
             var main = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "main");
             Assert.Contains(main.ManifestFiles, file => file.EndsWith(

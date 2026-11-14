@@ -499,6 +499,21 @@ internal static class GradleAndroidSourceSetResolver
             sourceSetsBlock,
             @"(?:getByName|maybeCreate|create)\s*\(\s*['""](?<name>[^'""]+)['""]\s*\)\s*\{|(?<name>[A-Za-z][A-Za-z0-9_]*)\s*\{",
             RegexOptions.CultureInvariant);
+        var factoryDeclarationCount = Regex.Matches(
+            sourceSetsBlock,
+            @"\b(?:getByName|maybeCreate|create)\s*\(",
+            RegexOptions.CultureInvariant).Count;
+        var resolvedFactoryDeclarationCount = declarations.Count(match =>
+            match.Value.StartsWith("getByName", StringComparison.Ordinal)
+            || match.Value.StartsWith("maybeCreate", StringComparison.Ordinal)
+            || match.Value.StartsWith("create", StringComparison.Ordinal));
+        if (factoryDeclarationCount > resolvedFactoryDeclarationCount)
+        {
+            diagnostics.Add(Diagnostic(
+                "GradleAndroidSourceSetNotStaticallyResolved",
+                "One or more Android source-set factory declarations use dynamic names and cannot be mapped safely.",
+                buildFile));
+        }
 
         foreach (Match declaration in declarations)
         {

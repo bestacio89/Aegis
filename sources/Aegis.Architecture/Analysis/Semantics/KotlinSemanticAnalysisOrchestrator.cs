@@ -131,6 +131,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 && sourceRootsByModule.TryGetValue(NormalizeModulePath(module.Path), out var roots)
                 && !module.IsTestProject
                 && !module.IsTestSupport
+                && roots.Any(root => root.Ownership == ProjectSourceRootOwnership.Production)
                 && roots.All(root => root.Ownership != ProjectSourceRootOwnership.Unknown))
             .ToArray();
         var productionOrder = JvmModuleDependencyResolver.OrderModules(

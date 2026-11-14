@@ -77,8 +77,8 @@ public sealed class SemanticAnalysisExecutionContext : IAsyncDisposable
     }
 
     /// <summary>
-    /// Returns successful same-module compiler outputs suitable for the
-    /// requested production/test scope.
+    /// Returns successful same-module and project-dependency compiler outputs
+    /// suitable for the requested production/test scope.
     /// </summary>
     public IReadOnlyList<string> GetCompilationOutputs(string modulePath, bool includeTestCode) =>
         GetCompilationOutputs(

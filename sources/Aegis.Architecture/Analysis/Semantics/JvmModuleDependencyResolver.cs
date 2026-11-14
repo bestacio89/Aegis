@@ -174,14 +174,14 @@ public static class JvmModuleDependencyResolver
     {
         foreach (var dependency in dependencies)
         {
-            if (!dependency.DependencyType.Equals(MavenProjectDependency, StringComparison.OrdinalIgnoreCase)
-                && !dependency.DependencyType.Equals(GradleProjectDependency, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(dependency.DependencyType, MavenProjectDependency, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(dependency.DependencyType, GradleProjectDependency, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            var isProduction = dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase);
-            var isTest = dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase);
+            var isProduction = string.Equals(dependency.Scope, "Production", StringComparison.OrdinalIgnoreCase);
+            var isTest = string.Equals(dependency.Scope, "Test", StringComparison.OrdinalIgnoreCase);
             if (!isProduction && !(includeTestDependencies && isTest))
                 continue;
 

@@ -28,7 +28,8 @@ internal static class GradleAndroidSourceSetResolver
         ArgumentNullException.ThrowIfNull(model);
 
         var variants = ResolveVariants(model, buildFile, diagnostics);
-        var sourceSetNames = CreateExpectedSourceSetNames(model, variants);
+        var knownSourceSetNames = CreateExpectedSourceSetNames(model, variants);
+        var sourceSetNames = new HashSet<string>(knownSourceSetNames, StringComparer.Ordinal);
         var explicitDirectories = ParseExplicitSourceSets(
             androidBlock, modulePath, analysisRoot, buildFile, diagnostics);
 
@@ -42,7 +43,7 @@ internal static class GradleAndroidSourceSetResolver
         var sourceRoots = new Dictionary<string, ProjectSourceRoot>(PathComparer);
         foreach (var name in sourceSetNames.OrderBy(value => value, StringComparer.Ordinal))
         {
-            var ownership = ResolveOwnership(name, sourceSetNames);
+            var ownership = ResolveOwnership(name, knownSourceSetNames);
             observed.TryGetValue(name, out var discovered);
             explicitDirectories.TryGetValue(name, out var explicitSet);
 
@@ -83,6 +84,7 @@ internal static class GradleAndroidSourceSetResolver
         model.SourceRoots = sourceRoots.Values
             .OrderBy(root => root.Directory, PathComparer)
             .ToList();
+        model.IsComplete = diagnostics.All(diagnostic => !diagnostic.AffectsCoverage);
     }
 
     private static List<GradleAndroidVariant> ResolveVariants(
@@ -224,9 +226,12 @@ internal static class GradleAndroidSourceSetResolver
             }
 
             if (category.Equals("java", StringComparison.OrdinalIgnoreCase))
-                AddIfSourceFile(sourceSet.JavaSourceDirectories, fullFile, modulePath, relative, category);
+            {
+                AddIfSourceFile(sourceSet.JavaSourceDirectories, fullFile, modulePath, relative, ".java");
+                AddIfSourceFile(sourceSet.KotlinSourceDirectories, fullFile, modulePath, relative, ".kt");
+            }
             else if (category.Equals("kotlin", StringComparison.OrdinalIgnoreCase))
-                AddIfSourceFile(sourceSet.KotlinSourceDirectories, fullFile, modulePath, relative, category);
+                AddIfSourceFile(sourceSet.KotlinSourceDirectories, fullFile, modulePath, relative, ".kt");
             else if (category.Equals("res", StringComparison.OrdinalIgnoreCase))
                 AddDirectory(sourceSet.ResourceDirectories, Path.Combine(modulePath, "src", sourceSetName, "res"));
             else if (category.Equals("assets", StringComparison.OrdinalIgnoreCase))
@@ -241,16 +246,13 @@ internal static class GradleAndroidSourceSetResolver
         string file,
         string modulePath,
         IReadOnlyList<string> relative,
-        string category)
+        string extension)
     {
-        if (!Path.GetExtension(file).Equals(category.Equals("java", StringComparison.OrdinalIgnoreCase)
-                ? ".java"
-                : ".kt",
-                StringComparison.OrdinalIgnoreCase))
+        if (!Path.GetExtension(file).Equals(extension, StringComparison.OrdinalIgnoreCase))
             return;
 
         AddDirectory(directories, Path.GetFullPath(Path.Combine(
-            modulePath, "src", relative[1], category)));
+            modulePath, "src", relative[1], relative[2])));
     }
 
     private static Dictionary<string, ExplicitSourceSet> ParseExplicitSourceSets(
@@ -513,18 +515,6 @@ internal static class GradleAndroidSourceSetResolver
     {
         if (!values.Any(existing => PathComparer.Equals(existing, file)))
             values.Add(Path.GetFullPath(file));
-    }
-
-    private static T GetOrAdd<T>(IDictionary<string, T> values, string name)
-        where T : class, new()
-    {
-        if (!values.TryGetValue(name, out var value))
-        {
-            value = new T();
-            values.Add(name, value);
-        }
-
-        return value;
     }
 
     private static ObservedSourceSet GetOrAdd(

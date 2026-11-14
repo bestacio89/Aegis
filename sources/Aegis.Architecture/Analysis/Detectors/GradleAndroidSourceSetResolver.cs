@@ -35,7 +35,11 @@ internal static class GradleAndroidSourceSetResolver
             androidBlock, modulePath, analysisRoot, buildFile, diagnostics);
 
         var observed = DiscoverObservedSourceSets(modulePath, files);
+        var generated = DiscoverGeneratedSourceSets(
+            modulePath, files, knownSourceSetNames, knownTestSourceSetNames);
         foreach (var name in observed.Keys)
+            sourceSetNames.Add(name);
+        foreach (var name in generated.Keys)
             sourceSetNames.Add(name);
         foreach (var name in explicitDirectories.Keys)
             sourceSetNames.Add(name);
@@ -46,6 +50,7 @@ internal static class GradleAndroidSourceSetResolver
         {
             var ownership = ResolveOwnership(name, knownSourceSetNames, knownTestSourceSetNames);
             observed.TryGetValue(name, out var discovered);
+            generated.TryGetValue(name, out var generatedSet);
             explicitDirectories.TryGetValue(name, out var explicitSet);
             if (ownership == ProjectSourceRootOwnership.Unknown
                 && (discovered is not null || explicitSet is not null))
@@ -71,6 +76,8 @@ internal static class GradleAndroidSourceSetResolver
             var manifestFiles = MergeFiles(
                 discovered?.ManifestFiles,
                 explicitSet?.ManifestFiles);
+            var generatedJavaDirectories = generatedSet?.JavaSourceDirectories ?? [];
+            var generatedKotlinDirectories = generatedSet?.KotlinSourceDirectories ?? [];
 
             sourceSets.Add(new GradleAndroidSourceSet
             {
@@ -82,6 +89,8 @@ internal static class GradleAndroidSourceSetResolver
                 KotlinSourceDirectories = kotlinDirectories,
                 ExplicitJavaSourceDirectories = explicitSet?.JavaSourceDirectories ?? [],
                 ExplicitKotlinSourceDirectories = explicitSet?.KotlinSourceDirectories ?? [],
+                GeneratedJavaSourceDirectories = generatedJavaDirectories,
+                GeneratedKotlinSourceDirectories = generatedKotlinDirectories,
                 ManifestFiles = manifestFiles,
                 ExplicitManifestFiles = explicitSet?.ManifestFiles ?? [],
                 ResourceDirectories = resourceDirectories,
@@ -99,6 +108,10 @@ internal static class GradleAndroidSourceSetResolver
                 ProjectSourceRootOrigin.Explicit, buildFile);
             AddSourceRoots(sourceRoots, explicitSet?.KotlinSourceDirectories ?? [], "Kotlin", ownership,
                 ProjectSourceRootOrigin.Explicit, buildFile);
+            AddSourceRoots(sourceRoots, generatedJavaDirectories, "Java", ownership,
+                ProjectSourceRootOrigin.GeneratedConvention, buildFile, isGenerated: true);
+            AddSourceRoots(sourceRoots, generatedKotlinDirectories, "Kotlin", ownership,
+                ProjectSourceRootOrigin.GeneratedConvention, buildFile, isGenerated: true);
         }
 
         model.Variants = variants;
@@ -297,6 +310,112 @@ internal static class GradleAndroidSourceSetResolver
         return result;
     }
 
+    private static Dictionary<string, GeneratedSourceSet> DiscoverGeneratedSourceSets(
+        string modulePath,
+        IReadOnlyCollection<string> files,
+        IReadOnlySet<string> knownSourceSetNames,
+        IReadOnlySet<string> knownTestSourceSetNames)
+    {
+        var result = new Dictionary<string, GeneratedSourceSet>(StringComparer.Ordinal);
+        foreach (var file in files)
+        {
+            var fullFile = Path.GetFullPath(file);
+            if (!IsSameOrDescendantPath(fullFile, modulePath))
+                continue;
+
+            var relative = Path.GetRelativePath(modulePath, fullFile)
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (relative.Length < 5
+                || !relative[0].Equals("build", StringComparison.OrdinalIgnoreCase)
+                || !relative[1].Equals("generated", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var extension = Path.GetExtension(fullFile);
+            var language = extension.Equals(".java", StringComparison.OrdinalIgnoreCase)
+                ? "Java"
+                : extension.Equals(".kt", StringComparison.OrdinalIgnoreCase)
+                    ? "Kotlin"
+                    : null;
+            if (language is null)
+                continue;
+
+            string rawSourceSetName;
+            string generatedRoot;
+            if (relative[2].Equals("ksp", StringComparison.OrdinalIgnoreCase)
+                && relative.Length >= 6
+                && relative[4].Equals(language.Equals("Java", StringComparison.Ordinal) ? "java" : "kotlin",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                rawSourceSetName = relative[3];
+                generatedRoot = Path.Combine(modulePath, "build", "generated", "ksp",
+                    rawSourceSetName, relative[4]);
+            }
+            else if (relative[2].Equals("source", StringComparison.OrdinalIgnoreCase)
+                     && relative.Length >= 6)
+            {
+                rawSourceSetName = relative[4];
+                generatedRoot = Path.Combine(modulePath, "build", "generated", "source",
+                    relative[3], rawSourceSetName);
+            }
+            else if (relative[2].Equals("ap_generated_sources", StringComparison.OrdinalIgnoreCase)
+                     && relative.Length >= 6
+                     && relative[4].Equals("out", StringComparison.OrdinalIgnoreCase))
+            {
+                rawSourceSetName = relative[3];
+                generatedRoot = Path.Combine(modulePath, "build", "generated",
+                    "ap_generated_sources", rawSourceSetName, "out");
+            }
+            else if (relative[2].Equals("sources", StringComparison.OrdinalIgnoreCase)
+                     && relative.Length >= 7
+                     && (relative[4].Equals("java", StringComparison.OrdinalIgnoreCase)
+                         || relative[4].Equals("kotlin", StringComparison.OrdinalIgnoreCase)))
+            {
+                rawSourceSetName = relative[5];
+                generatedRoot = Path.Combine(modulePath, "build", "generated", "sources",
+                    relative[3], relative[4], rawSourceSetName);
+            }
+            else
+            {
+                continue;
+            }
+
+            var sourceSetName = ResolveGeneratedSourceSetName(
+                rawSourceSetName, knownSourceSetNames, knownTestSourceSetNames);
+            var sourceSet = GetOrAdd(result, sourceSetName);
+            if (language.Equals("Java", StringComparison.Ordinal))
+                AddDirectory(sourceSet.JavaSourceDirectories, generatedRoot);
+            else
+                AddDirectory(sourceSet.KotlinSourceDirectories, generatedRoot);
+        }
+
+        return result;
+    }
+
+    private static string ResolveGeneratedSourceSetName(
+        string rawName,
+        IReadOnlySet<string> knownSourceSetNames,
+        IReadOnlySet<string> knownTestSourceSetNames)
+    {
+        if (knownSourceSetNames.Contains(rawName))
+            return rawName;
+
+        if (rawName.EndsWith("UnitTest", StringComparison.Ordinal))
+        {
+            var candidate = "test" + Capitalize(rawName[..^"UnitTest".Length]);
+            if (knownTestSourceSetNames.Contains(candidate))
+                return candidate;
+        }
+
+        if (rawName.EndsWith("AndroidTest", StringComparison.Ordinal))
+        {
+            var candidate = "androidTest" + Capitalize(rawName[..^"AndroidTest".Length]);
+            if (knownTestSourceSetNames.Contains(candidate))
+                return candidate;
+        }
+
+        return rawName;
+    }
+
     private static void AddIfSourceFile(
         ICollection<string> directories,
         string file,
@@ -473,7 +592,8 @@ internal static class GradleAndroidSourceSetResolver
         string language,
         ProjectSourceRootOwnership ownership,
         ProjectSourceRootOrigin origin,
-        string buildFile)
+        string buildFile,
+        bool isGenerated = false)
     {
         foreach (var directory in directories)
         {
@@ -488,10 +608,8 @@ internal static class GradleAndroidSourceSetResolver
                 roots[fullDirectory] = existing with
                 {
                     Ownership = mergedOwnership,
-                    Origin = existing.Origin == ProjectSourceRootOrigin.Explicit
-                        || origin == ProjectSourceRootOrigin.Explicit
-                            ? ProjectSourceRootOrigin.Explicit
-                            : existing.Origin,
+                    Origin = SelectOrigin(existing.Origin, origin),
+                    IsGenerated = existing.IsGenerated || isGenerated,
                     Languages = languages,
                     ContainsJavaSources = languages.Contains("Java", StringComparer.OrdinalIgnoreCase)
                 };
@@ -503,6 +621,7 @@ internal static class GradleAndroidSourceSetResolver
                 Directory = fullDirectory,
                 Ownership = ownership,
                 Origin = origin,
+                IsGenerated = isGenerated,
                 Languages = [language],
                 ContainsJavaSources = language.Equals("Java", StringComparison.OrdinalIgnoreCase),
                 EvidenceFile = buildFile
@@ -561,6 +680,21 @@ internal static class GradleAndroidSourceSetResolver
                     flavor.Equals(targetName, StringComparison.OrdinalIgnoreCase)))
             .Select(variant => variant.Name)
             .ToList();
+    }
+
+    private static ProjectSourceRootOrigin SelectOrigin(
+        ProjectSourceRootOrigin existing,
+        ProjectSourceRootOrigin incoming)
+    {
+        if (existing == ProjectSourceRootOrigin.Explicit || incoming == ProjectSourceRootOrigin.Explicit)
+            return ProjectSourceRootOrigin.Explicit;
+        if (existing == ProjectSourceRootOrigin.GeneratedConvention
+            || incoming == ProjectSourceRootOrigin.GeneratedConvention)
+            return ProjectSourceRootOrigin.GeneratedConvention;
+        if (existing == ProjectSourceRootOrigin.Observed || incoming == ProjectSourceRootOrigin.Observed)
+            return ProjectSourceRootOrigin.Observed;
+
+        return ProjectSourceRootOrigin.Conventional;
     }
 
     private static ProjectSourceRootOwnership ResolveOwnership(
@@ -733,6 +867,12 @@ internal static class GradleAndroidSourceSetResolver
         Target = target,
         AffectsCoverage = true
     };
+
+    private sealed class GeneratedSourceSet
+    {
+        public List<string> JavaSourceDirectories { get; } = [];
+        public List<string> KotlinSourceDirectories { get; } = [];
+    }
 
     private sealed class ObservedSourceSet
     {

@@ -37,7 +37,7 @@ internal static class GradleAndroidSourceSetResolver
         var explicitDirectories = ParseExplicitSourceSets(
             androidBlock, modulePath, analysisRoot, buildFile, diagnostics);
 
-        var observed = DiscoverObservedSourceSets(modulePath, files);
+        var observed = DiscoverObservedSourceSets(modulePath, files, explicitDirectories);
         var generated = DiscoverGeneratedSourceSets(
             modulePath, files, knownSourceSetNames, knownTestSourceSetNames);
         foreach (var name in observed.Keys)
@@ -83,6 +83,7 @@ internal static class GradleAndroidSourceSetResolver
             var manifestFiles = explicitSet?.ReplacesManifest == true
                 ? MergeFiles(explicitSet.ManifestFiles, null)
                 : MergeFiles(discovered?.ManifestFiles, explicitSet?.ManifestFiles);
+            IncludeMixedLanguageDirectories(javaDirectories, kotlinDirectories, files);
             var generatedJavaDirectories = generatedSet?.JavaSourceDirectories ?? [];
             var generatedKotlinDirectories = generatedSet?.KotlinSourceDirectories ?? [];
 
@@ -396,13 +397,15 @@ internal static class GradleAndroidSourceSetResolver
 
     private static Dictionary<string, ObservedSourceSet> DiscoverObservedSourceSets(
         string modulePath,
-        IReadOnlyCollection<string> files)
+        IReadOnlyCollection<string> files,
+        IReadOnlyDictionary<string, ExplicitSourceSet> explicitSourceSets)
     {
         var result = new Dictionary<string, ObservedSourceSet>(StringComparer.Ordinal);
         foreach (var file in files)
         {
             var fullFile = Path.GetFullPath(file);
-            if (!IsSameOrDescendantPath(fullFile, modulePath))
+            if (!IsSameOrDescendantPath(fullFile, modulePath)
+                || IsExplicitlyOwnedBySourceSet(fullFile, explicitSourceSets))
                 continue;
 
             var relative = Path.GetRelativePath(modulePath, fullFile)
@@ -446,6 +449,18 @@ internal static class GradleAndroidSourceSetResolver
 
         return result;
     }
+
+    private static bool IsExplicitlyOwnedBySourceSet(
+        string file,
+        IReadOnlyDictionary<string, ExplicitSourceSet> explicitSourceSets) =>
+        explicitSourceSets.Values.Any(sourceSet =>
+            sourceSet.JavaSourceDirectories
+                .Concat(sourceSet.KotlinSourceDirectories)
+                .Concat(sourceSet.ResourceDirectories)
+                .Concat(sourceSet.AssetDirectories)
+                .Any(directory => IsSameOrDescendantPath(file, directory))
+            || sourceSet.ManifestFiles.Any(manifest =>
+                PathComparer.Equals(Path.GetFullPath(manifest), file)));
 
     private static Dictionary<string, GeneratedSourceSet> DiscoverGeneratedSourceSets(
         string modulePath,
@@ -913,6 +928,32 @@ internal static class GradleAndroidSourceSetResolver
             exception is ArgumentException or NotSupportedException or PathTooLongException)
         {
             return false;
+        }
+    }
+
+    private static void IncludeMixedLanguageDirectories(
+        ICollection<string> javaDirectories,
+        ICollection<string> kotlinDirectories,
+        IReadOnlyCollection<string> files)
+    {
+        foreach (var directory in javaDirectories.ToArray())
+        {
+            if (files.Any(file =>
+                    Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
+                    && IsSameOrDescendantPath(file, directory)))
+            {
+                AddDirectory(kotlinDirectories, directory);
+            }
+        }
+
+        foreach (var directory in kotlinDirectories.ToArray())
+        {
+            if (files.Any(file =>
+                    Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase)
+                    && IsSameOrDescendantPath(file, directory)))
+            {
+                AddDirectory(javaDirectories, directory);
+            }
         }
     }
 

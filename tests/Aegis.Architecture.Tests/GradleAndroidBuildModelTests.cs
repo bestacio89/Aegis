@@ -537,7 +537,6 @@ public sealed class GradleAndroidBuildModelTests
                         release { isMinifyEnabled = true }
                         create("staging") { }
                     }
-                    testFixtures { enable = true }
                 }
                 """);
 
@@ -547,7 +546,6 @@ public sealed class GradleAndroidBuildModelTests
             WriteFile(app, "src/freeDebug/kotlin/FreeDebug.kt", "package org.example\nclass FreeDebug");
             WriteFile(app, "src/testDebug/kotlin/DebugUnitTest.kt", "package org.example\nclass DebugUnitTest");
             WriteFile(app, "src/androidTest/java/InstrumentedTest.kt", "package org.example\nclass InstrumentedTest");
-            WriteFile(app, "src/testFixtures/java/Fixture.java", "package org.example; class Fixture {}");
             WriteFile(app, "src/main/AndroidManifest.xml", "<manifest />");
             WriteFile(app, "src/freeDebug/AndroidManifest.xml", "<manifest />");
             WriteFile(app, "src/freeDebug/res/values/strings.xml", "<resources />");
@@ -566,13 +564,9 @@ public sealed class GradleAndroidBuildModelTests
             Assert.Contains(android.Variants, variant => variant.Name == "paidDebug");
             Assert.Contains(android.Variants, variant => variant.Name == "paidRelease");
             Assert.Contains(android.Variants, variant => variant.Name == "freeStaging");
-            Assert.True(android.TestFixturesEnabled);
             Assert.Equal(["freeDebug"], android.SourceSets.Single(sourceSet => sourceSet.Name == "freeDebug").AppliesToVariants);
             var freeFlavor = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "free");
             Assert.Equal(["freeDebug", "freeRelease", "freeStaging"], freeFlavor.AppliesToVariants);
-            var fixtures = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "testFixtures");
-            Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test, fixtures.Ownership);
-            Assert.Equal(Aegis.Shared.Architecture.Enums.GradleAndroidTestKind.Fixtures, fixtures.TestKind);
 
             var main = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "main");
             Assert.Contains(main.ManifestFiles, file => file.EndsWith(
@@ -732,7 +726,7 @@ public sealed class GradleAndroidBuildModelTests
                 "rootProject.name = \"android-unknown-source-set\"");
             File.WriteAllText(Path.Combine(app, "build.gradle.kts"), """
                 plugins {
-                    id("com.android.application") version "8.7.3"
+                    id("com.android.library") version "8.7.3"
                 }
                 android {
                     namespace = "org.example.unknownsourceset"
@@ -879,6 +873,50 @@ public sealed class GradleAndroidBuildModelTests
             Assert.DoesNotContain(module.SourceRoots, sourceRoot =>
                 sourceRoot.Directory == Path.Combine(app, "build", "generated", "ksp")
                 && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Unknown);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_classifies_enabled_android_library_test_fixtures_as_test_owned()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidTestFixtures_{Guid.NewGuid():N}");
+        var library = Path.Combine(root, "library");
+        Directory.CreateDirectory(library);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-test-fixtures\"");
+            File.WriteAllText(Path.Combine(library, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.library") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.fixtures"
+                    compileSdk = 35
+                    testFixtures { enable = true }
+                }
+                """);
+            WriteFile(library, "src/testFixtures/java/Fixture.java",
+                "package org.example.fixtures; class Fixture {}");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == library);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+            var fixtures = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "testFixtures");
+
+            Assert.Equal("Library", android.ModuleKind);
+            Assert.True(android.TestFixturesEnabled);
+            Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test, fixtures.Ownership);
+            Assert.Equal(Aegis.Shared.Architecture.Enums.GradleAndroidTestKind.Fixtures, fixtures.TestKind);
+            Assert.Equal(["debug", "release"], fixtures.AppliesToVariants);
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(library, "src", "testFixtures", "java")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test);
         }
         finally
         {

@@ -735,16 +735,15 @@ internal static class GradleBuildModelResolver
         if (block is null)
             return [];
 
-        var match = Regex.Match(
-            block,
-            @"\b" + Regex.Escape(propertyName) + @"\b[^\r\n]*",
-            RegexOptions.CultureInvariant);
-        if (!match.Success)
-            return [];
-
-        return Regex.Matches(match.Value, @"['""](?<value>[^'""]+)['""]")
+        return Regex.Matches(
+                block,
+                @"\b" + Regex.Escape(propertyName) + @"\b[^\r\n]*",
+                RegexOptions.CultureInvariant)
             .Cast<Match>()
-            .Select(value => value.Groups["value"].Value)
+            .SelectMany(declaration => Regex.Matches(
+                    declaration.Value, @"['""](?<value>[^'""]+)['""]")
+                .Cast<Match>()
+                .Select(value => value.Groups["value"].Value))
             .Distinct(StringComparer.Ordinal)
             .ToList();
     }

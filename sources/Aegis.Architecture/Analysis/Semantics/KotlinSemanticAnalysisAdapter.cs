@@ -10,7 +10,7 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
     private const string DefaultCompilerVersion = "2.4.21";
     private const string DefaultLanguageVersion = "2.4";
     private const string DefaultApiVersion = "2.4";
-    private const string DefaultJvmTarget = "21";
+    private const string DefaultJvmTarget = "1.8";
     private static readonly IReadOnlyCollection<string> Capabilities =
         Array.AsReadOnly(new[] { "symbols", "relationships", "compiler-diagnostics", "jvm-interop" });
 
@@ -189,7 +189,10 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
         var inferred = compilerVersion is null
             || languageVersion is null
             || apiVersion is null
-            || jvmTarget is null;
+            || jvmTarget is null
+            || (ReadOption(options, "kotlin.configurationInferred") is { } inferredValue
+                && bool.TryParse(inferredValue, out var explicitlyInferred)
+                && explicitlyInferred);
 
         return (
             new KotlinCompilerConfiguration(

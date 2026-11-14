@@ -49,6 +49,7 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             var options = _options.CurrentValue;
             if (!options.IsConfigured)
                 throw new InvalidOperationException(
@@ -239,7 +240,6 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
         finally
         {
             _gate.Release();
-            _gate.Dispose();
         }
     }
 }

@@ -11,6 +11,7 @@ public static class JavaSemanticAnalysisServiceCollectionExtensions
 
         services.Configure<JavaWorkerOptions>(_ => { });
         services.TryAddSingleton<IJvmClasspathResolver, LocalJvmClasspathResolver>();
+        services.TryAddSingleton<JvmSourceRootResolver>();
         services.TryAddSingleton<IJavaWorkerClient, JavaWorkerClient>();
         services.TryAddSingleton<ISemanticAnalysisAdapter, JavaSemanticAnalysisAdapter>();
         services.TryAddSingleton<SemanticAnalysisCoordinator>();

@@ -373,6 +373,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             || plugin.Id.Equals("com.android.application", StringComparison.Ordinal)
             || plugin.Id.Equals("com.android.library", StringComparison.Ordinal)
             || plugin.Id.Equals("com.android.test", StringComparison.Ordinal)
+            || plugin.Id.Equals("com.android.dynamic-feature", StringComparison.Ordinal)
+            || plugin.Id.Equals("com.android.asset-pack", StringComparison.Ordinal)
             || plugin.Id.Equals("org.jetbrains.kotlin.js", StringComparison.Ordinal)
             || plugin.Id.StartsWith("org.jetbrains.kotlin.native", StringComparison.Ordinal)
             || plugin.Id.StartsWith("org.jetbrains.kotlin.wasm", StringComparison.Ordinal)));

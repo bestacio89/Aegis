@@ -122,6 +122,57 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
         }
     }
 
+    [Theory]
+    [InlineData("com.android.application")]
+    [InlineData("com.android.library")]
+    [InlineData("com.android.test")]
+    [InlineData("com.android.dynamic-feature")]
+    [InlineData("com.android.asset-pack")]
+    public async Task Reports_android_gradle_modules_as_unsupported_instead_of_treating_them_as_jvm(
+        string androidPluginId)
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(repository);
+        try
+        {
+            var module = new ProjectModuleContext
+            {
+                Name = "android-module",
+                Path = repository,
+                Languages = ["Kotlin"],
+                GradleBuildModel = new GradleBuildModel
+                {
+                    Plugins = [new GradleBuildModel.Plugin(androidPluginId, "9.0.0", true)]
+                }
+            };
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "android-module",
+                RootPath = repository,
+                Language = "Kotlin",
+                Modules = [module]
+            };
+            var adapter = new RecordingKotlinAdapter();
+            var orchestrator = new KotlinSemanticAnalysisOrchestrator(
+                [adapter],
+                new EmptyClasspathResolver(),
+                NullLogger<KotlinSemanticAnalysisOrchestrator>.Instance);
+
+            await orchestrator.AnalyzeAsync(context);
+
+            var run = Assert.Single(context.SemanticAnalysisRuns);
+            Assert.Equal(SemanticAnalysisStatus.Unsupported, run.Status);
+            Assert.Contains(run.Diagnostics, diagnostic =>
+                diagnostic.Code == "KotlinTargetPlatformNotSupported"
+                && diagnostic.AffectsCoverage);
+            Assert.Empty(adapter.Requests);
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
     private static ProjectModuleContext CreateModule(
         string modulePath,
         string kotlinMainRoot,

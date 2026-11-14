@@ -191,6 +191,7 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         var classpath = _classpathResolver.Resolve(module, context.Modules, includeTestCode);
         var dependencyPaths = JvmModuleDependencyResolver.ResolveDependencyPaths(
             module.Path,
+            context.Modules,
             context.Dependencies,
             includeTestDependencies);
         var compilationOutputs = executionContext?.GetCompilationOutputs(

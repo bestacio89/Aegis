@@ -280,6 +280,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
 
         var dependencyPaths = JvmModuleDependencyResolver.ResolveDependencyPaths(
             module.Path,
+            context.Modules,
             context.Dependencies,
             includeTestDependencies);
         var compilationOutputs = executionContext?.GetCompilationOutputs(

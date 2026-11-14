@@ -12,6 +12,7 @@ public sealed class JvmModuleDependencyResolverTests
         var consumer = Module("a-consumer");
         var productionDependency = Module("m-production-dependency");
         var testSupport = Module("z-test-support");
+        testSupport.IsTestSupport = true;
         var dependencies = new[]
         {
             Dependency(consumer, productionDependency, "Production"),
@@ -57,12 +58,25 @@ public sealed class JvmModuleDependencyResolverTests
             Dependency(testDependency, transitiveTestDependency, "Test")
         };
 
+        testDependency.IsTestSupport = true;
+        transitiveTestDependency.IsTestSupport = true;
+        var modules = new[]
+        {
+            consumer,
+            productionDependency,
+            transitiveProduction,
+            testDependency,
+            testDependencyProduction,
+            transitiveTestDependency
+        };
         var productionPaths = JvmModuleDependencyResolver.ResolveDependencyPaths(
             consumer.Path,
+            modules,
             dependencies,
             includeTestDependencies: false);
         var testPaths = JvmModuleDependencyResolver.ResolveDependencyPaths(
             consumer.Path,
+            modules,
             dependencies,
             includeTestDependencies: true);
 
@@ -87,6 +101,26 @@ public sealed class JvmModuleDependencyResolverTests
                 .Select(Path.GetFullPath)
                 .OrderBy(path => path, PathComparer),
             testPaths.Test.OrderBy(path => path, PathComparer));
+    }
+
+    [Fact]
+    public void Test_scoped_dependency_to_regular_module_does_not_import_its_test_output()
+    {
+        var consumer = Module("consumer");
+        var regularDependency = Module("regular-dependency");
+        var dependencies = new[]
+        {
+            Dependency(consumer, regularDependency, "Test")
+        };
+
+        var paths = JvmModuleDependencyResolver.ResolveDependencyPaths(
+            consumer.Path,
+            [consumer, regularDependency],
+            dependencies,
+            includeTestDependencies: true);
+
+        Assert.Equal([Path.GetFullPath(regularDependency.Path)], paths.Production);
+        Assert.Empty(paths.Test);
     }
 
     [Fact]

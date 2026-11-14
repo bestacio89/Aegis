@@ -1273,6 +1273,51 @@ public sealed class GradleAndroidBuildModelTests
     }
 
     [Fact]
+    public void Detect_classifies_android_test_module_main_sources_as_instrumentation_test_code()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidTestModule_{Guid.NewGuid():N}");
+        var testModule = Path.Combine(root, "instrumentation");
+        Directory.CreateDirectory(testModule);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                "rootProject.name = \"android-test-module\"");
+            File.WriteAllText(Path.Combine(testModule, "build.gradle.kts"), """
+                plugins {
+                    id("com.android.test") version "8.7.3"
+                }
+                android {
+                    namespace = "org.example.instrumentation"
+                    compileSdk = 35
+                    targetProjectPath = ":app"
+                }
+                """);
+            WriteFile(testModule, "src/main/java/InstrumentationTest.java",
+                "package org.example.instrumentation; class InstrumentationTest {}");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules, candidate => candidate.Path == testModule);
+            var android = Assert.IsType<GradleAndroidBuildModel>(
+                Assert.IsType<GradleBuildModel>(module.GradleBuildModel).Android);
+            var main = Assert.Single(android.SourceSets, sourceSet => sourceSet.Name == "main");
+
+            Assert.Equal("Test", android.ModuleKind);
+            Assert.Equal(Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test, main.Ownership);
+            Assert.Equal(Aegis.Shared.Architecture.Enums.GradleAndroidTestKind.Instrumentation, main.TestKind);
+            Assert.Equal(
+                android.Variants.Select(variant => variant.Name).OrderBy(name => name),
+                main.AppliesToVariants.OrderBy(name => name));
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                sourceRoot.Directory == Path.Combine(testModule, "src", "main", "java")
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Test);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_classifies_enabled_android_library_test_fixtures_as_test_owned()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisAndroidTestFixtures_{Guid.NewGuid():N}");

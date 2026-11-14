@@ -24,9 +24,9 @@ public sealed class GradleAndroidBuildModel
 
     public string? BuildToolsVersion { get; init; }
 
-    public DefaultConfig? DefaultConfig { get; init; }
+    public AndroidDefaultConfig? DefaultConfig { get; init; }
 
-    public CompileOptions? CompileOptions { get; init; }
+    public AndroidCompileOptions? CompileOptions { get; init; }
 
     public List<string> FlavorDimensions { get; init; } = [];
 
@@ -38,13 +38,13 @@ public sealed class GradleAndroidBuildModel
 
     public bool IsComplete { get; init; }
 
-    public sealed record DefaultConfig(
+    public sealed record AndroidDefaultConfig(
         string? ApplicationId,
         string? MinSdk,
         string? TargetSdk,
         string? TestInstrumentationRunner);
 
-    public sealed record CompileOptions(
+    public sealed record AndroidCompileOptions(
         string? SourceCompatibility,
         string? TargetCompatibility,
         bool? CoreLibraryDesugaringEnabled);

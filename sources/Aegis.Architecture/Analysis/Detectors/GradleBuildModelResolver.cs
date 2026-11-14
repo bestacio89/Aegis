@@ -356,7 +356,7 @@ internal static class GradleBuildModelResolver
         var defaultConfigBlock = androidBlock is null ? null : ExtractBlock(androidBlock, "defaultConfig");
         var defaultConfig = defaultConfigBlock is null
             ? null
-            : new GradleAndroidBuildModel.DefaultConfig(
+            : new GradleAndroidBuildModel.AndroidDefaultConfig(
                 ReadAndroidLiteral(defaultConfigBlock, "applicationId"),
                 ReadAndroidLiteral(defaultConfigBlock, "minSdk", "minSdkVersion"),
                 ReadAndroidLiteral(defaultConfigBlock, "targetSdk", "targetSdkVersion"),
@@ -365,7 +365,7 @@ internal static class GradleBuildModelResolver
         var compileOptionsBlock = androidBlock is null ? null : ExtractBlock(androidBlock, "compileOptions");
         var compileOptions = compileOptionsBlock is null
             ? null
-            : new GradleAndroidBuildModel.CompileOptions(
+            : new GradleAndroidBuildModel.AndroidCompileOptions(
                 ReadAndroidLiteral(compileOptionsBlock, "sourceCompatibility"),
                 ReadAndroidLiteral(compileOptionsBlock, "targetCompatibility"),
                 ReadAndroidBoolean(compileOptionsBlock, "isCoreLibraryDesugaringEnabled", "coreLibraryDesugaringEnabled"));

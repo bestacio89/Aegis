@@ -96,7 +96,11 @@ internal static class KotlinMultiplatformBuildModelResolver
         return result;
     }
 
-    public static KotlinMultiplatformBuildModel Analyze(string source, string buildFile)
+    public static KotlinMultiplatformBuildModel Analyze(
+        string source,
+        string buildFile,
+        string modulePath,
+        string analysisRoot)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(buildFile);
@@ -163,20 +167,32 @@ internal static class KotlinMultiplatformBuildModelResolver
                 var segmentEnd = index + 1 < declarations.Length
                     ? declarations[index + 1].Index
                     : sourceSetsBlock.Length;
-                var declarationStart = declaration.Index + declaration.Length;
-                var declarationSegment = sourceSetsBlock.Substring(
-                    declarationStart,
-                    segmentEnd - declarationStart);
-                var body = ExtractFollowingBlock(declarationSegment, declarationSegment.IndexOf('{'));
+                var bodyStart = declaration.Value.TrimEnd().EndsWith("{", StringComparison.Ordinal)
+                    ? declaration.Index + declaration.Length - 1
+                    : sourceSetsBlock.IndexOf('{', declaration.Index + declaration.Length);
+                var body = bodyStart < 0 || bodyStart >= segmentEnd
+                    ? null
+                    : ExtractFollowingBlock(sourceSetsBlock, bodyStart);
                 var dependencies = body is null
                     ? Array.Empty<string>()
                     : DependsOnDeclaration.Matches(body)
                         .Select(match => match.Groups["name"].Value)
                         .Distinct(StringComparer.Ordinal)
                         .ToArray();
+                var kotlinDirectories = body is null
+                    ? []
+                    : GradleBuildModelResolver.ParseExplicitKotlinSourceDirectories(
+                        body, name, modulePath, analysisRoot, buildFile, diagnostics);
                 var (kind, targetName) = GetSourceSetKind(name, targets);
                 sourceSets.Add(new KotlinMultiplatformBuildModel.SourceSet(
-                    name, GetOwnership(name), kind, targetName, dependencies, declaration.Value.Trim()));
+                    name,
+                    GetOwnership(name),
+                    kind,
+                    targetName,
+                    dependencies,
+                    declaration.Value.Trim(),
+                    kotlinDirectories,
+                    kotlinDirectories));
             }
 
             var directEdges = DirectDependsOnDeclaration.Matches(sourceSetsBlock)

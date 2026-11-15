@@ -307,7 +307,7 @@ internal static class KotlinMultiplatformBuildModelResolver
     private static string ResolveTargetName(string arguments, string defaultName)
     {
         var value = arguments.TrimStart();
-        if (value.Length < 3 || (value[0] != '"' && value[0] != '\\''))
+        if (value.Length < 3 || (value[0] != '"' && value[0] != (char)39))
             return defaultName;
 
         var closingQuote = value.IndexOf(value[0], 1);

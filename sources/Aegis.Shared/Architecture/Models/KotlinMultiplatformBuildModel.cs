@@ -22,6 +22,8 @@ public sealed class KotlinMultiplatformBuildModel
     public sealed record SourceSet(
         string Name,
         string Ownership,
+        string Kind,
+        string? TargetName,
         IReadOnlyList<string> DependsOn,
         string Declaration);
 }

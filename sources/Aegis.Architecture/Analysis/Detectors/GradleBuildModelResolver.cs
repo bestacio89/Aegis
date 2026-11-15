@@ -2015,7 +2015,7 @@ internal static class GradleBuildModelResolver
         string modulePath,
         IReadOnlyCollection<string> files,
         KotlinMultiplatformBuildModel model,
-        ICollection<ProjectSourceRoot> sourceRoots,
+        List<ProjectSourceRoot> sourceRoots,
         ICollection<AnalysisDiagnostic> diagnostics,
         string buildFile)
     {
@@ -2036,11 +2036,11 @@ internal static class GradleBuildModelResolver
                 _ => ProjectSourceRootOwnership.Unknown
             };
 
-            var existingIndex = sourceRoots.ToList().FindIndex(root =>
+            var existingIndex = sourceRoots.FindIndex(root =>
                 PathsEqual(root.Directory, directory));
             if (existingIndex >= 0)
             {
-                var existing = sourceRoots.ElementAt(existingIndex);
+                var existing = sourceRoots[existingIndex];
                 if (existing.Ownership != ownership
                     && existing.Ownership != ProjectSourceRootOwnership.Unknown
                     && ownership != ProjectSourceRootOwnership.Unknown)
@@ -2064,9 +2064,7 @@ internal static class GradleBuildModelResolver
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList()
                 };
-                var roots = sourceRoots as IList<ProjectSourceRoot>;
-                if (roots is not null)
-                    roots[existingIndex] = merged;
+                sourceRoots[existingIndex] = merged;
                 continue;
             }
 

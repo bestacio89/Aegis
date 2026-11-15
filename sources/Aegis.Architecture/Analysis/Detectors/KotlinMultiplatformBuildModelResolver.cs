@@ -52,8 +52,11 @@ internal static class KotlinMultiplatformBuildModelResolver
         var targets = TargetDeclaration.Matches(kotlinBlock)
             .Select(match =>
             {
-                var name = match.Groups["name"].Value;
-                var platform = name switch
+                var declaredName = match.Groups["name"].Value;
+                var name = declaredName is "androidTarget" or "androidLibrary"
+                    ? "android"
+                    : declaredName;
+                var platform = declaredName switch
                 {
                     "jvm" => "JVM",
                     "androidTarget" or "androidLibrary" => "Android",
@@ -388,10 +391,23 @@ internal static class KotlinMultiplatformBuildModelResolver
             }
         }
 
+        var hasJavaScript = targets.Any(target => target.Name == "js");
+        var hasWasmJs = targets.Any(target => target.Name == "wasmJs");
+        if (hasJavaScript && hasWasmJs)
+        {
+            AddImplicitSourceSet(sourceSets, "webMain", "Production", "Intermediate", null);
+            AddImplicitSourceSet(sourceSets, "webTest", "Test", "Intermediate", null);
+            AddDependency(sourceSets, "webMain", "commonMain");
+            AddDependency(sourceSets, "webTest", "commonTest");
+        }
+
         foreach (var target in targets.Where(target => target.Platform is "JVM" or "Android" or "JS" or "Wasm"))
         {
-            AddDependency(sourceSets, $"{target.Name}Main", "commonMain");
-            AddDependency(sourceSets, $"{target.Name}Test", "commonTest");
+            var parentMain = hasJavaScript && hasWasmJs && target.Platform is "JS" or "Wasm"
+                && target.Name is "js" or "wasmJs" ? "webMain" : "commonMain";
+            var parentTest = parentMain == "webMain" ? "webTest" : "commonTest";
+            AddDependency(sourceSets, $"{target.Name}Main", parentMain);
+            AddDependency(sourceSets, $"{target.Name}Test", parentTest);
         }
     }
 

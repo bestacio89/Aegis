@@ -1103,7 +1103,7 @@ class KotlinSemanticCollector(
     private fun finalizeDeclarations() {
         for ((canonicalId, candidates) in declarationCandidates.groupBy { it.canonicalId }) {
             val expected = candidates.firstOrNull { isExpect(it.declaration) }
-            if (expected is not null) {
+            if (expected != null) {
                 symbols[canonicalId] = expected.symbol.apply {
                     addProperty("id", canonicalId)
                 }
@@ -1122,6 +1122,14 @@ class KotlinSemanticCollector(
                     symbols.putIfAbsent(actualId, actualSymbol)
                     actualDeclarationIds[candidate.declaration] = actualId
                     actualCanonicalIds[canonicalId] = actualId
+                    if (candidate.declaration is IrProperty) {
+                        propertyAccessors.replaceAll { _, value ->
+                            if (value == canonicalId) actualId else value
+                        }
+                        backingFieldProperties.replaceAll { _, value ->
+                            if (value == canonicalId) actualId else value
+                        }
+                    }
                     pendingActualizations.add(
                         Actualization(canonicalId, actualId, candidate.offset, candidate.file)
                     )
@@ -1134,14 +1142,14 @@ class KotlinSemanticCollector(
                     ?.takeUnless { it.isJsonNull }
                     ?.asString
                 val actualParentId = parentId?.let(actualCanonicalIds::get)
-                val symbolId = if (actualParentId is not null) {
+                val symbolId = if (actualParentId != null) {
                     "$canonicalId#actual:${targetName ?: "unknown"}"
                 } else {
                     canonicalId
                 }
                 val symbol = candidate.symbol.deepCopy()
                 symbol.addProperty("id", symbolId)
-                if (actualParentId is not null) {
+                if (actualParentId != null) {
                     symbol.addProperty("containingSymbolId", actualParentId)
                     symbol.getAsJsonArray("modifiers").add("target-specific")
                     actualDeclarationIds[candidate.declaration] = symbolId

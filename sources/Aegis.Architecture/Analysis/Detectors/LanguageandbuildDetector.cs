@@ -113,7 +113,8 @@ internal static class LanguageAndBuildDetector
         }
 
         if (files.Any(file =>
-                Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
+                Path.GetExtension(file).Equals(".py", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
                 || Path.GetFileName(file).Equals("setup.py", StringComparison.OrdinalIgnoreCase)
                 || Path.GetFileName(file).Equals("requirements.txt", StringComparison.OrdinalIgnoreCase)))
         {
@@ -122,9 +123,13 @@ internal static class LanguageAndBuildDetector
                 : ArchitectureBuildSystem.Pip);
         }
 
-        if (files.Any(file => Path.GetFileName(file).Equals("Cargo.toml", StringComparison.OrdinalIgnoreCase)))
+        if (files.Any(file =>
+                Path.GetExtension(file).Equals(".rs", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("Cargo.toml", StringComparison.OrdinalIgnoreCase)))
             buildSystems.Add(ArchitectureBuildSystem.Cargo);
-        if (files.Any(file => Path.GetFileName(file).Equals("go.mod", StringComparison.OrdinalIgnoreCase)))
+        if (files.Any(file =>
+                Path.GetExtension(file).Equals(".go", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(file).Equals("go.mod", StringComparison.OrdinalIgnoreCase)))
             buildSystems.Add(ArchitectureBuildSystem.GoMod);
 
         return buildSystems.OrderBy(value => value).ToList();

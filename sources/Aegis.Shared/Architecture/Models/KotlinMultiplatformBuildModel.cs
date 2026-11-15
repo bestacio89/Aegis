@@ -31,5 +31,7 @@ public sealed class KotlinMultiplatformBuildModel
         string Kind,
         string? TargetName,
         IReadOnlyList<string> DependsOn,
-        string Declaration);
+        string Declaration,
+        IReadOnlyList<string>? KotlinSourceDirectories = null,
+        IReadOnlyList<string>? ExplicitKotlinSourceDirectories = null);
 }

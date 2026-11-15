@@ -515,6 +515,7 @@ class KotlinCompilerIntegrationTests {
             this.apiVersion = "2.4"
             this.moduleName = "kmp-jvm-fixture"
             this.multiPlatform = true
+            this.commonSources = arrayOf(commonSource.toString())
             this.pluginClasspaths = arrayOf(pluginPath)
             this.freeArgs = listOf(commonSource.toString(), jvmSource.toString())
         }

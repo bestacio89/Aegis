@@ -2038,13 +2038,11 @@ internal static class GradleBuildModelResolver
     {
         foreach (var sourceSet in model.SourceSets)
         {
-            var directory = Path.GetFullPath(Path.Combine(
+            var conventionalDirectory = Path.GetFullPath(Path.Combine(
                 modulePath, "src", sourceSet.Name, "kotlin"));
-            var hasKotlinFiles = files.Any(file =>
-                Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
-                && IsSameOrDescendantPath(file, directory));
-            if (!hasKotlinFiles)
-                continue;
+            var directories = sourceSet.KotlinSourceDirectories is { Count: > 0 }
+                ? sourceSet.KotlinSourceDirectories
+                : [conventionalDirectory];
 
             var ownership = sourceSet.Ownership switch
             {
@@ -2053,46 +2051,63 @@ internal static class GradleBuildModelResolver
                 _ => ProjectSourceRootOwnership.Unknown
             };
 
-            var existingIndex = sourceRoots.FindIndex(root =>
-                PathsEqual(root.Directory, directory));
-            if (existingIndex >= 0)
+            foreach (var directoryValue in directories)
             {
-                var existing = sourceRoots[existingIndex];
-                if (existing.Ownership != ownership
-                    && existing.Ownership != ProjectSourceRootOwnership.Unknown
-                    && ownership != ProjectSourceRootOwnership.Unknown)
+                var directory = Path.GetFullPath(directoryValue);
+                var hasKotlinFiles = files.Any(file =>
+                    Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
+                    && IsSameOrDescendantPath(file, directory));
+                if (!hasKotlinFiles)
+                    continue;
+
+                var isExplicit = sourceSet.ExplicitKotlinSourceDirectories?.Any(explicitDirectory =>
+                    PathsEqual(explicitDirectory, directory)) == true;
+                var origin = isExplicit
+                    ? ProjectSourceRootOrigin.Explicit
+                    : ProjectSourceRootOrigin.Conventional;
+                var existingIndex = sourceRoots.FindIndex(root =>
+                    PathsEqual(root.Directory, directory));
+                if (existingIndex >= 0)
                 {
-                    diagnostics.Add(Diagnostic(
-                        "GradleKotlinMultiplatformSourceRootOwnershipConflict",
-                        $"Kotlin Multiplatform source set '{sourceSet.Name}' conflicts with previously discovered source-root ownership.",
-                        directory));
-                    ownership = ProjectSourceRootOwnership.Unknown;
-                }
-                else if (existing.Ownership != ProjectSourceRootOwnership.Unknown)
-                {
-                    ownership = existing.Ownership;
+                    var existing = sourceRoots[existingIndex];
+                    if (existing.Ownership != ownership
+                        && existing.Ownership != ProjectSourceRootOwnership.Unknown
+                        && ownership != ProjectSourceRootOwnership.Unknown)
+                    {
+                        diagnostics.Add(Diagnostic(
+                            "GradleKotlinMultiplatformSourceRootOwnershipConflict",
+                            $"Kotlin Multiplatform source set '{sourceSet.Name}' conflicts with previously discovered source-root ownership.",
+                            directory));
+                        ownership = ProjectSourceRootOwnership.Unknown;
+                    }
+                    else if (existing.Ownership != ProjectSourceRootOwnership.Unknown)
+                    {
+                        ownership = existing.Ownership;
+                    }
+
+                    sourceRoots[existingIndex] = existing with
+                    {
+                        Ownership = ownership,
+                        Origin = origin == ProjectSourceRootOrigin.Explicit
+                            ? ProjectSourceRootOrigin.Explicit
+                            : existing.Origin,
+                        Languages = existing.Languages
+                            .Append("Kotlin")
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList()
+                    };
+                    continue;
                 }
 
-                var merged = existing with
+                sourceRoots.Add(new ProjectSourceRoot
                 {
+                    Directory = directory,
                     Ownership = ownership,
-                    Languages = existing.Languages
-                        .Append("Kotlin")
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList()
-                };
-                sourceRoots[existingIndex] = merged;
-                continue;
+                    Origin = origin,
+                    Languages = ["Kotlin"],
+                    EvidenceFile = buildFile
+                });
             }
-
-            sourceRoots.Add(new ProjectSourceRoot
-            {
-                Directory = directory,
-                Ownership = ownership,
-                Origin = ProjectSourceRootOrigin.Conventional,
-                Languages = ["Kotlin"],
-                EvidenceFile = buildFile
-            });
         }
     }
 

@@ -33,6 +33,55 @@ internal static class KotlinMultiplatformBuildModelResolver
         @"\bsourceSets\s*\{",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex DependenciesBlock = new(
+        @"\bdependencies\s*\{",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    public static IReadOnlyList<(string SourceSetName, string Dependencies)> ExtractSourceSetDependencyBlocks(
+        string source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        var kotlinBlock = ExtractBlock(source, "kotlin");
+        var sourceSetsBlock = kotlinBlock is null
+            ? null
+            : ExtractNestedBlock(kotlinBlock, SourceSetBlock);
+        if (sourceSetsBlock is null)
+            return Array.Empty<(string, string)>();
+
+        var declarations = SourceSetDeclaration.Matches(sourceSetsBlock)
+            .Cast<Match>()
+            .Concat(SourceSetAccessorDeclaration.Matches(sourceSetsBlock).Cast<Match>())
+            .OrderBy(match => match.Index)
+            .GroupBy(match => match.Groups["name"].Value, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .OrderBy(match => match.Index)
+            .ToArray();
+        var result = new List<(string SourceSetName, string Dependencies)>();
+
+        for (var index = 0; index < declarations.Length; index++)
+        {
+            var declaration = declarations[index];
+            var segmentEnd = index + 1 < declarations.Length
+                ? declarations[index + 1].Index
+                : sourceSetsBlock.Length;
+            var bodyStart = sourceSetsBlock.IndexOf(
+                '{', declaration.Index + declaration.Length);
+            if (bodyStart < 0 || bodyStart >= segmentEnd)
+                continue;
+
+            var body = ExtractFollowingBlock(sourceSetsBlock, bodyStart);
+            if (body is null)
+                continue;
+
+            var dependencies = ExtractNestedBlock(body, DependenciesBlock);
+            if (dependencies is not null)
+                result.Add((declaration.Groups["name"].Value, dependencies));
+        }
+
+        return result;
+    }
+
     public static KotlinMultiplatformBuildModel Analyze(string source, string buildFile)
     {
         ArgumentNullException.ThrowIfNull(source);

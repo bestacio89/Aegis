@@ -29,7 +29,9 @@ internal static class ModuleRoleDetector
         "Streamlit",
         "Dash",
         "Gradio",
-        "Panel"
+        "Panel",
+        "Jetpack Compose",
+        "Compose Multiplatform"
     };
 
     private static readonly HashSet<string> BackendFrameworks = new(StringComparer.OrdinalIgnoreCase)
@@ -118,10 +120,15 @@ internal static class ModuleRoleDetector
             if (isJvmModule && hasJvmExecutablePlugin)
                 module.IsExecutable = true;
 
+            if (module.ProjectKind.Equals("AndroidApplication", StringComparison.OrdinalIgnoreCase))
+                module.Type = "Client";
+
             var isFrontend = module.ProjectKind.Equals("FrontendApplication", StringComparison.OrdinalIgnoreCase)
+                || module.Type is "Presentation" or "Client"
                 || module.Frameworks.Any(FrontendFrameworks.Contains);
             var isBackend = module.ProjectKind.Equals("BackendApplication", StringComparison.OrdinalIgnoreCase)
                 || module.ProjectKind.Equals("WebApplication", StringComparison.OrdinalIgnoreCase)
+                || module.Type is "Api" or "Consumer"
                 || module.Frameworks.Any(BackendFrameworks.Contains)
                 || (module.IsWebProject && !isFrontend);
 
@@ -139,18 +146,23 @@ internal static class ModuleRoleDetector
             if (module.ProjectKind.Equals("DesktopApplication", StringComparison.OrdinalIgnoreCase))
                 AddRole(module, ProjectModuleRole.Desktop);
 
-            if (module.IsLibrary)
+            var isShared = string.Equals(module.Type, "Shared", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(module.Type, "Contracts", StringComparison.OrdinalIgnoreCase)
+                || HasSharedNameEvidence(module.Name)
+                || module.ProjectKind.Contains("Shared", StringComparison.OrdinalIgnoreCase);
+            if (isShared)
             {
+                AddRole(module, ProjectModuleRole.Shared);
                 AddRole(module, ProjectModuleRole.Library);
-
-                if (HasSharedNameEvidence(module.Name)
-                    || module.ProjectKind.Contains("Shared", StringComparison.OrdinalIgnoreCase))
-                {
-                    AddRole(module, ProjectModuleRole.Shared);
-                }
             }
 
-            if (module.IsExecutable)
+            var isLibrary = module.IsLibrary
+                || module.Type is "Library" or "Infrastructure" or "Domain";
+            if (isLibrary)
+                AddRole(module, ProjectModuleRole.Library);
+
+            if (module.IsExecutable
+                || string.Equals(module.Type, "Application", StringComparison.OrdinalIgnoreCase))
                 AddRole(module, ProjectModuleRole.Executable);
 
             if (module.Roles.Count == 0)

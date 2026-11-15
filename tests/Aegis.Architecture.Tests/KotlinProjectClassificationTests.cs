@@ -54,7 +54,20 @@ public sealed class KotlinProjectClassificationTests
             {
                 var module = Assert.Single(context.Modules, candidate =>
                     candidate.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+                Assert.Equal(expectedLayer, module.Type);
+                Assert.Equal("KotlinProject", module.ProjectKind);
                 Assert.Equal(expectedLayer, Assert.Single(module.Layers).Name);
+
+                if (expectedLayer is "Api")
+                    Assert.Contains(ProjectModuleRole.Backend, module.Roles);
+                if (expectedLayer is "Presentation" or "Client")
+                    Assert.Contains(ProjectModuleRole.Frontend, module.Roles);
+                if (expectedLayer is "Shared")
+                    Assert.Contains(ProjectModuleRole.Shared, module.Roles);
+                if (expectedLayer is "Infrastructure")
+                    Assert.Contains(ProjectModuleRole.Library, module.Roles);
+                if (expectedLayer is "Application")
+                    Assert.Contains(ProjectModuleRole.Executable, module.Roles);
             }
 
             Assert.DoesNotContain(context.Modules, module =>

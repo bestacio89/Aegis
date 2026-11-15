@@ -56,6 +56,9 @@ class KotlinSemanticCollector(
     private val generatedRoots: List<Path>,
     private val targetName: String?
 ) {
+    private val declarationCandidates = mutableListOf<DeclarationCandidate>()
+    private val actualDeclarationIds = IdentityHashMap<IrDeclaration, String>()
+    private val actualCanonicalIds = LinkedHashMap<String, String>()
     private val pendingActualizations = mutableListOf<Actualization>()
     private val symbols = LinkedHashMap<String, JsonObject>()
     private val relationships = LinkedHashMap<String, JsonObject>()
@@ -67,6 +70,7 @@ class KotlinSemanticCollector(
 
     fun collect(module: IrModuleFragment) {
         module.acceptChildrenVoid(DeclarationCollector())
+        finalizeDeclarations()
         pendingActualizations.forEach { actualization ->
             if (symbols.containsKey(actualization.expectedId)) {
                 addRelationship(
@@ -121,7 +125,7 @@ class KotlinSemanticCollector(
         override fun visitClass(declaration: IrClass) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             val canonicalId = classId(declaration, owners.lastOrNull())
-            val id = semanticDeclarationId(canonicalId, declaration)
+            val id = canonicalId
             val symbolKind = when (declaration.kind.name) {
                 "INTERFACE" -> 5
                 "ENUM_CLASS" -> 7
@@ -146,7 +150,7 @@ class KotlinSemanticCollector(
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             val qualifiedName = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
             val canonicalId = "kotlin:typealias:$qualifiedName"
-            val id = semanticDeclarationId(canonicalId, declaration)
+            val id = canonicalId
             addSymbol(
                 id = id,
                 canonicalId = canonicalId,
@@ -162,7 +166,7 @@ class KotlinSemanticCollector(
         override fun visitProperty(declaration: IrProperty) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             val canonicalId = propertyId(declaration, owners.lastOrNull())
-            val id = semanticDeclarationId(canonicalId, declaration)
+            val id = canonicalId
             addSymbol(
                 id = id,
                 canonicalId = canonicalId,
@@ -216,7 +220,7 @@ class KotlinSemanticCollector(
             }
 
             val canonicalId = functionId(declaration, owners.lastOrNull())
-            val id = semanticDeclarationId(canonicalId, declaration)
+            val id = canonicalId
             addSymbol(
                 id = id,
                 canonicalId = canonicalId,
@@ -238,7 +242,7 @@ class KotlinSemanticCollector(
         override fun visitConstructor(declaration: IrConstructor) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             val canonicalId = functionId(declaration, owners.lastOrNull())
-            val id = semanticDeclarationId(canonicalId, declaration)
+            val id = canonicalId
             addSymbol(
                 id = id,
                 canonicalId = canonicalId,
@@ -266,7 +270,6 @@ class KotlinSemanticCollector(
             declaration: org.jetbrains.kotlin.ir.declarations.IrDeclaration,
             containingSymbolId: String?
         ) {
-            if (symbols.containsKey(id)) return
             val file = currentFile
             val offset = declaration.startOffset
             val isSource = file != null
@@ -311,10 +314,9 @@ class KotlinSemanticCollector(
                 declarationModifiers(declaration).forEach(::add)
             })
             symbol.add("provenance", provenance(file, offset))
-            symbols[id] = symbol
-            if (isActual(declaration)) {
-                pendingActualizations.add(Actualization(canonicalId, id, offset, file))
-            }
+            declarationCandidates.add(
+                DeclarationCandidate(canonicalId, symbol, declaration, offset, file)
+            )
         }
     }
 
@@ -1044,7 +1046,6 @@ class KotlinSemanticCollector(
 
     private fun declarationModifiers(declaration: IrDeclaration): List<String> = buildList {
         if (isExpect(declaration)) add("expect")
-        if (isActual(declaration)) add("actual")
         if (declaration is IrFunction && isComposable(declaration)) add("Composable")
         when (declaration) {
             is IrClass -> {
@@ -1075,14 +1076,7 @@ class KotlinSemanticCollector(
     }
 
     private fun semanticDeclarationId(id: String, declaration: IrDeclaration): String =
-        if (isActual(declaration)) "$id#actual:${targetName ?: "unknown"}" else id
-
-    private fun isActual(declaration: IrDeclaration): Boolean = when (declaration) {
-        is IrClass -> declaration.isActual
-        is IrFunction -> declaration.isActual
-        is IrProperty -> declaration.isActual
-        else -> false
-    }
+        actualDeclarationIds[declaration] ?: id
 
     private fun isExpect(declaration: IrDeclaration): Boolean = when (declaration) {
         is IrClass -> declaration.isExpect
@@ -1091,12 +1085,72 @@ class KotlinSemanticCollector(
         else -> false
     }
 
+    private data class DeclarationCandidate(
+        val canonicalId: String,
+        val symbol: JsonObject,
+        val declaration: IrDeclaration,
+        val offset: Int,
+        val file: IrFile?
+    )
+
     private data class Actualization(
         val expectedId: String,
         val actualId: String,
         val offset: Int,
         val file: IrFile?
     )
+
+    private fun finalizeDeclarations() {
+        for ((canonicalId, candidates) in declarationCandidates.groupBy { it.canonicalId }) {
+            val expected = candidates.firstOrNull { isExpect(it.declaration) }
+            if (expected is not null) {
+                symbols[canonicalId] = expected.symbol.apply {
+                    addProperty("id", canonicalId)
+                }
+
+                for (candidate in candidates.filterNot { isExpect(it.declaration) }) {
+                    val actualId = "$canonicalId#actual:${targetName ?: "unknown"}"
+                    val actualSymbol = candidate.symbol.deepCopy()
+                    actualSymbol.addProperty("id", actualId)
+                    actualSymbol.getAsJsonArray("modifiers").add("actual")
+                    actualSymbol.get("containingSymbolId")
+                        ?.takeUnless { it.isJsonNull }
+                        ?.asString
+                        ?.let(actualCanonicalIds::get)
+                        ?.let { actualSymbol.addProperty("containingSymbolId", it) }
+
+                    symbols.putIfAbsent(actualId, actualSymbol)
+                    actualDeclarationIds[candidate.declaration] = actualId
+                    actualCanonicalIds[canonicalId] = actualId
+                    pendingActualizations.add(
+                        Actualization(canonicalId, actualId, candidate.offset, candidate.file)
+                    )
+                }
+                continue
+            }
+
+            for (candidate in candidates) {
+                val parentId = candidate.symbol.get("containingSymbolId")
+                    ?.takeUnless { it.isJsonNull }
+                    ?.asString
+                val actualParentId = parentId?.let(actualCanonicalIds::get)
+                val symbolId = if (actualParentId is not null) {
+                    "$canonicalId#actual:${targetName ?: "unknown"}"
+                } else {
+                    canonicalId
+                }
+                val symbol = candidate.symbol.deepCopy()
+                symbol.addProperty("id", symbolId)
+                if (actualParentId is not null) {
+                    symbol.addProperty("containingSymbolId", actualParentId)
+                    symbol.getAsJsonArray("modifiers").add("target-specific")
+                    actualDeclarationIds[candidate.declaration] = symbolId
+                    actualCanonicalIds[canonicalId] = symbolId
+                }
+                symbols.putIfAbsent(symbolId, symbol)
+            }
+        }
+    }
 
     private fun isComposable(declaration: IrFunction): Boolean =
         declaration.annotations.any { annotation ->

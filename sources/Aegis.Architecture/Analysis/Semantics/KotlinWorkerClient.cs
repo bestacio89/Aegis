@@ -101,6 +101,8 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
                     jvmTarget = configuration.JvmTarget,
                     moduleName = configuration.ModuleName,
                     includeTestCode = request.IncludeTestCode,
+                    targetName = request.TargetName,
+                    multiplatform = !string.IsNullOrWhiteSpace(request.TargetName),
                     composeCompilerPluginEnabled = request.ProviderOptions.TryGetValue(
                         "kotlin.composeCompilerPluginEnabled",
                         out var composePluginEnabled)

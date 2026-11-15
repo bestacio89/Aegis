@@ -48,6 +48,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         val previousProject = System.getProperty(PROJECT_PATH_PROPERTY)
         val previousTestScope = System.getProperty(TEST_SCOPE_PROPERTY)
         val previousGeneratedRoots = System.getProperty(GENERATED_ROOTS_PROPERTY)
+        val previousTargetName = System.getProperty(TARGET_NAME_PROPERTY)
 
         val exitCode = try {
             System.setProperty(OUTPUT_PATH_PROPERTY, semanticOutput.toString())
@@ -57,6 +58,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
                 GENERATED_ROOTS_PROPERTY,
                 paths.generatedRoots.joinToString(File.pathSeparator) { it.toString() }
             )
+            restoreProperty(TARGET_NAME_PROPERTY, request.targetName)
 
             val compilerArguments = createCompilerArguments(request, paths, classesDirectory)
             K2JVMCompiler().exec(collector, Services.EMPTY, compilerArguments)
@@ -72,6 +74,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             restoreProperty(PROJECT_PATH_PROPERTY, previousProject)
             restoreProperty(TEST_SCOPE_PROPERTY, previousTestScope)
             restoreProperty(GENERATED_ROOTS_PROPERTY, previousGeneratedRoots)
+            restoreProperty(TARGET_NAME_PROPERTY, previousTargetName)
         }
 
         if (!Files.isRegularFile(semanticOutput)) {
@@ -100,6 +103,8 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         result.addProperty("apiVersion", request.apiVersion)
         result.addProperty("jvmTarget", request.jvmTarget)
         result.addProperty("moduleName", request.moduleName)
+        result.addProperty("targetName", request.targetName)
+        result.addProperty("multiplatform", request.multiplatform)
         result.addProperty("compilationSucceeded", exitCode == ExitCode.OK)
         result.addProperty("compilerExitCode", exitCode.name)
         result.addProperty("artifactRoot", artifactRoot.toString())
@@ -110,6 +115,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             add("relationships")
             add("compiler-diagnostics")
             add("jvm-interop")
+            if (request.multiplatform) add("multiplatform")
             if (request.composeCompilerPluginEnabled) add("jetpack-compose")
         })
         result.addProperty("status", statusForExitCode(exitCode))
@@ -156,6 +162,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             languageVersion = request.languageVersion
             apiVersion = request.apiVersion
             moduleName = request.moduleName
+            multiPlatform = request.multiplatform
             this.pluginClasspaths = pluginClasspaths
             this.pluginOptions = if (request.composeCompilerPluginEnabled) {
                 arrayOf("plugin:androidx.compose.compiler.plugins.kotlin:sourceInformation=true")
@@ -391,6 +398,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         private const val PROJECT_PATH_PROPERTY = "aegis.kotlin.semantic.project"
         private const val TEST_SCOPE_PROPERTY = "aegis.kotlin.semantic.test"
         private const val GENERATED_ROOTS_PROPERTY = "aegis.kotlin.semantic.generated"
+        private const val TARGET_NAME_PROPERTY = "aegis.kotlin.semantic.target"
         private const val STATUS_UNSUPPORTED = 1
         private const val STATUS_COMPLETED = 2
         private const val STATUS_PARTIALLY_COMPLETED = 3

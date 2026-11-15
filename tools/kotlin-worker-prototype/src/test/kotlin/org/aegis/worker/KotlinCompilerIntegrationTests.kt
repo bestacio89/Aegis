@@ -479,6 +479,86 @@ class KotlinCompilerIntegrationTests {
     }
 
     @Test
+    fun `K2 JVM target compiles expect actual declarations and emits their relationship`() {
+        val workspace = Files.createTempDirectory("aegis-kotlin-kmp-expect-actual-")
+        val commonRoot = workspace.resolve("src/commonMain/kotlin/sample")
+        val jvmRoot = workspace.resolve("src/jvmMain/kotlin/sample")
+        val commonSource = commonRoot.resolve("Platform.kt")
+        val jvmSource = jvmRoot.resolve("Platform.jvm.kt")
+        val destination = workspace.resolve("classes")
+        val evidence = workspace.resolve("semantic.json")
+        Files.createDirectories(commonRoot)
+        Files.createDirectories(jvmRoot)
+        Files.createDirectories(destination)
+        Files.writeString(commonSource, """
+            package sample
+            expect fun platformName(): String
+        """.trimIndent())
+        Files.writeString(jvmSource, """
+            package sample
+            actual fun platformName(): String = "jvm"
+        """.trimIndent())
+
+        val pluginPath = Path.of(
+            KotlinWorkerPluginRegistrar::class.java.protectionDomain.codeSource.location.toURI()
+        ).toString()
+        val stdlibPath = Path.of(
+            Unit::class.java.protectionDomain.codeSource.location.toURI()
+        ).toString()
+        val arguments = K2JVMCompilerArguments().apply {
+            this.destination = destination.toString()
+            this.classpath = stdlibPath
+            this.noStdlib = true
+            this.noReflect = true
+            this.jvmTarget = "21"
+            this.languageVersion = "2.4"
+            this.apiVersion = "2.4"
+            this.moduleName = "kmp-jvm-fixture"
+            this.multiPlatform = true
+            this.pluginClasspaths = arrayOf(pluginPath)
+            this.freeArgs = listOf(commonSource.toString(), jvmSource.toString())
+        }
+
+        val previousOutput = System.getProperty("aegis.kotlin.semantic.output")
+        val previousProject = System.getProperty("aegis.kotlin.semantic.project")
+        val previousTarget = System.getProperty("aegis.kotlin.semantic.target")
+        try {
+            System.setProperty("aegis.kotlin.semantic.output", evidence.toString())
+            System.setProperty("aegis.kotlin.semantic.project", workspace.toString())
+            System.setProperty("aegis.kotlin.semantic.target", "jvm")
+            val messages = PrintingMessageCollector(System.err, MessageRenderer.PLAIN_RELATIVE_PATHS, false)
+            val exitCode = K2JVMCompiler().exec(messages, Services.EMPTY, arguments)
+
+            assertEquals(ExitCode.OK, exitCode)
+            val result = JsonParser.parseString(Files.readString(evidence)).asJsonObject
+            val symbols = result.getAsJsonArray("symbols").map { it.asJsonObject }
+            val expectId = "kotlin:function:sample.platformName()"
+            val actualId = "$expectId#actual:jvm"
+            assertTrue(symbols.any {
+                it.get("id").asString == expectId
+                    && it.getAsJsonArray("modifiers").any { modifier -> modifier.asString == "expect" }
+            })
+            assertTrue(symbols.any {
+                it.get("id").asString == actualId
+                    && it.getAsJsonArray("modifiers").any { modifier -> modifier.asString == "actual" }
+            })
+            assertTrue(result.getAsJsonArray("relationships").any {
+                it.asJsonObject.get("kind").asInt == 11
+                    && it.asJsonObject.get("sourceSymbolId").asString == actualId
+                    && it.asJsonObject.get("targetSymbolId").asString == expectId
+            }, "KMP actual declarations must retain an explicit Actualizes relationship.")
+        } finally {
+            if (previousOutput == null) System.clearProperty("aegis.kotlin.semantic.output")
+            else System.setProperty("aegis.kotlin.semantic.output", previousOutput)
+            if (previousProject == null) System.clearProperty("aegis.kotlin.semantic.project")
+            else System.setProperty("aegis.kotlin.semantic.project", previousProject)
+            if (previousTarget == null) System.clearProperty("aegis.kotlin.semantic.target")
+            else System.setProperty("aegis.kotlin.semantic.target", previousTarget)
+            workspace.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `local declaration identities remain stable when source line offsets change`() {
         val workspace = Files.createTempDirectory("aegis-kotlin-local-identities-")
         val source = workspace.resolve("LocalDeclarations.kt")

@@ -19,6 +19,8 @@ data class KotlinWorkerAnalysisRequest(
     val jvmTarget: String,
     val moduleName: String,
     val includeTestCode: Boolean,
+    val targetName: String?,
+    val multiplatform: Boolean,
     val composeCompilerPluginEnabled: Boolean
 ) {
     companion object {
@@ -39,6 +41,8 @@ data class KotlinWorkerAnalysisRequest(
             jvmTarget = payload.requiredString("jvmTarget"),
             moduleName = payload.optionalString("moduleName") ?: "aegis-module",
             includeTestCode = payload.get("includeTestCode")?.takeUnless { it.isJsonNull }?.asBoolean ?: false,
+            targetName = payload.get("targetName")?.takeUnless { it.isJsonNull }?.asString,
+            multiplatform = payload.get("multiplatform")?.takeUnless { it.isJsonNull }?.asBoolean ?: false,
             composeCompilerPluginEnabled = payload.get("composeCompilerPluginEnabled")
                 ?.takeUnless { it.isJsonNull }?.asBoolean ?: false
         )

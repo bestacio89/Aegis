@@ -559,6 +559,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         var apiVersion = FirstNonBlank(gradle?.KotlinApiVersion, maven?.KotlinApiVersion);
         var declaredJvmTarget = FirstNonBlank(
             gradle?.KotlinJvmTarget,
+            AndroidSemanticAnalysisPlanner.ResolveAndroidJvmTarget(module, preferSourceCompatibility: false),
             maven?.KotlinJvmTarget,
             maven?.KotlinJdkRelease);
         var jvmTarget = declaredJvmTarget ?? FirstNonBlank(gradle?.JavaToolchainVersion);

@@ -296,6 +296,26 @@ public sealed class AndroidSemanticAnalysisPlanner
             : sourceSet.GeneratedKotlinSourceDirectories)
         .Contains(directory, PathComparer);
 
+    public static string? ResolveAndroidJvmTarget(
+        ProjectModuleContext module,
+        bool preferSourceCompatibility)
+    {
+        ArgumentNullException.ThrowIfNull(module);
+        var options = module.GradleBuildModel?.Android?.CompileOptions;
+        var value = preferSourceCompatibility
+            ? options?.SourceCompatibility ?? options?.TargetCompatibility
+            : options?.TargetCompatibility ?? options?.SourceCompatibility;
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        const string javaVersionPrefix = "JavaVersion.VERSION_";
+        var normalized = value.Trim();
+        if (normalized.StartsWith(javaVersionPrefix, StringComparison.Ordinal))
+            normalized = normalized[javaVersionPrefix.Length..].Replace('_', '.');
+
+        return normalized;
+    }
+
     private static AnalysisDiagnostic Diagnostic(string code, string message, string target) =>
         new()
         {

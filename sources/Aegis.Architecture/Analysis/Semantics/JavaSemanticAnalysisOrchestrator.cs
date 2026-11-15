@@ -368,6 +368,12 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
 
     private static string ResolveSourceLevel(ProjectModuleContext module)
     {
+        if (AndroidSemanticAnalysisPlanner.ResolveAndroidJvmTarget(module, preferSourceCompatibility: true)
+            is { Length: > 0 } androidSourceLevel)
+        {
+            return androidSourceLevel;
+        }
+
         if (module.GradleBuildModel?.JavaToolchainVersion is { Length: > 0 } toolchain)
             return toolchain;
 

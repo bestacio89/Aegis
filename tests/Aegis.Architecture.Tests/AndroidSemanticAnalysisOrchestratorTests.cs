@@ -54,6 +54,7 @@ public sealed class AndroidSemanticAnalysisOrchestratorTests
                         ModuleKind = "Application",
                         KotlinIntegration = "BuiltInDefault",
                         CompileSdk = "35",
+                        CompileOptions = new GradleAndroidBuildModel.AndroidCompileOptions("JavaVersion.VERSION_17", "JavaVersion.VERSION_17", false),
                         IsComplete = true,
                         Variants = [new GradleAndroidVariant("debug", [], "debug")],
                         SourceSets =
@@ -103,11 +104,13 @@ public sealed class AndroidSemanticAnalysisOrchestratorTests
                 Assert.True(request.ClasspathResolutionComplete);
             });
             Assert.Contains(javaAdapter.Requests, request => !request.IncludeTestCode
-                && request.SourceFiles.Single().EndsWith("Main.java", StringComparison.Ordinal));
+                && request.SourceFiles.Single().EndsWith("Main.java", StringComparison.Ordinal)
+                && request.SourceLevel == "17");
             Assert.Contains(javaAdapter.Requests, request => request.IncludeTestCode
                 && request.SourceFiles.Single().EndsWith("MainTest.java", StringComparison.Ordinal));
             Assert.Contains(kotlinAdapter.Requests, request => !request.IncludeTestCode
-                && request.SourceFiles.Single().EndsWith("Main.kt", StringComparison.Ordinal));
+                && request.SourceFiles.Single().EndsWith("Main.kt", StringComparison.Ordinal)
+                && request.ProviderOptions["kotlin.jvmTarget"] == "17");
             Assert.Contains(kotlinAdapter.Requests, request => request.IncludeTestCode
                 && request.SourceFiles.Single().EndsWith("MainTest.kt", StringComparison.Ordinal));
         }

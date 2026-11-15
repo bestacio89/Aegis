@@ -309,7 +309,8 @@ internal static class GradleBuildModelResolver
                     buildFile));
             }
             else if (sourceRoots.Any(sourceRoot => sourceRoot.ContainsKotlinSources)
-                     && kotlinJvmPlugins.Length == 0)
+                     && kotlinJvmPlugins.Length == 0
+                     && kotlinMultiplatformPlugins.Length == 0)
             {
                 diagnostics.Add(Diagnostic(
                     "GradleKotlinJvmPluginNotDetected",

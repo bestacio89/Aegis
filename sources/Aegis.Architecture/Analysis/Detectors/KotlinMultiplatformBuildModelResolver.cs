@@ -234,13 +234,13 @@ internal static class KotlinMultiplatformBuildModelResolver
         var match = Regex.Match(source,
             $@"\b{Regex.Escape(blockName)}\s*\{{",
             RegexOptions.CultureInvariant);
-        return match.Success ? ExtractFollowingBlock(source, match.Index + match.Length) : null;
+        return match.Success ? ExtractFollowingBlock(source, match.Index + match.Length - 1) : null;
     }
 
     private static string? ExtractNestedBlock(string source, Regex declaration)
     {
         var match = declaration.Match(source);
-        return match.Success ? ExtractFollowingBlock(source, match.Index + match.Length) : null;
+        return match.Success ? ExtractFollowingBlock(source, match.Index + match.Length - 1) : null;
     }
 
     private static string? ExtractFollowingBlock(string source, int start)

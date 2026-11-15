@@ -34,7 +34,7 @@ internal class KotlinExpectActualSourceCollector {
         if (sharedSourceRoots.isEmpty() || sourceFiles.isEmpty())
             return evidence
 
-        val declarations = parseDeclarations(sourceFiles, includeTestCode)
+        val declarations = parseDeclarations(sourceFiles, sharedSourceRoots, includeTestCode)
         val expectedDeclarations = declarations.filter { it.isExpected }
         val actualDeclarations = declarations.filter { it.isActual }
         if (expectedDeclarations.isEmpty() || actualDeclarations.isEmpty())
@@ -69,37 +69,36 @@ internal class KotlinExpectActualSourceCollector {
                 }
             }
 
-            val symbolCandidates = symbols.filter { symbol ->
-                symbol.stringValue("qualifiedName") == actual.qualifiedName
-                    && symbol.intValue("kind") in actual.compilerKinds
-                    && symbol.stringValue("filePath") == actual.filePath
+            val expectedSymbolCandidates = symbols.filter { symbol ->
+                symbol.stringValue("qualifiedName") == expected.qualifiedName
+                    && symbol.intValue("kind") in expected.compilerKinds
+                    && symbol.stringValue("filePath") == expected.filePath
             }
-            val locatedCandidates = symbolCandidates.filter { symbol ->
-                symbol.intValue("startLine") == actual.startLine
-                    && symbol.intValue("startColumn") == actual.startColumn
+            val locatedCandidates = expectedSymbolCandidates.filter { symbol ->
+                symbol.intValue("startLine") == expected.startLine
+                    && symbol.intValue("startColumn") == expected.startColumn
             }
-            val actualSymbol = when {
-                locatedCandidates.size == 1 -> locatedCandidates.single()
-                locatedCandidates.isEmpty() && symbolCandidates.size == 1 -> symbolCandidates.single()
+            val expectedSymbol = when {
+                locatedCandidates.size == 1 -> locatedCandidates.single().deepCopy()
+                locatedCandidates.isEmpty() && expectedSymbolCandidates.size == 1 ->
+                    expectedSymbolCandidates.single().deepCopy()
                 else -> {
                     diagnostics.add(createDiagnostic(
-                        "KotlinActualSemanticSymbolNotFound",
-                        "The compiler did not emit a unique semantic symbol for actual declaration '${actual.qualifiedName}'.",
-                        actual.filePath,
-                        actual.startLine,
+                        "KotlinExpectSemanticSymbolNotFound",
+                        "The compiler did not emit a unique semantic symbol for expect declaration '${expected.qualifiedName}'.",
+                        expected.filePath,
+                        expected.startLine,
                         targetName
                     ))
                     continue
                 }
             }
 
-            val expectedId = actualSymbol.stringValue("id")
+            val expectedId = expectedSymbol.stringValue("id")
             val actualId = "$expectedId#actual:${actual.sourceSetName ?: targetName ?: "unknown"}"
             if (actualizedIds.containsKey(expectedId))
                 continue
 
-            val expectedSymbol = actualSymbol.deepCopy()
-            expectedSymbol.addProperty("id", expectedId)
             expectedSymbol.addProperty("filePath", expected.filePath)
             expectedSymbol.addProperty("startLine", expected.startLine)
             expectedSymbol.addProperty("startColumn", expected.startColumn)
@@ -107,6 +106,15 @@ internal class KotlinExpectActualSourceCollector {
             expectedSymbol.addProperty("isTestCode", includeTestCode)
             expectedSymbol.add("provenance", provenance(expected))
             setModifier(expectedSymbol, "expect")
+
+            val actualSymbol = expectedSymbol.deepCopy()
+            actualSymbol.addProperty("id", actualId)
+            actualSymbol.addProperty("filePath", actual.filePath)
+            actualSymbol.addProperty("startLine", actual.startLine)
+            actualSymbol.addProperty("startColumn", actual.startColumn)
+            actualSymbol.addProperty("origin", 1)
+            actualSymbol.addProperty("isTestCode", includeTestCode)
+            actualSymbol.add("provenance", provenance(actual))
             setModifier(actualSymbol, "actual")
             actualizedIds[expectedId] = actualId
             pairs.add(ActualizationPair(expectedId, actualId, actual, expected, actualSymbol, expectedSymbol))
@@ -130,19 +138,14 @@ internal class KotlinExpectActualSourceCollector {
 
         val updatedSymbols = JsonArray()
         for (symbol in symbols) {
-            val originalId = symbol.stringValue("id")
-            val actualId = actualizedIds[originalId]
-            if (actualId == null) {
+            val expectedPair = pairs.firstOrNull { it.expectedId == symbol.stringValue("id") }
+            if (expectedPair == null) {
                 updatedSymbols.add(symbol)
                 continue
             }
 
-            symbol.addProperty("id", actualId)
-            val parentId = symbol.stringValueOrNull("containingSymbolId")
-            if (parentId != null)
-                actualizedIds[parentId]?.let { symbol.addProperty("containingSymbolId", it) }
-            updatedSymbols.add(symbol)
-            pairs.firstOrNull { it.expectedId == originalId }?.let { updatedSymbols.add(it.expectedSymbol) }
+            updatedSymbols.add(expectedPair.expectedSymbol)
+            updatedSymbols.add(expectedPair.actualSymbol)
         }
         evidence.add("symbols", updatedSymbols)
 
@@ -183,6 +186,7 @@ internal class KotlinExpectActualSourceCollector {
 
     private fun parseDeclarations(
         sourceFiles: List<Path>,
+        sharedSourceRoots: List<Path>,
         includeTestCode: Boolean
     ): List<SourceDeclaration> {
         val disposable = Disposer.newDisposable("aegis-kotlin-expect-actual")
@@ -195,9 +199,11 @@ internal class KotlinExpectActualSourceCollector {
             val factory = KtPsiFactory(environment.projectEnvironment.project, false)
             val declarations = mutableListOf<SourceDeclaration>()
 
+            val normalizedSharedRoots = sharedSourceRoots
+                .map { it.toAbsolutePath().normalize() }
             for (sourceFile in sourceFiles) {
-                val commonSourceSetName = if (includeTestCode) "commonTest" else "commonMain"
-                val isCommon = sourceSetName(sourceFile) == commonSourceSetName
+                val normalizedSourceFile = sourceFile.toAbsolutePath().normalize()
+                val isShared = normalizedSharedRoots.any(normalizedSourceFile::startsWith)
                 val source = Files.readString(sourceFile)
                 val file = factory.createFile(sourceFile.fileName.toString(), source)
                 collectDeclarations(
@@ -206,7 +212,7 @@ internal class KotlinExpectActualSourceCollector {
                     sourceFile.toAbsolutePath().normalize().toString(),
                     source,
                     sourceSetName(sourceFile),
-                    isCommon,
+                    isShared,
                     declarations
                 )
             }
@@ -223,7 +229,7 @@ internal class KotlinExpectActualSourceCollector {
         filePath: String,
         source: String,
         sourceSetName: String?,
-        isCommon: Boolean,
+        isShared: Boolean,
         output: MutableList<SourceDeclaration>
     ) {
         for (declaration in sourceDeclarations) {
@@ -231,8 +237,8 @@ internal class KotlinExpectActualSourceCollector {
             val qualifiedName = listOf(parentName, name)
                 .filter(String::isNotBlank)
                 .joinToString(".")
-            val isExpected = isCommon && hasModifier(declaration, KtTokens.EXPECT_KEYWORD)
-            val isActual = !isCommon && hasModifier(declaration, KtTokens.ACTUAL_KEYWORD)
+            val isExpected = isShared && hasModifier(declaration, KtTokens.EXPECT_KEYWORD)
+            val isActual = hasModifier(declaration, KtTokens.ACTUAL_KEYWORD)
 
             if (isExpected || isActual) {
                 val (line, column) = lineAndColumn(source, declaration.textOffset)
@@ -260,7 +266,7 @@ internal class KotlinExpectActualSourceCollector {
                     filePath,
                     source,
                     sourceSetName,
-                    isCommon,
+                    isShared,
                     output
                 )
             }

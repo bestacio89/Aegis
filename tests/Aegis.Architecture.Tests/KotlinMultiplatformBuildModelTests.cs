@@ -42,6 +42,12 @@ public sealed class KotlinMultiplatformBuildModelTests
                         val iosTest by creating {
                             dependsOn(commonTest)
                         }
+                        val webMain by creating {
+                            dependsOn(commonMain)
+                        }
+                        val webTest by creating {
+                            dependsOn(commonTest)
+                        }
                         val iosArm64Main by getting {
                             dependsOn(iosMain)
                         }
@@ -55,16 +61,16 @@ public sealed class KotlinMultiplatformBuildModelTests
                             dependsOn(iosTest)
                         }
                         val jsMain by getting {
-                            dependsOn(commonMain)
+                            dependsOn(webMain)
                         }
                         val jsTest by getting {
-                            dependsOn(commonTest)
+                            dependsOn(webTest)
                         }
                         val wasmJsMain by getting {
-                            dependsOn(commonMain)
+                            dependsOn(webMain)
                         }
                         val wasmJsTest by getting {
-                            dependsOn(commonTest)
+                            dependsOn(webTest)
                         }
                     }
                 }

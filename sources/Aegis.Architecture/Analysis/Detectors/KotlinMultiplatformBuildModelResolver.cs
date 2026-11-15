@@ -403,8 +403,9 @@ internal static class KotlinMultiplatformBuildModelResolver
 
         foreach (var target in targets.Where(target => target.Platform is "JVM" or "Android" or "JS" or "Wasm"))
         {
-            var parentMain = hasJavaScript && hasWasmJs && target.Platform is "JS" or "Wasm"
-                && target.Name is "js" or "wasmJs" ? "webMain" : "commonMain";
+            var usesWebHierarchy = hasJavaScript && hasWasmJs
+                && (target.Name is "js" or "wasmJs");
+            var parentMain = usesWebHierarchy ? "webMain" : "commonMain";
             var parentTest = parentMain == "webMain" ? "webTest" : "commonTest";
             AddDependency(sourceSets, $"{target.Name}Main", parentMain);
             AddDependency(sourceSets, $"{target.Name}Test", parentTest);
@@ -492,7 +493,10 @@ internal static class KotlinMultiplatformBuildModelResolver
 
         if (targets.Any(target => target.Name.StartsWith(prefix, StringComparison.Ordinal)
                                   && prefix.Length > 0)
-            || prefix is "native" or "apple")
+            || prefix is "native" or "apple"
+            || prefix == "web"
+                && targets.Any(target => target.Name == "js")
+                && targets.Any(target => target.Name == "wasmJs"))
             return ("Intermediate", null);
 
         return ("Unknown", null);

@@ -183,27 +183,35 @@ public sealed class KotlinMultiplatformSemanticAnalysisPlanner
         var selected = new List<ProjectSourceRoot>();
         foreach (var sourceSet in sourceSets.Where(sourceSet => sourceSet.Ownership == ownership))
         {
-            var expectedDirectory = Path.GetFullPath(Path.Combine(
+            var conventionalDirectory = Path.GetFullPath(Path.Combine(
                 modulePath, "src", sourceSet.Name, "kotlin"));
-            var root = sourceRoots.FirstOrDefault(candidate =>
-                PathComparer.Equals(Path.GetFullPath(candidate.Directory), expectedDirectory));
-            if (root is null)
-                continue;
+            IReadOnlyList<string> expectedDirectories = sourceSet.KotlinSourceDirectories is { Count: > 0 } explicitDirectories
+                ? explicitDirectories
+                : [conventionalDirectory];
 
-            var expectedOwnership = ownership == "Production"
-                ? ProjectSourceRootOwnership.Production
-                : ProjectSourceRootOwnership.Test;
-            if (root.Ownership != expectedOwnership || !root.ContainsLanguage("Kotlin"))
+            foreach (var directory in expectedDirectories)
             {
-                roots = Array.Empty<ProjectSourceRoot>();
-                diagnostic = CreateDiagnostic(
-                    "KotlinMultiplatformSourceRootOwnershipUnresolved",
-                    $"Source root '{expectedDirectory}' does not have authoritative {ownership.ToLowerInvariant()} Kotlin ownership.",
-                    expectedDirectory);
-                return false;
-            }
+                var expectedDirectory = Path.GetFullPath(directory);
+                var root = sourceRoots.FirstOrDefault(candidate =>
+                    PathComparer.Equals(Path.GetFullPath(candidate.Directory), expectedDirectory));
+                if (root is null)
+                    continue;
 
-            selected.Add(root);
+                var expectedOwnership = ownership == "Production"
+                    ? ProjectSourceRootOwnership.Production
+                    : ProjectSourceRootOwnership.Test;
+                if (root.Ownership != expectedOwnership || !root.ContainsLanguage("Kotlin"))
+                {
+                    roots = Array.Empty<ProjectSourceRoot>();
+                    diagnostic = CreateDiagnostic(
+                        "KotlinMultiplatformSourceRootOwnershipUnresolved",
+                        $"Source root '{expectedDirectory}' does not have authoritative {ownership.ToLowerInvariant()} Kotlin ownership.",
+                        expectedDirectory);
+                    return false;
+                }
+
+                selected.Add(root);
+            }
         }
 
         roots = selected

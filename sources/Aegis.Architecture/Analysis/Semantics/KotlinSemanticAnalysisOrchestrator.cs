@@ -449,6 +449,15 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         out (string Code, string Message) unsupportedTarget)
     {
         var plugins = module.GradleBuildModel?.Plugins ?? [];
+        var androidModel = module.GradleBuildModel?.Android;
+        if (androidModel is not null
+            && androidModel.KotlinIntegration is "Disabled" or "NotDeclared" or "Unknown")
+        {
+            unsupportedTarget = (
+                "KotlinAndroidIntegrationNotResolved",
+                "Kotlin sources were discovered in an Android module, but the active Android/Kotlin compiler integration is not statically established.");
+            return true;
+        }
         var androidPluginWithoutModel = module.GradleBuildModel?.Android is null
             ? plugins.FirstOrDefault(plugin => plugin.IsApplied
                 && (plugin.Id.StartsWith("com.android.", StringComparison.Ordinal)

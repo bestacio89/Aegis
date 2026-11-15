@@ -68,7 +68,7 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
         var hasDeclaredDependencies = false;
         var hasUnresolvedDependencyGraph = false;
 
-        if (module.MavenModel is { } maven)
+        if (selectedGradleDependencies is null && module.MavenModel is { } maven)
         {
             foreach (var dependency in maven.Dependencies)
             {

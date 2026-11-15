@@ -175,10 +175,9 @@ public sealed class JavaSemanticAnalysisOrchestratorTests
 
             await orchestrator.AnalyzeAsync(context);
 
-            var run = Assert.Single(context.SemanticAnalysisRuns);
-            Assert.Equal(SemanticAnalysisStatus.Unsupported, run.Status);
-            Assert.Contains(run.Diagnostics, diagnostic =>
-                diagnostic.Code == "JavaAndroidTargetNotSupported"
+            Assert.Empty(context.SemanticAnalysisRuns);
+            Assert.Contains(context.DiscoveryDiagnostics, diagnostic =>
+                diagnostic.Code == "AndroidVariantModelUnavailable"
                 && diagnostic.AffectsCoverage);
             Assert.Empty(adapter.Requests);
         }

@@ -89,6 +89,12 @@ public sealed class AndroidSemanticAnalysisPlanner
                 module.Path));
         }
 
+        if (scopes.Count == 0 && diagnostics.Count == 0)
+            diagnostics.Add(Diagnostic(
+                "AndroidSourceRootsUnavailable",
+                $"No variant-owned {language} production or unit-test source roots were discovered for this Android module.",
+                module.Path));
+
         if (diagnostics.Count > 0)
             context.DiscoveryDiagnostics.AddRange(diagnostics);
         return scopes;

@@ -163,7 +163,7 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
             var run = Assert.Single(context.SemanticAnalysisRuns);
             Assert.Equal(SemanticAnalysisStatus.Unsupported, run.Status);
             Assert.Contains(run.Diagnostics, diagnostic =>
-                diagnostic.Code == "KotlinTargetPlatformNotSupported"
+                diagnostic.Code == "AndroidVariantModelUnavailable"
                 && diagnostic.AffectsCoverage);
             Assert.Empty(adapter.Requests);
         }
@@ -220,10 +220,9 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
 
             await orchestrator.AnalyzeAsync(context);
 
-            var run = Assert.Single(context.SemanticAnalysisRuns);
-            Assert.Equal(SemanticAnalysisStatus.Unsupported, run.Status);
-            Assert.Contains(run.Diagnostics, diagnostic =>
-                diagnostic.Code == "KotlinTargetPlatformNotSupported"
+            Assert.Empty(context.SemanticAnalysisRuns);
+            Assert.Contains(context.DiscoveryDiagnostics, diagnostic =>
+                diagnostic.Code == "AndroidVariantModelUnavailable"
                 && diagnostic.AffectsCoverage);
             Assert.Empty(adapter.Requests);
         }

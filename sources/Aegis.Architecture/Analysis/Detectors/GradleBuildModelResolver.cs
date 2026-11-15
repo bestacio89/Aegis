@@ -352,7 +352,8 @@ internal static class GradleBuildModelResolver
             }
 
             var kotlinMultiplatform = kotlinMultiplatformPlugins.Length > 0
-                ? KotlinMultiplatformBuildModelResolver.Analyze(source, buildFile)
+                ? KotlinMultiplatformBuildModelResolver.Analyze(
+                    source, buildFile, module.Path, context.RootPath)
                 : null;
             if (kotlinMultiplatform is not null)
             {
@@ -1746,7 +1747,7 @@ internal static class GradleBuildModelResolver
         return result;
     }
 
-    private static List<string> ParseExplicitKotlinSourceDirectories(
+    internal static List<string> ParseExplicitKotlinSourceDirectories(
         string sourceSetBody,
         string sourceSetName,
         string modulePath,

@@ -161,10 +161,14 @@ internal static class KotlinMultiplatformBuildModelResolver
     private static bool HasSourceSetCycle(
         IReadOnlyCollection<KotlinMultiplatformBuildModel.SourceSet> sourceSets)
     {
-        var dependencies = sourceSets.ToDictionary(
-            sourceSet => sourceSet.Name,
-            sourceSet => sourceSet.DependsOn,
-            StringComparer.Ordinal);
+        var dependencies = sourceSets
+            .GroupBy(sourceSet => sourceSet.Name, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group.SelectMany(sourceSet => sourceSet.DependsOn)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray(),
+                StringComparer.Ordinal);
         var visiting = new HashSet<string>(StringComparer.Ordinal);
         var visited = new HashSet<string>(StringComparer.Ordinal);
 

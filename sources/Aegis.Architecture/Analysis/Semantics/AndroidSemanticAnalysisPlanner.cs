@@ -42,14 +42,22 @@ public sealed class AndroidSemanticAnalysisPlanner
             return [];
 
         var diagnostics = new List<AnalysisDiagnostic>();
-        if (!android.IsComplete || android.Variants.Count == 0)
+        if (android.Variants.Count == 0)
         {
             diagnostics.Add(Diagnostic(
                 "AndroidVariantModelUnavailable",
-                "The Android module has no complete statically derived variant model; semantic execution cannot select a safe variant.",
+                "The Android module has no statically derived variants; semantic execution cannot select a safe variant.",
                 module.Path));
             context.DiscoveryDiagnostics.AddRange(diagnostics);
             return [];
+        }
+
+        if (!android.IsComplete)
+        {
+            diagnostics.Add(Diagnostic(
+                "AndroidVariantModelIncomplete",
+                "The static Android model is incomplete. Known variant scopes may be analysed, but their semantic results remain partial.",
+                module.Path));
         }
 
         var scopes = new List<Scope>();
@@ -67,13 +75,13 @@ public sealed class AndroidSemanticAnalysisPlanner
             var variantName = group.Key;
             var productionRoots = ResolveSourceRoots(module, language, variantName, GradleAndroidTestKind.None, diagnostics);
             if (productionRoots.Count > 0)
-                scopes.Add(ResolveScope(module, context, variantName, AndroidVariantDependencyScope.Production,
-                    productionRoots, includeTestCode: false, executionContext));
+                scopes.Add(CreateSourceScope(variantName, AndroidVariantDependencyScope.Production,
+                    productionRoots, includeTestCode: false));
 
             var unitTestRoots = ResolveSourceRoots(module, language, variantName, GradleAndroidTestKind.Unit, diagnostics);
             if (unitTestRoots.Count > 0)
-                scopes.Add(ResolveScope(module, context, variantName, AndroidVariantDependencyScope.UnitTest,
-                    unitTestRoots, includeTestCode: true, executionContext));
+                scopes.Add(CreateSourceScope(variantName, AndroidVariantDependencyScope.UnitTest,
+                    unitTestRoots, includeTestCode: true));
         }
 
         foreach (var sourceSet in android.SourceSets.Where(sourceSet =>
@@ -99,6 +107,40 @@ public sealed class AndroidSemanticAnalysisPlanner
             context.DiscoveryDiagnostics.AddRange(diagnostics);
         return scopes;
     }
+
+    public Scope ResolveInputs(
+        ProjectModuleContext module,
+        ProjectArchitectureContext context,
+        Scope sourceScope,
+        SemanticAnalysisExecutionContext? executionContext)
+    {
+        ArgumentNullException.ThrowIfNull(sourceScope);
+        return ResolveScope(
+            module,
+            context,
+            sourceScope.VariantName,
+            sourceScope.DependencyScope,
+            sourceScope.SourceRoots,
+            sourceScope.IncludeTestCode,
+            executionContext);
+    }
+
+    private static Scope CreateSourceScope(
+        string variantName,
+        AndroidVariantDependencyScope dependencyScope,
+        IReadOnlyList<ProjectSourceRoot> sourceRoots,
+        bool includeTestCode) =>
+        new(
+            variantName,
+            dependencyScope,
+            sourceRoots,
+            [],
+            [],
+            false,
+            false,
+            [],
+            includeTestCode,
+            null);
 
     private Scope ResolveScope(
         ProjectModuleContext module,

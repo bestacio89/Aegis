@@ -449,9 +449,11 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         out (string Code, string Message) unsupportedTarget)
     {
         var plugins = module.GradleBuildModel?.Plugins ?? [];
-        var androidPluginWithoutModel = plugins.FirstOrDefault(plugin => plugin.IsApplied
-            && (plugin.Id.StartsWith("com.android.", StringComparison.Ordinal)
-                || plugin.Id is "org.jetbrains.kotlin.android" or "kotlin-android"));
+        var androidPluginWithoutModel = module.GradleBuildModel?.Android is null
+            ? plugins.FirstOrDefault(plugin => plugin.IsApplied
+                && (plugin.Id.StartsWith("com.android.", StringComparison.Ordinal)
+                    || plugin.Id is "org.jetbrains.kotlin.android" or "kotlin-android"))
+            : null;
         if (androidPluginWithoutModel is not null)
         {
             unsupportedTarget = ("AndroidVariantModelUnavailable",

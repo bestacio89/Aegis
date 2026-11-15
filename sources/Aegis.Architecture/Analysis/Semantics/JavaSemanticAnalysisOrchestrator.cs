@@ -100,8 +100,9 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
             if (module.GradleBuildModel?.Android is not null)
             {
                 var androidScopes = _androidPlanner.ResolveScopes(module, context, Language, executionContext);
-                foreach (var androidScope in androidScopes)
+                foreach (var sourceScope in androidScopes)
                 {
+                    var androidScope = _androidPlanner.ResolveInputs(module, context, sourceScope, executionContext);
                     await AnalyzeScopeAsync(
                         module, context, androidScope.SourceRoots,
                         androidScope.IncludeTestCode,

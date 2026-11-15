@@ -68,9 +68,12 @@ public sealed class AndroidSemanticAnalysisPlannerTests
                 new EmptyClasspathResolver(),
                 new AndroidSdkResolver(sdkRoot, new Dictionary<string, string>()));
 
-            var scopes = planner.ResolveScopes(module, context, "Java", null);
+            var sourceScopes = planner.ResolveScopes(module, context, "Java", null);
+            var scopes = sourceScopes
+                .Select(scope => planner.ResolveInputs(module, context, scope, null))
+                .ToArray();
 
-            Assert.Equal(4, scopes.Count);
+            Assert.Equal(4, scopes.Length);
             var debugProduction = Assert.Single(scopes, scope =>
                 scope.VariantName == "debug" && !scope.IncludeTestCode);
             var debugTest = Assert.Single(scopes, scope =>

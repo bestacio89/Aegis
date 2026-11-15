@@ -875,7 +875,7 @@ internal static class ModuleDetector
             || tokens.Contains("azureevent", StringComparer.Ordinal)
             || tokens.Contains("multitenancy", StringComparer.Ordinal)
             || tokens.Contains("identity", StringComparer.Ordinal)
-            || tokens.Contains("sso", StringComparison.Ordinal)
+            || tokens.Contains("sso", StringComparer.Ordinal)
             || normalized.Equals("franz.common", StringComparison.Ordinal)
             || tokens.Contains("caching", StringComparer.Ordinal)
             || tokens.Contains("cache", StringComparer.Ordinal)

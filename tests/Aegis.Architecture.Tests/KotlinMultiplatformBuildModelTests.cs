@@ -57,6 +57,8 @@ public sealed class KotlinMultiplatformBuildModelTests
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "jvmMain"
                 && sourceSet.Ownership == "Production"
+                && sourceSet.Kind == "TargetSpecific"
+                && sourceSet.TargetName == "jvm"
                 && sourceSet.DependsOn.SequenceEqual(["commonMain"]));
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "jvmTest"
@@ -64,7 +66,11 @@ public sealed class KotlinMultiplatformBuildModelTests
                 && sourceSet.DependsOn.SequenceEqual(["commonTest"]));
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "iosMain"
+                && sourceSet.Kind == "Intermediate"
                 && sourceSet.DependsOn.SequenceEqual(["commonMain"]));
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "commonMain"
+                && sourceSet.Kind == "Common");
             Assert.True(multiplatform.IsComplete);
             Assert.Empty(multiplatform.Diagnostics);
         }

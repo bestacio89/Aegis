@@ -15,6 +15,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
     private readonly IJvmClasspathResolver _classpathResolver;
     private readonly ILogger<KotlinSemanticAnalysisOrchestrator> _logger;
     private readonly JvmSourceRootResolver _sourceRootResolver;
+    private readonly AndroidSemanticAnalysisPlanner _androidPlanner;
 
     private const string KotlinLanguage = "Kotlin";
 
@@ -27,7 +28,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         IJvmClasspathResolver classpathResolver,
         ILogger<KotlinSemanticAnalysisOrchestrator> logger,
         SemanticAnalysisCoordinator? coordinator = null,
-        JvmSourceRootResolver? sourceRootResolver = null)
+        JvmSourceRootResolver? sourceRootResolver = null,
+        AndroidSemanticAnalysisPlanner? androidPlanner = null)
     {
         ArgumentNullException.ThrowIfNull(adapters);
         ArgumentNullException.ThrowIfNull(classpathResolver);
@@ -37,6 +39,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         _classpathResolver = classpathResolver;
         _logger = logger;
         _sourceRootResolver = sourceRootResolver ?? new JvmSourceRootResolver();
+        _androidPlanner = androidPlanner ?? new AndroidSemanticAnalysisPlanner(classpathResolver);
     }
 
     public Task AnalyzeAsync(
@@ -95,11 +98,24 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         }
 
         var sourceRootsByModule = new Dictionary<string, IReadOnlyList<ProjectSourceRoot>>(PathComparer);
+        var androidScopesByModule = new Dictionary<string, IReadOnlyList<AndroidSemanticAnalysisPlanner.Scope>>(PathComparer);
         var unsupportedModulePaths = new HashSet<string>(PathComparer);
 
         foreach (var module in modules)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (module.GradleBuildModel?.Android is not null)
+            {
+                var androidScopes = _androidPlanner.ResolveScopes(module, context, Language, executionContext);
+                var moduleKey = NormalizeModulePath(module.Path);
+                androidScopesByModule[moduleKey] = androidScopes;
+                sourceRootsByModule[moduleKey] = androidScopes
+                    .SelectMany(scope => scope.SourceRoots)
+                    .DistinctBy(root => root.Directory, PathComparer)
+                    .ToArray();
+                continue;
+            }
 
             if (TryGetUnsupportedTarget(module, out var unsupportedTarget))
             {
@@ -146,7 +162,19 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var roots = sourceRootsByModule[NormalizeModulePath(module.Path)];
+            var moduleKey = NormalizeModulePath(module.Path);
+            var roots = sourceRootsByModule[moduleKey];
+            if (androidScopesByModule.TryGetValue(moduleKey, out var androidScopes))
+            {
+                foreach (var androidScope in androidScopes.Where(scope => !scope.IncludeTestCode))
+                {
+                    await AnalyzeScopeAsync(
+                        module, context, androidScope.SourceRoots, false, false,
+                        executionContext, cancellationToken, androidScope).ConfigureAwait(false);
+                }
+                continue;
+            }
+
             var productionRoots = roots
                 .Where(root => root.Ownership != ProjectSourceRootOwnership.Test)
                 .ToArray();
@@ -183,7 +211,19 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var roots = sourceRootsByModule[NormalizeModulePath(module.Path)];
+            var moduleKey = NormalizeModulePath(module.Path);
+            var roots = sourceRootsByModule[moduleKey];
+            if (androidScopesByModule.TryGetValue(moduleKey, out var androidScopes))
+            {
+                foreach (var androidScope in androidScopes.Where(scope => scope.IncludeTestCode))
+                {
+                    await AnalyzeScopeAsync(
+                        module, context, androidScope.SourceRoots, true, true,
+                        executionContext, cancellationToken, androidScope).ConfigureAwait(false);
+                }
+                continue;
+            }
+
             if (roots.Any(root => root.Ownership == ProjectSourceRootOwnership.Unknown))
             {
                 await AnalyzeScopeAsync(
@@ -247,7 +287,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         bool includeTestCode,
         bool includeTestDependencies,
         SemanticAnalysisExecutionContext? executionContext,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AndroidSemanticAnalysisPlanner.Scope? androidScope = null)
     {
         if (sourceRoots.Count == 0)
             return;
@@ -271,7 +312,10 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             return;
         }
 
-        var classpath = _classpathResolver.Resolve(module, context.Modules, includeTestCode);
+        var classpath = androidScope is null
+            ? _classpathResolver.Resolve(module, context.Modules, includeTestCode)
+            : new JvmClasspathResolution(androidScope.ClasspathEntries, androidScope.UnresolvedDependencies,
+                androidScope.HasDeclaredDependencies, androidScope.IsComplete);
         var (compilerVersion, languageVersion, apiVersion, jvmTarget, inferred) =
             ResolveCompilerSettings(module);
         var javaSourceRoots = _sourceRootResolver.ResolveReferencedSourceRoots(
@@ -287,11 +331,10 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             context.Modules,
             context.Dependencies,
             includeTestDependencies);
-        var compilationOutputs = executionContext?.GetCompilationOutputs(
-            module.Path,
-            dependencyPaths.Production,
-            dependencyPaths.Test,
-            includeTestCode) ?? Array.Empty<string>();
+        var compilationOutputs = androidScope is null
+            ? executionContext?.GetCompilationOutputs(module.Path, dependencyPaths.Production, dependencyPaths.Test, includeTestCode)
+                ?? Array.Empty<string>()
+            : Array.Empty<string>();
 
         var composePlugin = module.GradleBuildModel?.Plugins.FirstOrDefault(plugin =>
             plugin.IsApplied
@@ -363,6 +406,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 .ToArray(),
             UnresolvedClasspathDependencies = classpath.UnresolvedDependencies,
             ClasspathResolutionComplete = classpath.IsComplete,
+            InputDiagnostics = androidScope?.Diagnostics ?? Array.Empty<AnalysisDiagnostic>(),
             BuildFiles = module.ProjectFiles.ToArray(),
             RequestedCapabilities = ["symbols", "relationships", "compiler-diagnostics", "jvm-interop"],
             HasDeclaredDependencies = classpath.HasDeclaredDependencies,
@@ -377,7 +421,10 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 ["kotlin.moduleName"] = NormalizeModuleName(module.Name),
                 ["kotlin.configurationInferred"] = inferred.ToString(),
                 ["kotlin.compilerPluginsNotExecuted"] = compilerPluginsNotExecuted.ToString(),
-                ["kotlin.composeCompilerPluginEnabled"] = composePluginEnabled.ToString()
+                ["kotlin.composeCompilerPluginEnabled"] = composePluginEnabled.ToString(),
+                ["android.variantName"] = androidScope?.VariantName ?? string.Empty,
+                ["android.sourceScope"] = androidScope?.DependencyScope.ToString() ?? string.Empty,
+                ["android.compileSdk"] = module.GradleBuildModel?.Android?.CompileSdk ?? string.Empty
             }
         };
 
@@ -401,25 +448,19 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         ProjectModuleContext module,
         out (string Code, string Message) unsupportedTarget)
     {
-        if (module.GradleBuildModel?.Android is not null)
+        var plugins = module.GradleBuildModel?.Plugins ?? [];
+        var androidPluginWithoutModel = plugins.FirstOrDefault(plugin => plugin.IsApplied
+            && (plugin.Id.StartsWith("com.android.", StringComparison.Ordinal)
+                || plugin.Id is "org.jetbrains.kotlin.android" or "kotlin-android"));
+        if (androidPluginWithoutModel is not null)
         {
-            unsupportedTarget = (
-                "KotlinTargetPlatformNotSupported",
-                "Android Kotlin analysis is not enabled until Android variants, SDK boot classpaths and source-set ownership are modelled.");
+            unsupportedTarget = ("AndroidVariantModelUnavailable",
+                "An Android Gradle plugin is applied, but its static Android variant model is unavailable. The module cannot be analysed safely as a plain JVM project.");
             return true;
         }
-
-        var plugins = module.GradleBuildModel?.Plugins ?? [];
         var unsupportedPlugin = plugins.FirstOrDefault(plugin =>
             plugin.IsApplied
             && (plugin.Id.Equals("org.jetbrains.kotlin.multiplatform", StringComparison.Ordinal)
-            || plugin.Id.Equals("org.jetbrains.kotlin.android", StringComparison.Ordinal)
-            || plugin.Id.Equals("kotlin-android", StringComparison.Ordinal)
-            || plugin.Id.Equals("com.android.application", StringComparison.Ordinal)
-            || plugin.Id.Equals("com.android.library", StringComparison.Ordinal)
-            || plugin.Id.Equals("com.android.test", StringComparison.Ordinal)
-            || plugin.Id.Equals("com.android.dynamic-feature", StringComparison.Ordinal)
-            || plugin.Id.Equals("com.android.asset-pack", StringComparison.Ordinal)
             || plugin.Id.Equals("org.jetbrains.kotlin.js", StringComparison.Ordinal)
             || plugin.Id.StartsWith("org.jetbrains.kotlin.native", StringComparison.Ordinal)
             || plugin.Id.StartsWith("org.jetbrains.kotlin.wasm", StringComparison.Ordinal)));
@@ -445,10 +486,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
 
         var message = unsupportedPlugin.Id.Equals("org.jetbrains.kotlin.multiplatform", StringComparison.Ordinal)
             ? "Kotlin Multiplatform is not analysed as a single JVM module. Target-specific source sets, expect/actual relationships and per-target classpaths must be modelled first."
-            : unsupportedPlugin.Id.Contains("android", StringComparison.Ordinal)
-                || unsupportedPlugin.Id.StartsWith("com.android.", StringComparison.Ordinal)
-                    ? "Android Kotlin analysis is not enabled until Android variants, SDK boot classpaths and source-set ownership are modelled."
-                    : "This Kotlin target is not JVM bytecode. A target-specific semantic engine and dependency model are required.";
+            : "This Kotlin target is not JVM bytecode. A target-specific semantic engine and dependency model are required.";
 
         unsupportedTarget = ("KotlinTargetPlatformNotSupported", message);
         return true;
@@ -487,6 +525,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         IReadOnlyCollection<ProjectModuleContext> modules)
     {
         var hasOwnedKotlinRoots = module.SourceRoots.Any(root => root.ContainsKotlinSources)
+            || module.GradleBuildModel?.Android?.SourceRoots.Any(root => root.ContainsKotlinSources) == true
             || Directory.Exists(Path.Combine(module.Path, "src", "main", "kotlin"))
             || Directory.Exists(Path.Combine(module.Path, "src", "test", "kotlin"));
         var hasKotlinLanguage = module.Languages.Any(language =>

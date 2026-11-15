@@ -34,6 +34,9 @@ public sealed class SemanticAnalysisRequest
 
     public IReadOnlyList<string> UnresolvedClasspathDependencies { get; init; } = Array.Empty<string>();
 
+    /// <summary>Host-side input-resolution diagnostics that must accompany worker evidence.</summary>
+    public IReadOnlyList<AnalysisDiagnostic> InputDiagnostics { get; init; } = Array.Empty<AnalysisDiagnostic>();
+
     public bool ClasspathResolutionComplete { get; init; } = true;
 
     public IReadOnlyList<string> BuildFiles { get; init; } = Array.Empty<string>();

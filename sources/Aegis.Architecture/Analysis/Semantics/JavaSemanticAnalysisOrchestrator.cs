@@ -15,6 +15,7 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
     private readonly IJvmClasspathResolver _classpathResolver;
     private readonly ILogger<JavaSemanticAnalysisOrchestrator> _logger;
     private readonly JvmSourceRootResolver _sourceRootResolver;
+    private readonly AndroidSemanticAnalysisPlanner _androidPlanner;
 
     public string Language => "Java";
 
@@ -25,7 +26,8 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         IJvmClasspathResolver classpathResolver,
         ILogger<JavaSemanticAnalysisOrchestrator> logger,
         SemanticAnalysisCoordinator? coordinator = null,
-        JvmSourceRootResolver? sourceRootResolver = null)
+        JvmSourceRootResolver? sourceRootResolver = null,
+        AndroidSemanticAnalysisPlanner? androidPlanner = null)
     {
         ArgumentNullException.ThrowIfNull(adapters);
         ArgumentNullException.ThrowIfNull(classpathResolver);
@@ -35,6 +37,7 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         _classpathResolver = classpathResolver;
         _logger = logger;
         _sourceRootResolver = sourceRootResolver ?? new JvmSourceRootResolver();
+        _androidPlanner = androidPlanner ?? new AndroidSemanticAnalysisPlanner(classpathResolver);
     }
 
     public Task AnalyzeAsync(
@@ -93,6 +96,20 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         foreach (var module in modules)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (module.GradleBuildModel?.Android is not null)
+            {
+                var androidScopes = _androidPlanner.ResolveScopes(module, context, Language, executionContext);
+                foreach (var androidScope in androidScopes)
+                {
+                    await AnalyzeScopeAsync(
+                        module, context, androidScope.SourceRoots,
+                        androidScope.IncludeTestCode,
+                        androidScope.IncludeTestCode,
+                        executionContext, cancellationToken, androidScope).ConfigureAwait(false);
+                }
+                continue;
+            }
 
             if (TryGetUnsupportedAndroidTarget(module, out var androidPluginId))
             {
@@ -170,7 +187,8 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         bool includeTestCode,
         bool includeTestDependencies,
         SemanticAnalysisExecutionContext? executionContext,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AndroidSemanticAnalysisPlanner.Scope? androidScope = null)
     {
         if (sourceRoots.Count == 0)
             return;
@@ -194,17 +212,19 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
             return;
         }
 
-        var classpath = _classpathResolver.Resolve(module, context.Modules, includeTestCode);
+        var classpath = androidScope is null
+            ? _classpathResolver.Resolve(module, context.Modules, includeTestCode)
+            : new JvmClasspathResolution(androidScope.ClasspathEntries, androidScope.UnresolvedDependencies,
+                androidScope.HasDeclaredDependencies, androidScope.IsComplete);
         var dependencyPaths = JvmModuleDependencyResolver.ResolveDependencyPaths(
             module.Path,
             context.Modules,
             context.Dependencies,
             includeTestDependencies);
-        var compilationOutputs = executionContext?.GetCompilationOutputs(
-            module.Path,
-            dependencyPaths.Production,
-            dependencyPaths.Test,
-            includeTestCode) ?? Array.Empty<string>();
+        var compilationOutputs = androidScope is null
+            ? executionContext?.GetCompilationOutputs(module.Path, dependencyPaths.Production, dependencyPaths.Test, includeTestCode)
+                ?? Array.Empty<string>()
+            : Array.Empty<string>();
         var request = new SemanticAnalysisRequest
         {
             Language = "Java",
@@ -242,12 +262,21 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
                 .ToArray(),
             UnresolvedClasspathDependencies = classpath.UnresolvedDependencies,
             ClasspathResolutionComplete = classpath.IsComplete,
+            InputDiagnostics = androidScope?.Diagnostics ?? Array.Empty<AnalysisDiagnostic>(),
             BuildFiles = module.ProjectFiles.ToArray(),
             RequestedCapabilities = [],
             SourceLevel = ResolveSourceLevel(module),
             HasDeclaredDependencies = classpath.HasDeclaredDependencies,
             IncludeGeneratedCode = true,
-            IncludeTestCode = includeTestCode
+            IncludeTestCode = includeTestCode,
+            ProviderOptions = androidScope is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["android.variantName"] = androidScope.VariantName,
+                    ["android.sourceScope"] = androidScope.DependencyScope.ToString(),
+                    ["android.compileSdk"] = module.GradleBuildModel?.Android?.CompileSdk ?? string.Empty
+                }
         };
 
         var run = await _coordinator.AnalyzeAsync(request, cancellationToken)
@@ -322,6 +351,7 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         IReadOnlyCollection<ProjectModuleContext> modules)
     {
         var hasOwnedJavaRoots = module.SourceRoots.Any(root => root.ContainsJavaSources)
+            || module.GradleBuildModel?.Android?.SourceRoots.Any(root => root.ContainsJavaSources) == true
             || Directory.Exists(Path.Combine(module.Path, "src", "main", "java"))
             || Directory.Exists(Path.Combine(module.Path, "src", "test", "java"));
         var hasJavaLanguage = module.Languages.Any(language =>

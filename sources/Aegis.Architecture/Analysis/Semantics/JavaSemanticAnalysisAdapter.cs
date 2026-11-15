@@ -69,8 +69,23 @@ public sealed class JavaSemanticAnalysisAdapter : ISemanticAnalysisAdapter
                 exception.GetType().Name);
         }
 
-        if (!request.HasDeclaredDependencies || request.ClasspathResolutionComplete)
+        var classpathIncomplete = request.HasDeclaredDependencies && !request.ClasspathResolutionComplete;
+        var inputIncomplete = request.InputDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage);
+        if (!classpathIncomplete && !inputIncomplete)
             return run;
+
+        var diagnostics = run.Diagnostics.Concat(request.InputDiagnostics).ToList();
+        if (classpathIncomplete)
+        {
+            diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = "JavaExternalClasspathUnavailable",
+                Component = nameof(JavaSemanticAnalysisAdapter),
+                Message = CreateClasspathDiagnostic(request),
+                Target = request.ProjectPath,
+                AffectsCoverage = true
+            });
+        }
 
         return new SemanticAnalysisRun
         {
@@ -79,7 +94,9 @@ public sealed class JavaSemanticAnalysisAdapter : ISemanticAnalysisAdapter
             EngineId = run.EngineId,
             EngineVersion = run.EngineVersion,
             ProjectPath = run.ProjectPath,
-            Status = SemanticAnalysisStatus.PartiallyCompleted,
+            Status = run.Status == SemanticAnalysisStatus.Completed
+                ? SemanticAnalysisStatus.PartiallyCompleted
+                : run.Status,
             StartedAtUtc = run.StartedAtUtc,
             CompletedAtUtc = run.CompletedAtUtc,
             AnalyzedFileCount = run.AnalyzedFileCount,
@@ -87,18 +104,7 @@ public sealed class JavaSemanticAnalysisAdapter : ISemanticAnalysisAdapter
             Capabilities = run.Capabilities,
             Symbols = run.Symbols,
             Relationships = run.Relationships,
-            Diagnostics =
-            [
-                .. run.Diagnostics,
-                new AnalysisDiagnostic
-                {
-                    Code = "JavaExternalClasspathUnavailable",
-                    Component = nameof(JavaSemanticAnalysisAdapter),
-                    Message = CreateClasspathDiagnostic(request),
-                    Target = request.ProjectPath,
-                    AffectsCoverage = true
-                }
-            ]
+            Diagnostics = diagnostics
         };
     }
 

@@ -8,4 +8,10 @@ public interface IJvmClasspathResolver
         ProjectModuleContext module,
         IReadOnlyCollection<ProjectModuleContext> projectModules,
         bool includeTestCode);
+
+    JvmClasspathResolution Resolve(
+        ProjectModuleContext module,
+        IReadOnlyCollection<ProjectModuleContext> projectModules,
+        IReadOnlyCollection<GradleBuildModel.Dependency> selectedGradleDependencies) =>
+        Resolve(module, projectModules, includeTestCode: false);
 }

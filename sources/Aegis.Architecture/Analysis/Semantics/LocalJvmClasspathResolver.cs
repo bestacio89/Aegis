@@ -42,7 +42,23 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
     public JvmClasspathResolution Resolve(
         ProjectModuleContext module,
         IReadOnlyCollection<ProjectModuleContext> projectModules,
-        bool includeTestCode)
+        bool includeTestCode) =>
+        ResolveCore(module, projectModules, includeTestCode, null);
+
+    public JvmClasspathResolution Resolve(
+        ProjectModuleContext module,
+        IReadOnlyCollection<ProjectModuleContext> projectModules,
+        IReadOnlyCollection<GradleBuildModel.Dependency> selectedGradleDependencies)
+    {
+        ArgumentNullException.ThrowIfNull(selectedGradleDependencies);
+        return ResolveCore(module, projectModules, includeTestCode: true, selectedGradleDependencies);
+    }
+
+    private JvmClasspathResolution ResolveCore(
+        ProjectModuleContext module,
+        IReadOnlyCollection<ProjectModuleContext> projectModules,
+        bool includeTestCode,
+        IReadOnlyCollection<GradleBuildModel.Dependency>? selectedGradleDependencies)
     {
         ArgumentNullException.ThrowIfNull(module);
         ArgumentNullException.ThrowIfNull(projectModules);
@@ -94,7 +110,7 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
 
         if (module.GradleBuildModel is { } gradle)
         {
-            foreach (var dependency in gradle.Dependencies)
+            foreach (var dependency in selectedGradleDependencies ?? gradle.Dependencies)
             {
                 if (dependency.IsPlatform
                     || dependency.IsEnforcedPlatform
@@ -104,8 +120,8 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
 
                 if (!string.IsNullOrWhiteSpace(dependency.ProjectPath))
                 {
+                    // Android project outputs are resolved separately with exact variant provenance.
                     hasDeclaredDependencies = true;
-                    unresolved.Add($"project:{dependency.ProjectPath}");
                     continue;
                 }
 

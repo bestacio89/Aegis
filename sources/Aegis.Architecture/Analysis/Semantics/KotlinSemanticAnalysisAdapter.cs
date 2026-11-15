@@ -100,8 +100,12 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
         }
 
         var run = result.Run;
-        var diagnostics = run.Diagnostics.ToList();
+        var diagnostics = run.Diagnostics.Concat(request.InputDiagnostics).ToList();
         var status = run.Status;
+
+        if (request.InputDiagnostics.Any(diagnostic => diagnostic.AffectsCoverage)
+            && status == SemanticAnalysisStatus.Completed)
+            status = SemanticAnalysisStatus.PartiallyCompleted;
 
         if (configurationInferred)
         {
@@ -199,7 +203,10 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
                         request.ProjectPath,
                         request.IncludeTestCode,
                         artifactRoot,
-                        result.CompilationOutputDirectory);
+                        result.CompilationOutputDirectory,
+                        request.ProviderOptions.TryGetValue("android.variantName", out var androidVariant)
+                            ? androidVariant
+                            : null);
                 }
                 catch (Exception exception) when (
                     exception is InvalidOperationException

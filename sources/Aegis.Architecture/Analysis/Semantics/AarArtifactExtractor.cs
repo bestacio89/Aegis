@@ -100,8 +100,19 @@ public sealed class AarArtifactExtractor
             using (var output = new FileStream(
                 temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
-                input.CopyTo(output);
-                if (output.Length != entry.Length)
+                var buffer = new byte[81920];
+                long totalBytes = 0;
+                int bytesRead;
+                while ((bytesRead = input.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    if (bytesRead > entry.Length - totalBytes)
+                        throw new InvalidDataException("A nested compiler archive exceeded its declared uncompressed size.");
+
+                    output.Write(buffer, 0, bytesRead);
+                    totalBytes += bytesRead;
+                }
+
+                if (totalBytes != entry.Length)
                     throw new InvalidDataException("A nested compiler archive was truncated during extraction.");
             }
 

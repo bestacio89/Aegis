@@ -11,15 +11,17 @@ namespace Aegis.Shared.Architecture.Models.Policies.Architecture
         /// </summary>
         public Dictionary<string, string[]> AllowedDependencies { get; set; } = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Api"] = ["Application", "Domain", "Infrastructure", "Contracts"],
-            ["Application"] = ["Domain", "Contracts"],
-            ["Domain"] = [],
-            ["Infrastructure"] = ["Domain", "Application", "Contracts"],
-            ["Contracts"] = [],
-            ["Presentation"] = ["Application", "Contracts", "Client"],
-            ["Consumer"] = ["Application", "Domain", "Infrastructure", "Contracts"],
-            ["Client"] = ["Contracts"],
-            ["Tests"] = ["Api", "Application", "Domain", "Infrastructure", "Contracts", "Presentation", "Consumer", "Client", "Tests"]
+            ["Api"] = ["Application", "Domain", "Infrastructure", "Contracts", "Shared", "Library"],
+            ["Application"] = ["Domain", "Contracts", "Shared", "Library"],
+            ["Domain"] = ["Shared", "Library"],
+            ["Infrastructure"] = ["Domain", "Application", "Contracts", "Shared", "Library"],
+            ["Contracts"] = ["Shared", "Library"],
+            ["Presentation"] = ["Application", "Contracts", "Client", "Shared", "Library"],
+            ["Consumer"] = ["Application", "Domain", "Infrastructure", "Contracts", "Shared", "Library"],
+            ["Client"] = ["Contracts", "Shared", "Library"],
+            ["Shared"] = ["Library"],
+            ["Library"] = [],
+            ["Tests"] = ["Api", "Application", "Domain", "Infrastructure", "Contracts", "Presentation", "Consumer", "Client", "Shared", "Library", "Tests"]
         };
 
         public Dictionary<string, string[]> LayerHints { get; set; } = new(StringComparer.OrdinalIgnoreCase)
@@ -32,7 +34,9 @@ namespace Aegis.Shared.Architecture.Models.Policies.Architecture
             ["Presentation"] = ["Admin", "Presentation", "Web", "Ui", "Front"],
             ["Consumer"] = ["Consumer", "Worker", "Background", "Jobs"],
             ["Client"] = ["Client", "ClientHttp", "Unity"],
-            ["Tests"] = ["Test", "Tests", "Testing"]
+            ["Tests"] = ["Test", "Tests", "Testing"],
+            ["Shared"] = ["Shared", "Common", "Commons"],
+            ["Library"] = ["Library", "Libraries", "Lib"]
         };
 
         /// <summary>
@@ -43,6 +47,7 @@ namespace Aegis.Shared.Architecture.Models.Policies.Architecture
         {
             ["C#"] = EnforcementMode.Strict,
             ["Java"] = EnforcementMode.Advisory,
+            ["Kotlin"] = EnforcementMode.Advisory,
             ["Python"] = EnforcementMode.Advisory,
             ["TypeScript"] = EnforcementMode.Strict,
             ["JavaScript"] = EnforcementMode.Advisory

@@ -104,7 +104,15 @@ public sealed class AndroidSemanticAnalysisPlanner
                 module.Path));
 
         if (diagnostics.Count > 0)
+        {
             context.DiscoveryDiagnostics.AddRange(diagnostics);
+            var sourceDiagnostics = diagnostics.ToArray();
+            scopes = scopes.Select(scope => scope with
+            {
+                Diagnostics = sourceDiagnostics,
+                IsComplete = sourceDiagnostics.All(diagnostic => !diagnostic.AffectsCoverage)
+            }).ToList();
+        }
         return scopes;
     }
 
@@ -115,7 +123,7 @@ public sealed class AndroidSemanticAnalysisPlanner
         SemanticAnalysisExecutionContext? executionContext)
     {
         ArgumentNullException.ThrowIfNull(sourceScope);
-        return ResolveScope(
+        var resolved = ResolveScope(
             module,
             context,
             sourceScope.VariantName,
@@ -123,6 +131,12 @@ public sealed class AndroidSemanticAnalysisPlanner
             sourceScope.SourceRoots,
             sourceScope.IncludeTestCode,
             executionContext);
+        var diagnostics = sourceScope.Diagnostics.Concat(resolved.Diagnostics).ToArray();
+        return resolved with
+        {
+            Diagnostics = diagnostics,
+            IsComplete = resolved.IsComplete && diagnostics.All(diagnostic => !diagnostic.AffectsCoverage)
+        };
     }
 
     private static Scope CreateSourceScope(

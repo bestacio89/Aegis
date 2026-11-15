@@ -215,8 +215,7 @@ class KotlinCompilerIntegrationTests {
             assertEquals(ExitCode.OK, exitCode)
             assertTrue(Files.exists(evidence), "The IR extension must emit semantic evidence.")
 
-            val compilerEvidence = JsonParser.parseString(Files.readString(evidence)).asJsonObject
-            val result = compilerEvidence
+            val result = JsonParser.parseString(Files.readString(evidence)).asJsonObject
             val symbols = result.getAsJsonArray("symbols").map { it.asJsonObject }
             val relationships = result.getAsJsonArray("relationships").map { it.asJsonObject }
 
@@ -532,7 +531,14 @@ class KotlinCompilerIntegrationTests {
             val exitCode = K2JVMCompiler().exec(messages, Services.EMPTY, arguments)
 
             assertEquals(ExitCode.OK, exitCode)
-            val result = JsonParser.parseString(Files.readString(evidence)).asJsonObject
+            val compilerEvidence = JsonParser.parseString(Files.readString(evidence)).asJsonObject
+            val result = KotlinExpectActualSourceCollector().reconcile(
+                compilerEvidence,
+                listOf(commonSource, jvmSource),
+                listOf(commonSourceRoot),
+                "jvm",
+                false
+            )
             val symbols = result.getAsJsonArray("symbols").map { it.asJsonObject }
             val expectId = "kotlin:function:sample.platformName()"
             val actualId = "$expectId#actual:jvmMain"

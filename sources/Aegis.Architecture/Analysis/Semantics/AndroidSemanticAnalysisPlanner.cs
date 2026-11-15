@@ -179,21 +179,20 @@ public sealed class AndroidSemanticAnalysisPlanner
         diagnostics.AddRange(projectDependencies.Diagnostics);
 
         var projectOutputs = new AndroidVariantProjectDependencyResolver.ClasspathResult([], [], true);
-        if (projectDependencies.OrderedDependencies.Count > 0)
+        if (executionContext is not null)
         {
-            if (executionContext is null)
-            {
-                diagnostics.Add(Diagnostic(
-                    "AndroidProjectCompilationOutputsUnavailable",
-                    "Project dependencies were declared, but no semantic execution context is available to supply host-validated compiler outputs.",
-                    module.Path));
-            }
-            else
-            {
-                projectOutputs = _projectDependencyResolver.AssembleCompilationOutputs(
-                    module, projectDependencies, executionContext, includeTestCode, variantName);
-                diagnostics.AddRange(projectOutputs.Diagnostics);
-            }
+            // This also supplies the consumer's own successful production output
+            // to its test scopes and the Kotlin output to mixed Java scopes.
+            projectOutputs = _projectDependencyResolver.AssembleCompilationOutputs(
+                module, projectDependencies, executionContext, includeTestCode, variantName);
+            diagnostics.AddRange(projectOutputs.Diagnostics);
+        }
+        else if (projectDependencies.OrderedDependencies.Count > 0)
+        {
+            diagnostics.Add(Diagnostic(
+                "AndroidProjectCompilationOutputsUnavailable",
+                "Project dependencies were declared, but no semantic execution context is available to supply host-validated compiler outputs.",
+                module.Path));
         }
 
         var entries = new List<string>();

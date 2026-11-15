@@ -504,7 +504,9 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             BuildFiles = module.ProjectFiles.ToArray(),
             TargetName = targetName,
             SourceSetNames = sourceSetNames?.ToArray() ?? Array.Empty<string>(),
-            RequestedCapabilities = ["symbols", "relationships", "compiler-diagnostics", "jvm-interop"],
+            RequestedCapabilities = targetName is null
+                ? ["symbols", "relationships", "compiler-diagnostics", "jvm-interop"]
+                : ["symbols", "relationships", "compiler-diagnostics", "jvm-interop", "multiplatform"],
             HasDeclaredDependencies = classpath.HasDeclaredDependencies,
             IncludeGeneratedCode = true,
             IncludeTestCode = includeTestCode,

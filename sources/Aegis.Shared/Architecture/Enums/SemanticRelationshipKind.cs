@@ -16,5 +16,6 @@ public enum SemanticRelationshipKind
     UsesAnnotation = 7,
     Injects = 8,
     Registers = 9,
-    LoadsDynamically = 10
+    LoadsDynamically = 10,
+    Actualizes = 11
 }

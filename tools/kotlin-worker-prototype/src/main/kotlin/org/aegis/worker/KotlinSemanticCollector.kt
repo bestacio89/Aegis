@@ -53,8 +53,10 @@ internal @OptIn(UnsafeDuringIrConstructionAPI::class)
 class KotlinSemanticCollector(
     private val projectPath: String,
     private val isTestCode: Boolean,
-    private val generatedRoots: List<Path>
+    private val generatedRoots: List<Path>,
+    private val targetName: String?
 ) {
+    private val pendingActualizations = mutableListOf<Actualization>()
     private val symbols = LinkedHashMap<String, JsonObject>()
     private val relationships = LinkedHashMap<String, JsonObject>()
     private val propertyAccessors = HashMap<Any, String>()
@@ -65,6 +67,17 @@ class KotlinSemanticCollector(
 
     fun collect(module: IrModuleFragment) {
         module.acceptChildrenVoid(DeclarationCollector())
+        pendingActualizations.forEach { actualization ->
+            if (symbols.containsKey(actualization.expectedId)) {
+                addRelationship(
+                    actualization.actualId,
+                    actualization.expectedId,
+                    11,
+                    actualization.offset,
+                    actualization.file
+                )
+            }
+        }
         module.acceptChildrenVoid(RelationshipCollector())
     }
 
@@ -107,7 +120,8 @@ class KotlinSemanticCollector(
 
         override fun visitClass(declaration: IrClass) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val id = classId(declaration, owners.lastOrNull())
+            val canonicalId = classId(declaration, owners.lastOrNull())
+            val id = semanticDeclarationId(canonicalId, declaration)
             val symbolKind = when (declaration.kind.name) {
                 "INTERFACE" -> 5
                 "ENUM_CLASS" -> 7
@@ -116,6 +130,7 @@ class KotlinSemanticCollector(
             }
             addSymbol(
                 id = id,
+                canonicalId = canonicalId,
                 name = declaration.name.asString(),
                 qualifiedName = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString(),
                 kind = symbolKind,
@@ -130,8 +145,11 @@ class KotlinSemanticCollector(
         override fun visitTypeAlias(declaration: IrTypeAlias) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
             val qualifiedName = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
+            val canonicalId = "kotlin:typealias:$qualifiedName"
+            val id = semanticDeclarationId(canonicalId, declaration)
             addSymbol(
-                id = "kotlin:typealias:$qualifiedName",
+                id = id,
+                canonicalId = canonicalId,
                 name = declaration.name.asString(),
                 qualifiedName = qualifiedName,
                 kind = 14,
@@ -143,9 +161,11 @@ class KotlinSemanticCollector(
 
         override fun visitProperty(declaration: IrProperty) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val id = propertyId(declaration, owners.lastOrNull())
+            val canonicalId = propertyId(declaration, owners.lastOrNull())
+            val id = semanticDeclarationId(canonicalId, declaration)
             addSymbol(
                 id = id,
+                canonicalId = canonicalId,
                 name = declaration.name.asString(),
                 qualifiedName = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString(),
                 kind = 12,
@@ -195,9 +215,11 @@ class KotlinSemanticCollector(
                 return
             }
 
-            val id = functionId(declaration, owners.lastOrNull())
+            val canonicalId = functionId(declaration, owners.lastOrNull())
+            val id = semanticDeclarationId(canonicalId, declaration)
             addSymbol(
                 id = id,
+                canonicalId = canonicalId,
                 name = declaration.name.asString(),
                 qualifiedName = declaration.fqNameWhenAvailable?.asString() ?: id,
                 kind = 9,
@@ -215,9 +237,11 @@ class KotlinSemanticCollector(
 
         override fun visitConstructor(declaration: IrConstructor) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val id = functionId(declaration, owners.lastOrNull())
+            val canonicalId = functionId(declaration, owners.lastOrNull())
+            val id = semanticDeclarationId(canonicalId, declaration)
             addSymbol(
                 id = id,
+                canonicalId = canonicalId,
                 name = "<init>",
                 qualifiedName = declaration.fqNameWhenAvailable?.asString() ?: id,
                 kind = 10,
@@ -235,6 +259,7 @@ class KotlinSemanticCollector(
 
         private fun addSymbol(
             id: String,
+            canonicalId: String = id,
             name: String,
             qualifiedName: String,
             kind: Int,
@@ -287,6 +312,9 @@ class KotlinSemanticCollector(
             })
             symbol.add("provenance", provenance(file, offset))
             symbols[id] = symbol
+            if (isActual(declaration)) {
+                pendingActualizations.add(Actualization(canonicalId, id, offset, file))
+            }
         }
     }
 
@@ -307,7 +335,10 @@ class KotlinSemanticCollector(
 
         override fun visitClass(declaration: IrClass) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val sourceId = classId(declaration, owners.lastOrNull())
+            val sourceId = semanticDeclarationId(
+                classId(declaration, owners.lastOrNull()),
+                declaration
+            )
             owners.addLast(sourceId)
             addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.superTypes.forEach { superType ->
@@ -317,7 +348,8 @@ class KotlinSemanticCollector(
                     ?: return@forEach
                 if (targetName == "kotlin.Any") return@forEach
 
-                val targetId = targetClass?.let(::classId) ?: "kotlin:type:$targetName"
+                val targetId = targetClass?.let { semanticDeclarationId(classId(it), it) }
+                    ?: "kotlin:type:$targetName"
                 val targetIsInterface = targetClass?.kind?.name in setOf("INTERFACE", "ANNOTATION_CLASS")
                 val relationshipKind = when {
                     declaration.kind.name == "INTERFACE" -> 2
@@ -339,7 +371,10 @@ class KotlinSemanticCollector(
 
         override fun visitProperty(declaration: IrProperty) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val sourceId = propertyId(declaration, owners.lastOrNull())
+            val sourceId = semanticDeclarationId(
+                propertyId(declaration, owners.lastOrNull()),
+                declaration
+            )
             owners.addLast(sourceId)
             addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.acceptChildrenVoid(this)
@@ -359,7 +394,10 @@ class KotlinSemanticCollector(
                 return
             }
 
-            val sourceId = functionId(declaration, owners.lastOrNull())
+            val sourceId = semanticDeclarationId(
+                functionId(declaration, owners.lastOrNull()),
+                declaration
+            )
             owners.addLast(sourceId)
             addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.acceptChildrenVoid(this)
@@ -368,7 +406,10 @@ class KotlinSemanticCollector(
 
         override fun visitConstructor(declaration: IrConstructor) {
             if (declaration.origin != IrDeclarationOrigin.DEFINED) return
-            val sourceId = functionId(declaration, owners.lastOrNull())
+            val sourceId = semanticDeclarationId(
+                functionId(declaration, owners.lastOrNull()),
+                declaration
+            )
             owners.addLast(sourceId)
             addAnnotationRelationships(sourceId, declaration, currentFile)
             declaration.acceptChildrenVoid(this)
@@ -382,8 +423,8 @@ class KotlinSemanticCollector(
             val propertyId = propertyAccessors[expression.symbol]
                 ?: targetProperty?.takeIf {
                     target.origin != IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
-                }?.let(::propertyId)
-            val targetId = propertyId ?: functionId(target)
+                }?.let { semanticDeclarationId(propertyId(it), it) }
+            val targetId = propertyId ?: semanticDeclarationId(functionId(target), target)
             if (propertyId != null) {
                 targetProperty?.let { addExternalPropertyIfNeeded(propertyId, it) }
             } else {
@@ -407,7 +448,8 @@ class KotlinSemanticCollector(
             val targetClass = target.parent as? IrClass
             val annotationClass = targetClass?.takeIf { it.kind.name == "ANNOTATION_CLASS" }
             val isAnnotation = annotationClass != null
-            val targetId = annotationClass?.let(::classId) ?: functionId(target)
+            val targetId = annotationClass?.let { semanticDeclarationId(classId(it), it) }
+                ?: semanticDeclarationId(functionId(target), target)
             if (annotationClass != null) {
                 addExternalTypeIfNeeded(
                     targetId,
@@ -426,7 +468,7 @@ class KotlinSemanticCollector(
         override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall) {
             val sourceId = owners.lastOrNull()
             val target = expression.symbol.owner
-            val targetId = functionId(target)
+            val targetId = semanticDeclarationId(functionId(target), target)
             addExternalFunctionIfNeeded(targetId, target)
             if (sourceId != null) {
                 addRelationship(sourceId, targetId, 4, expression.startOffset, currentFile)
@@ -440,8 +482,8 @@ class KotlinSemanticCollector(
             val targetProperty = (target as? IrSimpleFunction)?.correspondingPropertySymbol?.owner
             val propertyId = targetProperty?.takeIf {
                 target.origin != IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
-            }?.let(::propertyId)
-            val targetId = propertyId ?: functionId(target)
+            }?.let { semanticDeclarationId(propertyId(it), it) }
+            val targetId = propertyId ?: semanticDeclarationId(functionId(target), target)
             if (propertyId != null) {
                 targetProperty?.let { addExternalPropertyIfNeeded(propertyId, it) }
             } else {
@@ -470,7 +512,7 @@ class KotlinSemanticCollector(
                 expression.acceptChildrenVoid(this)
                 return
             }
-            val targetId = classId(target)
+            val targetId = semanticDeclarationId(classId(target), target)
             val qualifiedName = target.fqNameWhenAvailable?.asString() ?: targetId
             addExternalTypeIfNeeded(
                 targetId,
@@ -517,7 +559,7 @@ class KotlinSemanticCollector(
         override fun visitGetObjectValue(expression: IrGetObjectValue) {
             val sourceId = owners.lastOrNull()
             val target = expression.symbol.owner
-            val targetId = classId(target)
+            val targetId = semanticDeclarationId(classId(target), target)
             val qualifiedName = target.fqNameWhenAvailable?.asString() ?: targetId
             addExternalTypeIfNeeded(
                 targetId,
@@ -768,7 +810,7 @@ class KotlinSemanticCollector(
             }
         }
 
-        val id = propertyId(declaration)
+        val id = semanticDeclarationId(propertyId(declaration), declaration)
         addExternalPropertyIfNeeded(id, declaration)
         return id
     }
@@ -1001,6 +1043,8 @@ class KotlinSemanticCollector(
     }
 
     private fun declarationModifiers(declaration: IrDeclaration): List<String> = buildList {
+        if (isExpect(declaration)) add("expect")
+        if (isActual(declaration)) add("actual")
         if (declaration is IrFunction && isComposable(declaration)) add("Composable")
         when (declaration) {
             is IrClass -> {
@@ -1029,6 +1073,30 @@ class KotlinSemanticCollector(
             }
         }
     }
+
+    private fun semanticDeclarationId(id: String, declaration: IrDeclaration): String =
+        if (isActual(declaration)) "$id#actual:${targetName ?: "unknown"}" else id
+
+    private fun isActual(declaration: IrDeclaration): Boolean = when (declaration) {
+        is IrClass -> declaration.isActual
+        is IrFunction -> declaration.isActual
+        is IrProperty -> declaration.isActual
+        else -> false
+    }
+
+    private fun isExpect(declaration: IrDeclaration): Boolean = when (declaration) {
+        is IrClass -> declaration.isExpect
+        is IrFunction -> declaration.isExpect
+        is IrProperty -> declaration.isExpect
+        else -> false
+    }
+
+    private data class Actualization(
+        val expectedId: String,
+        val actualId: String,
+        val offset: Int,
+        val file: IrFile?
+    )
 
     private fun isComposable(declaration: IrFunction): Boolean =
         declaration.annotations.any { annotation ->

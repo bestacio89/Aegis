@@ -136,6 +136,18 @@ internal static class KotlinMultiplatformBuildModelResolver
                 buildFile));
         }
 
+        foreach (var commonSourceSet in new[] { "commonMain", "commonTest" })
+        {
+            if (!sourceSets.Any(sourceSet => sourceSet.Name.Equals(
+                    commonSourceSet, StringComparison.Ordinal)))
+            {
+                diagnostics.Add(CreateDiagnostic(
+                    "GradleKotlinMultiplatformCommonSourceSetNotResolved",
+                    $"The required common source set '{commonSourceSet}' was not statically declared.",
+                    buildFile));
+            }
+        }
+
         foreach (var target in targets)
         {
             foreach (var suffix in new[] { "Main", "Test" })
@@ -159,6 +171,24 @@ internal static class KotlinMultiplatformBuildModelResolver
                 "The statically resolved Kotlin Multiplatform source-set dependsOn graph contains a cycle.",
                 buildFile));
         }
+        else
+        {
+            foreach (var sourceSet in sourceSets.Where(sourceSet =>
+                         sourceSet.Name is not ("commonMain" or "commonTest")))
+            {
+                var commonTarget = sourceSet.Ownership == "Production" ? "commonMain"
+                    : sourceSet.Ownership == "Test" ? "commonTest"
+                    : null;
+                if (commonTarget is not null
+                    && !HasDependencyPath(sourceSet.Name, commonTarget, sourceSets))
+                {
+                    diagnostics.Add(CreateDiagnostic(
+                        "GradleKotlinMultiplatformSourceSetGraphIncomplete",
+                        $"Source set '{sourceSet.Name}' has no statically resolved dependency path to '{commonTarget}'.",
+                        buildFile));
+                }
+            }
+        }
 
         return new KotlinMultiplatformBuildModel
         {
@@ -171,7 +201,41 @@ internal static class KotlinMultiplatformBuildModelResolver
                 && !HasSourceSetCycle(sourceSets)
                 && sourceSets.All(sourceSet => sourceSet.DependsOn.All(dependency =>
                     sourceSets.Any(candidate => candidate.Name == dependency)))
+                && sourceSets.Where(sourceSet => sourceSet.Name is not ("commonMain" or "commonTest"))
+                    .All(sourceSet => sourceSet.Ownership switch
+                    {
+                        "Production" => HasDependencyPath(sourceSet.Name, "commonMain", sourceSets),
+                        "Test" => HasDependencyPath(sourceSet.Name, "commonTest", sourceSets),
+                        _ => false
+                    })
         };
+    }
+
+    private static bool HasDependencyPath(
+        string sourceSetName,
+        string targetName,
+        IReadOnlyCollection<KotlinMultiplatformBuildModel.SourceSet> sourceSets)
+    {
+        var dependencies = sourceSets
+            .GroupBy(sourceSet => sourceSet.Name, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.SelectMany(sourceSet => sourceSet.DependsOn)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray(),
+                StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+
+        bool Visit(string name)
+        {
+            if (name.Equals(targetName, StringComparison.Ordinal))
+                return true;
+            if (!visited.Add(name) || !dependencies.TryGetValue(name, out var targets))
+                return false;
+            return targets.Any(Visit);
+        }
+
+        return Visit(sourceSetName);
     }
 
     private static bool HasSourceSetCycle(

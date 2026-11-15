@@ -85,8 +85,11 @@ internal static class KotlinMultiplatformBuildModelResolver
                 var segmentEnd = index + 1 < declarations.Length
                     ? declarations[index + 1].Index
                     : sourceSetsBlock.Length;
-                var declarationSegment = sourceSetsBlock[declaration.Index + declaration.Length..segmentEnd];
-                var body = ExtractFollowingBlock(declarationSegment, 0);
+                var declarationStart = declaration.Index + declaration.Length;
+                var declarationSegment = sourceSetsBlock.Substring(
+                    declarationStart,
+                    segmentEnd - declarationStart);
+                var body = ExtractFollowingBlock(declarationSegment, declarationSegment.IndexOf('{'));
                 var dependencies = body is null
                     ? Array.Empty<string>()
                     : DependsOnDeclaration.Matches(body)

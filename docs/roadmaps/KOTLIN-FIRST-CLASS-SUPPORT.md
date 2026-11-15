@@ -505,9 +505,6 @@ The current static model does not yet represent the full Gradle attribute-matchi
 
 ###### K7.5.2.3 — Project outputs and deterministic classpath assembly
 
-- First establish explicit compiler-output evidence in the shared Gradle model. Accept only supported literal project-relative output paths attached to identifiable Java/Kotlin compile tasks; retain task, language, variant, scope and build-file provenance.
-- Reject dynamic paths, ambiguous declarations and paths escaping the owning module. Never synthesize output directories from Gradle/AGP/Kotlin conventions.
-
 - Resolve in-workspace Android project dependencies only when module/variant compatibility and output provenance are explicit.
 - Assemble the selected variant classpath through the existing shared JVM classpath contract, with deterministic ordering and no production/test/variant leakage.
 - Do not infer outputs from conventional build directories or treat static project declarations as proof of successful compilation.

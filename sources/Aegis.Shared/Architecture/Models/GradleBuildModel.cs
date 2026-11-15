@@ -16,9 +16,6 @@ public sealed class GradleBuildModel
 
     public List<SourceSet> SourceSets { get; init; } = [];
 
-    /// <summary>Compiler output directories declared explicitly in supported Gradle task configuration.</summary>
-    public List<ProjectCompilationOutput> CompilationOutputs { get; init; } = [];
-
     /// <summary>Literal custom Gradle Test task registrations; dynamic task configuration is not evaluated.</summary>
     public List<TestTask> TestTasks { get; init; } = [];
 

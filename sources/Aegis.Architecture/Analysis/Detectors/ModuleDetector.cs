@@ -867,6 +867,7 @@ internal static class ModuleDetector
             || normalized.Contains("grpc", StringComparison.Ordinal)
             || normalized.Contains("aras", StringComparison.Ordinal)
             || normalized.Contains("mapping", StringComparison.Ordinal)
+            || tokens.Contains("io", StringComparer.Ordinal)
             || normalized.Contains("opentelemetry", StringComparison.Ordinal)
             || normalized.Contains("polly", StringComparison.Ordinal)
             || normalized.Contains("kafka", StringComparison.Ordinal)

@@ -241,6 +241,7 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
         }
         catch (Exception exception) when (
             exception is IOException
+            or InvalidDataException
             or UnauthorizedAccessException
             or ArgumentException
             or NotSupportedException)

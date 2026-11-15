@@ -426,7 +426,7 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
         public string AdapterId => "fixture-kotlin";
         public string Language => "Kotlin";
         public IReadOnlyCollection<string> SupportedCapabilities =>
-            ["symbols", "relationships", "compiler-diagnostics", "jvm-interop"];
+            ["symbols", "relationships", "compiler-diagnostics", "jvm-interop", "multiplatform"];
 
         public bool CanAnalyze(SemanticAnalysisRequest request) =>
             request.Language.Equals("Kotlin", StringComparison.OrdinalIgnoreCase);

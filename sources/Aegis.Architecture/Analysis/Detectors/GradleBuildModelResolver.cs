@@ -2040,8 +2040,8 @@ internal static class GradleBuildModelResolver
         {
             var conventionalDirectory = Path.GetFullPath(Path.Combine(
                 modulePath, "src", sourceSet.Name, "kotlin"));
-            var directories = sourceSet.KotlinSourceDirectories is { Count: > 0 }
-                ? sourceSet.KotlinSourceDirectories
+            IReadOnlyList<string> directories = sourceSet.KotlinSourceDirectories is { Count: > 0 } explicitDirectories
+                ? explicitDirectories
                 : [conventionalDirectory];
 
             var ownership = sourceSet.Ownership switch

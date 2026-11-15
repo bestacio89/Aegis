@@ -223,7 +223,8 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
 
             await orchestrator.AnalyzeAsync(context);
 
-            Assert.Equal(2, adapter.Requests.Count);
+            Assert.True(adapter.Requests.Count == 2,
+                $"Expected production and test KMP requests. Runs: {string.Join(" | ", context.SemanticAnalysisRuns.Select(run => $"{run.TargetName}:{run.Status}:{string.Join(",", run.Diagnostics.Select(diagnostic => diagnostic.Code))}"))}. Discovery: {string.Join(" | ", context.DiscoveryDiagnostics.Select(diagnostic => $"{diagnostic.Code}:{diagnostic.Message}"))}");
             Assert.Equal(2, classpathResolver.SelectedConfigurations.Count);
             Assert.Equal(
                 new[] { "commonMainImplementation", "jvmMainImplementation" },

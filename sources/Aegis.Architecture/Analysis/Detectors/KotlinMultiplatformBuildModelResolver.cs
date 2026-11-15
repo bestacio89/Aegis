@@ -37,6 +37,10 @@ internal static class KotlinMultiplatformBuildModelResolver
         @"\bdependencies\s*\{",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex DirectSourceSetDependenciesBlock = new(
+        @"(?m)^\s*(?<name>[A-Za-z][A-Za-z0-9_]*(?:Main|Test))\.dependencies\s*\{",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     public static IReadOnlyList<(string SourceSetName, string Dependencies)> ExtractSourceSetDependencyBlocks(
         string source)
     {
@@ -49,16 +53,12 @@ internal static class KotlinMultiplatformBuildModelResolver
         if (sourceSetsBlock is null)
             return Array.Empty<(string, string)>();
 
-        var declarations = SourceSetDeclaration.Matches(sourceSetsBlock)
-            .Cast<Match>()
-            .Concat(SourceSetAccessorDeclaration.Matches(sourceSetsBlock).Cast<Match>())
-            .OrderBy(match => match.Index)
-            .GroupBy(match => match.Groups["name"].Value, StringComparer.Ordinal)
-            .Select(group => group.First())
-            .OrderBy(match => match.Index)
-            .ToArray();
         var result = new List<(string SourceSetName, string Dependencies)>();
 
+        var declarations = SourceSetDeclaration.Matches(sourceSetsBlock)
+            .Cast<Match>()
+            .OrderBy(match => match.Index)
+            .ToArray();
         for (var index = 0; index < declarations.Length; index++)
         {
             var declaration = declarations[index];
@@ -71,10 +71,24 @@ internal static class KotlinMultiplatformBuildModelResolver
                 continue;
 
             var body = ExtractFollowingBlock(sourceSetsBlock, bodyStart);
-            if (body is null)
-                continue;
+            var dependencies = body is null ? null : ExtractNestedBlock(body, DependenciesBlock);
+            if (dependencies is not null)
+                result.Add((declaration.Groups["name"].Value, dependencies));
+        }
 
-            var dependencies = ExtractNestedBlock(body, DependenciesBlock);
+        foreach (Match declaration in SourceSetAccessorDeclaration.Matches(sourceSetsBlock))
+        {
+            var body = ExtractFollowingBlock(
+                sourceSetsBlock, declaration.Index + declaration.Length - 1);
+            var dependencies = body is null ? null : ExtractNestedBlock(body, DependenciesBlock);
+            if (dependencies is not null)
+                result.Add((declaration.Groups["name"].Value, dependencies));
+        }
+
+        foreach (Match declaration in DirectSourceSetDependenciesBlock.Matches(sourceSetsBlock))
+        {
+            var dependencies = ExtractFollowingBlock(
+                sourceSetsBlock, declaration.Index + declaration.Length - 1);
             if (dependencies is not null)
                 result.Add((declaration.Groups["name"].Value, dependencies));
         }

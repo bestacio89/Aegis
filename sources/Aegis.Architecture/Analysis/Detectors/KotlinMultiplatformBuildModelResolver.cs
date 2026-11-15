@@ -136,6 +136,22 @@ internal static class KotlinMultiplatformBuildModelResolver
                 buildFile));
         }
 
+        foreach (var target in targets)
+        {
+            foreach (var suffix in new[] { "Main", "Test" })
+            {
+                var expectedSourceSet = $"{target.Name}{suffix}";
+                if (!sourceSets.Any(sourceSet => sourceSet.Name.Equals(
+                        expectedSourceSet, StringComparison.Ordinal)))
+                {
+                    diagnostics.Add(CreateDiagnostic(
+                        "GradleKotlinMultiplatformTargetSourceSetNotResolved",
+                        $"Target '{target.Name}' is missing its statically declared '{expectedSourceSet}' source set.",
+                        buildFile));
+                }
+            }
+        }
+
         if (HasSourceSetCycle(sourceSets))
         {
             diagnostics.Add(CreateDiagnostic(

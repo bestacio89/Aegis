@@ -267,8 +267,12 @@ internal static class GradleBuildModelResolver
                 .Where(plugin => plugin.IsApplied
                     && (plugin.Id is "org.jetbrains.kotlin.android" or "kotlin-android"))
                 .ToArray();
+            var kotlinMultiplatformPlugins = plugins
+                .Where(plugin => plugin.IsApplied && plugin.Id == "org.jetbrains.kotlin.multiplatform")
+                .ToArray();
             var kotlinCompilerPlugins = kotlinJvmPlugins
                 .Concat(kotlinAndroidPlugins)
+                .Concat(kotlinMultiplatformPlugins)
                 .ToArray();
             var kotlinPluginVersions = kotlinCompilerPlugins
                 .Select(plugin => plugin.Version)
@@ -290,14 +294,7 @@ internal static class GradleBuildModelResolver
                     buildFile));
             }
 
-            if (plugins.Any(plugin => plugin.IsApplied && plugin.Id == "org.jetbrains.kotlin.multiplatform"))
-            {
-                diagnostics.Add(Diagnostic(
-                    "GradleKotlinMultiplatformTargetNotStaticallyResolved",
-                    "Kotlin Multiplatform targets are not treated as JVM source roots until target-specific source-set resolution is available.",
-                    buildFile));
-            }
-            else if (androidModel is not null && sourceRoots.Any(sourceRoot => sourceRoot.ContainsKotlinSources))
+            if (androidModel is not null && sourceRoots.Any(sourceRoot => sourceRoot.ContainsKotlinSources))
             {
                 diagnostics.Add(Diagnostic(
                     "GradleKotlinAndroidTargetNotSupported",
@@ -337,6 +334,12 @@ internal static class GradleBuildModelResolver
                     buildFile));
             }
 
+            var kotlinMultiplatform = kotlinMultiplatformPlugins.Length > 0
+                ? KotlinMultiplatformBuildModelResolver.Analyze(source, buildFile)
+                : null;
+            if (kotlinMultiplatform is not null)
+                diagnostics.AddRange(kotlinMultiplatform.Diagnostics);
+
             var model = new GradleBuildModel
             {
                 BuildFile = buildFile,
@@ -354,6 +357,7 @@ internal static class GradleBuildModelResolver
                 KotlinApiVersion = kotlinCompilerOptions.ApiVersion,
                 KotlinJvmTarget = kotlinCompilerOptions.JvmTarget,
                 Android = androidModel,
+                KotlinMultiplatform = kotlinMultiplatform,
                 KotlinCompilerConfigurationInferred = kotlinPluginVersion is null
                     || kotlinCompilerOptions.ConfigurationInferred,
                 Diagnostics = diagnostics,

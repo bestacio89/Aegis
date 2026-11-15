@@ -114,6 +114,11 @@ public sealed class KotlinMultiplatformBuildModelTests
                 && sourceSet.Kind == "Common");
             Assert.True(multiplatform.IsComplete);
             Assert.Empty(multiplatform.Diagnostics);
+            Assert.Contains(module.SourceRoots, sourceRoot =>
+                Path.GetFullPath(sourceRoot.Directory) == Path.GetFullPath(
+                    Path.Combine(root, "src", "commonMain", "kotlin"))
+                && sourceRoot.Ownership == Aegis.Shared.Architecture.Enums.ProjectSourceRootOwnership.Production
+                && sourceRoot.ContainsKotlinSources);
         }
         finally
         {

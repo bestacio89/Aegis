@@ -339,7 +339,19 @@ internal static class GradleBuildModelResolver
                 ? KotlinMultiplatformBuildModelResolver.Analyze(source, buildFile)
                 : null;
             if (kotlinMultiplatform is not null)
+            {
                 diagnostics.AddRange(kotlinMultiplatform.Diagnostics);
+                AddKotlinMultiplatformSourceRoots(
+                    module.Path, files, kotlinMultiplatform, sourceRoots, diagnostics, buildFile);
+
+                if (Regex.IsMatch(source, @"\bkotlin\s*\.\s*srcDirs?\s*\(", RegexOptions.CultureInvariant))
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleKotlinMultiplatformCustomSourceRootsNotResolved",
+                        "Kotlin Multiplatform declares custom Kotlin source directories that are outside the statically modelled src/<sourceSet>/kotlin layout.",
+                        buildFile));
+                }
+            }
 
             var model = new GradleBuildModel
             {
@@ -1997,6 +2009,76 @@ internal static class GradleBuildModelResolver
         }
 
         return null;
+    }
+
+    private static void AddKotlinMultiplatformSourceRoots(
+        string modulePath,
+        IReadOnlyCollection<string> files,
+        KotlinMultiplatformBuildModel model,
+        ICollection<ProjectSourceRoot> sourceRoots,
+        ICollection<AnalysisDiagnostic> diagnostics,
+        string buildFile)
+    {
+        foreach (var sourceSet in model.SourceSets)
+        {
+            var directory = Path.GetFullPath(Path.Combine(
+                modulePath, "src", sourceSet.Name, "kotlin"));
+            var hasKotlinFiles = files.Any(file =>
+                Path.GetExtension(file).Equals(".kt", StringComparison.OrdinalIgnoreCase)
+                && IsSameOrDescendantPath(file, directory));
+            if (!hasKotlinFiles)
+                continue;
+
+            var ownership = sourceSet.Ownership switch
+            {
+                "Production" => ProjectSourceRootOwnership.Production,
+                "Test" => ProjectSourceRootOwnership.Test,
+                _ => ProjectSourceRootOwnership.Unknown
+            };
+
+            var existingIndex = sourceRoots.ToList().FindIndex(root =>
+                PathsEqual(root.Directory, directory));
+            if (existingIndex >= 0)
+            {
+                var existing = sourceRoots.ElementAt(existingIndex);
+                if (existing.Ownership != ownership
+                    && existing.Ownership != ProjectSourceRootOwnership.Unknown
+                    && ownership != ProjectSourceRootOwnership.Unknown)
+                {
+                    diagnostics.Add(Diagnostic(
+                        "GradleKotlinMultiplatformSourceRootOwnershipConflict",
+                        $"Kotlin Multiplatform source set '{sourceSet.Name}' conflicts with previously discovered source-root ownership.",
+                        directory));
+                    ownership = ProjectSourceRootOwnership.Unknown;
+                }
+                else if (existing.Ownership != ProjectSourceRootOwnership.Unknown)
+                {
+                    ownership = existing.Ownership;
+                }
+
+                var merged = existing with
+                {
+                    Ownership = ownership,
+                    Languages = existing.Languages
+                        .Append("Kotlin")
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList()
+                };
+                var roots = sourceRoots as IList<ProjectSourceRoot>;
+                if (roots is not null)
+                    roots[existingIndex] = merged;
+                continue;
+            }
+
+            sourceRoots.Add(new ProjectSourceRoot
+            {
+                Directory = directory,
+                Ownership = ownership,
+                Origin = ProjectSourceRootOrigin.Conventional,
+                Languages = ["Kotlin"],
+                EvidenceFile = buildFile
+            });
+        }
     }
 
     private static List<ProjectSourceRoot> DiscoverSourceRoots(

@@ -52,23 +52,23 @@ internal static class KotlinMultiplatformBuildModelResolver
         var targets = TargetDeclaration.Matches(kotlinBlock)
             .Select(match =>
             {
-                var declaredName = match.Groups["name"].Value;
-                var name = declaredName is "androidTarget" or "androidLibrary"
+                var targetKind = match.Groups["name"].Value;
+                var defaultName = targetKind is "androidTarget" or "androidLibrary"
                     ? "android"
-                    : declaredName;
-                var platform = declaredName switch
+                    : targetKind;
+                var name = ResolveTargetName(match.Groups["args"].Value, defaultName);
+                var platform = targetKind switch
                 {
                     "jvm" => "JVM",
                     "androidTarget" or "androidLibrary" => "Android",
                     "js" => "JS",
-                    "wasmJs" => "Wasm",
-                    "wasmWasi" => "Wasm",
-                    _ when name.StartsWith("ios", StringComparison.Ordinal)
-                        || name.StartsWith("macos", StringComparison.Ordinal)
-                        || name.StartsWith("tvos", StringComparison.Ordinal)
-                        || name.StartsWith("watchos", StringComparison.Ordinal) => "Native",
-                    _ when name.StartsWith("linux", StringComparison.Ordinal)
-                        || name.StartsWith("mingw", StringComparison.Ordinal) => "Native",
+                    "wasmJs" or "wasmWasi" => "Wasm",
+                    _ when targetKind.StartsWith("ios", StringComparison.Ordinal)
+                        || targetKind.StartsWith("macos", StringComparison.Ordinal)
+                        || targetKind.StartsWith("tvos", StringComparison.Ordinal)
+                        || targetKind.StartsWith("watchos", StringComparison.Ordinal)
+                        || targetKind.StartsWith("linux", StringComparison.Ordinal)
+                        || targetKind.StartsWith("mingw", StringComparison.Ordinal) => "Native",
                     _ => "Unknown"
                 };
                 return new KotlinMultiplatformBuildModel.Target(
@@ -304,6 +304,24 @@ internal static class KotlinMultiplatformBuildModelResolver
         };
     }
 
+    private static string ResolveTargetName(string arguments, string defaultName)
+    {
+        var match = Regex.Match(
+            arguments,
+            @"^\s*[\""'](?<name>[^\\"']+)[\\"']\s*(?:,|$)",
+            RegexOptions.CultureInvariant);
+        return match.Success ? match.Groups["name"].Value : defaultName;
+    }
+
+    private static string GetTargetKind(KotlinMultiplatformBuildModel.Target target)
+    {
+        var match = Regex.Match(
+            target.Declaration,
+            @"^(?<name>[A-Za-z][A-Za-z0-9_]*)",
+            RegexOptions.CultureInvariant);
+        return match.Success ? match.Groups["name"].Value : target.Name;
+    }
+
     private static void AddImplicitSourceSet(
         ICollection<KotlinMultiplatformBuildModel.SourceSet> sourceSets,
         string name,
@@ -354,12 +372,13 @@ internal static class KotlinMultiplatformBuildModelResolver
         foreach (var target in nativeTargets)
         {
             var name = target.Name;
-            var family = name.StartsWith("ios", StringComparison.Ordinal) ? "ios"
-                : name.StartsWith("tvos", StringComparison.Ordinal) ? "tvos"
-                : name.StartsWith("watchos", StringComparison.Ordinal) ? "watchos"
-                : name.StartsWith("macos", StringComparison.Ordinal) ? "macos"
-                : name.StartsWith("linux", StringComparison.Ordinal) ? "linux"
-                : name.StartsWith("mingw", StringComparison.Ordinal) ? "mingw"
+            var targetKind = GetTargetKind(target);
+            var family = targetKind.StartsWith("ios", StringComparison.Ordinal) ? "ios"
+                : targetKind.StartsWith("tvos", StringComparison.Ordinal) ? "tvos"
+                : targetKind.StartsWith("watchos", StringComparison.Ordinal) ? "watchos"
+                : targetKind.StartsWith("macos", StringComparison.Ordinal) ? "macos"
+                : targetKind.StartsWith("linux", StringComparison.Ordinal) ? "linux"
+                : targetKind.StartsWith("mingw", StringComparison.Ordinal) ? "mingw"
                 : null;
             if (family is null)
                 continue;
@@ -391,8 +410,8 @@ internal static class KotlinMultiplatformBuildModelResolver
             }
         }
 
-        var hasJavaScript = targets.Any(target => target.Name == "js");
-        var hasWasmJs = targets.Any(target => target.Name == "wasmJs");
+        var hasJavaScript = targets.Any(target => GetTargetKind(target) == "js");
+        var hasWasmJs = targets.Any(target => GetTargetKind(target) == "wasmJs");
         if (hasJavaScript && hasWasmJs)
         {
             AddImplicitSourceSet(sourceSets, "webMain", "Production", "Intermediate", null);
@@ -403,8 +422,9 @@ internal static class KotlinMultiplatformBuildModelResolver
 
         foreach (var target in targets.Where(target => target.Platform is "JVM" or "Android" or "JS" or "Wasm"))
         {
+            var targetKind = GetTargetKind(target);
             var usesWebHierarchy = hasJavaScript && hasWasmJs
-                && (target.Name is "js" or "wasmJs");
+                && (targetKind is "js" or "wasmJs");
             var parentMain = usesWebHierarchy ? "webMain" : "commonMain";
             var parentTest = parentMain == "webMain" ? "webTest" : "commonTest";
             AddDependency(sourceSets, $"{target.Name}Main", parentMain);

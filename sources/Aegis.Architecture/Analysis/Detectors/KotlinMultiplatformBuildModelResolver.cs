@@ -93,8 +93,9 @@ internal static class KotlinMultiplatformBuildModelResolver
                         .Select(match => match.Groups["name"].Value)
                         .Distinct(StringComparer.Ordinal)
                         .ToArray();
+                var (kind, targetName) = GetSourceSetKind(name, targets);
                 sourceSets.Add(new KotlinMultiplatformBuildModel.SourceSet(
-                    name, GetOwnership(name), dependencies, declaration.Value.Trim()));
+                    name, GetOwnership(name), kind, targetName, dependencies, declaration.Value.Trim()));
             }
 
             if (sourceSets.Count == 0)
@@ -138,6 +139,32 @@ internal static class KotlinMultiplatformBuildModelResolver
                 && sourceSets.All(sourceSet => sourceSet.DependsOn.All(dependency =>
                     sourceSets.Any(candidate => candidate.Name == dependency)))
         };
+    }
+
+    private static (string Kind, string? TargetName) GetSourceSetKind(
+        string name,
+        IReadOnlyCollection<KotlinMultiplatformBuildModel.Target> targets)
+    {
+        var suffixIndex = name.EndsWith("Main", StringComparison.Ordinal)
+            ? name.Length - "Main".Length
+            : name.EndsWith("Test", StringComparison.Ordinal)
+                ? name.Length - "Test".Length
+                : name.Length;
+        var prefix = name[..suffixIndex];
+        if (prefix.Equals("common", StringComparison.OrdinalIgnoreCase))
+            return ("Common", null);
+
+        var exactTarget = targets.FirstOrDefault(target =>
+            target.Name.Equals(prefix, StringComparison.Ordinal));
+        if (exactTarget is not null)
+            return ("TargetSpecific", exactTarget.Name);
+
+        if (targets.Any(target => target.Name.StartsWith(prefix, StringComparison.Ordinal)
+                                  && prefix.Length > 0)
+            || prefix is "native" or "apple")
+            return ("Intermediate", null);
+
+        return ("Unknown", null);
     }
 
     private static string GetOwnership(string name)

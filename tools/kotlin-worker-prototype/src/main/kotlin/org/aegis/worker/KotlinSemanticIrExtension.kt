@@ -17,8 +17,7 @@ class KotlinSemanticIrExtension : IrGenerationExtension {
             .split(java.io.File.pathSeparator)
             .filter(String::isNotBlank)
             .map { Path.of(it).toAbsolutePath().normalize() }
-        val targetName = System.getProperty(TARGET_NAME_PROPERTY)?.takeIf(String::isNotBlank)
-        val collector = KotlinSemanticCollector(projectPath, isTestCode, generatedRoots, targetName)
+        val collector = KotlinSemanticCollector(projectPath, isTestCode, generatedRoots)
         collector.collect(moduleFragment)
 
         val output = Path.of(outputPath).toAbsolutePath().normalize()
@@ -31,6 +30,5 @@ class KotlinSemanticIrExtension : IrGenerationExtension {
         const val PROJECT_PATH_PROPERTY = "aegis.kotlin.semantic.project"
         const val TEST_SCOPE_PROPERTY = "aegis.kotlin.semantic.test"
         const val GENERATED_ROOTS_PROPERTY = "aegis.kotlin.semantic.generated"
-        const val TARGET_NAME_PROPERTY = "aegis.kotlin.semantic.target"
     }
 }

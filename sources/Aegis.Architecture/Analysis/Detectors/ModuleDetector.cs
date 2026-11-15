@@ -828,7 +828,7 @@ internal static class ModuleDetector
             || normalized.EndsWith(".api", StringComparison.Ordinal)
             || normalized.Contains(".api.", StringComparison.Ordinal)
             || normalized.Contains("backend", StringComparison.Ordinal)
-            || normalized.Contains("server", StringComparison.Ordinal)
+            || tokens.Contains("server", StringComparer.Ordinal)
             || normalized.StartsWith("mcp-", StringComparison.Ordinal))
             return "Api";
 
@@ -908,7 +908,6 @@ internal static class ModuleDetector
             || normalized.Contains("frontend", StringComparison.Ordinal)
             || normalized.Contains("web", StringComparison.Ordinal)
             || normalized.Contains("compose", StringComparison.Ordinal)
-            || normalized.Contains("ui", StringComparison.Ordinal)
             || normalized.Contains("admin", StringComparison.Ordinal))
             return "Presentation";
 

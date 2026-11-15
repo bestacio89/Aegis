@@ -85,6 +85,12 @@ internal static class LanguageAndBuildDetector
                 || Path.GetFileName(file).Equals("Cargo.toml", StringComparison.OrdinalIgnoreCase)))
             languages.Add("Rust");
 
+        if (languages.Count == 0
+            && files.Any(file => IsMavenManifest(file) || IsGradleManifest(file)))
+        {
+            languages.Add("Java");
+        }
+
         return languages
             .OrderBy(language => language, StringComparer.OrdinalIgnoreCase)
             .ToList();

@@ -845,12 +845,6 @@ internal static class ModuleDetector
             || normalized.EndsWith(".core", StringComparison.Ordinal))
             return "Domain";
 
-        if (tokens.Contains("shared", StringComparer.Ordinal)
-            || tokens.Contains("common", StringComparer.Ordinal)
-            || normalized.Contains("shared", StringComparison.Ordinal)
-            || normalized.Contains("common", StringComparison.Ordinal))
-            return "Shared";
-
         if (normalized is "db" or "data"
             || tokens.Contains("infrastructure", StringComparer.Ordinal)
             || normalized.Contains("infrastructure", StringComparison.Ordinal)
@@ -897,6 +891,12 @@ internal static class ModuleDetector
             || normalized.StartsWith("base.", StringComparison.Ordinal))
             return "Infrastructure";
 
+        if (tokens.Contains("shared", StringComparer.Ordinal)
+            || tokens.Contains("common", StringComparer.Ordinal)
+            || normalized.Contains("shared", StringComparison.Ordinal)
+            || normalized.Contains("common", StringComparison.Ordinal))
+            return "Shared";
+
         if (tokens.Contains("consumer", StringComparer.Ordinal)
             || normalized.Contains("consumer", StringComparison.Ordinal)
             || normalized.Contains("worker", StringComparison.Ordinal)
@@ -913,6 +913,7 @@ internal static class ModuleDetector
             return "Presentation";
 
         if (tokens.Contains("client", StringComparer.Ordinal)
+            || tokens.Contains("ui", StringComparer.Ordinal)
             || normalized.Contains("client", StringComparison.Ordinal)
             || tokens.Contains("ios", StringComparer.Ordinal)
             || normalized.StartsWith("wear", StringComparison.Ordinal)

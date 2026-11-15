@@ -61,13 +61,13 @@ public sealed class ArchitectureDependencyInjectionTests
     }
 
     [Fact]
-    public void AddAegisCore_registers_both_java_and_kotlin_semantic_providers()
+    public async Task AddAegisCore_registers_both_java_and_kotlin_semantic_providers()
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddAegisCore();
 
-        using var provider = services.BuildServiceProvider();
+        await using var provider = services.BuildServiceProvider();
         var analyzers = provider.GetServices<ISemanticAnalysisProjectAnalyzer>()
             .Select(analyzer => analyzer.Language)
             .OrderBy(language => language, StringComparer.OrdinalIgnoreCase)

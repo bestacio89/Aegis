@@ -39,6 +39,33 @@ public sealed class KotlinMultiplatformBuildModelTests
                         val iosMain by creating {
                             dependsOn(commonMain)
                         }
+                        val iosTest by creating {
+                            dependsOn(commonTest)
+                        }
+                        val iosArm64Main by getting {
+                            dependsOn(iosMain)
+                        }
+                        val iosArm64Test by getting {
+                            dependsOn(iosTest)
+                        }
+                        val iosSimulatorArm64Main by getting {
+                            dependsOn(iosMain)
+                        }
+                        val iosSimulatorArm64Test by getting {
+                            dependsOn(iosTest)
+                        }
+                        val jsMain by getting {
+                            dependsOn(commonMain)
+                        }
+                        val jsTest by getting {
+                            dependsOn(commonTest)
+                        }
+                        val wasmJsMain by getting {
+                            dependsOn(commonMain)
+                        }
+                        val wasmJsTest by getting {
+                            dependsOn(commonTest)
+                        }
                     }
                 }
                 """);
@@ -54,7 +81,7 @@ public sealed class KotlinMultiplatformBuildModelTests
             Assert.Equal(new[] { "JVM", "Native", "Native", "JS", "Wasm" },
                 multiplatform.Targets.Select(target => target.Platform).ToArray());
             Assert.Equal("Manual", multiplatform.HierarchyMode);
-            Assert.Equal(13, multiplatform.SourceSets.Count);
+            Assert.Equal(19, multiplatform.SourceSets.Count);
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "jvmMain"
                 && sourceSet.Ownership == "Production"
@@ -73,7 +100,7 @@ public sealed class KotlinMultiplatformBuildModelTests
                 sourceSet.Name == "iosArm64Main"
                 && sourceSet.Kind == "TargetSpecific"
                 && sourceSet.TargetName == "iosArm64"
-                && sourceSet.DependsOn.Count == 0);
+                && sourceSet.DependsOn.SequenceEqual(["iosMain"]));
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "iosSimulatorArm64Test"
                 && sourceSet.Kind == "TargetSpecific"

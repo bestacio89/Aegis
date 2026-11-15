@@ -20,7 +20,6 @@ namespace Aegis.Shared.Architecture.Models.Policies.Architecture
             ["Consumer"] = ["Application", "Domain", "Infrastructure", "Contracts", "Shared", "Library"],
             ["Client"] = ["Contracts", "Shared", "Library"],
             ["Shared"] = ["Library"],
-            ["Library"] = [],
             ["Tests"] = ["Api", "Application", "Domain", "Infrastructure", "Contracts", "Presentation", "Consumer", "Client", "Shared", "Library", "Tests"]
         };
 

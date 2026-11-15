@@ -124,6 +124,16 @@ public sealed class AndroidVariantProjectDependencyResolver
                     target.Path));
             }
 
+            if (target.GradleBuildModel.Dependencies.Any(candidate =>
+                    !string.IsNullOrWhiteSpace(candidate.ProjectPath)))
+            {
+                complete = false;
+                diagnostics.Add(CreateDiagnostic(
+                    "AndroidProjectDependencyTransitiveOutputsUnresolved",
+                    $"Project '{dependency.ProjectPath}' declares additional project dependencies. Their variant-compatible outputs are not inferred transitively in this resolution pass.",
+                    target.Path));
+            }
+
             var isTestDependency = IsTestConfiguration(dependency.Configuration);
             if (target.GradleBuildModel.Android is { IsComplete: false })
             {

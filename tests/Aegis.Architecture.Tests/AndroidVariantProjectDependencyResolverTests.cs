@@ -168,6 +168,36 @@ public sealed class AndroidVariantProjectDependencyResolverTests
     }
 
     [Fact]
+    public void Keeps_project_dependency_resolution_partial_when_transitive_project_outputs_are_not_resolved()
+    {
+        var root = Module("root");
+        var app = Module("app");
+        var library = Module("library");
+        root.GradleModel = BuildModel(root, (":", root.Path), (":app", app.Path), (":library", library.Path));
+        app.GradleBuildModel = AndroidBuildModel();
+        library.GradleBuildModel = new GradleBuildModel
+        {
+            IsComplete = true,
+            Android = new GradleAndroidBuildModel
+            {
+                IsComplete = true,
+                Variants = [new GradleAndroidVariant("debug", [], "debug")]
+            },
+            Dependencies = [Dependency("implementation", ":nested")]
+        };
+
+        var result = new AndroidVariantProjectDependencyResolver().Resolve(
+            app,
+            [root, app, library],
+            Selection(Dependency("debugImplementation", ":library")));
+
+        Assert.False(result.IsComplete);
+        Assert.Contains(result.Diagnostics, diagnostic =>
+            diagnostic.Code == "AndroidProjectDependencyTransitiveOutputsUnresolved");
+        Assert.Equal([Path.GetFullPath(library.Path)], result.AndroidProductionDependencies);
+    }
+
+    [Fact]
     public void Reports_incomplete_owning_build_model_as_partial_evidence()
     {
         var root = Module("root");

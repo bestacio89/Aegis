@@ -467,7 +467,7 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
             bool includeTestCode) =>
             new(Array.Empty<string>(), Array.Empty<string>(), false, true);
 
-        JvmClasspathResolution IJvmClasspathResolver.Resolve(
+        public JvmClasspathResolution Resolve(
             ProjectModuleContext module,
             IReadOnlyCollection<ProjectModuleContext> projectModules,
             IReadOnlyCollection<GradleBuildModel.Dependency> selectedGradleDependencies)

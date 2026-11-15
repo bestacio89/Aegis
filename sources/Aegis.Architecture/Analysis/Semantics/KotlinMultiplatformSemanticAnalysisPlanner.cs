@@ -98,12 +98,13 @@ public sealed class KotlinMultiplatformSemanticAnalysisPlanner
                 .Where(sourceSet => sourceSet.Kind is "Common" or "Intermediate")
                 .ToArray();
 
-            if (!TryResolveRoots(
-                    module.Path, productionSharedSets, "Production", sourceRoots,
-                    out var productionSharedRoots, out var productionSharedRootDiagnostic)
-                || !TryResolveRoots(
-                    module.Path, testSharedSets, "Test", sourceRoots,
-                    out var testSharedRoots, out var testSharedRootDiagnostic))
+            var productionSharedResolved = TryResolveRoots(
+                module.Path, productionSharedSets, "Production", sourceRoots,
+                out var productionSharedRoots, out var productionSharedRootDiagnostic);
+            var testSharedResolved = TryResolveRoots(
+                module.Path, testSharedSets, "Test", sourceRoots,
+                out var testSharedRoots, out var testSharedRootDiagnostic);
+            if (!productionSharedResolved || !testSharedResolved)
             {
                 scopes.Add(CreateUnsupportedScope(
                     target,

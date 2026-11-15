@@ -215,7 +215,14 @@ class KotlinCompilerIntegrationTests {
             assertEquals(ExitCode.OK, exitCode)
             assertTrue(Files.exists(evidence), "The IR extension must emit semantic evidence.")
 
-            val result = JsonParser.parseString(Files.readString(evidence)).asJsonObject
+            val compilerEvidence = JsonParser.parseString(Files.readString(evidence)).asJsonObject
+            val result = KotlinExpectActualSourceCollector().reconcile(
+                compilerEvidence,
+                listOf(commonSource, jvmSource),
+                listOf(commonSourceRoot),
+                "jvm",
+                false
+            )
             val symbols = result.getAsJsonArray("symbols").map { it.asJsonObject }
             val relationships = result.getAsJsonArray("relationships").map { it.asJsonObject }
 
@@ -481,8 +488,10 @@ class KotlinCompilerIntegrationTests {
     @Test
     fun `K2 JVM target compiles expect actual declarations and emits their relationship`() {
         val workspace = Files.createTempDirectory("aegis-kotlin-kmp-expect-actual-")
-        val commonRoot = workspace.resolve("src/commonMain/kotlin/sample")
-        val jvmRoot = workspace.resolve("src/jvmMain/kotlin/sample")
+        val commonSourceRoot = workspace.resolve("src/commonMain/kotlin")
+        val jvmSourceRoot = workspace.resolve("src/jvmMain/kotlin")
+        val commonRoot = commonSourceRoot.resolve("sample")
+        val jvmRoot = jvmSourceRoot.resolve("sample")
         val commonSource = commonRoot.resolve("Platform.kt")
         val jvmSource = jvmRoot.resolve("Platform.jvm.kt")
         val destination = workspace.resolve("classes")
@@ -522,11 +531,9 @@ class KotlinCompilerIntegrationTests {
 
         val previousOutput = System.getProperty("aegis.kotlin.semantic.output")
         val previousProject = System.getProperty("aegis.kotlin.semantic.project")
-        val previousTarget = System.getProperty("aegis.kotlin.semantic.target")
         try {
             System.setProperty("aegis.kotlin.semantic.output", evidence.toString())
             System.setProperty("aegis.kotlin.semantic.project", workspace.toString())
-            System.setProperty("aegis.kotlin.semantic.target", "jvm")
             val messages = PrintingMessageCollector(System.err, MessageRenderer.PLAIN_RELATIVE_PATHS, false)
             val exitCode = K2JVMCompiler().exec(messages, Services.EMPTY, arguments)
 
@@ -553,8 +560,6 @@ class KotlinCompilerIntegrationTests {
             else System.setProperty("aegis.kotlin.semantic.output", previousOutput)
             if (previousProject == null) System.clearProperty("aegis.kotlin.semantic.project")
             else System.setProperty("aegis.kotlin.semantic.project", previousProject)
-            if (previousTarget == null) System.clearProperty("aegis.kotlin.semantic.target")
-            else System.setProperty("aegis.kotlin.semantic.target", previousTarget)
             workspace.toFile().deleteRecursively()
         }
     }

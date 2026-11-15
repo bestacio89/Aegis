@@ -88,6 +88,7 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
                     projectPath = request.ProjectPath,
                     workspaceRoot = request.WorkspaceRoot,
                     sourceRoots = request.SourceRoots,
+                    sharedSourceRoots = request.SharedSourceRoots,
                     referencedSourceRoots = request.ReferencedSourceRoots,
                     testSourceRoots = request.TestSourceRoots,
                     generatedSourceRoots = request.GeneratedSourceRoots,

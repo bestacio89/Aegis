@@ -82,7 +82,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             )
         }
 
-        val result = try {
+        val parsedResult = try {
             JsonParser.parseString(Files.readString(semanticOutput)).asJsonObject
         } catch (exception: Exception) {
             return failureResult(
@@ -90,6 +90,18 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
                 "The Kotlin compiler extension produced invalid semantic evidence: ${exception.javaClass.simpleName}.",
                 collector.diagnostics()
             )
+        }
+
+        val result = if (request.multiplatform) {
+            KotlinExpectActualSourceCollector().reconcile(
+                parsedResult,
+                paths.sourceFiles,
+                paths.sharedSourceRoots,
+                request.targetName,
+                request.includeTestCode
+            )
+        } else {
+            parsedResult
         }
 
         result.addProperty("engineId", ENGINE_ID)
@@ -160,6 +172,10 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             apiVersion = request.apiVersion
             moduleName = request.moduleName
             multiPlatform = request.multiplatform
+            commonSources = paths.sourceFiles
+                .filter { sourceFile -> paths.sharedSourceRoots.any(sourceFile::startsWith) }
+                .map(Path::toString)
+                .toTypedArray()
             this.pluginClasspaths = pluginClasspaths
             this.pluginOptions = if (request.composeCompilerPluginEnabled) {
                 arrayOf("plugin:androidx.compose.compiler.plugins.kotlin:sourceInformation=true")
@@ -199,6 +215,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
 
     private fun validatePaths(request: KotlinWorkerAnalysisRequest): ValidatedPaths {
         require(request.sourceRoots.size <= MAX_SOURCE_ROOTS) { "The Kotlin request exceeds the source-root limit." }
+        require(request.sharedSourceRoots.size <= MAX_SOURCE_ROOTS) { "The Kotlin request exceeds the shared-source-root limit." }
         require(request.referencedSourceRoots.size <= MAX_REFERENCED_ROOTS) { "The Kotlin request exceeds the referenced-source-root limit." }
         require(request.testSourceRoots.size <= MAX_SOURCE_ROOTS) { "The Kotlin request exceeds the test-source-root limit." }
         require(request.generatedSourceRoots.size <= MAX_REFERENCED_ROOTS) { "The Kotlin request exceeds the generated-source-root limit." }
@@ -219,6 +236,14 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         }.distinct()
 
         require(sourceRoots.isNotEmpty()) { "The Kotlin module has no owned source roots." }
+
+        val sharedRoots = request.sharedSourceRoots.map { value ->
+            val root = requireDirectory(value, "shared Kotlin source root")
+            require(sourceRoots.any { sourceRoot -> sourceRoot == root }) {
+                "A shared Kotlin source root is not part of the target's owned source roots: $value"
+            }
+            root
+        }.distinct()
 
         val referencedRoots = request.referencedSourceRoots.map { value ->
             val root = requireDirectory(value, "referenced JVM source root")
@@ -315,6 +340,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             workspaceRoot,
             projectRoot,
             sourceRoots,
+            sharedRoots,
             referencedRoots,
             testRoots,
             generatedRoots,
@@ -375,6 +401,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         val workspaceRoot: Path,
         val projectRoot: Path,
         val sourceRoots: List<Path>,
+        val sharedSourceRoots: List<Path>,
         val referencedSourceRoots: List<Path>,
         val testRoots: List<Path>,
         val generatedRoots: List<Path>,

@@ -53,7 +53,7 @@ public sealed class KotlinMultiplatformBuildModelTests
 
             Assert.Equal(new[] { "JVM", "Native", "Native", "JS", "Wasm" },
                 multiplatform.Targets.Select(target => target.Platform).ToArray());
-            Assert.Equal(5, multiplatform.SourceSets.Count);
+            Assert.Equal(14, multiplatform.SourceSets.Count);
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "jvmMain"
                 && sourceSet.Ownership == "Production"

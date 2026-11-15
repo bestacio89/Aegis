@@ -328,6 +328,9 @@ internal static class KotlinMultiplatformBuildModelResolver
 
     private static string? ExtractFollowingBlock(string source, int start)
     {
+        if (start < 0 || start >= source.Length)
+            return null;
+
         var open = source.IndexOf('{', start);
         if (open < 0)
             return null;

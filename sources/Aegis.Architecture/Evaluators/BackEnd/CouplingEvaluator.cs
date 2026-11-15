@@ -21,6 +21,7 @@ public sealed class CouplingEvaluator
     [
         "C#",
         "Java",
+        "Kotlin",
         "Python",
         "TypeScript",
         "JavaScript"
@@ -30,6 +31,12 @@ public sealed class CouplingEvaluator
     [
         "ASP.NET",
         "Spring Boot",
+        "Kotlin",
+        "Ktor",
+        "Android",
+        "Jetpack Compose",
+        "Compose Multiplatform",
+        "Kotlin Multiplatform",
         "FastAPI",
         "Angular",
         "React",

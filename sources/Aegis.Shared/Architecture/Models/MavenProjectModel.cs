@@ -38,6 +38,24 @@ public sealed class MavenProjectModel
 
     public List<Plugin> ManagedPlugins { get; init; } = [];
 
+    public string? KotlinPluginVersion { get; init; }
+
+    public string? KotlinLanguageVersion { get; init; }
+
+    public string? KotlinApiVersion { get; init; }
+
+    public string? KotlinJvmTarget { get; init; }
+
+    public string? KotlinJdkRelease { get; init; }
+
+    public bool KotlinCompilerConfigurationInferred { get; init; }
+
+    public List<string> KotlinMainSourceDirectoryExpressions { get; init; } = [];
+
+    public List<string> KotlinTestSourceDirectoryExpressions { get; init; } = [];
+
+    public bool KotlinExtensionsEnabled { get; init; }
+
     public List<Dependency> AnnotationProcessorPaths { get; init; } = [];
 
     public List<ProjectSourceRoot> SourceRoots { get; init; } = [];

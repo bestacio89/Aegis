@@ -73,7 +73,8 @@ internal static class ArchitecturalComponentDependencyProjector
             var key = new DependencyKey(
                 sourceArchitecturalId,
                 targetArchitecturalId,
-                dependency.Scope);
+                dependency.Scope,
+                CreateAndroidVariantKey(dependency.AndroidVariants));
 
             if (!aggregates.TryGetValue(key, out var accumulator))
             {
@@ -103,10 +104,16 @@ internal static class ArchitecturalComponentDependencyProjector
                 .ToList();
     }
 
+    private static string CreateAndroidVariantKey(IEnumerable<string> variants) =>
+        string.Join("|", variants.Where(variant => !string.IsNullOrWhiteSpace(variant))
+            .Select(variant => variant.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal).OrderBy(variant => variant, StringComparer.Ordinal));
+
     private sealed record DependencyKey(
         string SourceComponentId,
         string TargetComponentId,
-        string Scope);
+        string Scope,
+        string AndroidVariantKey);
 
     private sealed class DependencyAccumulator(
         ArchitecturalComponentContext source,
@@ -116,6 +123,7 @@ internal static class ArchitecturalComponentDependencyProjector
         private readonly HashSet<(string RunId, string RelationshipId)> _relationshipReferences = [];
         private readonly HashSet<SemanticRelationshipKind> _relationshipKinds = [];
         private readonly HashSet<string> _evidenceFiles = new(PathComparer);
+        private readonly HashSet<string> _androidVariants = new(StringComparer.OrdinalIgnoreCase);
         private int _relationshipCount;
         private int _resolvedRelationshipCount;
         private int _partiallyResolvedRelationshipCount;
@@ -137,6 +145,11 @@ internal static class ArchitecturalComponentDependencyProjector
 
             foreach (var file in dependency.EvidenceFiles)
                 _evidenceFiles.Add(file);
+            foreach (var variant in dependency.AndroidVariants)
+            {
+                if (!string.IsNullOrWhiteSpace(variant))
+                    _androidVariants.Add(variant);
+            }
         }
 
         public ArchitecturalComponentDependencyContext ToContext(string scope) => new()
@@ -162,6 +175,7 @@ internal static class ArchitecturalComponentDependencyProjector
             UnreferencedRelationshipCount = _unreferencedRelationshipCount,
             RelationshipKinds = _relationshipKinds.OrderBy(kind => kind).ToList(),
             EvidenceFiles = _evidenceFiles.OrderBy(file => file, PathComparer).ToList(),
+            AndroidVariants = _androidVariants.OrderBy(variant => variant, StringComparer.OrdinalIgnoreCase).ToList(),
             ContributingCodeContainerDependencies = _codeContainerDependencies
                 .OrderBy(edge => edge.SourceComponentId, StringComparer.Ordinal)
                 .ThenBy(edge => edge.TargetComponentId, StringComparer.Ordinal)

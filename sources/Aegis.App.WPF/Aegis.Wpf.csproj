@@ -48,7 +48,7 @@
    </Content>
  </ItemGroup>
 
-  <!-- The isolated Java worker is packaged by the repository script. -->
+  <!-- The isolated JVM semantic workers is packaged by the repository script. -->
   <ItemGroup Condition="Exists('$(JavaWorkerPackageDirectory)\Java\worker\classes\org\aegis\worker\WorkerMain.class')">
     <Content Include="$(JavaWorkerPackageDirectory)\Java\**\*">
       <Link>Java\%(RecursiveDir)%(Filename)%(Extension)</Link>

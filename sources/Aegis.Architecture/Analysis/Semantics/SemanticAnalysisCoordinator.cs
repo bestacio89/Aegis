@@ -17,9 +17,24 @@ public sealed class SemanticAnalysisCoordinator
         _adapters = adapters.ToArray();
     }
 
-    public async ValueTask<SemanticAnalysisRun> AnalyzeAsync(
+    public ValueTask<SemanticAnalysisRun> AnalyzeAsync(
         SemanticAnalysisRequest request,
+        CancellationToken cancellationToken = default) =>
+        AnalyzeCoreAsync(request, null, cancellationToken);
+
+    public ValueTask<SemanticAnalysisRun> AnalyzeAsync(
+        SemanticAnalysisRequest request,
+        SemanticAnalysisExecutionContext executionContext,
         CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(executionContext);
+        return AnalyzeCoreAsync(request, executionContext, cancellationToken);
+    }
+
+    private async ValueTask<SemanticAnalysisRun> AnalyzeCoreAsync(
+        SemanticAnalysisRequest request,
+        SemanticAnalysisExecutionContext? executionContext,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
@@ -64,7 +79,10 @@ public sealed class SemanticAnalysisCoordinator
 
         try
         {
-            return await capableAdapters[0].AnalyzeAsync(request, cancellationToken).ConfigureAwait(false);
+            return executionContext is not null
+                && capableAdapters[0] is ISemanticAnalysisExecutionAdapter executionAdapter
+                    ? await executionAdapter.AnalyzeAsync(request, executionContext, cancellationToken).ConfigureAwait(false)
+                    : await capableAdapters[0].AnalyzeAsync(request, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

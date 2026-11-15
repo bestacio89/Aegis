@@ -66,6 +66,38 @@ public sealed class ArchitecturalComponentDependencyProjectionTests
     }
 
     [Fact]
+    public void Keeps_logical_dependencies_and_cycles_separate_by_android_variant()
+    {
+        var context = new ProjectArchitectureContext
+        {
+            ArchitecturalComponents =
+            [
+                new ArchitecturalComponentContext { Id = "logical-a", Name = "Logical A" },
+                new ArchitecturalComponentContext { Id = "logical-b", Name = "Logical B" }
+            ],
+            ArchitecturalComponentMemberships =
+            [
+                Membership("code-a", "logical-a"),
+                Membership("code-b", "logical-b")
+            ],
+            ArchitectureComponentDependencies =
+            [
+                DependencyWithVariants("code-a", "code-b", "Production", 1, "debug-run", ["debug"], "debug-ab"),
+                DependencyWithVariants("code-b", "code-a", "Production", 1, "release-run", ["release"], "release-ba")
+            ]
+        };
+
+        ArchitecturalComponentDependencyProjector.Project(context);
+
+        Assert.Equal(2, context.ArchitecturalComponentDependencies.Count);
+        Assert.Contains(context.ArchitecturalComponentDependencies, edge => edge.AndroidVariants.SequenceEqual(["debug"]));
+        Assert.Contains(context.ArchitecturalComponentDependencies, edge => edge.AndroidVariants.SequenceEqual(["release"]));
+
+        ArchitectureDependencyCycleAnalyzer.Analyze(context);
+        Assert.Empty(context.ArchitecturalComponentCycles);
+    }
+
+    [Fact]
     public void Semantic_projection_retains_relationships_within_the_same_code_container()
     {
         var root = Path.Combine(Path.GetTempPath(), $"aegis-internal-edge-{Guid.NewGuid():N}");
@@ -147,12 +179,13 @@ public sealed class ArchitecturalComponentDependencyProjectionTests
         };
 
     private static ArchitectureComponentDependencyContext Dependency(
-        string source,
-        string target,
-        string scope,
-        int relationshipCount,
-        string runId,
+        string source, string target, string scope, int relationshipCount, string runId,
         params string[] relationshipIds) =>
+        DependencyWithVariants(source, target, scope, relationshipCount, runId, [], relationshipIds);
+
+    private static ArchitectureComponentDependencyContext DependencyWithVariants(
+        string source, string target, string scope, int relationshipCount, string runId,
+        string[] androidVariants, params string[] relationshipIds) =>
         new()
         {
             SourceComponentId = source,
@@ -160,6 +193,7 @@ public sealed class ArchitecturalComponentDependencyProjectionTests
             TargetComponentId = target,
             TargetComponentName = target,
             Scope = scope,
+            AndroidVariants = androidVariants.ToList(),
             RelationshipCount = relationshipCount,
             ResolvedRelationshipCount = relationshipCount,
             ContributingRelationships = relationshipIds.Select(id =>

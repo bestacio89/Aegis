@@ -12,7 +12,7 @@ internal static class JavaSemanticFrameworkDetector
         ArgumentNullException.ThrowIfNull(context);
 
         foreach (var run in context.SemanticAnalysisRuns.Where(run =>
-                     run.Language.Equals("Java", StringComparison.OrdinalIgnoreCase)
+                     (run.Language.Equals("Java", StringComparison.OrdinalIgnoreCase) || run.Language.Equals("Kotlin", StringComparison.OrdinalIgnoreCase))
                      && run.Status is SemanticAnalysisStatus.Completed or SemanticAnalysisStatus.PartiallyCompleted))
         {
             var module = context.Modules.FirstOrDefault(candidate => PathsEqual(candidate.Path, run.ProjectPath));
@@ -24,58 +24,48 @@ internal static class JavaSemanticFrameworkDetector
                 .GroupBy(symbol => symbol.Id, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
+            foreach (var composable in symbols.Values.Where(symbol =>
+                         symbol.Modifiers.Contains("Composable", StringComparer.OrdinalIgnoreCase)))
+            {
+                AddCompilerFrameworkEvidence(
+                    context,
+                    module,
+                    run,
+                    composable,
+                    composable.Provenance,
+                    ("Jetpack Compose", FrameworkEvidenceKind.Application),
+                    composable.IsTestCode,
+                    composable.Id);
+            }
+
             foreach (var relationship in run.Relationships.Where(relationship =>
-                         relationship.Kind == SemanticRelationshipKind.UsesAnnotation
+                         (relationship.Kind == SemanticRelationshipKind.UsesAnnotation
+                             || run.Language.Equals("Kotlin", StringComparison.OrdinalIgnoreCase)
+                             && (relationship.Kind is SemanticRelationshipKind.Calls
+                                 or SemanticRelationshipKind.References
+                                 or SemanticRelationshipKind.Inherits
+                                 or SemanticRelationshipKind.Implements))
                          && relationship.ResolutionStatus == SemanticResolutionStatus.Resolved
                          && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)))
             {
                 if (!symbols.TryGetValue(relationship.TargetSymbolId!, out var annotationSymbol))
                     continue;
 
-                var classification = Classify(annotationSymbol.QualifiedName);
+                var classification = annotationSymbol.Modifiers.Contains("Composable", StringComparer.OrdinalIgnoreCase)
+                    ? ("Jetpack Compose", FrameworkEvidenceKind.Application)
+                    : Classify(annotationSymbol.QualifiedName);
                 if (classification is null)
                     continue;
 
-                var (framework, kind) = classification.Value;
-                var provenance = relationship.Provenance.Select(item => new SemanticEvidenceProvenance
-                {
-                    AnalyzerId = run.EngineId,
-                    Source = item.Source == SemanticEvidenceSource.Unknown
-                        ? SemanticEvidenceSource.Compiler
-                        : item.Source,
-                    FilePath = item.FilePath,
-                    StartLine = item.StartLine,
-                    StartColumn = item.StartColumn,
-                    Confidence = item.Confidence > 0 ? item.Confidence : 1.0
-                }).ToList();
-
-                var evidenceKey = string.Join(
-                    "|",
-                    module.Path,
-                    framework,
-                    annotationSymbol.QualifiedName,
-                    string.Join(",", provenance.Select(item =>
-                        $"{item.FilePath}:{item.StartLine}:{item.StartColumn}")));
-                var evidence = new FrameworkEvidence
-                {
-                    Id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(evidenceKey))).ToLowerInvariant(),
-                    Name = framework,
-                    Kind = kind,
-                    ProjectPath = Path.GetFullPath(module.Path),
-                    IsTestOnly = kind == FrameworkEvidenceKind.Testing
-                        || relationship.IsTestCode
-                        || module.IsTestProject
-                        || module.IsTestSupport,
-                    Provenance = provenance
-                };
-
-                if (module.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
-                    module.FrameworkEvidence.Add(evidence);
-                if (context.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
-                    context.FrameworkEvidence.Add(evidence);
-
-                AddDistinct(module.Frameworks, framework);
-                AddDistinct(context.DetectedFrameworks, framework);
+                AddCompilerFrameworkEvidence(
+                    context,
+                    module,
+                    run,
+                    annotationSymbol,
+                    relationship.Provenance,
+                    classification.Value,
+                    relationship.IsTestCode,
+                    relationship.Id);
             }
 
             if (string.Equals(module.Framework, "Java SE", StringComparison.OrdinalIgnoreCase))
@@ -108,12 +98,63 @@ internal static class JavaSemanticFrameworkDetector
         }
     }
 
+    private static void AddCompilerFrameworkEvidence(
+        ProjectArchitectureContext context,
+        ProjectModuleContext module,
+        SemanticAnalysisRun run,
+        SemanticSymbol symbol,
+        IEnumerable<SemanticEvidenceProvenance> sourceEvidence,
+        (string Name, FrameworkEvidenceKind Kind) classification,
+        bool isTestCode,
+        string evidenceIdentity)
+    {
+        var provenance = sourceEvidence.Select(item => new SemanticEvidenceProvenance
+        {
+            AnalyzerId = run.EngineId,
+            Source = item.Source == SemanticEvidenceSource.Unknown
+                ? SemanticEvidenceSource.Compiler
+                : item.Source,
+            FilePath = item.FilePath,
+            StartLine = item.StartLine,
+            StartColumn = item.StartColumn,
+            Confidence = item.Confidence > 0 ? item.Confidence : 1.0
+        }).ToList();
+        var (framework, kind) = classification;
+        var evidenceKey = string.Join(
+            "|",
+            module.Path,
+            framework,
+            symbol.QualifiedName,
+            evidenceIdentity,
+            string.Join(",", provenance.Select(item =>
+                $"{item.FilePath}:{item.StartLine}:{item.StartColumn}")));
+        var evidence = new FrameworkEvidence
+        {
+            Id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(evidenceKey))).ToLowerInvariant(),
+            Name = framework,
+            Kind = kind,
+            ProjectPath = Path.GetFullPath(module.Path),
+            IsTestOnly = kind == FrameworkEvidenceKind.Testing
+                || isTestCode
+                || module.IsTestProject
+                || module.IsTestSupport,
+            Provenance = provenance
+        };
+
+        if (module.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
+            module.FrameworkEvidence.Add(evidence);
+        if (context.FrameworkEvidence.All(existing => !existing.Id.Equals(evidence.Id, StringComparison.Ordinal)))
+            context.FrameworkEvidence.Add(evidence);
+
+        AddDistinct(module.Frameworks, framework);
+        AddDistinct(context.DetectedFrameworks, framework);
+    }
+
     private static void AnalyzeDeclaredFrameworkDependencies(ProjectArchitectureContext context)
     {
         foreach (var dependency in context.DependencyEvidence.Where(dependency =>
                      dependency.Ecosystem is "Maven" or "Gradle"
                      && dependency.Kind == DependencyEvidenceKind.Package
-                     && !dependency.IsTestOnly
                      && !string.IsNullOrWhiteSpace(dependency.Name)))
         {
             var separator = dependency.Name.IndexOf(':');
@@ -140,7 +181,7 @@ internal static class JavaSemanticFrameworkDetector
                 Version = dependency.ResolvedVersion ?? dependency.DeclaredVersion,
                 Kind = kind,
                 ProjectPath = Path.GetFullPath(module.Path),
-                IsTestOnly = module.IsTestProject || module.IsTestSupport,
+                IsTestOnly = dependency.IsTestOnly || module.IsTestProject || module.IsTestSupport,
                 Provenance = dependency.Provenance.Select(item => new SemanticEvidenceProvenance
                 {
                     AnalyzerId = item.AnalyzerId,
@@ -299,6 +340,61 @@ internal static class JavaSemanticFrameworkDetector
             && artifactId.Equals("eclipselink", StringComparison.OrdinalIgnoreCase))
             return ("EclipseLink", FrameworkEvidenceKind.Persistence);
 
+        if (groupId.Equals("io.ktor", StringComparison.OrdinalIgnoreCase))
+            return artifactId.StartsWith("ktor-server-", StringComparison.OrdinalIgnoreCase)
+                || artifactId.StartsWith("ktor-client-", StringComparison.OrdinalIgnoreCase)
+                    ? ("Ktor", FrameworkEvidenceKind.Web)
+                    : ("Ktor", FrameworkEvidenceKind.Application);
+
+        if (groupId.Equals("org.jetbrains.kotlinx", StringComparison.OrdinalIgnoreCase))
+        {
+            if (artifactId.StartsWith("kotlinx-coroutines-", StringComparison.OrdinalIgnoreCase))
+                return ("kotlinx.coroutines", FrameworkEvidenceKind.Runtime);
+            if (artifactId.StartsWith("kotlinx-serialization-", StringComparison.OrdinalIgnoreCase))
+                return ("kotlinx.serialization", FrameworkEvidenceKind.Serialization);
+        }
+
+        if (groupId.Equals("org.jetbrains.exposed", StringComparison.OrdinalIgnoreCase))
+            return ("Exposed", FrameworkEvidenceKind.Persistence);
+
+        // AndroidX integrations are classified from exact Maven coordinates.
+        // Declared dependency evidence is intentionally separate from compiler-confirmed usage.
+        if (groupId.Equals("androidx.core", StringComparison.OrdinalIgnoreCase)
+            && (artifactId.Equals("core", StringComparison.OrdinalIgnoreCase)
+                || artifactId.Equals("core-ktx", StringComparison.OrdinalIgnoreCase)))
+            return ("AndroidX Core", FrameworkEvidenceKind.Runtime);
+
+        if (groupId.Equals("androidx.lifecycle", StringComparison.OrdinalIgnoreCase))
+            return ("AndroidX Lifecycle", FrameworkEvidenceKind.Runtime);
+
+        if (groupId.Equals("androidx.navigation", StringComparison.OrdinalIgnoreCase))
+            return ("AndroidX Navigation", FrameworkEvidenceKind.Application);
+
+        if (groupId.Equals("androidx.room", StringComparison.OrdinalIgnoreCase))
+            return ("Room", FrameworkEvidenceKind.Persistence);
+
+        if (groupId.StartsWith("androidx.compose", StringComparison.OrdinalIgnoreCase))
+            return ("Jetpack Compose", FrameworkEvidenceKind.Application);
+
+        if (groupId.Equals("androidx.activity", StringComparison.OrdinalIgnoreCase)
+            && artifactId.Equals("activity-compose", StringComparison.OrdinalIgnoreCase))
+            return ("Jetpack Compose", FrameworkEvidenceKind.Application);
+
+        if (groupId.Equals("androidx.hilt", StringComparison.OrdinalIgnoreCase))
+            return ("Hilt", FrameworkEvidenceKind.Application);
+
+        if (groupId.Equals("com.google.dagger", StringComparison.OrdinalIgnoreCase))
+        {
+            if (artifactId.StartsWith("hilt-", StringComparison.OrdinalIgnoreCase))
+                return ("Hilt", FrameworkEvidenceKind.Application);
+            if (artifactId.Equals("dagger", StringComparison.OrdinalIgnoreCase)
+                || artifactId.Equals("dagger-compiler", StringComparison.OrdinalIgnoreCase))
+                return ("Dagger", FrameworkEvidenceKind.Application);
+        }
+
+        if (groupId.Equals("io.insert-koin", StringComparison.OrdinalIgnoreCase))
+            return ("Koin", FrameworkEvidenceKind.Application);
+
         return null;
     }
 
@@ -439,6 +535,17 @@ internal static class JavaSemanticFrameworkDetector
             return "Mockito";
         if (groupId.Equals("org.testcontainers", StringComparison.OrdinalIgnoreCase))
             return "Testcontainers";
+        if (groupId.Equals("io.kotest", StringComparison.OrdinalIgnoreCase))
+            return "Kotest";
+        if (groupId.Equals("io.mockk", StringComparison.OrdinalIgnoreCase)
+            && artifactId.StartsWith("mockk", StringComparison.OrdinalIgnoreCase))
+            return "MockK";
+        if (groupId.Equals("org.jetbrains.kotlin", StringComparison.OrdinalIgnoreCase)
+            && artifactId.Equals("kotlin-test", StringComparison.OrdinalIgnoreCase))
+            return "Kotlin Test";
+        if (groupId.Equals("org.jetbrains.kotlinx", StringComparison.OrdinalIgnoreCase)
+            && artifactId.Equals("kotlinx-coroutines-test", StringComparison.OrdinalIgnoreCase))
+            return "kotlinx.coroutines Test";
         if (groupId.Equals("org.assertj", StringComparison.OrdinalIgnoreCase)
             && artifactId.StartsWith("assertj-", StringComparison.OrdinalIgnoreCase))
             return "AssertJ";
@@ -626,6 +733,37 @@ internal static class JavaSemanticFrameworkDetector
             return ("Hibernate", FrameworkEvidenceKind.Persistence);
         if (qualifiedName.StartsWith("org.eclipse.microprofile.", StringComparison.Ordinal))
             return ("MicroProfile", FrameworkEvidenceKind.Runtime);
+
+        if (qualifiedName.StartsWith("io.ktor.server.", StringComparison.Ordinal)
+            || qualifiedName.StartsWith("io.ktor.client.", StringComparison.Ordinal))
+            return ("Ktor", FrameworkEvidenceKind.Web);
+        if (qualifiedName.StartsWith("io.ktor.", StringComparison.Ordinal))
+            return ("Ktor", FrameworkEvidenceKind.Application);
+        if (qualifiedName.StartsWith("kotlinx.coroutines.", StringComparison.Ordinal))
+            return ("kotlinx.coroutines", FrameworkEvidenceKind.Runtime);
+        if (qualifiedName.StartsWith("kotlinx.serialization.", StringComparison.Ordinal))
+            return ("kotlinx.serialization", FrameworkEvidenceKind.Serialization);
+        if (qualifiedName.StartsWith("org.jetbrains.exposed.", StringComparison.Ordinal))
+            return ("Exposed", FrameworkEvidenceKind.Persistence);
+
+        if (qualifiedName.StartsWith("androidx.core.", StringComparison.Ordinal))
+            return ("AndroidX Core", FrameworkEvidenceKind.Runtime);
+        if (qualifiedName.StartsWith("androidx.lifecycle.", StringComparison.Ordinal))
+            return ("AndroidX Lifecycle", FrameworkEvidenceKind.Runtime);
+        if (qualifiedName.StartsWith("androidx.navigation.", StringComparison.Ordinal))
+            return ("AndroidX Navigation", FrameworkEvidenceKind.Application);
+        if (qualifiedName.StartsWith("androidx.room.", StringComparison.Ordinal))
+            return ("Room", FrameworkEvidenceKind.Persistence);
+        if (qualifiedName.StartsWith("androidx.compose.", StringComparison.Ordinal)
+            || qualifiedName.StartsWith("androidx.activity.compose.", StringComparison.Ordinal))
+            return ("Jetpack Compose", FrameworkEvidenceKind.Application);
+        if (qualifiedName.StartsWith("androidx.hilt.", StringComparison.Ordinal)
+            || qualifiedName.StartsWith("dagger.hilt.", StringComparison.Ordinal))
+            return ("Hilt", FrameworkEvidenceKind.Application);
+        if (qualifiedName.StartsWith("dagger.", StringComparison.Ordinal))
+            return ("Dagger", FrameworkEvidenceKind.Application);
+        if (qualifiedName.StartsWith("org.koin.", StringComparison.Ordinal))
+            return ("Koin", FrameworkEvidenceKind.Application);
 
         return null;
     }

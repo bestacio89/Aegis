@@ -20,6 +20,7 @@ public static class DependencyInjection
     {
         services.AddScopedDependencies(a => a.FullName?.StartsWith("Aegis") ?? false);
         services.AddJavaSemanticAnalysis();
+        services.AddKotlinSemanticAnalysis();
 
         services.AddMissingArchitectureEvaluators();
 

@@ -22,6 +22,18 @@ public sealed class ArchitectureComponentDependencyContext
 
     public string DependencyType { get; init; } = "SemanticComponentDependency";
 
+    /// <summary>Android variants associated with the contributing source declarations.</summary>
+    public List<string> AndroidVariants { get; init; } = [];
+
+    /// <summary>Android source sets associated with the contributing source declarations.</summary>
+    public List<string> AndroidSourceSets { get; init; } = [];
+
+    /// <summary>Android module kinds represented by the dependency endpoints.</summary>
+    public List<string> AndroidModuleKinds { get; init; } = [];
+
+    /// <summary>Android test categories represented by the dependency endpoints.</summary>
+    public List<string> AndroidTestKinds { get; init; } = [];
+
     /// <summary>True when both ends refer to the same language-level code container.</summary>
     public bool IsInternal { get; init; }
 

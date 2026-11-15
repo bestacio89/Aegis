@@ -26,6 +26,7 @@ internal static class ArchitectureDependencyCycleAnalyzer
                 edge.TargetComponentId,
                 edge.TargetComponentName,
                 edge.Scope,
+                edge.AndroidVariants,
                 edge.RelationshipCount,
                 edge.ContributingRelationships,
                 edge.UnreferencedRelationshipCount));
@@ -37,6 +38,7 @@ internal static class ArchitectureDependencyCycleAnalyzer
                 edge.TargetComponentId,
                 edge.TargetComponentName,
                 edge.Scope,
+                edge.AndroidVariants,
                 edge.RelationshipCount,
                 edge.ContributingRelationships,
                 edge.UnreferencedRelationshipCount));
@@ -62,10 +64,54 @@ internal static class ArchitectureDependencyCycleAnalyzer
 
         var results = new List<ArchitectureDependencyCycleContext>();
 
-        foreach (var scopeGroup in edges.GroupBy(edge => edge.Scope, StringComparer.OrdinalIgnoreCase)
+        foreach (var scopeGroup in edges
+                     .GroupBy(edge => edge.Scope, StringComparer.OrdinalIgnoreCase)
                      .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase))
         {
             var scopedEdges = scopeGroup.ToArray();
+            var variants = scopedEdges
+                .SelectMany(edge => edge.AndroidVariants)
+                .Where(variant => !string.IsNullOrWhiteSpace(variant))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(variant => variant, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var unvariantedEdges = scopedEdges
+                .Where(edge => edge.AndroidVariants.Count == 0)
+                .ToArray();
+
+            if (unvariantedEdges.Length > 0)
+            {
+                AddCycles(scopeGroup.Key, [], unvariantedEdges, requireVariantEvidence: false);
+            }
+
+            foreach (var variant in variants)
+            {
+                // A dependency edge that applies to multiple variants participates
+                // independently in each compatible variant graph. Edges without
+                // Android provenance are shared, but cannot by themselves cause a
+                // duplicate variant-specific cycle report.
+                var variantEdges = scopedEdges
+                    .Where(edge => edge.AndroidVariants.Count == 0
+                        || edge.AndroidVariants.Contains(variant, StringComparer.OrdinalIgnoreCase))
+                    .ToArray();
+
+                AddCycles(scopeGroup.Key, [variant], variantEdges, requireVariantEvidence: true);
+            }
+        }
+
+        return results
+            .OrderBy(cycle => cycle.Scope, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(cycle => CreateAndroidVariantKey(cycle.AndroidVariants), StringComparer.Ordinal)
+            .ThenBy(cycle => cycle.ComponentNames[0], StringComparer.OrdinalIgnoreCase)
+            .ThenBy(cycle => cycle.ComponentIds[0], StringComparer.Ordinal)
+            .ToArray();
+
+        void AddCycles(
+            string scope,
+            IReadOnlyList<string> androidVariants,
+            IReadOnlyList<DependencyEdge> scopedEdges,
+            bool requireVariantEvidence)
+        {
             var names = new Dictionary<string, string>(StringComparer.Ordinal);
 
             foreach (var edge in scopedEdges)
@@ -95,6 +141,12 @@ internal static class ArchitectureDependencyCycleAnalyzer
                 var internalEdges = scopedEdges
                     .Where(edge => members.Contains(edge.SourceId) && members.Contains(edge.TargetId))
                     .ToArray();
+                if (requireVariantEvidence && !internalEdges.Any(edge =>
+                        edge.AndroidVariants.Contains(androidVariants[0], StringComparer.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
                 var hasSelfDependency = internalEdges.Any(edge =>
                     string.Equals(edge.SourceId, edge.TargetId, StringComparison.Ordinal));
 
@@ -120,7 +172,8 @@ internal static class ArchitectureDependencyCycleAnalyzer
                 results.Add(new ArchitectureDependencyCycleContext
                 {
                     Projection = projection,
-                    Scope = scopeGroup.Key,
+                    Scope = scope,
+                    AndroidVariants = androidVariants.ToList(),
                     ComponentIds = componentIds,
                     ComponentNames = componentIds.Select(id => names[id]).ToList(),
                     DependencyEdgeCount = internalEdges.Length,
@@ -132,12 +185,6 @@ internal static class ArchitectureDependencyCycleAnalyzer
                 });
             }
         }
-
-        return results
-            .OrderBy(cycle => cycle.Scope, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(cycle => cycle.ComponentNames[0], StringComparer.OrdinalIgnoreCase)
-            .ThenBy(cycle => cycle.ComponentIds[0], StringComparer.Ordinal)
-            .ToArray();
     }
 
     /// <summary>
@@ -212,12 +259,18 @@ internal static class ArchitectureDependencyCycleAnalyzer
         return components;
     }
 
+    private static string CreateAndroidVariantKey(IEnumerable<string> variants) =>
+        string.Join("|", variants.Where(variant => !string.IsNullOrWhiteSpace(variant))
+            .Select(variant => variant.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal).OrderBy(variant => variant, StringComparer.Ordinal));
+
     private sealed record DependencyEdge(
         string SourceId,
         string SourceName,
         string TargetId,
         string TargetName,
         string Scope,
+        IReadOnlyList<string> AndroidVariants,
         int RelationshipCount,
         IReadOnlyList<SemanticRelationshipReference> Relationships,
         int UnreferencedRelationshipCount);

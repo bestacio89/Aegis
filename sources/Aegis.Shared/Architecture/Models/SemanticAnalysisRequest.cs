@@ -16,11 +16,20 @@ public sealed class SemanticAnalysisRequest
 
     public string ModuleName { get; init; } = string.Empty;
 
+    /// <summary>Build target whose compiler configuration scopes this semantic run.</summary>
+    public string? TargetName { get; init; }
+
+    /// <summary>Source sets included in this target-scoped compilation.</summary>
+    public IReadOnlyList<string> SourceSetNames { get; init; } = Array.Empty<string>();
+
     public string BuildSystem { get; init; } = string.Empty;
 
     public IReadOnlyList<string> SourceFiles { get; init; } = Array.Empty<string>();
 
     public IReadOnlyList<string> SourceRoots { get; init; } = Array.Empty<string>();
+
+    /// <summary>Shared source roots compiled as common sources for a multiplatform target.</summary>
+    public IReadOnlyList<string> SharedSourceRoots { get; init; } = Array.Empty<string>();
 
     /// <summary>Source roots from explicitly declared project dependencies, used for compiler binding resolution only.</summary>
     public IReadOnlyList<string> ReferencedSourceRoots { get; init; } = Array.Empty<string>();
@@ -34,9 +43,16 @@ public sealed class SemanticAnalysisRequest
 
     public IReadOnlyList<string> UnresolvedClasspathDependencies { get; init; } = Array.Empty<string>();
 
+    /// <summary>Host-side input-resolution diagnostics that must accompany worker evidence.</summary>
+    public IReadOnlyList<AnalysisDiagnostic> InputDiagnostics { get; init; } = Array.Empty<AnalysisDiagnostic>();
+
     public bool ClasspathResolutionComplete { get; init; } = true;
 
     public IReadOnlyList<string> BuildFiles { get; init; } = Array.Empty<string>();
+
+    /// <summary>Namespaced, non-executable options interpreted only by the selected provider.</summary>
+    public IReadOnlyDictionary<string, string> ProviderOptions { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
 
     /// <summary>Stable capability identifiers requested from the selected adapter.</summary>
     public IReadOnlyList<string> RequestedCapabilities { get; init; } = Array.Empty<string>();

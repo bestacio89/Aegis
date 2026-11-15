@@ -14,10 +14,17 @@ public static class ArchitecturalComponentClassifier
 
     private static readonly string[] ConventionalRoles =
     [
-        "domain",
+        "api",
         "application",
+        "client",
+        "consumer",
+        "contracts",
+        "domain",
         "infrastructure",
-        "presentation"
+        "library",
+        "presentation",
+        "shared",
+        "tests"
     ];
 
     public static void Classify(
@@ -30,9 +37,11 @@ public static class ArchitecturalComponentClassifier
 
         context.ArchitecturalComponents.Clear();
         context.ArchitecturalComponentMemberships.Clear();
-        context.ArchitectureClassificationDiagnostics.Clear();
 
-        var diagnostics = new List<ArchitectureClassificationDiagnostic>();
+        var diagnostics = context.ArchitectureClassificationDiagnostics
+            .Where(diagnostic => diagnostic.Code.StartsWith("ModuleLayer", StringComparison.Ordinal))
+            .ToList();
+        context.ArchitectureClassificationDiagnostics.Clear();
         var mappings = ValidateConfiguration(configuration, diagnostics);
         var matchedMappingIds = new HashSet<string>(StringComparer.Ordinal);
         var componentMembers = new Dictionary<string, List<ArchitectureComponentContext>>(StringComparer.Ordinal);
@@ -88,7 +97,7 @@ public static class ArchitecturalComponentClassifier
                 continue;
             }
 
-            var inference = InferConvention(codeComponent);
+            var inference = InferConvention(codeComponent, context);
             if (inference.Ambiguous)
             {
                 diagnostics.Add(new ArchitectureClassificationDiagnostic
@@ -394,7 +403,9 @@ public static class ArchitecturalComponentClassifier
         }
     }
 
-    private static ConventionInference InferConvention(ArchitectureComponentContext component)
+    private static ConventionInference InferConvention(
+        ArchitectureComponentContext component,
+        ProjectArchitectureContext context)
     {
         var tokens = new[]
             {
@@ -412,12 +423,37 @@ public static class ArchitecturalComponentClassifier
             .OrderBy(value => value, StringComparer.Ordinal)
             .ToArray();
 
-        return tokens.Length switch
-        {
-            0 => new ConventionInference(null, false),
-            1 => new ConventionInference(tokens[0], false),
-            _ => new ConventionInference(null, true)
-        };
+        var moduleLayer = ResolveModuleLayer(component, context);
+        if (tokens.Length > 1 && moduleLayer is not null && tokens.Contains(moduleLayer, StringComparer.Ordinal))
+            return new ConventionInference(moduleLayer, false);
+
+        if (tokens.Length > 0)
+            return tokens.Length == 1
+                ? new ConventionInference(tokens[0], false)
+                : new ConventionInference(null, true);
+
+        return moduleLayer is null
+            ? new ConventionInference(null, false)
+            : new ConventionInference(moduleLayer, false);
+    }
+
+    private static string? ResolveModuleLayer(
+        ArchitectureComponentContext component,
+        ProjectArchitectureContext context)
+    {
+        if (string.IsNullOrWhiteSpace(component.BuildModulePath))
+            return null;
+
+        var module = context.Modules.FirstOrDefault(candidate =>
+            !string.IsNullOrWhiteSpace(candidate.Path)
+            && PathComparer.Equals(
+                Path.GetFullPath(candidate.Path),
+                Path.GetFullPath(component.BuildModulePath)));
+        var layer = module?.Layers.FirstOrDefault()?.Name?.Trim().ToLowerInvariant();
+
+        return layer is not null && ConventionalRoles.Contains(layer, StringComparer.Ordinal)
+            ? layer
+            : null;
     }
 
     private static void AddMembership(

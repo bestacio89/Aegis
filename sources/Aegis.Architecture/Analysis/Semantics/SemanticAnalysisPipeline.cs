@@ -23,17 +23,31 @@ public sealed class SemanticAnalysisPipeline
         ArgumentNullException.ThrowIfNull(logger);
 
         _analyzers = analyzers
-            .OrderBy(analyzer => analyzer.Language, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(analyzer => analyzer.ExecutionOrder)
+            .ThenBy(analyzer => analyzer.Language, StringComparer.OrdinalIgnoreCase)
             .ThenBy(analyzer => analyzer.GetType().FullName, StringComparer.Ordinal)
             .ToArray();
         _logger = logger;
+
+        _logger.LogInformation(
+            "Registered semantic project analyzers: {Languages}.",
+            RegisteredLanguages.Count == 0 ? "None" : string.Join(", ", RegisteredLanguages));
     }
+
+    public IReadOnlyCollection<string> RegisteredLanguages =>
+        _analyzers
+            .Select(analyzer => analyzer.Language)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(language => language, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     public async Task AnalyzeAsync(
         ProjectArchitectureContext context,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
+
+        await using var executionContext = new SemanticAnalysisExecutionContext(_logger);
 
         foreach (var analyzer in _analyzers)
         {
@@ -42,7 +56,7 @@ public sealed class SemanticAnalysisPipeline
 
             try
             {
-                await analyzer.AnalyzeAsync(context, cancellationToken)
+                await analyzer.AnalyzeAsync(context, executionContext, cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -103,7 +117,8 @@ public sealed class SemanticAnalysisPipeline
             .SelectMany(module => module.Languages)
             .Append(context.Language)
             .Where(language => !string.IsNullOrWhiteSpace(language)
-                && !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                && !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
+                && !language.Equals("Multi-Language", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
         foreach (var language in discoveredLanguages)

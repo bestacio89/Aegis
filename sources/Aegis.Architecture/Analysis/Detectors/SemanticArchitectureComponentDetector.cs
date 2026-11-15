@@ -62,7 +62,10 @@ internal static class SemanticArchitectureComponentDetector
             {
                 var languageMatch = candidates.FirstOrDefault(module =>
                     module.Languages.Contains(language, StringComparer.OrdinalIgnoreCase));
-                return languageMatch ?? candidates[0];
+                var androidMatch = candidates.FirstOrDefault(module =>
+                    module.GradleBuildModel?.Android is not null
+                    && module.Languages.Contains(language, StringComparer.OrdinalIgnoreCase));
+                return androidMatch ?? languageMatch ?? candidates[0];
             }
 
             var moduleName = Path.GetFileName(modulePath);
@@ -78,6 +81,9 @@ internal static class SemanticArchitectureComponentDetector
             .Select(run => run.Language)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        // Symbol IDs are opaque and project-scoped by the shared semantic contract.
+        // Keep module identity in the key; a workspace-wide ID-only map can collapse
+        // unrelated declarations when different modules emit the same ID.
         var symbolComponents = semanticRuns
             .SelectMany(run =>
             {
@@ -99,8 +105,13 @@ internal static class SemanticArchitectureComponentDetector
                                 : symbol.ContainerName.Trim();
                         var modulePath = NormalizePath(run.ProjectPath);
                         var componentId = CreateComponentId(modulePath, run.Language, componentKind, componentName);
+                        var sourceOwnership = ResolveAndroidSourceOwnership(module, symbol.FilePath!, run.Language);
+                        if (symbol.IsTestCode || module.IsTestProject || module.IsTestSupport)
+                            sourceOwnership = sourceOwnership with { Ownership = "Test" };
+                        var isTestCode = sourceOwnership.Ownership == "Test";
                         return new SymbolComponent(
                             symbol.Id,
+                            symbol.QualifiedName,
                             componentId,
                             componentName,
                             componentKind,
@@ -108,28 +119,63 @@ internal static class SemanticArchitectureComponentDetector
                             modulePath,
                             run.Language,
                             Path.GetFullPath(symbol.FilePath!),
-                            symbol.IsTestCode);
+                            isTestCode,
+                            sourceOwnership.Ownership,
+                            sourceOwnership.SourceSetName,
+                            sourceOwnership.Variants,
+                            sourceOwnership.ModuleKind,
+                            sourceOwnership.TestKind);
                     });
             })
-            .GroupBy(item => item.SymbolId, StringComparer.Ordinal)
+            .GroupBy(
+                item => new SymbolIdentity(item.ModulePath, item.Language, item.SymbolId),
+                SymbolIdentityComparer.Instance)
             .Select(group => new
             {
-                SymbolId = group.Key,
+                group.Key,
                 Components = group
                     .GroupBy(item => item.ComponentId, StringComparer.Ordinal)
                     .Select(componentGroup => componentGroup.First())
                     .ToArray()
             })
             .Where(item => item.Components.Length == 1)
-            .ToDictionary(item => item.SymbolId, item => item.Components[0], StringComparer.Ordinal);
+            .ToDictionary(
+                item => item.Key,
+                item => item.Components[0],
+                SymbolIdentityComparer.Instance);
+
+        var symbolIdentitiesById = semanticRuns
+            .SelectMany(run => run.Symbols
+                .Where(IsProjectSourceSymbol)
+                .Where(symbol => !string.IsNullOrWhiteSpace(symbol.Id))
+                .Select(symbol => new SymbolIdentity(
+                    NormalizePath(run.ProjectPath),
+                    run.Language,
+                    symbol.Id)))
+            .Distinct(SymbolIdentityComparer.Instance)
+            .GroupBy(identity => identity.SymbolId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToArray(),
+                StringComparer.Ordinal);
+
+        var symbolComponentsByQualifiedName = symbolComponents.Values
+            .Where(component => !string.IsNullOrWhiteSpace(component.QualifiedName))
+            .GroupBy(
+                component => new QualifiedSymbolIdentity(component.Language, component.QualifiedName),
+                QualifiedSymbolIdentityComparer.Instance)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToArray(),
+                QualifiedSymbolIdentityComparer.Instance);
 
         var componentNodes = symbolComponents.Values
             .GroupBy(component => component.ComponentId, StringComparer.Ordinal)
             .Select(group =>
             {
                 var first = group.First();
-                var productionSymbols = group.Where(item => !item.IsTestCode).ToArray();
-                var testSymbols = group.Where(item => item.IsTestCode).ToArray();
+                var productionSymbols = group.Where(item => item.SourceOwnership == "Production").ToArray();
+                var testSymbols = group.Where(item => item.SourceOwnership == "Test").ToArray();
                 var files = group.Select(item => item.FilePath)
                     .Distinct(PathComparer)
                     .OrderBy(path => path, PathComparer)
@@ -144,6 +190,19 @@ internal static class SemanticArchitectureComponentDetector
                     ComponentKind = first.ComponentKind,
                     BuildModuleName = first.ModuleName,
                     BuildModulePath = first.ModulePath,
+                    AndroidModuleKind = first.AndroidModuleKind,
+                    AndroidVariants = group.SelectMany(item => item.AndroidVariants)
+                        .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+                    AndroidSourceSets = group.Select(item => item.SourceSetName)
+                        .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+                    SourceOwnerships = group.Select(item => item.SourceOwnership)
+                        .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+                    AndroidTestKinds = group.Select(item => item.AndroidTestKind)
+                        .Where(value => !string.IsNullOrWhiteSpace(value)
+                            && !value.Equals(nameof(GradleAndroidTestKind.None), StringComparison.OrdinalIgnoreCase))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
                     SourceFileCount = files.Count,
                     ProductionSourceFileCount = productionSymbols
                         .Select(item => item.FilePath)
@@ -194,8 +253,27 @@ internal static class SemanticArchitectureComponentDetector
                          && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)))
             {
                 if (!runSymbols.TryGetValue(relationship.SourceSymbolId, out var sourceSymbol)
-                    || !symbolComponents.TryGetValue(relationship.SourceSymbolId, out var sourceComponent)
-                    || !symbolComponents.TryGetValue(relationship.TargetSymbolId!, out var targetComponent))
+                    || !symbolComponents.TryGetValue(
+                        new SymbolIdentity(NormalizePath(run.ProjectPath), run.Language, relationship.SourceSymbolId),
+                        out var sourceComponent))
+                {
+                    continue;
+                }
+
+                var targetComponent = ResolveTargetComponent(
+                    context,
+                    run,
+                    relationship.TargetSymbolId!,
+                    sourceComponent,
+                    relationship.IsTestCode || sourceSymbol.IsTestCode
+                        || sourceComponent.SourceOwnership == "Test"
+                        || sourceModule.IsTestProject
+                        || sourceModule.IsTestSupport,
+                    symbolComponents,
+                    symbolIdentitiesById,
+                    symbolComponentsByQualifiedName);
+                if (targetComponent is null
+                    || !TryResolveCompatibleAndroidVariants(sourceComponent, targetComponent, out var compatibleAndroidVariants))
                 {
                     continue;
                 }
@@ -203,17 +281,25 @@ internal static class SemanticArchitectureComponentDetector
                 var targetModule = ResolveModule(targetComponent.ModulePath, targetComponent.Language);
                 var isTest = relationship.IsTestCode
                     || sourceSymbol.IsTestCode
+                    || sourceComponent.SourceOwnership == "Test"
+                    || targetComponent.SourceOwnership == "Test"
+                    || sourceComponent.IsTestCode
                     || targetComponent.IsTestCode
                     || sourceModule.IsTestProject
                     || sourceModule.IsTestSupport
                     || targetModule?.IsTestProject == true
                     || targetModule?.IsTestSupport == true;
 
-                var scope = isTest ? "Test" : "Production";
-                var key = new EdgeKey(sourceComponent.ComponentId, targetComponent.ComponentId, scope);
+                var hasUnknownAndroidOwnership = sourceComponent.SourceOwnership == "Unknown"
+                    || targetComponent.SourceOwnership == "Unknown";
+                var scope = hasUnknownAndroidOwnership
+                    ? "Unknown"
+                    : isTest ? "Test" : "Production";
+                var variantKey = string.Join("|", compatibleAndroidVariants);
+                var key = new EdgeKey(sourceComponent.ComponentId, targetComponent.ComponentId, scope, variantKey);
                 if (!edges.TryGetValue(key, out var accumulator))
                 {
-                    accumulator = new EdgeAccumulator(sourceComponent, targetComponent);
+                    accumulator = new EdgeAccumulator(sourceComponent, targetComponent, compatibleAndroidVariants);
                     edges.Add(key, accumulator);
                 }
 
@@ -268,6 +354,276 @@ internal static class SemanticArchitectureComponentDetector
             $"Semantic architectural component projection: runs={semanticRuns.Length}; sourceSymbols={sourceSymbolCount}; componentSymbols={componentSymbolCount}; components={componentNodes.Count}; candidateRelationships={candidateRelationshipCount}; projectedEdges={edges.Count}; productionEdges={context.ProductionComponentDependencies.Count}; testEdges={context.TestComponentDependencies.Count}.");
     }
 
+    private static SymbolComponent? ResolveTargetComponent(
+        ProjectArchitectureContext context,
+        SemanticAnalysisRun run,
+        string targetSymbolId,
+        SymbolComponent sourceComponent,
+        bool includeTestDependencies,
+        IReadOnlyDictionary<SymbolIdentity, SymbolComponent> symbolComponents,
+        IReadOnlyDictionary<string, SymbolIdentity[]> symbolIdentitiesById,
+        IReadOnlyDictionary<QualifiedSymbolIdentity, SymbolComponent[]> symbolComponentsByQualifiedName)
+    {
+        // External symbols emitted by a provider describe the resolved target,
+        // but ProjectPath may still identify the consumer analysis context.
+        // Use a distinct path as an exact owner only when it differs from the run.
+        var externalSymbols = run.Symbols
+            .Where(symbol =>
+                symbol.Id.Equals(targetSymbolId, StringComparison.Ordinal)
+                && symbol.Origin == SemanticSymbolOrigin.External)
+            .ToArray();
+
+        if (externalSymbols.Length > 0)
+        {
+            var candidates = new Dictionary<SymbolIdentity, SymbolComponent>(SymbolIdentityComparer.Instance);
+            var sourceProjectPath = NormalizePath(run.ProjectPath);
+            var reachableDependencyPaths = ResolveReachableDependencyPaths(
+                context.Dependencies,
+                sourceProjectPath,
+                includeTestDependencies);
+
+            foreach (var externalSymbol in externalSymbols.Where(symbol =>
+                         !string.IsNullOrWhiteSpace(symbol.ProjectPath)))
+            {
+                var externalProjectPath = NormalizePath(externalSymbol.ProjectPath!);
+                if (PathComparer.Equals(externalProjectPath, sourceProjectPath))
+                    continue;
+
+                var exactIdentity = new SymbolIdentity(
+                    externalProjectPath,
+                    string.IsNullOrWhiteSpace(externalSymbol.Language) ? run.Language : externalSymbol.Language,
+                    targetSymbolId);
+                if (symbolComponents.TryGetValue(exactIdentity, out var exactTarget)
+                    && TryResolveCompatibleAndroidVariants(sourceComponent, exactTarget, out _))
+                {
+                    candidates[exactIdentity] = exactTarget;
+                }
+            }
+
+            // A provider-supplied target owner is stronger than name matching.
+            if (candidates.Count > 0)
+                return candidates.Count == 1 ? candidates.Values.Single() : null;
+
+            foreach (var externalSymbol in externalSymbols)
+            {
+                if (string.IsNullOrWhiteSpace(externalSymbol.QualifiedName))
+                    continue;
+
+                var targetLanguage = string.IsNullOrWhiteSpace(externalSymbol.Language)
+                    ? run.Language
+                    : externalSymbol.Language;
+                if (!symbolComponentsByQualifiedName.TryGetValue(
+                        new QualifiedSymbolIdentity(targetLanguage, externalSymbol.QualifiedName),
+                        out var qualifiedCandidates))
+                {
+                    continue;
+                }
+
+                var projectCandidates = qualifiedCandidates
+                    .Where(component => !PathComparer.Equals(component.ModulePath, sourceProjectPath))
+                    .Where(component => reachableDependencyPaths.Contains(component.ModulePath))
+                    .ToArray();
+
+                // A qualified name plus a reachable module does not identify a
+                // particular Android variant. Filtering by intersection first is
+                // unsafe: it can make a debug reference appear to target the debug
+                // declaration even when the compiler actually resolved a release
+                // declaration. Require one owner/declaration candidate before
+                // applying variant compatibility; otherwise fail closed.
+                if (projectCandidates.Length != 1)
+                    continue;
+
+                var candidate = projectCandidates[0];
+                if (!TryResolveCompatibleAndroidVariants(sourceComponent, candidate, out _))
+                    continue;
+
+                var identity = new SymbolIdentity(candidate.ModulePath, candidate.Language, candidate.SymbolId);
+                candidates[identity] = candidate;
+            }
+
+            return candidates.Count == 1 ? candidates.Values.Single() : null;
+        }
+
+        // Same-run source declarations are already scoped by the run's project.
+        var sameProjectTarget = new SymbolIdentity(
+            NormalizePath(run.ProjectPath),
+            run.Language,
+            targetSymbolId);
+        if (symbolComponents.TryGetValue(sameProjectTarget, out var localTarget)
+            && TryResolveCompatibleAndroidVariants(sourceComponent, localTarget, out _))
+        {
+            return localTarget;
+        }
+
+        // Preserve the existing Java/C# relationship contract when the target ID
+        // is unique across the workspace. Never choose arbitrarily across projects.
+        return symbolIdentitiesById.TryGetValue(targetSymbolId, out var identities)
+            && identities.Length == 1
+            && symbolComponents.TryGetValue(identities[0], out var uniqueTarget)
+                ? uniqueTarget
+                : null;
+    }
+
+    private static bool TryResolveCompatibleAndroidVariants(
+        SymbolComponent source,
+        SymbolComponent target,
+        out IReadOnlyList<string> compatibleVariants)
+    {
+        compatibleVariants = [];
+
+        var sourceIsAndroid = !string.IsNullOrWhiteSpace(source.AndroidModuleKind);
+        var targetIsAndroid = !string.IsNullOrWhiteSpace(target.AndroidModuleKind);
+
+        if (!sourceIsAndroid && !targetIsAndroid)
+            return true;
+
+        // Preserve the known Android endpoint's variant provenance when the
+        // opposite endpoint is a non-Android JVM module.
+        if (sourceIsAndroid && !targetIsAndroid)
+        {
+            if (source.AndroidVariants.Count == 0)
+                return false;
+
+            compatibleVariants = source.AndroidVariants
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return true;
+        }
+
+        if (!sourceIsAndroid && targetIsAndroid)
+        {
+            if (target.AndroidVariants.Count == 0)
+                return false;
+
+            compatibleVariants = target.AndroidVariants
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return true;
+        }
+
+        // Missing variant evidence is not proof of compatibility. Do not project
+        // an Android-to-Android edge based only on a qualified-name match.
+        if (source.AndroidVariants.Count == 0 || target.AndroidVariants.Count == 0)
+            return false;
+
+        var intersection = source.AndroidVariants
+            .Intersect(target.AndroidVariants, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (intersection.Length == 0)
+            return false;
+
+        compatibleVariants = intersection;
+        return true;
+    }
+
+    private static HashSet<string> ResolveReachableDependencyPaths(
+        IReadOnlyCollection<ArchitectureDependencyContext> dependencies,
+        string sourceProjectPath,
+        bool includeTestDependencies)
+    {
+        var reachable = new HashSet<string>(PathComparer);
+        var pending = new Queue<string>();
+        pending.Enqueue(sourceProjectPath);
+
+        while (pending.TryDequeue(out var currentPath))
+        {
+            foreach (var dependency in dependencies.Where(dependency =>
+                         !string.IsNullOrWhiteSpace(dependency.SourceProjectPath)
+                         && !string.IsNullOrWhiteSpace(dependency.TargetProjectPath)
+                         && PathComparer.Equals(NormalizePath(dependency.SourceProjectPath), currentPath)
+                         && (dependency.Scope.Equals("Production", StringComparison.OrdinalIgnoreCase)
+                             || includeTestDependencies
+                                 && dependency.Scope.Equals("Test", StringComparison.OrdinalIgnoreCase))))
+            {
+                var targetPath = NormalizePath(dependency.TargetProjectPath);
+                if (PathComparer.Equals(targetPath, sourceProjectPath)
+                    || !reachable.Add(targetPath))
+                {
+                    continue;
+                }
+
+                pending.Enqueue(targetPath);
+            }
+        }
+
+        return reachable;
+    }
+
+    private static AndroidSourceOwnership ResolveAndroidSourceOwnership(
+        ProjectModuleContext module,
+        string filePath,
+        string language)
+    {
+        var android = module.GradleBuildModel?.Android;
+        if (android is null)
+        {
+            var isAndroidModule = string.Equals(module.Framework, "Android", StringComparison.OrdinalIgnoreCase)
+                || module.Frameworks.Contains("Android", StringComparer.OrdinalIgnoreCase);
+            var ownership = isAndroidModule
+                ? "Unknown"
+                : module.IsTestProject || module.IsTestSupport ? "Test" : "Production";
+            return new AndroidSourceOwnership(ownership, null, [], null, null);
+        }
+
+        var normalizedFile = NormalizePath(filePath);
+        var matchingSourceSets = android.SourceSets
+            .Select(sourceSet => new
+            {
+                SourceSet = sourceSet,
+                Directories = sourceSet.JavaSourceDirectories
+                    .Concat(sourceSet.KotlinSourceDirectories)
+                    .Concat(sourceSet.GeneratedJavaSourceDirectories)
+                    .Concat(sourceSet.GeneratedKotlinSourceDirectories)
+                    .Where(directory => !string.IsNullOrWhiteSpace(directory))
+                    .Select(NormalizePath)
+                    .Distinct(PathComparer)
+                    .Where(directory => IsPathWithin(normalizedFile, directory))
+                    .OrderByDescending(directory => directory.Length)
+                    .ToArray()
+            })
+            .Where(item => item.Directories.Length > 0)
+            .OrderByDescending(item => item.Directories[0].Length)
+            .ToArray();
+
+        if (matchingSourceSets.Length == 0
+            || matchingSourceSets.Length > 1
+            && matchingSourceSets[0].Directories[0].Length == matchingSourceSets[1].Directories[0].Length)
+        {
+            return new AndroidSourceOwnership("Unknown", null, [], android.ModuleKind, null);
+        }
+
+        var match = matchingSourceSets[0].SourceSet;
+        return new AndroidSourceOwnership(
+            match.Ownership.ToString(),
+            match.Name,
+            match.AppliesToVariants,
+            android.ModuleKind,
+            match.TestKind.ToString());
+    }
+
+    private static bool IsPathWithin(string filePath, string directory)
+    {
+        var relativePath = Path.GetRelativePath(directory, filePath);
+        return !Path.IsPathRooted(relativePath)
+            && relativePath != "."
+            && relativePath != ".."
+            && !relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", PathComparison)
+            && !relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", PathComparison);
+    }
+
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    private sealed record AndroidSourceOwnership(
+        string Ownership,
+        string? SourceSetName,
+        IReadOnlyList<string> Variants,
+        string? ModuleKind,
+        string? TestKind);
+
     private static string CreateComponentId(string modulePath, string language, string componentKind, string componentName) =>
         $"{language.ToLowerInvariant()}-{componentKind.ToLowerInvariant()}:{modulePath}:{componentName}";
 
@@ -316,8 +672,47 @@ internal static class SemanticArchitectureComponentDetector
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
+    private sealed record SymbolIdentity(string ProjectPath, string Language, string SymbolId);
+
+    private sealed record QualifiedSymbolIdentity(string Language, string QualifiedName);
+
+    private sealed class QualifiedSymbolIdentityComparer : IEqualityComparer<QualifiedSymbolIdentity>
+    {
+        public static QualifiedSymbolIdentityComparer Instance { get; } = new();
+
+        public bool Equals(QualifiedSymbolIdentity? x, QualifiedSymbolIdentity? y) =>
+            ReferenceEquals(x, y)
+            || x is not null && y is not null
+                && StringComparer.OrdinalIgnoreCase.Equals(x.Language, y.Language)
+                && StringComparer.Ordinal.Equals(x.QualifiedName, y.QualifiedName);
+
+        public int GetHashCode(QualifiedSymbolIdentity identity) =>
+            HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(identity.Language),
+                StringComparer.Ordinal.GetHashCode(identity.QualifiedName));
+    }
+
+    private sealed class SymbolIdentityComparer : IEqualityComparer<SymbolIdentity>
+    {
+        public static SymbolIdentityComparer Instance { get; } = new();
+
+        public bool Equals(SymbolIdentity? x, SymbolIdentity? y) =>
+            ReferenceEquals(x, y)
+            || x is not null && y is not null
+                && PathComparer.Equals(x.ProjectPath, y.ProjectPath)
+                && StringComparer.OrdinalIgnoreCase.Equals(x.Language, y.Language)
+                && StringComparer.Ordinal.Equals(x.SymbolId, y.SymbolId);
+
+        public int GetHashCode(SymbolIdentity identity) =>
+            HashCode.Combine(
+                PathComparer.GetHashCode(identity.ProjectPath),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(identity.Language),
+                StringComparer.Ordinal.GetHashCode(identity.SymbolId));
+    }
+
     private sealed record SymbolComponent(
         string SymbolId,
+        string QualifiedName,
         string ComponentId,
         string ComponentName,
         string ComponentKind,
@@ -325,14 +720,20 @@ internal static class SemanticArchitectureComponentDetector
         string ModulePath,
         string Language,
         string FilePath,
-        bool IsTestCode);
+        bool IsTestCode,
+        string SourceOwnership,
+        string? SourceSetName,
+        IReadOnlyList<string> AndroidVariants,
+        string? AndroidModuleKind,
+        string? AndroidTestKind);
 
-    private sealed record EdgeKey(string SourceComponentId, string TargetComponentId, string Scope);
+    private sealed record EdgeKey(string SourceComponentId, string TargetComponentId, string Scope, string AndroidVariantKey);
 
     private sealed class EdgeAccumulator
     {
         private readonly SymbolComponent _source;
         private readonly SymbolComponent _target;
+        private readonly IReadOnlyList<string> _compatibleAndroidVariants;
         private readonly HashSet<string> _relationshipIds = new(StringComparer.Ordinal);
         private readonly List<SemanticRelationshipReference> _relationshipReferences = [];
         private readonly HashSet<SemanticRelationship> _unreferencedRelationships = [];
@@ -341,10 +742,14 @@ internal static class SemanticArchitectureComponentDetector
         private int _resolvedRelationshipCount;
         private int _partiallyResolvedRelationshipCount;
 
-        public EdgeAccumulator(SymbolComponent source, SymbolComponent target)
+        public EdgeAccumulator(
+            SymbolComponent source,
+            SymbolComponent target,
+            IReadOnlyList<string> compatibleAndroidVariants)
         {
             _source = source;
             _target = target;
+            _compatibleAndroidVariants = compatibleAndroidVariants;
         }
 
         public void Add(string runId, SemanticRelationship relationship)
@@ -401,7 +806,19 @@ internal static class SemanticArchitectureComponentDetector
                 .ToList(),
             UnreferencedRelationshipCount = _unreferencedRelationships.Count,
             RelationshipKinds = _relationshipKinds.OrderBy(kind => kind).ToList(),
-            EvidenceFiles = _evidenceFiles.OrderBy(file => file, PathComparer).ToList()
+            EvidenceFiles = _evidenceFiles.OrderBy(file => file, PathComparer).ToList(),
+            AndroidVariants = _compatibleAndroidVariants.ToList(),
+            AndroidSourceSets = new[] { _source.SourceSetName, _target.SourceSetName }
+                .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+            AndroidModuleKinds = new[] { _source.AndroidModuleKind, _target.AndroidModuleKind }
+                .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+            AndroidTestKinds = new[] { _source.AndroidTestKind, _target.AndroidTestKind }
+                .Where(value => !string.IsNullOrWhiteSpace(value)
+                    && !value.Equals(nameof(GradleAndroidTestKind.None), StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList()
         };
     }
 }

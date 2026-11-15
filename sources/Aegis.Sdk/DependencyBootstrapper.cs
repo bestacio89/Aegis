@@ -13,6 +13,7 @@ public static class DependencyBootstrapper
        
         // Core components
         services.AddJavaSemanticAnalysis();
+        services.AddKotlinSemanticAnalysis();
         services.AddScoped<RuleEngine>();
         services.AddScoped<RuleEngineCore>();
         services.AddScoped<AegisArchitectureAnalysisRunner>();

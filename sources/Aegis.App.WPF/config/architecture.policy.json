@@ -2,15 +2,16 @@
   "Architecture": {
     "EnforceLayerBoundaries": true,
     "AllowedDependencies": {
-      "Api": ["Application", "Domain", "Infrastructure", "Contracts"],
-      "Application": ["Domain", "Contracts"],
-      "Domain": [],
-      "Infrastructure": ["Domain", "Application", "Contracts"],
-      "Contracts": [],
-      "Presentation": ["Application", "Contracts", "Client"],
-      "Consumer": ["Application", "Domain", "Infrastructure", "Contracts"],
-      "Client": ["Contracts"],
-      "Tests": ["Api", "Application", "Domain", "Infrastructure", "Contracts", "Presentation", "Consumer", "Client", "Tests"]
+      "Api": ["Application", "Domain", "Infrastructure", "Contracts", "Shared", "Library"],
+      "Application": ["Domain", "Contracts", "Shared", "Library"],
+      "Domain": ["Shared", "Library"],
+      "Infrastructure": ["Domain", "Application", "Contracts", "Shared", "Library"],
+      "Contracts": ["Shared", "Library"],
+      "Presentation": ["Application", "Contracts", "Client", "Shared", "Library"],
+      "Consumer": ["Application", "Domain", "Infrastructure", "Contracts", "Shared", "Library"],
+      "Client": ["Contracts", "Shared", "Library"],
+      "Shared": ["Library"],
+      "Tests": ["Api", "Application", "Domain", "Infrastructure", "Contracts", "Presentation", "Consumer", "Client", "Shared", "Library", "Tests"]
     },
     "LayerHints": {
       "Api": ["Api", "Controllers", "CompositionRoot"],
@@ -21,11 +22,14 @@
       "Presentation": ["Admin", "Presentation", "Web", "Ui", "Front"],
       "Consumer": ["Consumer", "Worker", "Background", "Jobs"],
       "Client": ["Client", "ClientHttp", "Unity"],
-      "Tests": ["Test", "Tests", "Testing"]
+      "Tests": ["Test", "Tests", "Testing"],
+      "Shared": ["Shared", "Common", "Commons"],
+      "Library": ["Library", "Libraries", "Lib"]
     },
     "EnforcementByLanguage": {
       "C#": "Strict",
       "Java": "Strict",
+      "Kotlin": "Strict",
       "Python": "Advisory",
       "TypeScript": "Strict"
     },

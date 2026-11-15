@@ -32,6 +32,7 @@ public sealed class ArchitecturalEvaluator :
     [
         "C#",
         "Java",
+        "Kotlin",
         "Python",
         "TypeScript",
         "JavaScript"
@@ -41,6 +42,12 @@ public sealed class ArchitecturalEvaluator :
     [
         "ASP.NET",
         "Spring Boot",
+        "Kotlin",
+        "Ktor",
+        "Android",
+        "Jetpack Compose",
+        "Compose Multiplatform",
+        "Kotlin Multiplatform",
         "FastAPI",
         "Node",
         "Angular",

@@ -514,12 +514,50 @@ internal static class ModuleDetector
         foreach (var module in modules)
         {
             var hasKotlin = module.Languages.Contains("Kotlin", StringComparer.OrdinalIgnoreCase);
+            var hasJava = module.Languages.Contains("Java", StringComparer.OrdinalIgnoreCase);
+            var android = module.GradleBuildModel?.Android;
+
+            if (android is not null)
+            {
+                if (!hasJava)
+                {
+                    module.Frameworks.RemoveAll(framework =>
+                        framework.Equals("Java", StringComparison.OrdinalIgnoreCase));
+                }
+                else
+                {
+                    AddFramework(module, "Java");
+                }
+
+                if (hasKotlin)
+                    AddFramework(module, "Kotlin");
+
+                AddFramework(module, "Android");
+                module.ProjectKind = android.ModuleKind switch
+                {
+                    "Application" => "AndroidApplication",
+                    "Library" => "AndroidLibrary",
+                    "Test" => "AndroidTest",
+                    "DynamicFeature" => "AndroidDynamicFeature",
+                    "AssetPack" => "AndroidAssetPack",
+                    _ => "Unknown"
+                };
+                module.IsExecutable = android.ModuleKind == "Application";
+                module.IsLibrary = android.ModuleKind == "Library";
+                module.IsTestProject = module.IsTestProject || android.ModuleKind == "Test";
+                module.Framework = module.Frameworks.Count switch
+                {
+                    0 => null,
+                    1 => module.Frameworks[0],
+                    _ => "Multi-Framework"
+                };
+                continue;
+            }
+
             if (!hasKotlin)
                 continue;
 
-            var hasJava = module.Languages.Contains("Java", StringComparer.OrdinalIgnoreCase);
             AddFramework(module, "Kotlin");
-
             if (!hasJava)
             {
                 module.Frameworks.RemoveAll(framework =>
@@ -753,106 +791,140 @@ internal static class ModuleDetector
             return "TestSupport";
         }
 
-        var pathType = DetectModuleTypeFromName(pathName);
-        return pathType != "Unknown"
-            ? pathType
-            : DetectModuleTypeFromName(moduleName.ToLowerInvariant());
+        var manifestType = DetectModuleTypeFromName(moduleName.ToLowerInvariant());
+        return manifestType != "Unknown"
+            ? manifestType
+            : DetectModuleTypeFromName(pathName);
     }
 
     private static string DetectModuleTypeFromName(string name)
     {
-        if (name is "test" or "tests"
-            || name.EndsWith(".test", StringComparison.Ordinal)
-            || name.EndsWith(".tests", StringComparison.Ordinal)
-            || name.EndsWith("tests", StringComparison.Ordinal)
-            || name.StartsWith("test-", StringComparison.Ordinal)
-            || name.StartsWith("tests-", StringComparison.Ordinal))
-        {
-            return "Test";
-        }
+        var normalized = name.Trim().ToLowerInvariant();
+        var tokens = normalized.Split(['.', '-', '_', ' '], StringSplitOptions.RemoveEmptyEntries);
 
-        if (name.Equals("testing", StringComparison.Ordinal)
-            || name.EndsWith(".testing", StringComparison.Ordinal)
-            || name.Contains("testsupport", StringComparison.Ordinal))
-        {
+        if (normalized is "test" or "tests"
+            || normalized.EndsWith(".test", StringComparison.Ordinal)
+            || normalized.EndsWith(".tests", StringComparison.Ordinal)
+            || normalized.EndsWith("tests", StringComparison.Ordinal)
+            || normalized.StartsWith("test-", StringComparison.Ordinal)
+            || normalized.StartsWith("tests-", StringComparison.Ordinal))
+            return "Test";
+
+        if (normalized.Equals("testing", StringComparison.Ordinal)
+            || normalized.EndsWith(".testing", StringComparison.Ordinal)
+            || normalized.Contains("testsupport", StringComparison.Ordinal))
             return "TestSupport";
-        }
-        // Explicit contract packages take precedence over the technical family
-        // names used by adapters such as Http.Contracts.
-        if (name.Contains("contracts", StringComparison.Ordinal)
-            || name.Contains("annotations", StringComparison.Ordinal)
-            || (name.EndsWith(".headers", StringComparison.Ordinal)
-                && !name.Split('.').Contains("http", StringComparer.Ordinal))
-            || (name.EndsWith(".errors", StringComparison.Ordinal)
-                && !name.Split('.').Contains("http", StringComparer.Ordinal)))
+
+        if (tokens.Contains("contracts", StringComparer.Ordinal)
+            || normalized.Contains("contracts", StringComparison.Ordinal)
+            || tokens.Contains("annotations", StringComparer.Ordinal)
+            || (normalized.EndsWith(".headers", StringComparison.Ordinal)
+                && !tokens.Contains("http", StringComparer.Ordinal))
+            || (normalized.EndsWith(".errors", StringComparison.Ordinal)
+                && !tokens.Contains("http", StringComparer.Ordinal)))
             return "Contracts";
 
-        if (name.EndsWith(".api", StringComparison.Ordinal)
-            || name.EndsWith("api", StringComparison.Ordinal))
+        if (tokens.Contains("api", StringComparer.Ordinal)
+            || normalized.EndsWith(".api", StringComparison.Ordinal)
+            || normalized.Contains(".api.", StringComparison.Ordinal)
+            || normalized.Contains("backend", StringComparison.Ordinal)
+            || tokens.Contains("server", StringComparer.Ordinal)
+            || normalized.StartsWith("mcp-", StringComparison.Ordinal))
             return "Api";
-        if (name.Contains("application", StringComparison.Ordinal)
-            || name.EndsWith(".app", StringComparison.Ordinal))
+
+        if (tokens.Contains("application", StringComparer.Ordinal)
+            || normalized.Contains("application", StringComparison.Ordinal)
+            || normalized.Equals("app", StringComparison.Ordinal)
+            || normalized.StartsWith("app-", StringComparison.Ordinal)
+            || normalized.EndsWith(".app", StringComparison.Ordinal))
             return "Application";
-        if (name.Contains("domain", StringComparison.Ordinal)
-            || name.Contains("business", StringComparison.Ordinal)
-            || name.EndsWith(".core", StringComparison.Ordinal))
+
+        if (tokens.Contains("domain", StringComparer.Ordinal)
+            || normalized.Contains("domain", StringComparison.Ordinal)
+            || normalized.Contains("business", StringComparison.Ordinal)
+            || normalized.EndsWith(".core", StringComparison.Ordinal))
             return "Domain";
-        // Foundational runtime capabilities and platform adapters belong to
-        // infrastructure even when their package names omit "Infrastructure".
-        if (name.Contains("infrastructure", StringComparison.Ordinal)
-            || name.Contains("persistence", StringComparison.Ordinal)
-            || name.Contains("database", StringComparison.Ordinal)
-            || name.Contains("mediator", StringComparison.Ordinal)
-            || name.Contains("messaging", StringComparison.Ordinal)
-            || name.Contains("http", StringComparison.Ordinal)
-            || name.Contains("refit", StringComparison.Ordinal)
-            || name.Contains("serialization", StringComparison.Ordinal)
-            || name.Contains("serializer", StringComparison.Ordinal)
-            || name.Contains("reflection", StringComparison.Ordinal)
-            || name.Contains("dependencyinjection", StringComparison.Ordinal)
-            || name.Contains("bootstrap", StringComparison.Ordinal)
-            || name.Contains("hosting", StringComparison.Ordinal)
-            || name.Contains("entityframework", StringComparison.Ordinal)
-            || name.Contains("cosmos", StringComparison.Ordinal)
-            || name.Contains("mongodb", StringComparison.Ordinal)
-            || name.Contains("grpc", StringComparison.Ordinal)
-            || name.Contains("aras", StringComparison.Ordinal)
-            || name.Contains("mapping", StringComparison.Ordinal)
-            || name.Split('.').Contains("io", StringComparer.Ordinal)
-            || name.Contains("opentelemetry", StringComparison.Ordinal)
-            || name.Contains("polly", StringComparison.Ordinal)
-            || name.Contains("kafka", StringComparison.Ordinal)
-            || name.Contains("rabbitmq", StringComparison.Ordinal)
-            || name.Contains("masstransit", StringComparison.Ordinal)
-            || name.Contains("sagas", StringComparison.Ordinal)
-            || name.Contains("azureevent", StringComparison.Ordinal)
-            || name.Contains("multitenancy", StringComparison.Ordinal)
-            || name.Contains("identity", StringComparison.Ordinal)
-            || name.Contains("sso", StringComparison.Ordinal)
-            || name.Equals("franz.common", StringComparison.Ordinal)
-            || name.Contains("caching", StringComparison.Ordinal)
-            || name.Contains("cache", StringComparison.Ordinal)
-            || name.Contains("logging", StringComparison.Ordinal)
-            || name.Contains("security", StringComparison.Ordinal)
-            || name.Contains("integration", StringComparison.Ordinal)
-            || name.Contains("transport", StringComparison.Ordinal)
-            || name.Contains("storage", StringComparison.Ordinal)
-            || name.Contains("observability", StringComparison.Ordinal)
-            || name.Contains("resilience", StringComparison.Ordinal)
-            || name.Contains("abstractions", StringComparison.Ordinal)
-            || name.EndsWith(".base", StringComparison.Ordinal)
-            || name.StartsWith("base.", StringComparison.Ordinal))
+
+        if (normalized is "db" or "data"
+            || tokens.Contains("infrastructure", StringComparer.Ordinal)
+            || normalized.Contains("infrastructure", StringComparison.Ordinal)
+            || normalized.Contains("persistence", StringComparison.Ordinal)
+            || normalized.Contains("database", StringComparison.Ordinal)
+            || normalized.Contains("storage", StringComparison.Ordinal)
+            || normalized.Contains("mediator", StringComparison.Ordinal)
+            || normalized.Contains("messaging", StringComparison.Ordinal)
+            || normalized.Contains("http", StringComparison.Ordinal)
+            || normalized.Contains("refit", StringComparison.Ordinal)
+            || normalized.Contains("serialization", StringComparison.Ordinal)
+            || normalized.Contains("serializer", StringComparison.Ordinal)
+            || normalized.Contains("reflection", StringComparison.Ordinal)
+            || normalized.Contains("dependencyinjection", StringComparison.Ordinal)
+            || normalized.Contains("bootstrap", StringComparison.Ordinal)
+            || normalized.Contains("hosting", StringComparison.Ordinal)
+            || normalized.Contains("entityframework", StringComparison.Ordinal)
+            || normalized.Contains("cosmos", StringComparison.Ordinal)
+            || normalized.Contains("mongodb", StringComparison.Ordinal)
+            || normalized.Contains("grpc", StringComparison.Ordinal)
+            || normalized.Contains("aras", StringComparison.Ordinal)
+            || normalized.Contains("mapping", StringComparison.Ordinal)
+            || tokens.Contains("io", StringComparer.Ordinal)
+            || normalized.Contains("opentelemetry", StringComparison.Ordinal)
+            || normalized.Contains("polly", StringComparison.Ordinal)
+            || normalized.Contains("kafka", StringComparison.Ordinal)
+            || normalized.Contains("rabbitmq", StringComparison.Ordinal)
+            || normalized.Contains("masstransit", StringComparison.Ordinal)
+            || normalized.Contains("sagas", StringComparison.Ordinal)
+            || normalized.Contains("azureevent", StringComparison.Ordinal)
+            || normalized.Contains("multitenancy", StringComparison.Ordinal)
+            || normalized.Contains("identity", StringComparison.Ordinal)
+            || normalized.Contains("sso", StringComparison.Ordinal)
+            || normalized.Equals("franz.common", StringComparison.Ordinal)
+            || normalized.Contains("caching", StringComparison.Ordinal)
+            || normalized.Contains("cache", StringComparison.Ordinal)
+            || normalized.Contains("logging", StringComparison.Ordinal)
+            || normalized.Contains("security", StringComparison.Ordinal)
+            || normalized.Contains("integration", StringComparison.Ordinal)
+            || normalized.Contains("transport", StringComparison.Ordinal)
+            || normalized.Contains("observability", StringComparison.Ordinal)
+            || normalized.Contains("resilience", StringComparison.Ordinal)
+            || normalized.Contains("abstractions", StringComparison.Ordinal)
+            || normalized.EndsWith(".base", StringComparison.Ordinal)
+            || normalized.StartsWith("base.", StringComparison.Ordinal))
             return "Infrastructure";
-        if (name.Contains("consumer", StringComparison.Ordinal)
-            || name.Contains("worker", StringComparison.Ordinal)
-            || name.Contains("background", StringComparison.Ordinal))
+
+        if (tokens.Contains("shared", StringComparer.Ordinal)
+            || tokens.Contains("common", StringComparer.Ordinal)
+            || normalized.Contains("shared", StringComparison.Ordinal)
+            || normalized.Contains("common", StringComparison.Ordinal))
+            return "Shared";
+
+        if (tokens.Contains("consumer", StringComparer.Ordinal)
+            || normalized.Contains("consumer", StringComparison.Ordinal)
+            || normalized.Contains("worker", StringComparison.Ordinal)
+            || normalized.Contains("background", StringComparison.Ordinal))
             return "Consumer";
-        if (name.Contains("admin", StringComparison.Ordinal)
-            || name.Contains("presentation", StringComparison.Ordinal)
-            || name.Contains("web", StringComparison.Ordinal))
+
+        if (tokens.Contains("presentation", StringComparer.Ordinal)
+            || normalized.Contains("presentation", StringComparison.Ordinal)
+            || normalized.Contains("frontend", StringComparison.Ordinal)
+            || normalized.Contains("web", StringComparison.Ordinal)
+            || normalized.Contains("compose", StringComparison.Ordinal)
+            || normalized.Contains("ui", StringComparison.Ordinal)
+            || normalized.Contains("admin", StringComparison.Ordinal))
             return "Presentation";
-        if (name.Contains("client", StringComparison.Ordinal))
+
+        if (tokens.Contains("client", StringComparer.Ordinal)
+            || normalized.Contains("client", StringComparison.Ordinal)
+            || tokens.Contains("ios", StringComparer.Ordinal)
+            || normalized.StartsWith("wear", StringComparison.Ordinal)
+            || normalized.Contains("mobile", StringComparison.Ordinal)
+            || normalized.Contains("desktop", StringComparison.Ordinal))
             return "Client";
+
+        if (tokens.Contains("library", StringComparer.Ordinal)
+            || tokens.Contains("lib", StringComparer.Ordinal))
+            return "Library";
+
         return "Unknown";
     }
 

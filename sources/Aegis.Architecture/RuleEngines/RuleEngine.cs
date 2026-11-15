@@ -783,16 +783,28 @@ public sealed class RuleEngine
         ProjectArchitectureContext context,
         string scopePath)
     {
-        var module = context.Modules.FirstOrDefault(candidate =>
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentException.ThrowIfNullOrWhiteSpace(scopePath);
+
+        var isRepositoryScope = PathsEqual(scopePath, context.RootPath);
+        var exactModule = context.Modules.FirstOrDefault(candidate =>
             !string.IsNullOrWhiteSpace(candidate.Path)
             && PathsEqual(candidate.Path, scopePath));
 
-        var languages = module?.Languages
-            .Where(language => !string.IsNullOrWhiteSpace(language))
-            .ToList() ?? [];
+        IEnumerable<string> discoveredLanguages = isRepositoryScope
+            ? context.Modules.SelectMany(module => module.Languages)
+            : exactModule?.Languages ?? [];
+
+        var languages = discoveredLanguages
+            .Where(language => !string.IsNullOrWhiteSpace(language)
+                && !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
+                && !language.Equals("Multi-Language", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         if (!string.IsNullOrWhiteSpace(context.Language)
             && !context.Language.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
+            && !context.Language.Equals("Multi-Language", StringComparison.OrdinalIgnoreCase)
             && !languages.Contains(context.Language, StringComparer.OrdinalIgnoreCase))
         {
             languages.Add(context.Language);

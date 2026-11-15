@@ -26,6 +26,21 @@ public sealed class ArchitectureComponentContext
 
     public string BuildModulePath { get; init; } = string.Empty;
 
+    /// <summary>Android Gradle module kind when this component belongs to an Android module.</summary>
+    public string? AndroidModuleKind { get; init; }
+
+    /// <summary>Android variants contributed by the component's source declarations.</summary>
+    public List<string> AndroidVariants { get; init; } = [];
+
+    /// <summary>Android source sets contributing declarations to this component.</summary>
+    public List<string> AndroidSourceSets { get; init; } = [];
+
+    /// <summary>Explicit source ownership represented by this component.</summary>
+    public List<string> SourceOwnerships { get; init; } = [];
+
+    /// <summary>Android test categories represented by this component.</summary>
+    public List<string> AndroidTestKinds { get; init; } = [];
+
     public int SourceFileCount { get; init; }
 
     public int ProductionSourceFileCount { get; init; }

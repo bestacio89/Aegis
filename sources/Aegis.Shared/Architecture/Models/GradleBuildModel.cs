@@ -23,6 +23,22 @@ public sealed class GradleBuildModel
 
     public string? JavaToolchainVersion { get; init; }
 
+    public string? KotlinPluginVersion { get; init; }
+
+    public string? KotlinLanguageVersion { get; init; }
+
+    public string? KotlinApiVersion { get; init; }
+
+    public string? KotlinJvmTarget { get; init; }
+
+    /// <summary>Statically interpreted Android Gradle Plugin configuration; null for non-Android modules.</summary>
+    public GradleAndroidBuildModel? Android { get; init; }
+
+    /// <summary>Statically interpreted Kotlin Multiplatform targets and source-set graph.</summary>
+    public KotlinMultiplatformBuildModel? KotlinMultiplatform { get; init; }
+
+    public bool KotlinCompilerConfigurationInferred { get; init; }
+
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];
 
     public bool IsComplete { get; init; }
@@ -45,7 +61,9 @@ public sealed class GradleBuildModel
         string Name,
         List<string> JavaSourceDirectories,
         bool IsTest,
-        List<string>? ExplicitJavaSourceDirectories = null);
+        List<string>? ExplicitJavaSourceDirectories = null,
+        List<string>? KotlinSourceDirectories = null,
+        List<string>? ExplicitKotlinSourceDirectories = null);
 
     public sealed record TestTask(
         string Name,

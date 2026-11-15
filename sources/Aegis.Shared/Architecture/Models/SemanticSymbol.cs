@@ -44,5 +44,20 @@ public sealed class SemanticSymbol
 
     public bool IsPublic { get; init; }
 
+    /// <summary>Normalized source declaration form, such as DataClass, Object, ExtensionFunction or TypeAlias.</summary>
+    public string? DeclarationKind { get; init; }
+
+    /// <summary>Normalized source visibility: Public, Internal, Protected, Private or Unknown.</summary>
+    public string? Visibility { get; init; }
+
+    /// <summary>Resolved receiver type for extension declarations.</summary>
+    public string? ReceiverType { get; init; }
+
+    /// <summary>Expanded target type for a type-alias declaration.</summary>
+    public string? ExpandedType { get; init; }
+
+    /// <summary>Normalized source modifiers that are relevant to semantic interpretation.</summary>
+    public List<string> Modifiers { get; init; } = [];
+
     public List<SemanticEvidenceProvenance> Provenance { get; init; } = [];
 }

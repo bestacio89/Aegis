@@ -32,8 +32,9 @@ internal static class NatureDetector
         {
             ctx.Nature = project.ProjectKind switch
             {
-                "Test" => "TestSuite",
-                "ClassLibrary" or "TestSupport" => "Library",
+                "Test" or "AndroidTest" => "TestSuite",
+                "ClassLibrary" or "TestSupport" or "AndroidLibrary" or "AndroidDynamicFeature" or "AndroidAssetPack" => "Library",
+                "AndroidApplication" => "Application",
                 "WebApplication" => "Service",
                 "FrontendApplication" => "FrontendApp",
                 "DesktopApplication" => "DesktopApp",

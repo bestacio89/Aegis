@@ -53,7 +53,7 @@ public sealed class KotlinMultiplatformBuildModelTests
 
             Assert.Equal(new[] { "JVM", "Native", "Native", "JS", "Wasm" },
                 multiplatform.Targets.Select(target => target.Platform).ToArray());
-            Assert.Equal(14, multiplatform.SourceSets.Count);
+            Assert.Equal(13, multiplatform.SourceSets.Count);
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "jvmMain"
                 && sourceSet.Ownership == "Production"
@@ -68,6 +68,19 @@ public sealed class KotlinMultiplatformBuildModelTests
                 sourceSet.Name == "iosMain"
                 && sourceSet.Kind == "Intermediate"
                 && sourceSet.DependsOn.SequenceEqual(["commonMain"]));
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "iosArm64Main"
+                && sourceSet.Kind == "TargetSpecific"
+                && sourceSet.TargetName == "iosArm64"
+                && sourceSet.DependsOn.SequenceEqual(["commonMain"]));
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "iosSimulatorArm64Test"
+                && sourceSet.Kind == "TargetSpecific"
+                && sourceSet.DependsOn.SequenceEqual(["commonTest"]));
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "wasmJsTest"
+                && sourceSet.Kind == "TargetSpecific"
+                && sourceSet.DependsOn.SequenceEqual(["commonTest"]));
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "commonMain"
                 && sourceSet.Kind == "Common");

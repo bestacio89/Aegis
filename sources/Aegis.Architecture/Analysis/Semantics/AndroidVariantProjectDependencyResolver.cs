@@ -57,6 +57,7 @@ public sealed class AndroidVariantProjectDependencyResolver
         var seenAndroidTest = new HashSet<string>(PathComparer);
         var seenJvmProduction = new HashSet<string>(PathComparer);
         var seenJvmTest = new HashSet<string>(PathComparer);
+        var orderedDependencies = new List<ResolvedProjectDependency>();
 
         foreach (var dependency in selection.Dependencies)
         {
@@ -152,17 +153,31 @@ public sealed class AndroidVariantProjectDependencyResolver
                     continue;
                 }
 
-                AddPath(
+                if (AddPath(
                     target.Path,
                     isTestDependency ? androidTest : androidProduction,
-                    isTestDependency ? seenAndroidTest : seenAndroidProduction);
+                    isTestDependency ? seenAndroidTest : seenAndroidProduction))
+                {
+                    orderedDependencies.Add(new ResolvedProjectDependency(
+                        target.Path,
+                        selection.VariantName,
+                        isTestDependency,
+                        isTestDependency && (target.IsTestProject || target.IsTestSupport)));
+                }
             }
             else
             {
-                AddPath(
+                if (AddPath(
                     target.Path,
                     isTestDependency ? jvmTest : jvmProduction,
-                    isTestDependency ? seenJvmTest : seenJvmProduction);
+                    isTestDependency ? seenJvmTest : seenJvmProduction))
+                {
+                    orderedDependencies.Add(new ResolvedProjectDependency(
+                        target.Path,
+                        null,
+                        isTestDependency,
+                        isTestDependency && (target.IsTestProject || target.IsTestSupport)));
+                }
             }
         }
 
@@ -171,18 +186,88 @@ public sealed class AndroidVariantProjectDependencyResolver
             androidTest,
             jvmProduction,
             jvmTest,
+            orderedDependencies,
             diagnostics,
             complete && diagnostics.All(diagnostic => !diagnostic.AffectsCoverage));
     }
 
-    private static void AddPath(
+    /// <summary>
+    /// Assembles host-validated compiler outputs in the original selected
+    /// dependency declaration order. Android outputs require exact variant
+    /// identity; ordinary JVM outputs remain unqualified.
+    /// </summary>
+    public ClasspathResult AssembleCompilationOutputs(
+        ProjectModuleContext consumer,
+        Result resolution,
+        SemanticAnalysisExecutionContext executionContext,
+        bool includeTestCode,
+        string? variantName)
+    {
+        ArgumentNullException.ThrowIfNull(consumer);
+        ArgumentNullException.ThrowIfNull(resolution);
+        ArgumentNullException.ThrowIfNull(executionContext);
+
+        var diagnostics = resolution.Diagnostics.ToList();
+        var entries = new List<string>();
+        var seen = new HashSet<string>(PathComparer);
+
+        AddEntries(executionContext.GetCompilationOutputs(
+            consumer.Path,
+            includeTestCode,
+            variantName));
+
+        foreach (var dependency in resolution.OrderedDependencies)
+        {
+            var productionEntries = executionContext.GetCompilationOutputs(
+                dependency.ModulePath,
+                false,
+                dependency.VariantName);
+            if (productionEntries.Count == 0)
+            {
+                diagnostics.Add(CreateDiagnostic(
+                    "AndroidProjectDependencyCompilationOutputUnavailable",
+                    $"No host-validated compiler output is registered for project dependency '{dependency.ModulePath}' in the required variant and scope.",
+                    dependency.ModulePath));
+                continue;
+            }
+
+            AddEntries(productionEntries);
+            if (includeTestCode && dependency.IsTestDependency && dependency.IncludeTestOutput)
+            {
+                var testEntries = executionContext.GetCompilationOutputs(
+                    dependency.ModulePath,
+                    true,
+                    dependency.VariantName);
+                AddEntries(testEntries);
+            }
+        }
+
+        return new ClasspathResult(
+            entries,
+            diagnostics,
+            resolution.IsComplete && diagnostics.All(diagnostic => !diagnostic.AffectsCoverage));
+
+        void AddEntries(IEnumerable<string> values)
+        {
+            foreach (var value in values)
+            {
+                if (seen.Add(value))
+                    entries.Add(value);
+            }
+        }
+    }
+
+    private static bool AddPath(
         string path,
         ICollection<string> paths,
         ISet<string> seen)
     {
         var normalized = Path.GetFullPath(path);
-        if (seen.Add(normalized))
-            paths.Add(normalized);
+        if (!seen.Add(normalized))
+            return false;
+
+        paths.Add(normalized);
+        return true;
     }
 
     private static bool IsTestConfiguration(string configuration)
@@ -222,16 +307,28 @@ public sealed class AndroidVariantProjectDependencyResolver
         };
 
     private static Result Incomplete(IReadOnlyList<AnalysisDiagnostic> diagnostics) =>
-        new([], [], [], [], diagnostics, false);
+        new([], [], [], [], [], diagnostics, false);
 
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    public sealed record ResolvedProjectDependency(
+        string ModulePath,
+        string? VariantName,
+        bool IsTestDependency,
+        bool IncludeTestOutput);
 
     public sealed record Result(
         IReadOnlyList<string> AndroidProductionDependencies,
         IReadOnlyList<string> AndroidTestDependencies,
         IReadOnlyList<string> JvmProductionDependencies,
         IReadOnlyList<string> JvmTestDependencies,
+        IReadOnlyList<ResolvedProjectDependency> OrderedDependencies,
+        IReadOnlyList<AnalysisDiagnostic> Diagnostics,
+        bool IsComplete);
+
+    public sealed record ClasspathResult(
+        IReadOnlyList<string> Entries,
         IReadOnlyList<AnalysisDiagnostic> Diagnostics,
         bool IsComplete);
 }

@@ -113,6 +113,61 @@ public sealed class AndroidVariantProjectDependencyResolverTests
     }
 
     [Fact]
+    public async Task Assembles_only_registered_outputs_in_selected_variant_and_dependency_order()
+    {
+        var root = Module("root");
+        var app = Module("app");
+        var androidLibrary = Module("android-library");
+        var jvmLibrary = Module("jvm-library");
+        root.GradleModel = BuildModel(
+            root,
+            (":", root.Path),
+            (":app", app.Path),
+            (":android-library", androidLibrary.Path),
+            (":jvm-library", jvmLibrary.Path));
+        app.GradleBuildModel = AndroidBuildModel();
+        androidLibrary.GradleBuildModel = AndroidBuildModel("debug", "release");
+        jvmLibrary.GradleBuildModel = new GradleBuildModel { IsComplete = true };
+
+        var selection = Selection(
+            Dependency("debugImplementation", ":android-library"),
+            Dependency("debugUnitTestImplementation", ":jvm-library"));
+        var resolver = new AndroidVariantProjectDependencyResolver();
+        var resolution = resolver.Resolve(app, [root, app, androidLibrary, jvmLibrary], selection);
+
+        await using var executionContext = new SemanticAnalysisExecutionContext(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        var appOutput = RegisterOutput(executionContext, app.Path, false, "debug");
+        var androidDebugOutput = RegisterOutput(executionContext, androidLibrary.Path, false, "debug");
+        _ = RegisterOutput(executionContext, androidLibrary.Path, false, "release");
+        var jvmOutput = RegisterOutput(executionContext, jvmLibrary.Path, false);
+
+        var classpath = resolver.AssembleCompilationOutputs(
+            app,
+            resolution,
+            executionContext,
+            includeTestCode: true,
+            variantName: "debug");
+
+        Assert.True(classpath.IsComplete);
+        Assert.Equal([appOutput, androidDebugOutput, jvmOutput], classpath.Entries);
+        Assert.Empty(classpath.Diagnostics);
+    }
+
+    private static string RegisterOutput(
+        SemanticAnalysisExecutionContext context,
+        string modulePath,
+        bool isTestCode,
+        string? variantName = null)
+    {
+        var artifactRoot = context.CreateArtifactRoot();
+        var output = Path.Combine(artifactRoot, "classes");
+        Directory.CreateDirectory(output);
+        context.RegisterCompilationOutput(modulePath, isTestCode, artifactRoot, output, variantName);
+        return output;
+    }
+
+    [Fact]
     public void Reports_incomplete_owning_build_model_as_partial_evidence()
     {
         var root = Module("root");

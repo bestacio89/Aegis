@@ -482,23 +482,32 @@ class KotlinCompilerIntegrationTests {
     fun `K2 JVM target compiles expect actual declarations and emits their relationship`() {
         val workspace = Files.createTempDirectory("aegis-kotlin-kmp-expect-actual-")
         val commonSourceRoot = workspace.resolve("src/commonMain/kotlin")
+        val sharedSourceRoot = workspace.resolve("src/sharedMain/kotlin")
         val jvmSourceRoot = workspace.resolve("src/jvmMain/kotlin")
         val commonRoot = commonSourceRoot.resolve("sample")
+        val sharedRoot = sharedSourceRoot.resolve("sample")
         val jvmRoot = jvmSourceRoot.resolve("sample")
         val commonSource = commonRoot.resolve("Platform.kt")
+        val sharedSource = sharedRoot.resolve("SharedPlatform.kt")
         val jvmSource = jvmRoot.resolve("Platform.jvm.kt")
         val destination = workspace.resolve("classes")
         val evidence = workspace.resolve("semantic.json")
         Files.createDirectories(commonRoot)
+        Files.createDirectories(sharedRoot)
         Files.createDirectories(jvmRoot)
         Files.createDirectories(destination)
         Files.writeString(commonSource, """
             package sample
             expect fun platformName(): String
         """.trimIndent())
+        Files.writeString(sharedSource, """
+            package sample
+            expect fun sharedPlatformName(): String
+        """.trimIndent())
         Files.writeString(jvmSource, """
             package sample
             actual fun platformName(): String = "jvm"
+            actual fun sharedPlatformName(): String = "shared-jvm"
         """.trimIndent())
 
         val pluginPath = Path.of(
@@ -517,9 +526,9 @@ class KotlinCompilerIntegrationTests {
             this.apiVersion = "2.4"
             this.moduleName = "kmp-jvm-fixture"
             this.multiPlatform = true
-            this.commonSources = arrayOf(commonSource.toString())
+            this.commonSources = arrayOf(commonSource.toString(), sharedSource.toString())
             this.pluginClasspaths = arrayOf(pluginPath)
-            this.freeArgs = listOf(commonSource.toString(), jvmSource.toString())
+            this.freeArgs = listOf(commonSource.toString(), sharedSource.toString(), jvmSource.toString())
         }
 
         val previousOutput = System.getProperty("aegis.kotlin.semantic.output")
@@ -534,8 +543,8 @@ class KotlinCompilerIntegrationTests {
             val compilerEvidence = JsonParser.parseString(Files.readString(evidence)).asJsonObject
             val result = KotlinExpectActualSourceCollector().reconcile(
                 compilerEvidence,
-                listOf(commonSource, jvmSource),
-                listOf(commonSourceRoot),
+                listOf(commonSource, sharedSource, jvmSource),
+                listOf(commonSourceRoot, sharedSourceRoot),
                 "jvm",
                 false
             )
@@ -555,6 +564,18 @@ class KotlinCompilerIntegrationTests {
                     && it.asJsonObject.get("sourceSymbolId").asString == actualId
                     && it.asJsonObject.get("targetSymbolId").asString == expectId
             }, "KMP actual declarations must retain an explicit Actualizes relationship.")
+
+            val sharedExpectId = "kotlin:function:sample.sharedPlatformName()"
+            val sharedActualId = "$sharedExpectId#actual:jvmMain"
+            assertTrue(symbols.any {
+                it.get("id").asString == sharedExpectId
+                    && it.getAsJsonArray("modifiers").any { modifier -> modifier.asString == "expect" }
+            }, "Expect declarations in custom intermediate source sets must be retained.")
+            assertTrue(symbols.any {
+                it.get("id").asString == sharedActualId
+                    && it.getAsJsonArray("modifiers").any { modifier -> modifier.asString == "actual" }
+            }, "Actual declarations must be reconciled from custom intermediate source sets.")
+            assertEquals(2, result.get("expectActualRelationshipCount").asInt)
         } finally {
             if (previousOutput == null) System.clearProperty("aegis.kotlin.semantic.output")
             else System.setProperty("aegis.kotlin.semantic.output", previousOutput)

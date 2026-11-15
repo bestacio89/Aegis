@@ -12,6 +12,19 @@ public interface IJvmClasspathResolver
     JvmClasspathResolution Resolve(
         ProjectModuleContext module,
         IReadOnlyCollection<ProjectModuleContext> projectModules,
-        IReadOnlyCollection<GradleBuildModel.Dependency> selectedGradleDependencies) =>
-        Resolve(module, projectModules, includeTestCode: false);
+        IReadOnlyCollection<GradleBuildModel.Dependency> selectedGradleDependencies)
+    {
+        ArgumentNullException.ThrowIfNull(selectedGradleDependencies);
+        var unresolved = selectedGradleDependencies
+            .Where(dependency => string.IsNullOrWhiteSpace(dependency.ProjectPath))
+            .Select(dependency => (dependency.Group ?? "unknown") + ":"
+                + (dependency.Artifact ?? "unknown") + ":"
+                + (dependency.Version ?? "unspecified"))
+            .ToArray();
+        return new JvmClasspathResolution(
+            [],
+            unresolved,
+            selectedGradleDependencies.Count > 0,
+            unresolved.Length == 0);
+    }
 }

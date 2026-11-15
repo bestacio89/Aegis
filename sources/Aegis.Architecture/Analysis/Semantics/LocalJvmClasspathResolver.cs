@@ -66,6 +66,7 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
         var entries = new HashSet<string>(PathComparer);
         var unresolved = new HashSet<string>(StringComparer.Ordinal);
         var hasDeclaredDependencies = false;
+        var hasUnresolvedDependencyGraph = false;
 
         if (module.MavenModel is { } maven)
         {
@@ -92,10 +93,12 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
                 {
                     hasDeclaredDependencies = true;
                     unresolved.Add($"project:{projectModule.Name}");
+                    hasUnresolvedDependencyGraph = true;
                     continue;
                 }
 
                 hasDeclaredDependencies = true;
+                hasUnresolvedDependencyGraph = true;
                 var coordinate = $"{dependency.GroupId}:{dependency.ArtifactId}:{dependency.Version ?? "unspecified"}";
                 if (!TryResolveMavenArtifact(dependency, out var artifactPaths))
                 {
@@ -122,6 +125,11 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
                 {
                     // Android project outputs are resolved separately with exact variant provenance.
                     hasDeclaredDependencies = true;
+                    if (selectedGradleDependencies is null)
+                    {
+                        unresolved.Add($"project:{dependency.ProjectPath}");
+                        hasUnresolvedDependencyGraph = true;
+                    }
                     continue;
                 }
 
@@ -130,6 +138,7 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
                     continue;
 
                 hasDeclaredDependencies = true;
+                hasUnresolvedDependencyGraph = true;
                 var coordinate = $"{dependency.Group}:{dependency.Artifact}:{dependency.Version ?? "unspecified"}";
                 if (!TryResolveGradleArtifact(dependency, out var artifactPaths))
                 {
@@ -151,7 +160,7 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
             orderedEntries,
             orderedUnresolved,
             hasDeclaredDependencies,
-            !hasDeclaredDependencies);
+            !hasUnresolvedDependencyGraph);
     }
 
     private bool TryResolveMavenArtifact(

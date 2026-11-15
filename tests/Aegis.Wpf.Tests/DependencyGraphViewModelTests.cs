@@ -127,6 +127,71 @@ public sealed class DependencyGraphViewModelTests
     }
 
     [Fact]
+    public void Update_Retains_isolated_code_containers_across_multiple_languages()
+    {
+        var context = new ProjectArchitectureContext
+        {
+            Modules =
+            [
+                new ProjectModuleContext { Name = "api", Path = Path.Combine(Path.GetTempPath(), "polyglot", "api"), Languages = ["C#"] },
+                new ProjectModuleContext { Name = "frontend", Path = Path.Combine(Path.GetTempPath(), "polyglot", "frontend"), Languages = ["TypeScript"] },
+                new ProjectModuleContext { Name = "worker", Path = Path.Combine(Path.GetTempPath(), "polyglot", "worker"), Languages = ["Java"] }
+            ],
+            ArchitectureComponents =
+            [
+                new ArchitectureComponentContext
+                {
+                    Id = "csharp-project:api",
+                    Name = "Api",
+                    QualifiedName = "Api",
+                    Language = "C#",
+                    ComponentKind = "Project",
+                    ProductionSymbolCount = 4
+                },
+                new ArchitectureComponentContext
+                {
+                    Id = "typescript-module:frontend",
+                    Name = "Frontend",
+                    QualifiedName = "src",
+                    Language = "TypeScript",
+                    ComponentKind = "Module",
+                    ProductionSymbolCount = 3
+                },
+                new ArchitectureComponentContext
+                {
+                    Id = "java-package:worker",
+                    Name = "Worker",
+                    QualifiedName = "com.sample.worker",
+                    Language = "Java",
+                    ComponentKind = "Package",
+                    ProductionSymbolCount = 2
+                }
+            ],
+            ArchitectureComponentDependencies =
+            [
+                new ArchitectureComponentDependencyContext
+                {
+                    SourceComponentId = "csharp-project:api",
+                    SourceComponentName = "Api",
+                    TargetComponentId = "typescript-module:frontend",
+                    TargetComponentName = "Frontend",
+                    RelationshipCount = 1
+                }
+            ]
+        };
+
+        var viewModel = new DependencyGraphViewModel();
+        viewModel.Update(context);
+
+        Assert.Equal("Code containers", viewModel.GraphProjection);
+        Assert.Equal(3, viewModel.GraphNodes.Count);
+        Assert.Equal(1, viewModel.GraphEdges.Count);
+        Assert.Contains(viewModel.GraphNodes, node => node.Id == "csharp-project:api");
+        Assert.Contains(viewModel.GraphNodes, node => node.Id == "typescript-module:frontend");
+        Assert.Contains(viewModel.GraphNodes, node => node.Id == "java-package:worker");
+    }
+
+    [Fact]
     public void SelectingNode_RestrictsGraphToItsAdjacentRelationships()
     {
         var context = new ProjectArchitectureContext

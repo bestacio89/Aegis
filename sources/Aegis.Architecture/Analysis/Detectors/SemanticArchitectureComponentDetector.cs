@@ -234,11 +234,14 @@ internal static class SemanticArchitectureComponentDetector
         context.ArchitectureComponents.AddRange(componentNodes);
 
         var edges = new Dictionary<EdgeKey, EdgeAccumulator>();
+        var projectionMetrics = new List<(SemanticAnalysisRun Run, RunProjectionMetrics Metrics)>();
 
         foreach (var run in semanticRuns)
         {
-            var sourceModule = ResolveModule(run.ProjectPath, run.Language);
+            var metrics = new RunProjectionMetrics();
+            projectionMetrics.Add((run, metrics));
 
+            var sourceModule = ResolveModule(run.ProjectPath, run.Language);
             var runSymbols = run.Symbols
                 .Where(IsProjectSourceSymbol)
                 .Where(symbol => !string.IsNullOrWhiteSpace(symbol.Id))
@@ -246,17 +249,29 @@ internal static class SemanticArchitectureComponentDetector
                 .Where(group => group.Count() == 1)
                 .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
 
-            foreach (var relationship in run.Relationships.Where(relationship =>
-                         ComponentRelationshipKinds.Contains(relationship.Kind)
-                         && (relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
+            var candidateRelationships = run.Relationships
+                .Where(relationship => ComponentRelationshipKinds.Contains(relationship.Kind))
+                .ToArray();
+            metrics.ObservedRelationships = candidateRelationships.Length;
+
+            foreach (var relationship in candidateRelationships.Where(relationship =>
+                         (relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
                              or SemanticResolutionStatus.PartiallyResolved)
                          && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)))
             {
-                if (!runSymbols.TryGetValue(relationship.SourceSymbolId, out var sourceSymbol)
-                    || !symbolComponents.TryGetValue(
+                metrics.ResolvedCandidates++;
+
+                if (!runSymbols.TryGetValue(relationship.SourceSymbolId, out var sourceSymbol))
+                {
+                    metrics.MissingSourceSymbols++;
+                    continue;
+                }
+
+                if (!symbolComponents.TryGetValue(
                         new SymbolIdentity(NormalizePath(run.ProjectPath), run.Language, relationship.SourceSymbolId),
                         out var sourceComponent))
                 {
+                    metrics.MissingSourceComponents++;
                     continue;
                 }
 
@@ -272,9 +287,18 @@ internal static class SemanticArchitectureComponentDetector
                     symbolComponents,
                     symbolIdentitiesById,
                     symbolComponentsByQualifiedName);
-                if (targetComponent is null
-                    || !TryResolveCompatibleAndroidVariants(sourceComponent, targetComponent, out var compatibleAndroidVariants))
+                if (targetComponent is null)
                 {
+                    metrics.UnresolvedTargets++;
+                    continue;
+                }
+
+                if (!TryResolveCompatibleAndroidVariants(
+                        sourceComponent,
+                        targetComponent,
+                        out var compatibleAndroidVariants))
+                {
+                    metrics.IncompatibleVariants++;
                     continue;
                 }
 
@@ -304,7 +328,35 @@ internal static class SemanticArchitectureComponentDetector
                 }
 
                 accumulator.Add(run.RunId, relationship);
+                metrics.ProjectedRelationships++;
             }
+        }
+
+        foreach (var (run, metrics) in projectionMetrics)
+        {
+            run.Diagnostics.RemoveAll(diagnostic =>
+                diagnostic.Code == "SemanticArchitectureComponentProjectionBaseline");
+            run.Diagnostics.Add(new AnalysisDiagnostic
+            {
+                Code = "SemanticArchitectureComponentProjectionBaseline",
+                Component = nameof(SemanticArchitectureComponentDetector),
+                Source = "SemanticArchitectureComponentProjection",
+                Language = run.Language,
+                EngineId = run.EngineId,
+                RunId = run.RunId,
+                ProjectPath = run.ProjectPath,
+                Message =
+                    $"Observed relationships={metrics.ObservedRelationships}; "
+                    + $"resolved candidates={metrics.ResolvedCandidates}; "
+                    + $"unresolved or targetless observations={metrics.ObservedRelationships - metrics.ResolvedCandidates}; "
+                    + $"missing source symbols={metrics.MissingSourceSymbols}; "
+                    + $"missing source components={metrics.MissingSourceComponents}; "
+                    + $"unresolved or ambiguous targets={metrics.UnresolvedTargets}; "
+                    + $"incompatible target variants={metrics.IncompatibleVariants}; "
+                    + $"projected relationships={metrics.ProjectedRelationships}.",
+                Target = run.ProjectPath,
+                AffectsCoverage = false
+            });
         }
 
         var projectedEdges = edges
@@ -351,7 +403,7 @@ internal static class SemanticArchitectureComponentDetector
         AegisDiagnostics.Report(
             nameof(SemanticArchitectureComponentDetector),
             componentSymbolCount == 0 && sourceSymbolCount > 0 ? DiagnosticLevel.Warning : DiagnosticLevel.Info,
-            $"Semantic architectural component projection: runs={semanticRuns.Length}; sourceSymbols={sourceSymbolCount}; componentSymbols={componentSymbolCount}; components={componentNodes.Count}; candidateRelationships={candidateRelationshipCount}; projectedEdges={edges.Count}; productionEdges={context.ProductionComponentDependencies.Count}; testEdges={context.TestComponentDependencies.Count}.");
+            $"Semantic architectural component projection: runs={semanticRuns.Length}; sourceSymbols={sourceSymbolCount}; componentSymbols={componentSymbolCount}; components={componentNodes.Count}; candidateRelationships={candidateRelationshipCount}; unresolvedObservations={projectionMetrics.Sum(item => item.Metrics.ObservedRelationships - item.Metrics.ResolvedCandidates)}; unresolvedTargets={projectionMetrics.Sum(item => item.Metrics.UnresolvedTargets)}; incompatibleVariants={projectionMetrics.Sum(item => item.Metrics.IncompatibleVariants)}; projectedRelationships={projectionMetrics.Sum(item => item.Metrics.ProjectedRelationships)}; projectedEdges={edges.Count}; productionEdges={context.ProductionComponentDependencies.Count}; testEdges={context.TestComponentDependencies.Count}.");
     }
 
     private static SymbolComponent? ResolveTargetComponent(
@@ -671,6 +723,23 @@ internal static class SemanticArchitectureComponentDetector
 
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private sealed class RunProjectionMetrics
+    {
+        public int ObservedRelationships { get; set; }
+
+        public int ResolvedCandidates { get; set; }
+
+        public int MissingSourceSymbols { get; set; }
+
+        public int MissingSourceComponents { get; set; }
+
+        public int UnresolvedTargets { get; set; }
+
+        public int IncompatibleVariants { get; set; }
+
+        public int ProjectedRelationships { get; set; }
+    }
 
     private sealed record SymbolIdentity(string ProjectPath, string Language, string SymbolId);
 

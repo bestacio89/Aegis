@@ -220,9 +220,10 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
 
             await orchestrator.AnalyzeAsync(context);
 
-            Assert.Empty(context.SemanticAnalysisRuns);
-            Assert.Contains(context.DiscoveryDiagnostics, diagnostic =>
-                diagnostic.Code == "AndroidVariantModelUnavailable"
+            var run = Assert.Single(context.SemanticAnalysisRuns);
+            Assert.Equal(SemanticAnalysisStatus.Unsupported, run.Status);
+            Assert.Contains(run.Diagnostics, diagnostic =>
+                diagnostic.Code == "KotlinAndroidIntegrationNotResolved"
                 && diagnostic.AffectsCoverage);
             Assert.Empty(adapter.Requests);
         }

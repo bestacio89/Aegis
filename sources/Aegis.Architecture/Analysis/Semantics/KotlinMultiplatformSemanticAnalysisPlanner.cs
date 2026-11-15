@@ -192,14 +192,36 @@ public sealed class KotlinMultiplatformSemanticAnalysisPlanner
             foreach (var directory in expectedDirectories)
             {
                 var expectedDirectory = Path.GetFullPath(directory);
-                var root = sourceRoots.FirstOrDefault(candidate =>
-                    PathComparer.Equals(Path.GetFullPath(candidate.Directory), expectedDirectory));
-                if (root is null)
-                    continue;
-
                 var expectedOwnership = ownership == "Production"
                     ? ProjectSourceRootOwnership.Production
                     : ProjectSourceRootOwnership.Test;
+                var root = sourceRoots.FirstOrDefault(candidate =>
+                    PathComparer.Equals(Path.GetFullPath(candidate.Directory), expectedDirectory));
+
+                // The source-set graph is authoritative for ownership. If the
+                // generic source-root inventory omitted an existing conventional
+                // KMP root, recover it from that graph rather than silently
+                // producing an empty (but apparently supported) target scope.
+                if (root is null && Directory.Exists(expectedDirectory))
+                {
+                    root = new ProjectSourceRoot
+                    {
+                        Directory = expectedDirectory,
+                        Ownership = expectedOwnership,
+                        Origin = ProjectSourceRootOrigin.Conventional,
+                        Languages = ["Kotlin"]
+                    };
+                }
+
+                if (root is null)
+                {
+                    roots = Array.Empty<ProjectSourceRoot>();
+                    diagnostic = CreateDiagnostic(
+                        "KotlinMultiplatformSourceRootNotFound",
+                        $"The declared {ownership.ToLowerInvariant()} source set '{sourceSet.Name}' has no existing Kotlin source directory at '{expectedDirectory}'.",
+                        expectedDirectory);
+                    return false;
+                }
                 if (root.Ownership != expectedOwnership || !root.ContainsLanguage("Kotlin"))
                 {
                     roots = Array.Empty<ProjectSourceRoot>();

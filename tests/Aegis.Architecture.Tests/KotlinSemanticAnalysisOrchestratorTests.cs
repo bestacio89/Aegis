@@ -58,7 +58,11 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
             Assert.Equal([Path.GetFullPath(kotlinMainFile)], production.SourceFiles);
             Assert.Equal([Path.GetFullPath(kotlinTestFile)], test.SourceFiles);
             Assert.Equal([Path.GetFullPath(kotlinMainRoot)], production.SourceRoots);
+            Assert.Equal([Path.GetFullPath(Path.Combine(root, "src", "commonMain", "kotlin"))],
+                production.SharedSourceRoots);
             Assert.Equal([Path.GetFullPath(kotlinTestRoot)], test.SourceRoots);
+            Assert.Equal([Path.GetFullPath(Path.Combine(root, "src", "commonTest", "kotlin"))],
+                test.SharedSourceRoots);
             Assert.Empty(production.TestSourceRoots);
             Assert.Equal([Path.GetFullPath(kotlinTestRoot)], test.TestSourceRoots);
             Assert.Equal([Path.GetFullPath(javaMainRoot)], production.ReferencedSourceRoots);

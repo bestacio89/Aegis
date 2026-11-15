@@ -229,7 +229,9 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                         executionContext,
                         cancellationToken,
                         targetName: multiplatformScope.TargetName,
-                        sourceSetNames: multiplatformScope.ProductionSourceSetNames).ConfigureAwait(false);
+                        sourceSetNames: multiplatformScope.ProductionSourceSetNames,
+                        sharedSourceRoots: multiplatformScope.ProductionSharedSourceRoots
+                            .Select(root => root.Directory).ToArray()).ConfigureAwait(false);
                 }
                 continue;
             }
@@ -298,7 +300,9 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                         executionContext,
                         cancellationToken,
                         targetName: multiplatformScope.TargetName,
-                        sourceSetNames: multiplatformScope.TestSourceSetNames).ConfigureAwait(false);
+                        sourceSetNames: multiplatformScope.TestSourceSetNames,
+                        sharedSourceRoots: multiplatformScope.TestSharedSourceRoots
+                            .Select(root => root.Directory).ToArray()).ConfigureAwait(false);
                 }
                 continue;
             }
@@ -382,7 +386,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         CancellationToken cancellationToken,
         AndroidSemanticAnalysisPlanner.Scope? androidScope = null,
         string? targetName = null,
-        IReadOnlyCollection<string>? sourceSetNames = null)
+        IReadOnlyCollection<string>? sourceSetNames = null,
+        IReadOnlyCollection<string>? sharedSourceRoots = null)
     {
         if (sourceRoots.Count == 0)
             return;
@@ -479,6 +484,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             BuildSystem = module.BuildSystem.ToString(),
             SourceFiles = sourceFiles,
             SourceRoots = sourceRoots.Select(root => Path.GetFullPath(root.Directory)).ToArray(),
+            SharedSourceRoots = sharedSourceRoots?.Select(Path.GetFullPath).ToArray() ?? Array.Empty<string>(),
             ReferencedSourceRoots = javaSourceRoots,
             TestSourceRoots = includeTestCode
                 ? (module.IsTestProject || module.IsTestSupport

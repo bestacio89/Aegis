@@ -28,6 +28,9 @@ public sealed class SemanticAnalysisRequest
 
     public IReadOnlyList<string> SourceRoots { get; init; } = Array.Empty<string>();
 
+    /// <summary>Shared source roots compiled as common sources for a multiplatform target.</summary>
+    public IReadOnlyList<string> SharedSourceRoots { get; init; } = Array.Empty<string>();
+
     /// <summary>Source roots from explicitly declared project dependencies, used for compiler binding resolution only.</summary>
     public IReadOnlyList<string> ReferencedSourceRoots { get; init; } = Array.Empty<string>();
 

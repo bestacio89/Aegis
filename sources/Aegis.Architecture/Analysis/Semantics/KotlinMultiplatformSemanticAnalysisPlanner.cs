@@ -73,7 +73,7 @@ public sealed class KotlinMultiplatformSemanticAnalysisPlanner
             {
                 scopes.Add(new TargetScope(
                     target.Name, target.Platform, false,
-                    [], [], productionSets.Select(sourceSet => sourceSet.Name).ToArray(),
+                    [], [], [], [], productionSets.Select(sourceSet => sourceSet.Name).ToArray(),
                     testSets.Select(sourceSet => sourceSet.Name).ToArray(),
                     productionRootDiagnostic));
                 continue;
@@ -85,9 +85,32 @@ public sealed class KotlinMultiplatformSemanticAnalysisPlanner
             {
                 scopes.Add(new TargetScope(
                     target.Name, target.Platform, false,
-                    productionRoots, [], productionSets.Select(sourceSet => sourceSet.Name).ToArray(),
+                    productionRoots, [], [], [], productionSets.Select(sourceSet => sourceSet.Name).ToArray(),
                     testSets.Select(sourceSet => sourceSet.Name).ToArray(),
                     testRootDiagnostic));
+                continue;
+            }
+
+            var productionSharedSets = productionSets
+                .Where(sourceSet => sourceSet.Kind is "Common" or "Intermediate")
+                .ToArray();
+            var testSharedSets = testSets
+                .Where(sourceSet => sourceSet.Kind is "Common" or "Intermediate")
+                .ToArray();
+
+            if (!TryResolveRoots(
+                    module.Path, productionSharedSets, "Production", sourceRoots,
+                    out var productionSharedRoots, out var productionSharedRootDiagnostic)
+                || !TryResolveRoots(
+                    module.Path, testSharedSets, "Test", sourceRoots,
+                    out var testSharedRoots, out var testSharedRootDiagnostic))
+            {
+                scopes.Add(CreateUnsupportedScope(
+                    target,
+                    "KotlinMultiplatformSharedSourceRootsUnresolved",
+                    productionSharedRootDiagnostic?.Message
+                        ?? testSharedRootDiagnostic?.Message
+                        ?? "Shared source roots could not be resolved for the target."));
                 continue;
             }
 
@@ -97,6 +120,8 @@ public sealed class KotlinMultiplatformSemanticAnalysisPlanner
                 true,
                 productionRoots,
                 testRoots,
+                productionSharedRoots,
+                testSharedRoots,
                 productionSets.Select(sourceSet => sourceSet.Name).ToArray(),
                 testSets.Select(sourceSet => sourceSet.Name).ToArray(),
                 null));
@@ -194,7 +219,7 @@ public sealed class KotlinMultiplatformSemanticAnalysisPlanner
     {
         var diagnostic = CreateDiagnostic(code, message, target.Name);
         return new TargetScope(
-            target.Name, target.Platform, false, [], [], [], [], diagnostic);
+            target.Name, target.Platform, false, [], [], [], [], [], [], diagnostic);
     }
 
     private static AnalysisDiagnostic CreateDiagnostic(string code, string message, string target) => new()
@@ -215,6 +240,8 @@ public sealed class KotlinMultiplatformSemanticAnalysisPlanner
         bool IsSupported,
         IReadOnlyList<ProjectSourceRoot> ProductionSourceRoots,
         IReadOnlyList<ProjectSourceRoot> TestSourceRoots,
+        IReadOnlyList<ProjectSourceRoot> ProductionSharedSourceRoots,
+        IReadOnlyList<ProjectSourceRoot> TestSharedSourceRoots,
         IReadOnlyList<string> ProductionSourceSetNames,
         IReadOnlyList<string> TestSourceSetNames,
         AnalysisDiagnostic? Diagnostic);

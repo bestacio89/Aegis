@@ -538,7 +538,7 @@ class KotlinCompilerIntegrationTests {
             assertTrue(symbols.any {
                 it.get("id").asString == expectId
                     && it.getAsJsonArray("modifiers").any { modifier -> modifier.asString == "expect" }
-            })
+            }, "Expected declaration evidence was not emitted: ${symbols.map { it.get("id").asString to it.getAsJsonArray("modifiers") }}")
             assertTrue(symbols.any {
                 it.get("id").asString == actualId
                     && it.getAsJsonArray("modifiers").any { modifier -> modifier.asString == "actual" }

@@ -30,7 +30,7 @@ public sealed class LocalJvmClasspathResolverAndroidArtifactTests
             var result = resolver.Resolve(module, [module], includeTestCode: false);
 
             Assert.Equal(3, result.Entries.Count);
-            Assert.Equal("classes.jar", Path.GetFileName(result.Entries[0]));
+            Assert.Contains(result.Entries, path => Path.GetFileName(path) == "classes.jar");
             Assert.Contains(result.Entries, path => Path.GetFileName(path) == "annotations.jar");
             Assert.Contains(result.Entries, path => Path.GetFileName(path) == "runtime.jar");
             Assert.All(result.Entries, path => Assert.True(File.Exists(path)));

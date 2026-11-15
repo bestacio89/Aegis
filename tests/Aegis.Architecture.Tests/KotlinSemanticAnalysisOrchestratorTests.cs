@@ -450,6 +450,15 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
         }
     }
 
+    private sealed class EmptyClasspathResolver : IJvmClasspathResolver
+    {
+        public JvmClasspathResolution Resolve(
+            ProjectModuleContext module,
+            IReadOnlyCollection<ProjectModuleContext> projectModules,
+            bool includeTestCode) =>
+            new(Array.Empty<string>(), Array.Empty<string>(), false, true);
+    }
+
     private sealed class RecordingClasspathResolver : IJvmClasspathResolver
     {
         public List<IReadOnlyList<string>> SelectedConfigurations { get; } = [];

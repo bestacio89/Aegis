@@ -96,6 +96,13 @@ internal static class KotlinMultiplatformBuildModelResolver
                 var (kind, targetName) = GetSourceSetKind(name, targets);
                 sourceSets.Add(new KotlinMultiplatformBuildModel.SourceSet(
                     name, GetOwnership(name), kind, targetName, dependencies, declaration.Value.Trim()));
+                if (kind == "Unknown")
+                {
+                    diagnostics.Add(CreateDiagnostic(
+                        "GradleKotlinMultiplatformSourceSetOwnershipUnknown",
+                        $"Source set '{name}' could not be classified as common, intermediate or target-specific.",
+                        buildFile));
+                }
             }
 
             if (sourceSets.Count == 0)
@@ -129,6 +136,14 @@ internal static class KotlinMultiplatformBuildModelResolver
                 buildFile));
         }
 
+        if (HasSourceSetCycle(sourceSets))
+        {
+            diagnostics.Add(CreateDiagnostic(
+                "GradleKotlinMultiplatformSourceSetDependencyCycle",
+                "The statically resolved Kotlin Multiplatform source-set dependsOn graph contains a cycle.",
+                buildFile));
+        }
+
         return new KotlinMultiplatformBuildModel
         {
             Targets = targets,
@@ -136,9 +151,41 @@ internal static class KotlinMultiplatformBuildModelResolver
             Diagnostics = diagnostics,
             IsComplete = diagnostics.Count == 0
                 && targets.All(target => target.Platform != "Unknown")
+                && sourceSets.All(sourceSet => sourceSet.Kind != "Unknown")
+                && !HasSourceSetCycle(sourceSets)
                 && sourceSets.All(sourceSet => sourceSet.DependsOn.All(dependency =>
                     sourceSets.Any(candidate => candidate.Name == dependency)))
         };
+    }
+
+    private static bool HasSourceSetCycle(
+        IReadOnlyCollection<KotlinMultiplatformBuildModel.SourceSet> sourceSets)
+    {
+        var dependencies = sourceSets.ToDictionary(
+            sourceSet => sourceSet.Name,
+            sourceSet => sourceSet.DependsOn,
+            StringComparer.Ordinal);
+        var visiting = new HashSet<string>(StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+
+        bool Visit(string name)
+        {
+            if (visiting.Contains(name))
+                return true;
+            if (!visited.Add(name))
+                return false;
+
+            visiting.Add(name);
+            foreach (var dependency in dependencies[name])
+            {
+                if (dependencies.ContainsKey(dependency) && Visit(dependency))
+                    return true;
+            }
+            visiting.Remove(name);
+            return false;
+        }
+
+        return dependencies.Keys.Any(Visit);
     }
 
     private static (string Kind, string? TargetName) GetSourceSetKind(

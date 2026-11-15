@@ -14,6 +14,7 @@ public sealed class AndroidVariantProjectDependencyResolver
         AndroidVariantDependencySelection selection)
     {
         ArgumentNullException.ThrowIfNull(consumer);
+        ArgumentException.ThrowIfNullOrWhiteSpace(consumer.Path);
         ArgumentNullException.ThrowIfNull(modules);
         ArgumentNullException.ThrowIfNull(selection);
 
@@ -113,7 +114,25 @@ public sealed class AndroidVariantProjectDependencyResolver
                 continue;
             }
 
+            if (!target.GradleBuildModel.IsComplete)
+            {
+                complete = false;
+                diagnostics.Add(CreateDiagnostic(
+                    "AndroidProjectDependencyTargetBuildModelIncomplete",
+                    $"The Gradle build model for project '{dependency.ProjectPath}' is incomplete; compiler-output compatibility cannot be fully established.",
+                    target.Path));
+            }
+
             var isTestDependency = IsTestConfiguration(dependency.Configuration);
+            if (target.GradleBuildModel.Android is { IsComplete: false })
+            {
+                complete = false;
+                diagnostics.Add(CreateDiagnostic(
+                    "AndroidProjectDependencyTargetVariantModelIncomplete",
+                    $"The Android variant model for project '{dependency.ProjectPath}' is incomplete.",
+                    target.Path));
+            }
+
             if (target.GradleBuildModel.Android is not null)
             {
                 var matchingVariants = target.GradleBuildModel.Android.Variants
@@ -159,7 +178,7 @@ public sealed class AndroidVariantProjectDependencyResolver
     private static void AddPath(
         string path,
         ICollection<string> paths,
-        ISet<string> seen) 
+        ISet<string> seen)
     {
         var normalized = Path.GetFullPath(path);
         if (seen.Add(normalized))

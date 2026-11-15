@@ -119,7 +119,7 @@ public sealed class AndroidVariantProjectDependencyResolverTests
         var app = Module("app");
         var library = Module("library");
         root.GradleModel = BuildModel(root, (":", root.Path), (":app", app.Path), (":library", library.Path));
-        root.GradleModel.IsComplete = false;
+        root.GradleModel!.IsComplete = false;
         app.GradleBuildModel = AndroidBuildModel();
         library.GradleBuildModel = AndroidBuildModel();
 

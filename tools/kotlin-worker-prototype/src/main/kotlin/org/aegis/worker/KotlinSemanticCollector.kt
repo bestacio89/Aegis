@@ -123,7 +123,7 @@ class KotlinSemanticCollector(
         }
 
         override fun visitClass(declaration: IrClass) {
-            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
+            if (declaration.origin != IrDeclarationOrigin.DEFINED && !isExpect(declaration)) return
             val canonicalId = classId(declaration, owners.lastOrNull())
             val id = canonicalId
             val symbolKind = when (declaration.kind.name) {
@@ -147,7 +147,7 @@ class KotlinSemanticCollector(
         }
 
         override fun visitTypeAlias(declaration: IrTypeAlias) {
-            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
+            if (declaration.origin != IrDeclarationOrigin.DEFINED && !isExpect(declaration)) return
             val qualifiedName = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
             val canonicalId = "kotlin:typealias:$qualifiedName"
             val id = canonicalId
@@ -164,7 +164,7 @@ class KotlinSemanticCollector(
         }
 
         override fun visitProperty(declaration: IrProperty) {
-            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
+            if (declaration.origin != IrDeclarationOrigin.DEFINED && !isExpect(declaration)) return
             val canonicalId = propertyId(declaration, owners.lastOrNull())
             val id = canonicalId
             addSymbol(
@@ -185,7 +185,7 @@ class KotlinSemanticCollector(
         }
 
         override fun visitEnumEntry(declaration: IrEnumEntry) {
-            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
+            if (declaration.origin != IrDeclarationOrigin.DEFINED && !isExpect(declaration)) return
             val containingClass = declaration.parent as? IrClass
             val qualifiedName = containingClass?.fqNameWhenAvailable?.asString()
                 ?.let { it + "." + declaration.name.asString() }
@@ -208,7 +208,7 @@ class KotlinSemanticCollector(
                 return
             }
 
-            if (declaration.origin != IrDeclarationOrigin.DEFINED) {
+            if (declaration.origin != IrDeclarationOrigin.DEFINED && !isExpect(declaration)) {
                 if (declaration.origin.name == "LOCAL_FUNCTION_FOR_LAMBDA") {
                     lexicalScopes.addLast(
                         createLexicalScope(currentFile, declaration.startOffset, declaration.endOffset, "lambda")
@@ -240,7 +240,7 @@ class KotlinSemanticCollector(
         }
 
         override fun visitConstructor(declaration: IrConstructor) {
-            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
+            if (declaration.origin != IrDeclarationOrigin.DEFINED && !isExpect(declaration)) return
             val canonicalId = functionId(declaration, owners.lastOrNull())
             val id = canonicalId
             addSymbol(
@@ -336,7 +336,7 @@ class KotlinSemanticCollector(
         }
 
         override fun visitClass(declaration: IrClass) {
-            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
+            if (declaration.origin != IrDeclarationOrigin.DEFINED && !isExpect(declaration)) return
             val sourceId = semanticDeclarationId(
                 classId(declaration, owners.lastOrNull()),
                 declaration
@@ -372,7 +372,7 @@ class KotlinSemanticCollector(
         }
 
         override fun visitProperty(declaration: IrProperty) {
-            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
+            if (declaration.origin != IrDeclarationOrigin.DEFINED && !isExpect(declaration)) return
             val sourceId = semanticDeclarationId(
                 propertyId(declaration, owners.lastOrNull()),
                 declaration
@@ -407,7 +407,7 @@ class KotlinSemanticCollector(
         }
 
         override fun visitConstructor(declaration: IrConstructor) {
-            if (declaration.origin != IrDeclarationOrigin.DEFINED) return
+            if (declaration.origin != IrDeclarationOrigin.DEFINED && !isExpect(declaration)) return
             val sourceId = semanticDeclarationId(
                 functionId(declaration, owners.lastOrNull()),
                 declaration

@@ -42,7 +42,6 @@ public sealed class AndroidSemanticAnalysisOrchestratorTests
                     KotlinPluginVersion = "2.4.21",
                     KotlinLanguageVersion = "2.4",
                     KotlinApiVersion = "2.4",
-                    KotlinJvmTarget = "21",
                     Plugins =
                     [
                         new GradleBuildModel.Plugin("com.android.application", "9.0.0", true),

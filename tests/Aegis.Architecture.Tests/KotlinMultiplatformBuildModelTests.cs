@@ -1,4 +1,5 @@
 using Aegis.Architecture.Analysis;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Xunit;
 

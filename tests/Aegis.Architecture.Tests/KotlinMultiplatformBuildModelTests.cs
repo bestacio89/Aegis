@@ -110,11 +110,11 @@ public sealed class KotlinMultiplatformBuildModelTests
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "iosSimulatorArm64Test"
                 && sourceSet.Kind == "TargetSpecific"
-                && sourceSet.DependsOn.SequenceEqual(["commonTest"]));
+                && sourceSet.DependsOn.SequenceEqual(["iosTest"]));
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "wasmJsTest"
                 && sourceSet.Kind == "TargetSpecific"
-                && sourceSet.DependsOn.SequenceEqual(["commonTest"]));
+                && sourceSet.DependsOn.SequenceEqual(["webTest"]));
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "commonMain"
                 && sourceSet.Kind == "Common");

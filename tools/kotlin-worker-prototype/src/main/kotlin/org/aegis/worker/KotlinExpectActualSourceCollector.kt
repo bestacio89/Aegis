@@ -115,6 +115,7 @@ internal class KotlinExpectActualSourceCollector {
             actualSymbol.addProperty("origin", 1)
             actualSymbol.addProperty("isTestCode", includeTestCode)
             actualSymbol.add("provenance", provenance(actual))
+            removeModifier(actualSymbol, "expect")
             setModifier(actualSymbol, "actual")
             actualizedIds[expectedId] = actualId
             pairs.add(ActualizationPair(expectedId, actualId, actual, expected, actualSymbol, expectedSymbol))
@@ -360,6 +361,13 @@ internal class KotlinExpectActualSourceCollector {
         if (modifiers.none { it.asString == modifier })
             modifiers.add(modifier)
         symbol.add("modifiers", modifiers)
+    }
+
+    private fun removeModifier(symbol: JsonObject, modifier: String) {
+        val modifiers = symbol.getAsJsonArray("modifiers") ?: return
+        val retained = JsonArray()
+        modifiers.filterNot { it.asString == modifier }.forEach(retained::add)
+        symbol.add("modifiers", retained)
     }
 
     private fun createDiagnostic(

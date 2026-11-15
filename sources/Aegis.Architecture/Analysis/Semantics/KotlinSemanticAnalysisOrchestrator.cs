@@ -129,7 +129,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                         module,
                         (diagnostic.Code, diagnostic.Message),
                         unsupportedScope.TargetName,
-                        unsupportedScope.SourceSetNames));
+                        unsupportedScope.ProductionSourceSetNames.Concat(unsupportedScope.TestSourceSetNames).ToArray()));
                 }
 
                 var supportedScopes = plan.Targets.Where(scope => scope.IsSupported).ToArray();

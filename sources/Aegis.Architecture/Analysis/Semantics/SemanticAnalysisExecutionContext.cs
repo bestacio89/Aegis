@@ -10,8 +10,8 @@ namespace Aegis.Architecture.Analysis.Semantics;
 public sealed class SemanticAnalysisExecutionContext : IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, byte> _artifactRoots = new(PathComparer);
-    private readonly ConcurrentDictionary<string, string> _productionOutputs = new(PathComparer);
-    private readonly ConcurrentDictionary<string, string> _testOutputs = new(PathComparer);
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _productionOutputs = new(PathComparer);
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _testOutputs = new(PathComparer);
     private readonly ILogger _logger;
     private int _disposed;
 
@@ -44,12 +44,15 @@ public sealed class SemanticAnalysisExecutionContext : IAsyncDisposable
         string modulePath,
         bool isTestCode,
         string artifactRoot,
-        string outputDirectory)
+        string outputDirectory,
+        string? variantName = null)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(modulePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(artifactRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        if (variantName is not null && string.IsNullOrWhiteSpace(variantName))
+            throw new ArgumentException("A compilation variant name cannot be empty or whitespace.", nameof(variantName));
 
         var normalizedRoot = Path.GetFullPath(artifactRoot);
         var normalizedOutput = Path.GetFullPath(outputDirectory);
@@ -73,7 +76,10 @@ public sealed class SemanticAnalysisExecutionContext : IAsyncDisposable
         }
 
         var key = NormalizeModulePath(modulePath);
-        (isTestCode ? _testOutputs : _productionOutputs)[key] = normalizedOutput;
+        var variantKey = NormalizeVariantName(variantName);
+        var outputsByVariant = (isTestCode ? _testOutputs : _productionOutputs)
+            .GetOrAdd(key, _ => new ConcurrentDictionary<string, string>(StringComparer.Ordinal));
+        outputsByVariant[variantKey] = normalizedOutput;
     }
 
     /// <summary>
@@ -81,11 +87,22 @@ public sealed class SemanticAnalysisExecutionContext : IAsyncDisposable
     /// suitable for the requested production/test scope.
     /// </summary>
     public IReadOnlyList<string> GetCompilationOutputs(string modulePath, bool includeTestCode) =>
+        GetCompilationOutputs(modulePath, Array.Empty<string>(), Array.Empty<string>(), includeTestCode, null);
+
+    /// <summary>
+    /// Returns outputs for one exact build variant. Unqualified outputs are not
+    /// used as fallbacks because doing so could leak binaries across variants.
+    /// </summary>
+    public IReadOnlyList<string> GetCompilationOutputs(
+        string modulePath,
+        bool includeTestCode,
+        string? variantName) =>
         GetCompilationOutputs(
             modulePath,
             Array.Empty<string>(),
             Array.Empty<string>(),
-            includeTestCode);
+            includeTestCode,
+            variantName);
 
     /// <summary>
     /// Returns this module's outputs and the outputs of its explicit project
@@ -95,29 +112,44 @@ public sealed class SemanticAnalysisExecutionContext : IAsyncDisposable
         string modulePath,
         IReadOnlyCollection<string> productionDependencyPaths,
         IReadOnlyCollection<string> testDependencyPaths,
-        bool includeTestCode)
+        bool includeTestCode) =>
+        GetCompilationOutputs(modulePath, productionDependencyPaths, testDependencyPaths, includeTestCode, null);
+
+    /// <summary>
+    /// Returns outputs for the requested variant and explicit project dependencies.
+    /// Variant identity is exact; a missing variant output is never replaced by
+    /// another variant's output or by an unqualified output.
+    /// </summary>
+    public IReadOnlyList<string> GetCompilationOutputs(
+        string modulePath,
+        IReadOnlyCollection<string> productionDependencyPaths,
+        IReadOnlyCollection<string> testDependencyPaths,
+        bool includeTestCode,
+        string? variantName)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(modulePath);
         ArgumentNullException.ThrowIfNull(productionDependencyPaths);
         ArgumentNullException.ThrowIfNull(testDependencyPaths);
 
+        var variantKey = NormalizeVariantName(variantName);
+
         // Classpath order is meaningful (for example, when duplicate binary
         // names exist). Preserve the explicit dependency traversal order.
         var outputs = new List<string>();
         var seenOutputs = new HashSet<string>(PathComparer);
-        AddOutput(_productionOutputs, modulePath, outputs, seenOutputs);
+        AddOutput(_productionOutputs, modulePath, variantKey, outputs, seenOutputs);
 
         foreach (var dependencyPath in productionDependencyPaths)
-            AddOutput(_productionOutputs, dependencyPath, outputs, seenOutputs);
+            AddOutput(_productionOutputs, dependencyPath, variantKey, outputs, seenOutputs);
 
         if (includeTestCode)
         {
-            AddOutput(_testOutputs, modulePath, outputs, seenOutputs);
+            AddOutput(_testOutputs, modulePath, variantKey, outputs, seenOutputs);
             foreach (var dependencyPath in testDependencyPaths)
             {
-                AddOutput(_productionOutputs, dependencyPath, outputs, seenOutputs);
-                AddOutput(_testOutputs, dependencyPath, outputs, seenOutputs);
+                AddOutput(_productionOutputs, dependencyPath, variantKey, outputs, seenOutputs);
+                AddOutput(_testOutputs, dependencyPath, variantKey, outputs, seenOutputs);
             }
         }
 
@@ -125,20 +157,25 @@ public sealed class SemanticAnalysisExecutionContext : IAsyncDisposable
     }
 
     private static void AddOutput(
-        ConcurrentDictionary<string, string> outputsByModule,
+        ConcurrentDictionary<string, ConcurrentDictionary<string, string>> outputsByModule,
         string modulePath,
+        string variantKey,
         ICollection<string> outputs,
         ISet<string> seenOutputs)
     {
         if (string.IsNullOrWhiteSpace(modulePath))
             return;
 
-        if (outputsByModule.TryGetValue(NormalizeModulePath(modulePath), out var output)
+        if (outputsByModule.TryGetValue(NormalizeModulePath(modulePath), out var outputsByVariant)
+            && outputsByVariant.TryGetValue(variantKey, out var output)
             && seenOutputs.Add(output))
         {
             outputs.Add(output);
         }
     }
+
+    private static string NormalizeVariantName(string? variantName) =>
+        variantName?.Trim() ?? string.Empty;
 
     private static string NormalizeModulePath(string modulePath) =>
         Path.GetFullPath(modulePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

@@ -66,13 +66,51 @@ public sealed class SemanticAnalysisExecutionContextTests
     private static string RegisterOutput(
         SemanticAnalysisExecutionContext context,
         string modulePath,
-        bool isTestCode)
+        bool isTestCode,
+        string? variantName = null)
     {
         var artifactRoot = context.CreateArtifactRoot();
         var output = Path.Combine(artifactRoot, "classes");
         Directory.CreateDirectory(output);
-        context.RegisterCompilationOutput(modulePath, isTestCode, artifactRoot, output);
+        context.RegisterCompilationOutput(modulePath, isTestCode, artifactRoot, output, variantName);
         return output;
+    }
+
+    [Fact]
+    public async Task Keeps_compilation_outputs_isolated_by_exact_android_variant()
+    {
+        await using var context = new SemanticAnalysisExecutionContext(
+            NullLogger<SemanticAnalysisExecutionContext>.Instance);
+        var modulePath = Path.Combine(Path.GetTempPath(), "aegis-android-module");
+        var debugOutput = RegisterOutput(context, modulePath, isTestCode: false, variantName: "debug");
+        var releaseOutput = RegisterOutput(context, modulePath, isTestCode: false, variantName: "release");
+
+        Assert.Equal([debugOutput], context.GetCompilationOutputs(modulePath, false, "debug"));
+        Assert.Equal([releaseOutput], context.GetCompilationOutputs(modulePath, false, "release"));
+        Assert.Empty(context.GetCompilationOutputs(modulePath, false));
+        Assert.Empty(context.GetCompilationOutputs(modulePath, false, "staging"));
+    }
+
+    [Fact]
+    public async Task Assembles_project_outputs_in_dependency_order_without_cross_variant_or_scope_leakage()
+    {
+        await using var context = new SemanticAnalysisExecutionContext(
+            NullLogger<SemanticAnalysisExecutionContext>.Instance);
+        var consumerPath = Path.Combine(Path.GetTempPath(), "aegis-android-consumer");
+        var dependencyPath = Path.Combine(Path.GetTempPath(), "aegis-android-dependency");
+        var consumerDebug = RegisterOutput(context, consumerPath, false, "debug");
+        var dependencyDebug = RegisterOutput(context, dependencyPath, false, "debug");
+        _ = RegisterOutput(context, dependencyPath, false, "release");
+        var dependencyDebugTest = RegisterOutput(context, dependencyPath, true, "debug");
+
+        var outputs = context.GetCompilationOutputs(
+            consumerPath,
+            [dependencyPath, dependencyPath],
+            [dependencyPath],
+            includeTestCode: true,
+            variantName: "debug");
+
+        Assert.Equal([consumerDebug, dependencyDebug, dependencyDebugTest], outputs);
     }
 
     [Fact]

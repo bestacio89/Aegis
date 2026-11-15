@@ -4,6 +4,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
+import org.jetbrains.kotlin.CoreEnvironmentDeprecation
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.CompilerConfiguration
@@ -21,7 +22,7 @@ import org.jetbrains.kotlin.psi.KtTypeAlias
 import java.nio.file.Files
 import java.nio.file.Path
 
-@OptIn(CompilerConfiguration.Internals::class)
+@OptIn(CompilerConfiguration.Internals::class, CoreEnvironmentDeprecation::class)
 internal class KotlinExpectActualSourceCollector {
     fun reconcile(
         evidence: JsonObject,
@@ -33,7 +34,7 @@ internal class KotlinExpectActualSourceCollector {
         if (sharedSourceRoots.isEmpty() || sourceFiles.isEmpty())
             return evidence
 
-        val declarations = parseDeclarations(sourceFiles, sharedSourceRoots)
+        val declarations = parseDeclarations(sourceFiles, includeTestCode)
         val expectedDeclarations = declarations.filter { it.isExpected }
         val actualDeclarations = declarations.filter { it.isActual }
         if (expectedDeclarations.isEmpty() || actualDeclarations.isEmpty())
@@ -182,7 +183,7 @@ internal class KotlinExpectActualSourceCollector {
 
     private fun parseDeclarations(
         sourceFiles: List<Path>,
-        sharedSourceRoots: List<Path>
+        includeTestCode: Boolean
     ): List<SourceDeclaration> {
         val disposable = Disposer.newDisposable("aegis-kotlin-expect-actual")
         try {
@@ -195,7 +196,8 @@ internal class KotlinExpectActualSourceCollector {
             val declarations = mutableListOf<SourceDeclaration>()
 
             for (sourceFile in sourceFiles) {
-                val isShared = sharedSourceRoots.any { root -> sourceFile.startsWith(root) }
+                val commonSourceSetName = if (includeTestCode) "commonTest" else "commonMain"
+                val isCommon = sourceSetName(sourceFile) == commonSourceSetName
                 val source = Files.readString(sourceFile)
                 val file = factory.createFile(sourceFile.fileName.toString(), source)
                 collectDeclarations(
@@ -204,7 +206,7 @@ internal class KotlinExpectActualSourceCollector {
                     sourceFile.toAbsolutePath().normalize().toString(),
                     source,
                     sourceSetName(sourceFile),
-                    isShared,
+                    isCommon,
                     declarations
                 )
             }
@@ -221,7 +223,7 @@ internal class KotlinExpectActualSourceCollector {
         filePath: String,
         source: String,
         sourceSetName: String?,
-        isShared: Boolean,
+        isCommon: Boolean,
         output: MutableList<SourceDeclaration>
     ) {
         for (declaration in sourceDeclarations) {
@@ -229,8 +231,8 @@ internal class KotlinExpectActualSourceCollector {
             val qualifiedName = listOf(parentName, name)
                 .filter(String::isNotBlank)
                 .joinToString(".")
-            val isExpected = isShared && declaration.hasModifier(KtTokens.EXPECT_KEYWORD)
-            val isActual = !isShared && declaration.hasModifier(KtTokens.ACTUAL_KEYWORD)
+            val isExpected = isCommon && hasModifier(declaration, KtTokens.EXPECT_KEYWORD)
+            val isActual = !isCommon && hasModifier(declaration, KtTokens.ACTUAL_KEYWORD)
 
             if (isExpected || isActual) {
                 val (line, column) = lineAndColumn(source, declaration.textOffset)
@@ -258,17 +260,22 @@ internal class KotlinExpectActualSourceCollector {
                     filePath,
                     source,
                     sourceSetName,
-                    isShared,
+                    isCommon,
                     output
                 )
             }
         }
     }
 
+    private fun hasModifier(
+        declaration: KtDeclaration,
+        modifier: org.jetbrains.kotlin.lexer.KtModifierKeywordToken
+    ): Boolean =
+        (declaration as? KtModifierListOwner)?.hasModifier(modifier) == true
+
     private fun compilerKind(declaration: KtDeclaration): Set<Int> = when (declaration) {
         is KtNamedFunction -> setOf(9)
         is KtProperty -> setOf(12)
-        is KtTypeAlias -> setOf(14)
         is KtClassOrObject -> setOf(4, 5, 7, 8)
         else -> emptySet()
     }
@@ -289,10 +296,6 @@ internal class KotlinExpectActualSourceCollector {
             declaration.typeParameters.size.toString(),
             ((declaration as? KtClass)?.primaryConstructorParameters.orEmpty())
                 .joinToString(",") { normalizeType(it.typeReference?.text.orEmpty()) }
-        ).joinToString("|")
-        is KtTypeAlias -> listOf(
-            declaration.typeParameters.size.toString(),
-            normalizeType(declaration.typeReference?.text.orEmpty())
         ).joinToString("|")
         else -> ""
     }

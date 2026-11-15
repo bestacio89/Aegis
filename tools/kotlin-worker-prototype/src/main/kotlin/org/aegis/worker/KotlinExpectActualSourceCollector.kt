@@ -194,7 +194,7 @@ internal class KotlinExpectActualSourceCollector {
         try {
             val environment = KotlinCoreEnvironment.createForProduction(
                 disposable,
-                CompilerConfiguration(),
+                CompilerConfiguration.create(),
                 EnvironmentConfigFiles.JVM_CONFIG_FILES
             )
             val factory = KtPsiFactory(environment.projectEnvironment.project, false)

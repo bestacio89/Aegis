@@ -16,15 +16,30 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
             ?? throw new InvalidOperationException("The Kotlin worker package path was not configured.");
         var workspace = Directory.CreateTempSubdirectory("aegis-kotlin-e2e-");
         var sourceRoot = Path.Combine(workspace.FullName, "src", "main", "kotlin");
-        var sourceFile = Path.Combine(sourceRoot, "sample", "WorkerProbe.kt");
+        var sourceFile = Path.Combine(sourceRoot, "sample", "application", "WorkerProbe.kt");
+        var domainFile = Path.Combine(sourceRoot, "sample", "domain", "OrderRepository.kt");
         Directory.CreateDirectory(Path.GetDirectoryName(sourceFile)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(domainFile)!);
         await File.WriteAllTextAsync(
             sourceFile,
             """
-            package sample
+            package sample.application
 
-            class WorkerProbe {
-                fun execute(): String = "worker-ready"
+            import sample.domain.OrderRepository
+
+            class WorkerProbe(private val repository: OrderRepository) {
+                fun execute(id: String): String = repository.findById(id).id
+            }
+            """);
+        await File.WriteAllTextAsync(
+            domainFile,
+            """
+            package sample.domain
+
+            data class Order(val id: String)
+
+            interface OrderRepository {
+                fun findById(id: String): Order
             }
             """);
 
@@ -51,7 +66,7 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
                 WorkspaceRoot = workspace.FullName,
                 ModuleName = "worker-probe",
                 BuildSystem = "Gradle",
-                SourceFiles = [sourceFile],
+                SourceFiles = [sourceFile, domainFile],
                 SourceRoots = [sourceRoot],
                 RequestedCapabilities = ["symbols", "relationships", "compiler-diagnostics", "jvm-interop"],
                 ProviderOptions = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -71,11 +86,45 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
                 run.Status == SemanticAnalysisStatus.Completed,
                 $"Expected completed Kotlin analysis, received {run.Status}: {string.Join(" | ", run.Diagnostics.Select(diagnostic => $"{diagnostic.Code} ({diagnostic.ExceptionType}): {diagnostic.Message}"))}");
             Assert.Contains(run.Symbols, symbol =>
-                symbol.QualifiedName == "sample.WorkerProbe"
+                symbol.QualifiedName == "sample.application.WorkerProbe"
                 && symbol.Language == "Kotlin");
+            var domainSymbolIds = run.Symbols
+                .Where(symbol => symbol.ContainerName == "sample.domain")
+                .Select(symbol => symbol.Id)
+                .ToHashSet(StringComparer.Ordinal);
+            Assert.Contains(run.Relationships, relationship =>
+                (relationship.Kind is SemanticRelationshipKind.Calls or SemanticRelationshipKind.References)
+                && domainSymbolIds.Contains(relationship.TargetSymbolId ?? string.Empty));
+
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "worker-probe",
+                RootPath = workspace.FullName,
+                Language = "Kotlin",
+                Modules =
+                [
+                    new ProjectModuleContext
+                    {
+                        Name = "worker-probe",
+                        Path = workspace.FullName,
+                        Languages = ["Kotlin"]
+                    }
+                ],
+                SemanticAnalysisRuns = [run]
+            };
+            SemanticAnalysisPipeline.ProjectArchitectureComponents(context);
+
+            Assert.Equal(2, context.ProductionComponents.Count);
+            var relationshipEdge = Assert.Single(context.ProductionComponentDependencies);
+            Assert.True(relationshipEdge.RelationshipCount > 0);
+            Assert.Equal("sample.application", context.ProductionComponents
+                .Single(component => component.Id == relationshipEdge.SourceComponentId).QualifiedName);
+            Assert.Equal("sample.domain", context.ProductionComponents
+                .Single(component => component.Id == relationshipEdge.TargetComponentId).QualifiedName);
+
             var outputDirectory = Assert.Single(
                 executionContext.GetCompilationOutputs(workspace.FullName, includeTestCode: false));
-            Assert.True(File.Exists(Path.Combine(outputDirectory, "sample", "WorkerProbe.class")));
+            Assert.True(File.Exists(Path.Combine(outputDirectory, "sample", "application", "WorkerProbe.class")));
         }
         finally
         {

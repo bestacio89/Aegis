@@ -131,6 +131,45 @@ public sealed class SemanticAnalysisPipelineTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_does_not_treat_the_multi_language_repository_label_as_a_language()
+    {
+        var executionOrder = new List<string>();
+        var pipeline = new SemanticAnalysisPipeline(
+            [new RecordingAnalyzer("Kotlin", executionOrder)],
+            NullLogger<SemanticAnalysisPipeline>.Instance);
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "Polyglot",
+            RootPath = Path.GetTempPath(),
+            Language = "Multi-Language",
+            Modules =
+            [
+                new ProjectModuleContext
+                {
+                    Name = "kotlin-module",
+                    Path = Path.Combine(Path.GetTempPath(), "kotlin-module"),
+                    Languages = ["Kotlin"]
+                },
+                new ProjectModuleContext
+                {
+                    Name = "frontend",
+                    Path = Path.Combine(Path.GetTempPath(), "frontend"),
+                    Languages = ["JavaScript"]
+                }
+            ]
+        };
+
+        await pipeline.AnalyzeAsync(context);
+
+        Assert.Equal(["Kotlin"], executionOrder);
+        Assert.DoesNotContain(context.SemanticAnalysisRuns, run =>
+            run.Language.Equals("Multi-Language", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(context.SemanticAnalysisRuns, run =>
+            run.Language == "JavaScript"
+            && run.Status == SemanticAnalysisStatus.Unsupported);
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_propagates_cancellation_before_starting_a_provider()
     {
         var executionOrder = new List<string>();

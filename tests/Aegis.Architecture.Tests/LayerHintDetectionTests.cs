@@ -36,7 +36,7 @@ public sealed class LayerHintDetectionTests
     }
 
     [Fact]
-    public void Context_detection_keeps_modules_unclassified_when_layer_hints_are_ambiguous()
+    public void Context_detection_uses_neutral_library_layer_when_layer_hints_are_ambiguous()
     {
         var root = CreateProject("Kernel");
 
@@ -56,7 +56,12 @@ public sealed class LayerHintDetectionTests
             var module = Assert.Single(context.Modules);
             var layer = Assert.Single(module.Layers);
 
-            Assert.Equal("Unclassified:Kernel", layer.Name);
+            Assert.Equal("Library", layer.Name);
+            Assert.Contains(
+                context.ArchitectureClassificationDiagnostics,
+                diagnostic => diagnostic.Code == "ModuleLayerHintsAmbiguous"
+                    && diagnostic.ModulePath == module.Path
+                    && diagnostic.AffectsCoverage);
             Assert.DoesNotContain(
                 context.Layers,
                 item => item.Name.Equals("Domain", StringComparison.OrdinalIgnoreCase)

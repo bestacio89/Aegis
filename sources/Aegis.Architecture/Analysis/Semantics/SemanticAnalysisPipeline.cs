@@ -28,7 +28,18 @@ public sealed class SemanticAnalysisPipeline
             .ThenBy(analyzer => analyzer.GetType().FullName, StringComparer.Ordinal)
             .ToArray();
         _logger = logger;
+
+        _logger.LogInformation(
+            "Registered semantic project analyzers: {Languages}.",
+            RegisteredLanguages.Count == 0 ? "None" : string.Join(", ", RegisteredLanguages));
     }
+
+    public IReadOnlyCollection<string> RegisteredLanguages =>
+        _analyzers
+            .Select(analyzer => analyzer.Language)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(language => language, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     public async Task AnalyzeAsync(
         ProjectArchitectureContext context,
@@ -106,7 +117,8 @@ public sealed class SemanticAnalysisPipeline
             .SelectMany(module => module.Languages)
             .Append(context.Language)
             .Where(language => !string.IsNullOrWhiteSpace(language)
-                && !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                && !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
+                && !language.Equals("Multi-Language", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
         foreach (var language in discoveredLanguages)

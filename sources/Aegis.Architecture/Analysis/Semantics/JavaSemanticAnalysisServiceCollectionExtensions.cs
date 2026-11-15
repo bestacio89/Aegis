@@ -13,11 +13,12 @@ public static class JavaSemanticAnalysisServiceCollectionExtensions
         services.TryAddSingleton<IJvmClasspathResolver, LocalJvmClasspathResolver>();
         services.TryAddSingleton<JvmSourceRootResolver>();
         services.TryAddSingleton<IJavaWorkerClient, JavaWorkerClient>();
-        services.TryAddSingleton<ISemanticAnalysisAdapter, JavaSemanticAnalysisAdapter>();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<ISemanticAnalysisAdapter, JavaSemanticAnalysisAdapter>());
         services.TryAddSingleton<SemanticAnalysisCoordinator>();
         services.TryAddSingleton<JavaSemanticAnalysisOrchestrator>();
-        services.TryAddSingleton<ISemanticAnalysisProjectAnalyzer>(
-            provider => provider.GetRequiredService<JavaSemanticAnalysisOrchestrator>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<ISemanticAnalysisProjectAnalyzer, JavaSemanticAnalysisOrchestrator>());
         services.TryAddSingleton<SemanticAnalysisPipeline>();
 
         return services;

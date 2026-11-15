@@ -21,6 +21,7 @@ public sealed class DependencyGraphEvaluator
     [
         "C#",
         "Java",
+        "Kotlin",
         "TypeScript",
         "JavaScript"
     ];
@@ -29,6 +30,12 @@ public sealed class DependencyGraphEvaluator
     [
         "ASP.NET",
         "Spring Boot",
+        "Kotlin",
+        "Ktor",
+        "Android",
+        "Jetpack Compose",
+        "Compose Multiplatform",
+        "Kotlin Multiplatform",
         "Angular",
         "React",
         "Node"
@@ -222,7 +229,8 @@ public sealed class DependencyGraphEvaluator
             .SelectMany(module => module.Languages)
             .Append(context.Language)
             .Where(language => !string.IsNullOrWhiteSpace(language)
-                && !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                && !language.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
+                && !language.Equals("Multi-Language", StringComparison.OrdinalIgnoreCase))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var semanticRuns = context.SemanticAnalysisRuns
             .Where(run => requiredLanguages.Contains(run.Language))

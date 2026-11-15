@@ -13,11 +13,11 @@ public static class KotlinSemanticAnalysisServiceCollectionExtensions
         services.TryAddSingleton<IJvmClasspathResolver, LocalJvmClasspathResolver>();
         services.TryAddSingleton<JvmSourceRootResolver>();
         services.TryAddSingleton<IKotlinWorkerClient, KotlinWorkerClient>();
-        services.TryAddSingleton<ISemanticAnalysisAdapter, KotlinSemanticAnalysisAdapter>();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<ISemanticAnalysisAdapter, KotlinSemanticAnalysisAdapter>());
         services.TryAddSingleton<SemanticAnalysisCoordinator>();
-        services.TryAddSingleton<KotlinSemanticAnalysisOrchestrator>();
-        services.TryAddSingleton<ISemanticAnalysisProjectAnalyzer>(
-            provider => provider.GetRequiredService<KotlinSemanticAnalysisOrchestrator>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<ISemanticAnalysisProjectAnalyzer, KotlinSemanticAnalysisOrchestrator>());
         services.TryAddSingleton<SemanticAnalysisPipeline>();
 
         return services;

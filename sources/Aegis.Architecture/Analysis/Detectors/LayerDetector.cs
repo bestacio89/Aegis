@@ -1,3 +1,4 @@
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
 
@@ -55,7 +56,8 @@ internal static class LayerDetector
             var (layerName, confidence) = ResolveLayer(
                 module,
                 filesByModule[module],
-                layerHints);
+                layerHints,
+                context);
 
             var layer = new ProjectLayerContext
             {
@@ -96,7 +98,8 @@ internal static class LayerDetector
     private static (string Name, double Confidence) ResolveLayer(
         ProjectModuleContext module,
         IReadOnlyCollection<string> moduleFiles,
-        IReadOnlyDictionary<string, string[]> layerHints)
+        IReadOnlyDictionary<string, string[]> layerHints,
+        ProjectArchitectureContext context)
     {
         var projectIdentifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -123,7 +126,14 @@ internal static class LayerDetector
             return (projectMatches[0], 0.9);
 
         if (projectMatches.Length > 1)
-            return ($"Unclassified:{module.Name}", 0.25);
+        {
+            AddFallbackDiagnostic(
+                context,
+                module,
+                "ModuleLayerHintsAmbiguous",
+                "Multiple project-name layer hints matched with equal authority; the neutral Library layer was applied pending an explicit mapping.");
+            return (ResolveFallbackLayer(module), 0.25);
+        }
 
         var folderIdentifiers = new HashSet<string>(
             projectIdentifiers,
@@ -155,9 +165,21 @@ internal static class LayerDetector
             return (folderMatches[0], 0.85);
 
         if (folderMatches.Length > 1)
-            return ($"Unclassified:{module.Name}", 0.25);
+        {
+            AddFallbackDiagnostic(
+                context,
+                module,
+                "ModuleLayerHintsAmbiguous",
+                "Multiple source-folder layer hints matched with equal authority; the neutral Library layer was applied pending an explicit mapping.");
+            return (ResolveFallbackLayer(module), 0.25);
+        }
 
-        return ($"Unclassified:{module.Name}", 0.5);
+        AddFallbackDiagnostic(
+            context,
+            module,
+            "ModuleLayerClassificationFallback",
+            "No project or source-folder convention identified an architectural layer; a neutral Library classification was applied.");
+        return (ResolveFallbackLayer(module), 0.35);
     }
 
     private static string[] FindMatchingLayers(
@@ -238,6 +260,39 @@ internal static class LayerDetector
             .Select(char.ToLowerInvariant)
             .ToArray());
 
+    private static string ResolveFallbackLayer(ProjectModuleContext module)
+    {
+        if (module.IsTestProject || module.IsTestSupport)
+            return "Tests";
+        if (module.Roles.Contains(ProjectModuleRole.Shared))
+            return "Shared";
+        if (module.Roles.Contains(ProjectModuleRole.Frontend))
+            return "Presentation";
+        if (module.Roles.Contains(ProjectModuleRole.Backend))
+            return "Api";
+        if (module.Roles.Contains(ProjectModuleRole.Desktop))
+            return "Client";
+        return "Library";
+    }
+
+    private static void AddFallbackDiagnostic(
+        ProjectArchitectureContext context,
+        ProjectModuleContext module,
+        string code,
+        string message)
+    {
+        context.ArchitectureClassificationDiagnostics.Add(new ArchitectureClassificationDiagnostic
+        {
+            Code = code,
+            Severity = "Information",
+            Message = message,
+            Target = module.Name,
+            Language = module.Languages.Count == 1 ? module.Languages[0] : string.Join(", ", module.Languages),
+            ModulePath = module.Path,
+            AffectsCoverage = true
+        });
+    }
+
     private static string? ResolveKnownLayerName(string? type) =>
         type?.Trim().ToLowerInvariant() switch
         {
@@ -249,6 +304,8 @@ internal static class LayerDetector
             "presentation" => "Presentation",
             "consumer" => "Consumer",
             "client" => "Client",
+            "shared" => "Shared",
+            "library" => "Library",
             "test" => "Tests",
             "testsupport" => "Tests",
             "unity" => "Client",

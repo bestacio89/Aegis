@@ -1,3 +1,4 @@
+using Aegis.Architecture.Analysis.Semantics;
 using Aegis.Architecture.Bootstrap;
 using Aegis.Architecture.RuleEngines;
 using Aegis.Shared.Contracts;
@@ -57,6 +58,28 @@ public sealed class ArchitectureDependencyInjectionTests
             .ToArray();
 
         Assert.Equal(before, after);
+    }
+
+    [Fact]
+    public void AddAegisCore_registers_both_java_and_kotlin_semantic_providers()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddAegisCore();
+
+        using var provider = services.BuildServiceProvider();
+        var analyzers = provider.GetServices<ISemanticAnalysisProjectAnalyzer>()
+            .Select(analyzer => analyzer.Language)
+            .OrderBy(language => language, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var pipeline = provider.GetRequiredService<SemanticAnalysisPipeline>();
+
+        Assert.Equal(["Java", "Kotlin"], analyzers);
+        Assert.Equal(["Java", "Kotlin"], pipeline.RegisteredLanguages);
+        Assert.Contains(provider.GetServices<ISemanticAnalysisAdapter>(), adapter =>
+            adapter.Language.Equals("Java", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(provider.GetServices<ISemanticAnalysisAdapter>(), adapter =>
+            adapter.Language.Equals("Kotlin", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

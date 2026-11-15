@@ -315,7 +315,14 @@ class KotlinSemanticCollector(
             })
             symbol.add("provenance", provenance(file, offset))
             declarationCandidates.add(
-                DeclarationCandidate(canonicalId, symbol, declaration, offset, file)
+                DeclarationCandidate(
+                    canonicalId,
+                    symbol,
+                    declaration,
+                    offset,
+                    file,
+                    sourceSetName(file)
+                )
             )
         }
     }
@@ -1078,6 +1085,22 @@ class KotlinSemanticCollector(
     private fun semanticDeclarationId(id: String, declaration: IrDeclaration): String =
         actualDeclarationIds[declaration] ?: id
 
+    private fun isCommonSourceSet(sourceSetName: String?): Boolean =
+        sourceSetName == if (isTestCode) "commonTest" else "commonMain"
+
+    private fun sourceSetName(file: IrFile?): String? {
+        val path = file?.fileEntry?.name?.replace('\\', '/') ?: return null
+        val segments = path.split('/')
+        val sourceIndex = segments.indexOfLast { it == "src" }
+        if (sourceIndex < 0 || sourceIndex + 1 >= segments.size)
+            return null
+
+        return segments[sourceIndex + 1].takeIf {
+            it.endsWith("Main", ignoreCase = false)
+                || it.endsWith("Test", ignoreCase = false)
+        }
+    }
+
     private fun isExpect(declaration: IrDeclaration): Boolean = when (declaration) {
         is IrClass -> declaration.isExpect
         is IrFunction -> declaration.isExpect
@@ -1090,7 +1113,8 @@ class KotlinSemanticCollector(
         val symbol: JsonObject,
         val declaration: IrDeclaration,
         val offset: Int,
-        val file: IrFile?
+        val file: IrFile?,
+        val sourceSetName: String?
     )
 
     private data class Actualization(
@@ -1103,13 +1127,21 @@ class KotlinSemanticCollector(
     private fun finalizeDeclarations() {
         for ((canonicalId, candidates) in declarationCandidates.groupBy { it.canonicalId }) {
             val expected = candidates.firstOrNull { isExpect(it.declaration) }
+                ?: candidates.firstOrNull { candidate ->
+                    isCommonSourceSet(candidate.sourceSetName)
+                        && candidates.any { other -> !isCommonSourceSet(other.sourceSetName) }
+                }
             if (expected != null) {
                 symbols[canonicalId] = expected.symbol.apply {
                     addProperty("id", canonicalId)
+                    if (!isExpect(expected.declaration))
+                        getAsJsonArray("modifiers").add("expect")
                 }
 
-                for (candidate in candidates.filterNot { isExpect(it.declaration) }) {
-                    val actualId = "$canonicalId#actual:${targetName ?: "unknown"}"
+                for (candidate in candidates.filter {
+                    it !== expected && !isCommonSourceSet(it.sourceSetName)
+                }) {
+                    val actualId = "$canonicalId#actual:${candidate.sourceSetName ?: targetName ?: "unknown"}"
                     val actualSymbol = candidate.symbol.deepCopy()
                     actualSymbol.addProperty("id", actualId)
                     actualSymbol.getAsJsonArray("modifiers").add("actual")

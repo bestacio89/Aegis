@@ -534,7 +534,7 @@ class KotlinCompilerIntegrationTests {
             val result = JsonParser.parseString(Files.readString(evidence)).asJsonObject
             val symbols = result.getAsJsonArray("symbols").map { it.asJsonObject }
             val expectId = "kotlin:function:sample.platformName()"
-            val actualId = "$expectId#actual:jvm"
+            val actualId = "$expectId#actual:jvmMain"
             assertTrue(symbols.any {
                 it.get("id").asString == expectId
                     && it.getAsJsonArray("modifiers").any { modifier -> modifier.asString == "expect" }

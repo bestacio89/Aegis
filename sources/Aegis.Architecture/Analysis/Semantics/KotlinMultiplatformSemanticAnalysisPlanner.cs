@@ -48,7 +48,7 @@ public sealed class KotlinMultiplatformSemanticAnalysisPlanner
                 continue;
             }
 
-            if (target.Platform != "JVM" || target.Name != "jvm")
+            if (target.Platform != "JVM")
             {
                 scopes.Add(CreateUnsupportedScope(
                     target,

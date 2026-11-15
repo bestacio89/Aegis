@@ -16,6 +16,7 @@ public static class KotlinSemanticAnalysisServiceCollectionExtensions
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<ISemanticAnalysisAdapter, KotlinSemanticAnalysisAdapter>());
         services.TryAddSingleton<SemanticAnalysisCoordinator>();
+        services.TryAddSingleton<KotlinSemanticAnalysisOrchestrator>();
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<ISemanticAnalysisProjectAnalyzer, KotlinSemanticAnalysisOrchestrator>());
         services.TryAddSingleton<SemanticAnalysisPipeline>();

@@ -76,6 +76,7 @@ public sealed class ArchitectureDependencyInjectionTests
 
         Assert.Equal(["Java", "Kotlin"], analyzers);
         Assert.Equal(["Java", "Kotlin"], pipeline.RegisteredLanguages);
+        Assert.NotNull(provider.GetRequiredService<KotlinSemanticAnalysisOrchestrator>());
         Assert.Contains(provider.GetServices<ISemanticAnalysisAdapter>(), adapter =>
             adapter.Language.Equals("Java", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(provider.GetServices<ISemanticAnalysisAdapter>(), adapter =>

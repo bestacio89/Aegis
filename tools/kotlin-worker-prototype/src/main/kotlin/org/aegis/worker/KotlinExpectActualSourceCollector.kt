@@ -3,7 +3,7 @@ package org.aegis.worker
 import com.google.gson.JsonArray
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
-import com.intellij.openapi.util.Disposer
+import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.CompilerConfiguration
@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.psi.KtTypeAlias
 import java.nio.file.Files
 import java.nio.file.Path
 
+@OptIn(CompilerConfiguration.Internals::class)
 internal class KotlinExpectActualSourceCollector {
     fun reconcile(
         evidence: JsonObject,
@@ -49,7 +50,7 @@ internal class KotlinExpectActualSourceCollector {
         for (actual in actualDeclarations.sortedBy { it.qualifiedName.count { character -> character == '.' } }) {
             val expectedCandidates = expectedDeclarations.filter { expected ->
                 expected.qualifiedName == actual.qualifiedName
-                    && expected.kind == actual.kind
+                    && expected.compilerKinds.intersect(actual.compilerKinds).isNotEmpty()
             }
             val exactMatches = expectedCandidates.filter { it.signature == actual.signature }
             val expected = when {
@@ -190,7 +191,7 @@ internal class KotlinExpectActualSourceCollector {
                 CompilerConfiguration(),
                 EnvironmentConfigFiles.JVM_CONFIG_FILES
             )
-            val factory = KtPsiFactory(environment.project, false)
+            val factory = KtPsiFactory(environment.projectEnvironment.project, false)
             val declarations = mutableListOf<SourceDeclaration>()
 
             for (sourceFile in sourceFiles) {

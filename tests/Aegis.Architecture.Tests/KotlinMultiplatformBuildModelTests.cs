@@ -244,6 +244,53 @@ public sealed class KotlinMultiplatformBuildModelTests
     }
 
     [Fact]
+    public void Detect_models_and_discovers_explicit_kotlin_source_directories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisKmpCustomRoots_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                @"rootProject.name = ""sample""");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    id("org.jetbrains.kotlin.multiplatform") version "2.4.21"
+                }
+                kotlin {
+                    jvm()
+                    sourceSets {
+                        val commonMain by getting {
+                            kotlin.srcDir("src/shared-kotlin")
+                        }
+                    }
+                }
+                """);
+
+            var sourceRoot = Path.Combine(root, "src", "shared-kotlin");
+            var source = Path.Combine(sourceRoot, "sample", "Common.kt");
+            Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+            File.WriteAllText(source, "package sample\nclass Common");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<GradleBuildModel>(module.GradleBuildModel);
+            var multiplatform = Assert.IsType<KotlinMultiplatformBuildModel>(model.KotlinMultiplatform);
+            var commonMain = Assert.Single(multiplatform.SourceSets, sourceSet => sourceSet.Name == "commonMain");
+
+            Assert.Equal([Path.GetFullPath(sourceRoot)], commonMain.KotlinSourceDirectories);
+            Assert.Contains(module.SourceRoots, sourceRootModel =>
+                Path.GetFullPath(sourceRootModel.Directory) == Path.GetFullPath(sourceRoot)
+                && sourceRootModel.Ownership == ProjectSourceRootOwnership.Production
+                && sourceRootModel.ContainsLanguage("Kotlin"));
+            Assert.True(multiplatform.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_classifies_custom_intermediate_source_sets_from_explicit_dependency_paths()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisKmpCustomHierarchy_{Guid.NewGuid():N}");

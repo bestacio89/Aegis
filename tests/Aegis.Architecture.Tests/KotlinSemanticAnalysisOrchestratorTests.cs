@@ -176,6 +176,14 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
                     KotlinLanguageVersion = "2.4",
                     KotlinApiVersion = "2.4",
                     KotlinJvmTarget = "21",
+                    Dependencies =
+                    [
+                        new("commonMainImplementation", "org.example", "common-main", "1.0", null, null, false, false, false, "implementation(common-main)"),
+                        new("jvmMainImplementation", "org.example", "jvm-main", "1.0", null, null, false, false, false, "implementation(jvm-main)"),
+                        new("commonTestImplementation", "org.example", "common-test", "1.0", null, null, false, false, false, "implementation(common-test)"),
+                        new("jvmTestImplementation", "org.example", "jvm-test", "1.0", null, null, false, false, false, "implementation(jvm-test)"),
+                        new("linuxX64MainImplementation", "org.example", "native-main", "1.0", null, null, false, false, false, "implementation(native-main)")
+                    ],
                     KotlinMultiplatform = new KotlinMultiplatformBuildModel
                     {
                         Targets =
@@ -209,14 +217,22 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
                 Modules = [module]
             };
             var adapter = new RecordingKotlinAdapter();
+            var classpathResolver = new RecordingClasspathResolver();
             var orchestrator = new KotlinSemanticAnalysisOrchestrator(
                 [adapter],
-                new EmptyClasspathResolver(),
+                classpathResolver,
                 NullLogger<KotlinSemanticAnalysisOrchestrator>.Instance);
 
             await orchestrator.AnalyzeAsync(context);
 
             Assert.Equal(2, adapter.Requests.Count);
+            Assert.Equal(2, classpathResolver.SelectedConfigurations.Count);
+            Assert.Equal(
+                new[] { "commonMainImplementation", "jvmMainImplementation" },
+                classpathResolver.SelectedConfigurations[0].OrderBy(value => value, StringComparer.Ordinal));
+            Assert.Equal(
+                new[] { "commonMainImplementation", "commonTestImplementation", "jvmMainImplementation", "jvmTestImplementation" },
+                classpathResolver.SelectedConfigurations[1].OrderBy(value => value, StringComparer.Ordinal));
             var production = Assert.Single(adapter.Requests, request => !request.IncludeTestCode);
             var test = Assert.Single(adapter.Requests, request => request.IncludeTestCode);
             Assert.Equal("jvm", production.TargetName);
@@ -434,14 +450,33 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
         }
     }
 
-    private sealed class EmptyClasspathResolver : IJvmClasspathResolver
+    private sealed class RecordingClasspathResolver : IJvmClasspathResolver
     {
+        public List<IReadOnlyList<string>> SelectedConfigurations { get; } = [];
+
         public JvmClasspathResolution Resolve(
             ProjectModuleContext module,
             IReadOnlyCollection<ProjectModuleContext> projectModules,
             bool includeTestCode) =>
             new(Array.Empty<string>(), Array.Empty<string>(), false, true);
+
+        public JvmClasspathResolution Resolve(
+            ProjectModuleContext module,
+            IReadOnlyCollection<ProjectModuleContext> projectModules,
+            IReadOnlyCollection<GradleBuildModel.Dependency> selectedGradleDependencies)
+        {
+            SelectedConfigurations.Add(selectedGradleDependencies
+                .Select(dependency => dependency.Configuration)
+                .OrderBy(configuration => configuration, StringComparer.Ordinal)
+                .ToArray());
+            return new(
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                selectedGradleDependencies.Count > 0,
+                true);
+        }
     }
+
 
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;

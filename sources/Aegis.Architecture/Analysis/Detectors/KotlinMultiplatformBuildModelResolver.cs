@@ -114,13 +114,6 @@ internal static class KotlinMultiplatformBuildModelResolver
                 var (kind, targetName) = GetSourceSetKind(name, targets);
                 sourceSets.Add(new KotlinMultiplatformBuildModel.SourceSet(
                     name, GetOwnership(name), kind, targetName, dependencies, declaration.Value.Trim()));
-                if (kind == "Unknown")
-                {
-                    diagnostics.Add(CreateDiagnostic(
-                        "GradleKotlinMultiplatformSourceSetOwnershipUnknown",
-                        $"Source set '{name}' could not be classified as common, intermediate or target-specific.",
-                        buildFile));
-                }
             }
 
             var directEdges = DirectDependsOnDeclaration.Matches(sourceSetsBlock)
@@ -185,6 +178,32 @@ internal static class KotlinMultiplatformBuildModelResolver
 
             if (useDefaultHierarchy)
                 ApplyDefaultHierarchyTemplate(sourceSets, targets);
+
+            for (var index = 0; index < sourceSets.Count; index++)
+            {
+                var sourceSet = sourceSets[index];
+                if (sourceSet.Kind != "Unknown")
+                    continue;
+
+                var commonSourceSet = sourceSet.Ownership switch
+                {
+                    "Production" => "commonMain",
+                    "Test" => "commonTest",
+                    _ => null
+                };
+                if (commonSourceSet is not null
+                    && sourceSet.DependsOn.Count > 0
+                    && HasDependencyPath(sourceSet.Name, commonSourceSet, sourceSets))
+                {
+                    sourceSets[index] = sourceSet with { Kind = "Intermediate" };
+                    continue;
+                }
+
+                diagnostics.Add(CreateDiagnostic(
+                    "GradleKotlinMultiplatformSourceSetOwnershipUnknown",
+                    $"Source set '{sourceSet.Name}' could not be classified as common, intermediate or target-specific from its dependency graph.",
+                    buildFile));
+            }
 
             if (hasDynamicConfiguration)
             {

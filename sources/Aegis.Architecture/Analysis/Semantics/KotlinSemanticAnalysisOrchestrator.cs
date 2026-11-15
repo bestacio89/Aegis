@@ -231,7 +231,10 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                         targetName: multiplatformScope.TargetName,
                         sourceSetNames: multiplatformScope.ProductionSourceSetNames,
                         sharedSourceRoots: multiplatformScope.ProductionSharedSourceRoots
-                            .Select(root => root.Directory).ToArray()).ConfigureAwait(false);
+                            .Select(root => root.Directory).ToArray(),
+                        selectedGradleDependencies: SelectMultiplatformDependencies(
+                            module, multiplatformScope.ProductionSourceSetNames, includeTestCode: false))
+                        .ConfigureAwait(false);
                 }
                 continue;
             }
@@ -302,7 +305,13 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                         targetName: multiplatformScope.TargetName,
                         sourceSetNames: multiplatformScope.TestSourceSetNames,
                         sharedSourceRoots: multiplatformScope.TestSharedSourceRoots
-                            .Select(root => root.Directory).ToArray()).ConfigureAwait(false);
+                            .Select(root => root.Directory).ToArray(),
+                        selectedGradleDependencies: SelectMultiplatformDependencies(
+                            module,
+                            multiplatformScope.ProductionSourceSetNames
+                                .Concat(multiplatformScope.TestSourceSetNames).Distinct(StringComparer.Ordinal).ToArray(),
+                            includeTestCode: true))
+                        .ConfigureAwait(false);
                 }
                 continue;
             }
@@ -373,6 +382,39 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         }
     }
 
+    private static IReadOnlyCollection<GradleBuildModel.Dependency> SelectMultiplatformDependencies(
+        ProjectModuleContext module,
+        IReadOnlyCollection<string> sourceSetNames,
+        bool includeTestCode)
+    {
+        var model = module.GradleBuildModel;
+        if (model is null || model.KotlinMultiplatform is null)
+            return Array.Empty<GradleBuildModel.Dependency>();
+
+        var selectedSourceSets = sourceSetNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var allSourceSets = model.KotlinMultiplatform.SourceSets
+            .Select(sourceSet => sourceSet.Name)
+            .ToArray();
+
+        return model.Dependencies.Where(dependency =>
+        {
+            var configuration = dependency.Configuration;
+            var owningSourceSet = allSourceSets.FirstOrDefault(name =>
+                configuration.StartsWith(name, StringComparison.OrdinalIgnoreCase));
+            if (owningSourceSet is not null)
+                return selectedSourceSets.Contains(owningSourceSet);
+
+            var normalized = configuration.Replace("-", string.Empty, StringComparison.Ordinal)
+                .Replace("_", string.Empty, StringComparison.Ordinal)
+                .ToLowerInvariant();
+            if (!includeTestCode && normalized.StartsWith("test", StringComparison.Ordinal))
+                return false;
+
+            return normalized is "api" or "implementation" or "compileonly" or "compile" or "provided"
+                || includeTestCode && normalized is "testapi" or "testimplementation" or "testcompileonly" or "testcompile";
+        }).ToArray();
+    }
+
     private static string NormalizeModulePath(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
@@ -387,7 +429,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         AndroidSemanticAnalysisPlanner.Scope? androidScope = null,
         string? targetName = null,
         IReadOnlyCollection<string>? sourceSetNames = null,
-        IReadOnlyCollection<string>? sharedSourceRoots = null)
+        IReadOnlyCollection<string>? sharedSourceRoots = null,
+        IReadOnlyCollection<GradleBuildModel.Dependency>? selectedGradleDependencies = null)
     {
         if (sourceRoots.Count == 0)
             return;
@@ -411,10 +454,12 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             return;
         }
 
-        var classpath = androidScope is null
-            ? _classpathResolver.Resolve(module, context.Modules, includeTestCode)
-            : new JvmClasspathResolution(androidScope.ClasspathEntries, androidScope.UnresolvedDependencies,
-                androidScope.HasDeclaredDependencies, androidScope.IsComplete);
+        var classpath = androidScope is not null
+            ? new JvmClasspathResolution(androidScope.ClasspathEntries, androidScope.UnresolvedDependencies,
+                androidScope.HasDeclaredDependencies, androidScope.IsComplete)
+            : selectedGradleDependencies is not null
+                ? _classpathResolver.Resolve(module, context.Modules, selectedGradleDependencies)
+                : _classpathResolver.Resolve(module, context.Modules, includeTestCode);
         var (compilerVersion, languageVersion, apiVersion, jvmTarget, inferred) =
             ResolveCompilerSettings(module);
         var javaSourceRoots = _sourceRootResolver.ResolveReferencedSourceRoots(

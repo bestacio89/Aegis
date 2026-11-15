@@ -185,6 +185,65 @@ public sealed class KotlinMultiplatformBuildModelTests
     }
 
     [Fact]
+    public void Detect_extracts_dependencies_from_each_kotlin_multiplatform_source_set()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisKmpDependencies_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                @"rootProject.name = ""sample""");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    id("org.jetbrains.kotlin.multiplatform") version "2.4.21"
+                }
+                kotlin {
+                    jvm()
+                    sourceSets {
+                        commonMain.dependencies {
+                            implementation("org.example:common-library:1.2.3")
+                        }
+                        val commonTest by getting {
+                            dependencies {
+                                implementation("org.example:test-library:2.3.4")
+                            }
+                        }
+                        jvmMain.dependencies {
+                            api("org.example:jvm-library:3.4.5")
+                        }
+                    }
+                }
+                """);
+
+            var source = Path.Combine(root, "src", "commonMain", "kotlin", "sample", "Common.kt");
+            Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+            File.WriteAllText(source, "package sample\nclass Common");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var model = Assert.IsType<GradleBuildModel>(Assert.Single(context.Modules).GradleBuildModel);
+            var multiplatform = Assert.IsType<KotlinMultiplatformBuildModel>(model.KotlinMultiplatform);
+
+            Assert.Contains(model.Dependencies, dependency =>
+                dependency.Configuration == "commonMainImplementation"
+                && dependency.Group == "org.example"
+                && dependency.Artifact == "common-library");
+            Assert.Contains(model.Dependencies, dependency =>
+                dependency.Configuration == "commonTestImplementation"
+                && dependency.Group == "org.example"
+                && dependency.Artifact == "test-library");
+            Assert.Contains(model.Dependencies, dependency =>
+                dependency.Configuration == "jvmMainApi"
+                && dependency.Group == "org.example"
+                && dependency.Artifact == "jvm-library");
+            Assert.True(multiplatform.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_classifies_custom_intermediate_source_sets_from_explicit_dependency_paths()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisKmpCustomHierarchy_{Guid.NewGuid():N}");

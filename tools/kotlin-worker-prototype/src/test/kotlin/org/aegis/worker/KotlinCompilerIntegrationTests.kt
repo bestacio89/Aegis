@@ -216,13 +216,7 @@ class KotlinCompilerIntegrationTests {
             assertTrue(Files.exists(evidence), "The IR extension must emit semantic evidence.")
 
             val compilerEvidence = JsonParser.parseString(Files.readString(evidence)).asJsonObject
-            val result = KotlinExpectActualSourceCollector().reconcile(
-                compilerEvidence,
-                listOf(commonSource, jvmSource),
-                listOf(commonSourceRoot),
-                "jvm",
-                false
-            )
+            val result = compilerEvidence
             val symbols = result.getAsJsonArray("symbols").map { it.asJsonObject }
             val relationships = result.getAsJsonArray("relationships").map { it.asJsonObject }
 

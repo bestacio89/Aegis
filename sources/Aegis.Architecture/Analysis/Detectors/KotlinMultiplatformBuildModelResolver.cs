@@ -108,6 +108,31 @@ internal static class KotlinMultiplatformBuildModelResolver
                 }
             }
 
+            // Kotlin Gradle Plugin creates target-specific Main/Test source sets
+            // when a target is declared, even when the build script never accesses them.
+            foreach (var target in targets)
+            {
+                foreach (var (suffix, ownership, commonSourceSet) in new[]
+                         {
+                             ("Main", "Production", "commonMain"),
+                             ("Test", "Test", "commonTest")
+                         })
+                {
+                    var sourceSetName = $"{target.Name}{suffix}";
+                    if (sourceSets.Any(sourceSet => sourceSet.Name.Equals(
+                            sourceSetName, StringComparison.Ordinal)))
+                        continue;
+
+                    sourceSets.Add(new KotlinMultiplatformBuildModel.SourceSet(
+                        sourceSetName,
+                        ownership,
+                        "TargetSpecific",
+                        target.Name,
+                        [commonSourceSet],
+                        $"<implicit:{sourceSetName}>"));
+                }
+            }
+
             if (sourceSets.Count == 0)
             {
                 diagnostics.Add(CreateDiagnostic(

@@ -26,7 +26,7 @@ internal static class KotlinMultiplatformBuildModelResolver
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex DirectDependsOnDeclaration = new(
-        @"\b(?<source>[A-Za-z][A-Za-z0-9_]*)(?:\.get\s*\(\s*\))?\.dependsOn\s*\(\s*(?<target>[A-Za-z][A-Za-z0-9_]*)",
+        @"\b(?<source>[A-Za-z][A-Za-z0-9_]*)(?:\.get\s*\(\s*\))?\.dependsOn\s*\(\s*(?<target>[A-Za-z][A-Za-z0-9_]*)(?:\.get\s*\(\s*\))?",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex SourceSetBlock = new(
@@ -120,25 +120,11 @@ internal static class KotlinMultiplatformBuildModelResolver
                 }
             }
 
-            foreach (var edge in DirectDependsOnDeclaration.Matches(sourceSetsBlock))
-            {
-                var sourceName = edge.Groups["source"].Value;
-                var targetName = edge.Groups["target"].Value;
-                var sourceIndex = sourceSets.FindIndex(sourceSet => sourceSet.Name == sourceName);
-                if (sourceIndex >= 0)
-                {
-                    var sourceSet = sourceSets[sourceIndex];
-                    sourceSets[sourceIndex] = sourceSet with
-                    {
-                        DependsOn = sourceSet.DependsOn
-                            .Append(targetName)
-                            .Distinct(StringComparer.Ordinal)
-                            .ToArray()
-                    };
-                }
-            }
-
-            var hasExplicitEdges = sourceSets.Any(sourceSet => sourceSet.DependsOn.Count > 0);
+            var directEdges = DirectDependsOnDeclaration.Matches(sourceSetsBlock)
+                .Select(edge => (Source: edge.Groups["source"].Value, Target: edge.Groups["target"].Value))
+                .ToArray();
+            var hasExplicitEdges = directEdges.Length > 0
+                || sourceSets.Any(sourceSet => sourceSet.DependsOn.Count > 0);
             var hasCustomIntermediateSets = sourceSets.Any(sourceSet =>
                 sourceSet.Kind == "Intermediate"
                 && sourceSet.Declaration.StartsWith("val ", StringComparison.Ordinal));
@@ -176,6 +162,22 @@ internal static class KotlinMultiplatformBuildModelResolver
                         Array.Empty<string>(),
                         $"<implicit:{sourceSetName}>"));
                 }
+            }
+
+            foreach (var edge in directEdges)
+            {
+                var sourceIndex = sourceSets.FindIndex(sourceSet => sourceSet.Name == edge.Source);
+                if (sourceIndex < 0)
+                    continue;
+
+                var sourceSet = sourceSets[sourceIndex];
+                sourceSets[sourceIndex] = sourceSet with
+                {
+                    DependsOn = sourceSet.DependsOn
+                        .Append(edge.Target)
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray()
+                };
             }
 
             if (useDefaultHierarchy)

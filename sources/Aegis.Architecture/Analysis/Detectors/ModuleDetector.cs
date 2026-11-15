@@ -791,10 +791,10 @@ internal static class ModuleDetector
             return "TestSupport";
         }
 
-        var pathType = DetectModuleTypeFromName(pathName);
-        return pathType != "Unknown"
-            ? pathType
-            : DetectModuleTypeFromName(moduleName.ToLowerInvariant());
+        var manifestType = DetectModuleTypeFromName(moduleName.ToLowerInvariant());
+        return manifestType != "Unknown"
+            ? manifestType
+            : DetectModuleTypeFromName(pathName);
     }
 
     private static string DetectModuleTypeFromName(string name)
@@ -909,11 +909,11 @@ internal static class ModuleDetector
             || normalized.Contains("frontend", StringComparison.Ordinal)
             || normalized.Contains("web", StringComparison.Ordinal)
             || normalized.Contains("compose", StringComparison.Ordinal)
+            || normalized.Contains("ui", StringComparison.Ordinal)
             || normalized.Contains("admin", StringComparison.Ordinal))
             return "Presentation";
 
         if (tokens.Contains("client", StringComparer.Ordinal)
-            || tokens.Contains("ui", StringComparer.Ordinal)
             || normalized.Contains("client", StringComparison.Ordinal)
             || tokens.Contains("ios", StringComparer.Ordinal)
             || normalized.StartsWith("wear", StringComparison.Ordinal)

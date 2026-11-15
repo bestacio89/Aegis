@@ -133,6 +133,58 @@ public sealed class KotlinMultiplatformBuildModelTests
     }
 
     [Fact]
+    public void Detect_preserves_custom_target_names_and_uses_declared_platform_families()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisKmpCustomTargets_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                @"rootProject.name = ""sample""");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    id("org.jetbrains.kotlin.multiplatform") version "2.4.21"
+                }
+                kotlin {
+                    jvm("desktop")
+                    iosArm64("iosDevice")
+                }
+                """);
+
+            var source = Path.Combine(root, "src", "commonMain", "kotlin", "sample", "Common.kt");
+            Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+            File.WriteAllText(source, "package sample\nclass Common");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var module = Assert.Single(context.Modules);
+            var model = Assert.IsType<GradleBuildModel>(module.GradleBuildModel);
+            var multiplatform = Assert.IsType<KotlinMultiplatformBuildModel>(model.KotlinMultiplatform);
+
+            Assert.Contains(multiplatform.Targets, target =>
+                target.Name == "desktop" && target.Platform == "JVM");
+            Assert.Contains(multiplatform.Targets, target =>
+                target.Name == "iosDevice" && target.Platform == "Native");
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "desktopMain"
+                && sourceSet.TargetName == "desktop"
+                && sourceSet.DependsOn.SequenceEqual(["commonMain"]));
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "iosDeviceMain"
+                && sourceSet.TargetName == "iosDevice"
+                && sourceSet.DependsOn.SequenceEqual(["iosMain"]));
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "iosMain"
+                && sourceSet.DependsOn.SequenceEqual(["appleMain"]));
+            Assert.True(multiplatform.IsComplete);
+            Assert.Empty(multiplatform.Diagnostics);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Detect_infers_default_native_and_apple_hierarchy_without_fabricating_direct_edges()
     {
         var root = Path.Combine(Path.GetTempPath(), $"AegisKmpDefaultHierarchy_{Guid.NewGuid():N}");

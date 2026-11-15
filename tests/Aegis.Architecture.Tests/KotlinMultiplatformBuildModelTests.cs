@@ -14,7 +14,7 @@ public sealed class KotlinMultiplatformBuildModelTests
         try
         {
             File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
-                "rootProject.name = \"sample\"");
+                @"rootProject.name = ""sample""");
             File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
                 plugins {
                     id("org.jetbrains.kotlin.multiplatform") version "2.4.21"
@@ -88,7 +88,7 @@ public sealed class KotlinMultiplatformBuildModelTests
         try
         {
             File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
-                "rootProject.name = \"sample\"");
+                @"rootProject.name = ""sample""");
             File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
                 plugins {
                     id("org.jetbrains.kotlin.multiplatform") version "2.4.21"
@@ -131,7 +131,7 @@ public sealed class KotlinMultiplatformBuildModelTests
         try
         {
             File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
-                "rootProject.name = \"sample\"");
+                @"rootProject.name = ""sample""");
             File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
                 plugins {
                     id("org.jetbrains.kotlin.multiplatform") version "2.4.21"

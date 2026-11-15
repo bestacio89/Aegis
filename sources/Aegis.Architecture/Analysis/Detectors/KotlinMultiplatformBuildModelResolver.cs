@@ -10,19 +10,19 @@ namespace Aegis.Architecture.Analysis.Detectors;
 internal static class KotlinMultiplatformBuildModelResolver
 {
     private static readonly Regex TargetDeclaration = new(
-        @"(?m)^\\s*(?<name>jvm|androidTarget|iosArm64|iosSimulatorArm64|iosX64|macosArm64|macosX64|tvosArm64|tvosSimulatorArm64|watchosArm64|watchosSimulatorArm64|linuxX64|linuxArm64|mingwX64|js|wasmJs|wasmWasi)\\s*(?:\\((?<args>[^)]*)\\))?\\s*(?:\\{|$)",
+        @"(?m)^\s*(?<name>jvm|androidTarget|iosArm64|iosSimulatorArm64|iosX64|macosArm64|macosX64|tvosArm64|tvosSimulatorArm64|watchosArm64|watchosSimulatorArm64|linuxX64|linuxArm64|mingwX64|js|wasmJs|wasmWasi)\s*(?:\((?<args>[^)]*)\))?\s*(?:\{|$)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex SourceSetDeclaration = new(
-        @"(?m)^\\s*(?:val\\s+)?(?<name>[A-Za-z][A-Za-z0-9_]*)\\s+by\\s+(?:getting|creating)\\b",
+        @"(?m)^\s*(?:val\s+)?(?<name>[A-Za-z][A-Za-z0-9_]*)\s+by\s+(?:getting|creating)\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex DependsOnDeclaration = new(
-        @"\\bdependsOn\\s*\\(\\s*(?<name>[A-Za-z][A-Za-z0-9_]*)\\s*\\)",
+        @"\bdependsOn\s*\(\s*(?<name>[A-Za-z][A-Za-z0-9_]*)\s*\)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex SourceSetBlock = new(
-        @"\\bsourceSets\\s*\\{",
+        @"\bsourceSets\s*\{",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public static KotlinMultiplatformBuildModel Analyze(string source, string buildFile)
@@ -77,10 +77,16 @@ internal static class KotlinMultiplatformBuildModelResolver
         }
         else
         {
-            foreach (Match declaration in SourceSetDeclaration.Matches(sourceSetsBlock))
+            var declarations = SourceSetDeclaration.Matches(sourceSetsBlock).Cast<Match>().ToArray();
+            for (var index = 0; index < declarations.Length; index++)
             {
+                var declaration = declarations[index];
                 var name = declaration.Groups["name"].Value;
-                var body = ExtractFollowingBlock(sourceSetsBlock, declaration.Index + declaration.Length);
+                var segmentEnd = index + 1 < declarations.Length
+                    ? declarations[index + 1].Index
+                    : sourceSetsBlock.Length;
+                var declarationSegment = sourceSetsBlock[declaration.Index + declaration.Length..segmentEnd];
+                var body = ExtractFollowingBlock(declarationSegment, 0);
                 var dependencies = body is null
                     ? Array.Empty<string>()
                     : DependsOnDeclaration.Matches(body)
@@ -100,7 +106,6 @@ internal static class KotlinMultiplatformBuildModelResolver
             }
         }
 
-        var targetNames = targets.Select(target => target.Name).ToHashSet(StringComparer.Ordinal);
         foreach (var sourceSet in sourceSets)
         {
             foreach (var dependency in sourceSet.DependsOn)
@@ -149,7 +154,7 @@ internal static class KotlinMultiplatformBuildModelResolver
     private static string? ExtractBlock(string source, string blockName)
     {
         var match = Regex.Match(source,
-            $@"\\b{Regex.Escape(blockName)}\\s*\\{{",
+            $@"\b{Regex.Escape(blockName)}\s*\{{",
             RegexOptions.CultureInvariant);
         return match.Success ? ExtractFollowingBlock(source, match.Index + match.Length) : null;
     }

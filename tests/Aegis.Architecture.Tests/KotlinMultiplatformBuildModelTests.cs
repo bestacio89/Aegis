@@ -53,6 +53,7 @@ public sealed class KotlinMultiplatformBuildModelTests
 
             Assert.Equal(new[] { "JVM", "Native", "Native", "JS", "Wasm" },
                 multiplatform.Targets.Select(target => target.Platform).ToArray());
+            Assert.Equal("Manual", multiplatform.HierarchyMode);
             Assert.Equal(13, multiplatform.SourceSets.Count);
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "jvmMain"
@@ -72,7 +73,7 @@ public sealed class KotlinMultiplatformBuildModelTests
                 sourceSet.Name == "iosArm64Main"
                 && sourceSet.Kind == "TargetSpecific"
                 && sourceSet.TargetName == "iosArm64"
-                && sourceSet.DependsOn.SequenceEqual(["commonMain"]));
+                && sourceSet.DependsOn.Count == 0);
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "iosSimulatorArm64Test"
                 && sourceSet.Kind == "TargetSpecific"
@@ -86,6 +87,60 @@ public sealed class KotlinMultiplatformBuildModelTests
                 && sourceSet.Kind == "Common");
             Assert.True(multiplatform.IsComplete);
             Assert.Empty(multiplatform.Diagnostics);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Detect_infers_default_native_and_apple_hierarchy_without_fabricating_direct_edges()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"AegisKmpDefaultHierarchy_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "settings.gradle.kts"),
+                @"rootProject.name = ""sample""");
+            File.WriteAllText(Path.Combine(root, "build.gradle.kts"), """
+                plugins {
+                    id("org.jetbrains.kotlin.multiplatform") version "2.4.21"
+                }
+                kotlin {
+                    iosArm64()
+                    iosSimulatorArm64()
+                    macosArm64()
+                    linuxX64()
+                }
+                """);
+
+            var source = Path.Combine(root, "src", "commonMain", "kotlin", "sample", "Common.kt");
+            Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+            File.WriteAllText(source, "package sample\nclass Common");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+            var model = Assert.IsType<GradleBuildModel>(Assert.Single(context.Modules).GradleBuildModel);
+            var multiplatform = Assert.IsType<KotlinMultiplatformBuildModel>(model.KotlinMultiplatform);
+
+            Assert.Equal("Default", multiplatform.HierarchyMode);
+            Assert.True(multiplatform.IsComplete);
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "iosArm64Main"
+                && sourceSet.DependsOn.SequenceEqual(["iosMain"]));
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "iosMain"
+                && sourceSet.Kind == "Intermediate"
+                && sourceSet.DependsOn.SequenceEqual(["appleMain"]));
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "appleMain"
+                && sourceSet.DependsOn.SequenceEqual(["nativeMain"]));
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "nativeMain"
+                && sourceSet.DependsOn.SequenceEqual(["commonMain"]));
+            Assert.Contains(multiplatform.SourceSets, sourceSet =>
+                sourceSet.Name == "linuxX64Main"
+                && sourceSet.DependsOn.SequenceEqual(["linuxMain"]));
         }
         finally
         {

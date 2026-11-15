@@ -10,15 +10,23 @@ namespace Aegis.Architecture.Analysis.Detectors;
 internal static class KotlinMultiplatformBuildModelResolver
 {
     private static readonly Regex TargetDeclaration = new(
-        @"(?m)^\s*(?<name>jvm|androidTarget|iosArm64|iosSimulatorArm64|iosX64|macosArm64|macosX64|tvosArm64|tvosSimulatorArm64|watchosArm64|watchosSimulatorArm64|linuxX64|linuxArm64|mingwX64|js|wasmJs|wasmWasi)\s*(?:\((?<args>[^)]*)\))?\s*(?:\{|$)",
+        @"(?m)^\s*(?<name>jvm|androidTarget|androidLibrary|iosArm64|iosSimulatorArm64|iosX64|macosArm64|macosX64|tvosArm64|tvosSimulatorArm64|tvosX64|watchosArm32|watchosArm64|watchosX64|watchosSimulatorArm64|watchosSimulatorX64|linuxX64|linuxArm64|mingwX64|js|wasmJs|wasmWasi)\s*(?:\((?<args>[^)]*)\))?\s*(?:\{|$)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex SourceSetDeclaration = new(
         @"(?m)^\s*(?:val\s+)?(?<name>[A-Za-z][A-Za-z0-9_]*)\s+by\s+(?:getting|creating)\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex SourceSetAccessorDeclaration = new(
+        @"(?m)^\s*(?<name>[A-Za-z][A-Za-z0-9_]*(?:Main|Test))\s*\{",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex DependsOnDeclaration = new(
-        @"\bdependsOn\s*\(\s*(?<name>[A-Za-z][A-Za-z0-9_]*)\s*\)",
+        @"\bdependsOn\s*\(\s*(?<name>[A-Za-z][A-Za-z0-9_]*)\s*(?:\.get\s*\(\s*\))?\s*\)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex DirectDependsOnDeclaration = new(
+        @"\b(?<source>[A-Za-z][A-Za-z0-9_]*)(?:\.get\s*\(\s*\))?\.dependsOn\s*\(\s*(?<target>[A-Za-z][A-Za-z0-9_]*)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex SourceSetBlock = new(
@@ -48,7 +56,7 @@ internal static class KotlinMultiplatformBuildModelResolver
                 var platform = name switch
                 {
                     "jvm" => "JVM",
-                    "androidTarget" => "Android",
+                    "androidTarget" or "androidLibrary" => "Android",
                     "js" => "JS",
                     "wasmJs" => "Wasm",
                     "wasmWasi" => "Wasm",
@@ -68,6 +76,11 @@ internal static class KotlinMultiplatformBuildModelResolver
 
         var sourceSetsBlock = ExtractNestedBlock(kotlinBlock, SourceSetBlock);
         var sourceSets = new List<KotlinMultiplatformBuildModel.SourceSet>();
+        var hierarchyMode = "Unknown";
+        var hasDynamicConfiguration = Regex.IsMatch(
+            kotlinBlock,
+            @"\b(?:targets\s*\.|targetPresets\s*\.|register\s*\(|applyHierarchyTemplate\s*\{)",
+            RegexOptions.CultureInvariant);
         if (sourceSetsBlock is null)
         {
             diagnostics.Add(CreateDiagnostic(
@@ -77,7 +90,14 @@ internal static class KotlinMultiplatformBuildModelResolver
         }
         else
         {
-            var declarations = SourceSetDeclaration.Matches(sourceSetsBlock).Cast<Match>().ToArray();
+            var declarations = SourceSetDeclaration.Matches(sourceSetsBlock)
+                .Cast<Match>()
+                .Concat(SourceSetAccessorDeclaration.Matches(sourceSetsBlock).Cast<Match>())
+                .OrderBy(match => match.Index)
+                .GroupBy(match => match.Groups["name"].Value, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .OrderBy(match => match.Index)
+                .ToArray();
             for (var index = 0; index < declarations.Length; index++)
             {
                 var declaration = declarations[index];
@@ -108,8 +128,41 @@ internal static class KotlinMultiplatformBuildModelResolver
                 }
             }
 
-            // Kotlin Gradle Plugin creates target-specific Main/Test source sets
-            // when a target is declared, even when the build script never accesses them.
+            foreach (var edge in DirectDependsOnDeclaration.Matches(sourceSetsBlock))
+            {
+                var sourceName = edge.Groups["source"].Value;
+                var targetName = edge.Groups["target"].Value;
+                var sourceIndex = sourceSets.FindIndex(sourceSet => sourceSet.Name == sourceName);
+                if (sourceIndex >= 0)
+                {
+                    var sourceSet = sourceSets[sourceIndex];
+                    sourceSets[sourceIndex] = sourceSet with
+                    {
+                        DependsOn = sourceSet.DependsOn
+                            .Append(targetName)
+                            .Distinct(StringComparer.Ordinal)
+                            .ToArray()
+                    };
+                }
+            }
+
+            var hasExplicitEdges = sourceSets.Any(sourceSet => sourceSet.DependsOn.Count > 0);
+            var hasCustomIntermediateSets = sourceSets.Any(sourceSet =>
+                sourceSet.Kind == "Intermediate"
+                && sourceSet.Declaration.StartsWith("val ", StringComparison.Ordinal));
+            var explicitlyAppliesDefaultTemplate = Regex.IsMatch(
+                kotlinBlock,
+                @"\bapplyDefaultHierarchyTemplate\s*\(\s*\)",
+                RegexOptions.CultureInvariant);
+            var useDefaultHierarchy = explicitlyAppliesDefaultTemplate
+                || (!hasExplicitEdges && !hasCustomIntermediateSets);
+            hierarchyMode = useDefaultHierarchy ? "Default" : "Manual";
+
+            AddImplicitSourceSet(sourceSets, "commonMain", "Production", "Common", null);
+            AddImplicitSourceSet(sourceSets, "commonTest", "Test", "Common", null);
+
+            // The Kotlin Gradle Plugin creates target-specific Main/Test source sets
+            // for each statically declared target, even when the build script never accesses them.
             foreach (var target in targets)
             {
                 foreach (var (suffix, ownership, commonSourceSet) in new[]
@@ -128,9 +181,20 @@ internal static class KotlinMultiplatformBuildModelResolver
                         ownership,
                         "TargetSpecific",
                         target.Name,
-                        [commonSourceSet],
+                        Array.Empty<string>(),
                         $"<implicit:{sourceSetName}>"));
                 }
+            }
+
+            if (useDefaultHierarchy)
+                ApplyDefaultHierarchyTemplate(sourceSets, targets);
+
+            if (hasDynamicConfiguration)
+            {
+                diagnostics.Add(CreateDiagnostic(
+                    "GradleKotlinMultiplatformDynamicConfigurationNotResolved",
+                    "Kotlin Multiplatform target or hierarchy configuration contains dynamic Gradle expressions that cannot be evaluated safely.",
+                    buildFile));
             }
 
             if (sourceSets.Count == 0)
@@ -223,7 +287,11 @@ internal static class KotlinMultiplatformBuildModelResolver
             Targets = targets,
             SourceSets = sourceSets,
             Diagnostics = diagnostics,
+            HierarchyMode = hierarchyMode,
+            HasDynamicConfiguration = hasDynamicConfiguration,
             IsComplete = diagnostics.Count == 0
+                && hierarchyMode != "Unknown"
+                && !hasDynamicConfiguration
                 && targets.All(target => target.Platform != "Unknown")
                 && sourceSets.All(sourceSet => sourceSet.Kind != "Unknown")
                 && !HasSourceSetCycle(sourceSets)
@@ -237,6 +305,100 @@ internal static class KotlinMultiplatformBuildModelResolver
                         _ => false
                     })
         };
+    }
+
+    private static void AddImplicitSourceSet(
+        ICollection<KotlinMultiplatformBuildModel.SourceSet> sourceSets,
+        string name,
+        string ownership,
+        string kind,
+        string? targetName)
+    {
+        if (sourceSets.Any(sourceSet => sourceSet.Name.Equals(name, StringComparison.Ordinal)))
+            return;
+
+        sourceSets.Add(new KotlinMultiplatformBuildModel.SourceSet(
+            name, ownership, kind, targetName, Array.Empty<string>(), $"<implicit:{name}>"));
+    }
+
+    private static void AddDependency(
+        IList<KotlinMultiplatformBuildModel.SourceSet> sourceSets,
+        string sourceName,
+        string dependencyName)
+    {
+        var index = sourceSets.ToList().FindIndex(sourceSet => sourceSet.Name == sourceName);
+        if (index < 0)
+            return;
+
+        var sourceSet = sourceSets[index];
+        sourceSets[index] = sourceSet with
+        {
+            DependsOn = sourceSet.DependsOn
+                .Append(dependencyName)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray()
+        };
+    }
+
+    private static void ApplyDefaultHierarchyTemplate(
+        IList<KotlinMultiplatformBuildModel.SourceSet> sourceSets,
+        IReadOnlyCollection<KotlinMultiplatformBuildModel.Target> targets)
+    {
+        var nativeTargets = targets.Where(target => target.Platform == "Native").ToArray();
+        if (nativeTargets.Length > 0)
+        {
+            AddImplicitSourceSet(sourceSets, "nativeMain", "Production", "Intermediate", null);
+            AddImplicitSourceSet(sourceSets, "nativeTest", "Test", "Intermediate", null);
+            AddDependency(sourceSets, "nativeMain", "commonMain");
+            AddDependency(sourceSets, "nativeTest", "commonTest");
+        }
+
+        var appleFamilies = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var target in nativeTargets)
+        {
+            var name = target.Name;
+            var family = name.StartsWith("ios", StringComparison.Ordinal) ? "ios"
+                : name.StartsWith("tvos", StringComparison.Ordinal) ? "tvos"
+                : name.StartsWith("watchos", StringComparison.Ordinal) ? "watchos"
+                : name.StartsWith("macos", StringComparison.Ordinal) ? "macos"
+                : name.StartsWith("linux", StringComparison.Ordinal) ? "linux"
+                : name.StartsWith("mingw", StringComparison.Ordinal) ? "mingw"
+                : null;
+            if (family is null)
+                continue;
+
+            AddImplicitSourceSet(sourceSets, $"{family}Main", "Production", "Intermediate", null);
+            AddImplicitSourceSet(sourceSets, $"{family}Test", "Test", "Intermediate", null);
+            if (family is "ios" or "tvos" or "watchos" or "macos")
+                appleFamilies.Add(family);
+            else
+            {
+                AddDependency(sourceSets, $"{family}Main", "nativeMain");
+                AddDependency(sourceSets, $"{family}Test", "nativeTest");
+            }
+
+            AddDependency(sourceSets, $"{name}Main", $"{family}Main");
+            AddDependency(sourceSets, $"{name}Test", $"{family}Test");
+        }
+
+        if (appleFamilies.Count > 0)
+        {
+            AddImplicitSourceSet(sourceSets, "appleMain", "Production", "Intermediate", null);
+            AddImplicitSourceSet(sourceSets, "appleTest", "Test", "Intermediate", null);
+            AddDependency(sourceSets, "appleMain", "nativeMain");
+            AddDependency(sourceSets, "appleTest", "nativeTest");
+            foreach (var family in appleFamilies)
+            {
+                AddDependency(sourceSets, $"{family}Main", "appleMain");
+                AddDependency(sourceSets, $"{family}Test", "appleTest");
+            }
+        }
+
+        foreach (var target in targets.Where(target => target.Platform is "JVM" or "Android" or "JS" or "Wasm"))
+        {
+            AddDependency(sourceSets, $"{target.Name}Main", "commonMain");
+            AddDependency(sourceSets, $"{target.Name}Test", "commonTest");
+        }
     }
 
     private static bool HasDependencyPath(

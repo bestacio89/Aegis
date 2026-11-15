@@ -12,6 +12,12 @@ public sealed class KotlinMultiplatformBuildModel
 
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];
 
+    /// <summary>How the source-set dependency graph was established.</summary>
+    public string HierarchyMode { get; init; } = "Unknown";
+
+    /// <summary>True when relevant Gradle configuration could not be statically interpreted.</summary>
+    public bool HasDynamicConfiguration { get; init; }
+
     public bool IsComplete { get; init; }
 
     public sealed record Target(

@@ -166,6 +166,22 @@ internal static class GradleBuildModelResolver
             }
             var dependencies = ParseDependencies(
                 ExtractBlock(source, "dependencies"), catalog, diagnostics, buildFile);
+            if (plugins.Any(plugin => plugin.IsApplied
+                    && plugin.Id.Equals("org.jetbrains.kotlin.multiplatform", StringComparison.Ordinal)))
+            {
+                foreach (var (sourceSetName, dependencyBlock) in
+                         KotlinMultiplatformBuildModelResolver.ExtractSourceSetDependencyBlocks(source))
+                {
+                    var sourceSetDependencies = ParseDependencies(
+                        dependencyBlock, catalog, diagnostics, buildFile);
+                    dependencies.AddRange(sourceSetDependencies.Select(dependency => dependency with
+                    {
+                        Configuration = sourceSetName
+                            + char.ToUpperInvariant(dependency.Configuration[0])
+                            + dependency.Configuration[1..]
+                    }));
+                }
+            }
             var toolchainMatch = ToolchainVersion.Match(source);
             var toolchain = toolchainMatch.Success ? toolchainMatch.Groups["version"].Value : null;
 

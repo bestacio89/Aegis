@@ -73,16 +73,18 @@ internal class KotlinExpectActualSourceCollector {
             val expectedSymbolCandidates = symbols.filter { symbol ->
                 symbol.stringValue("qualifiedName") == expected.qualifiedName
                     && symbol.intValue("kind") in expected.compilerKinds
-                    && symbol.stringValue("filePath") == expected.filePath
             }
             val locatedCandidates = expectedSymbolCandidates.filter { symbol ->
                 symbol.intValue("startLine") == expected.startLine
                     && symbol.intValue("startColumn") == expected.startColumn
             }
+            val sourceCandidates = expectedSymbolCandidates.filter { symbol ->
+                symbol.stringValue("filePath") == expected.filePath
+            }
             val expectedSymbol = when {
                 locatedCandidates.size == 1 -> locatedCandidates.single().deepCopy()
-                locatedCandidates.isEmpty() && expectedSymbolCandidates.size == 1 ->
-                    expectedSymbolCandidates.single().deepCopy()
+                sourceCandidates.size == 1 -> sourceCandidates.single().deepCopy()
+                expectedSymbolCandidates.size == 1 -> expectedSymbolCandidates.single().deepCopy()
                 else -> {
                     diagnostics.add(createDiagnostic(
                         "KotlinExpectSemanticSymbolNotFound",

@@ -34,6 +34,9 @@ public sealed class GradleBuildModel
     /// <summary>Statically interpreted Android Gradle Plugin configuration; null for non-Android modules.</summary>
     public GradleAndroidBuildModel? Android { get; init; }
 
+    /// <summary>Statically interpreted Kotlin Multiplatform targets and source-set graph.</summary>
+    public KotlinMultiplatformBuildModel? KotlinMultiplatform { get; init; }
+
     public bool KotlinCompilerConfigurationInferred { get; init; }
 
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];

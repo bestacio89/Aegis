@@ -205,8 +205,9 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
                         artifactRoot,
                         result.CompilationOutputDirectory,
                         request.ProviderOptions.TryGetValue("android.variantName", out var androidVariant)
-                            ? androidVariant
-                            : null);
+                            && !string.IsNullOrWhiteSpace(androidVariant)
+                                ? androidVariant
+                                : null);
                 }
                 catch (Exception exception) when (
                     exception is InvalidOperationException

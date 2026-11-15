@@ -105,6 +105,13 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (TryGetUnsupportedTarget(module, out var unsupportedTarget))
+            {
+                context.SemanticAnalysisRuns.Add(CreateUnsupportedTargetRun(module, unsupportedTarget));
+                unsupportedModulePaths.Add(NormalizeModulePath(module.Path));
+                continue;
+            }
+
             if (module.GradleBuildModel?.Android is not null)
             {
                 var androidScopes = _androidPlanner.ResolveScopes(module, context, Language, executionContext);
@@ -114,13 +121,6 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                     .SelectMany(scope => scope.SourceRoots)
                     .DistinctBy(root => root.Directory, PathComparer)
                     .ToArray();
-                continue;
-            }
-
-            if (TryGetUnsupportedTarget(module, out var unsupportedTarget))
-            {
-                context.SemanticAnalysisRuns.Add(CreateUnsupportedTargetRun(module, unsupportedTarget));
-                unsupportedModulePaths.Add(NormalizeModulePath(module.Path));
                 continue;
             }
 
@@ -168,9 +168,11 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             {
                 foreach (var androidScope in androidScopes.Where(scope => !scope.IncludeTestCode))
                 {
+                    var resolvedScope = _androidPlanner.ResolveInputs(
+                        module, context, androidScope, executionContext);
                     await AnalyzeScopeAsync(
-                        module, context, androidScope.SourceRoots, false, false,
-                        executionContext, cancellationToken, androidScope).ConfigureAwait(false);
+                        module, context, resolvedScope.SourceRoots, false, false,
+                        executionContext, cancellationToken, resolvedScope).ConfigureAwait(false);
                 }
                 continue;
             }
@@ -217,9 +219,11 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             {
                 foreach (var androidScope in androidScopes.Where(scope => scope.IncludeTestCode))
                 {
+                    var resolvedScope = _androidPlanner.ResolveInputs(
+                        module, context, androidScope, executionContext);
                     await AnalyzeScopeAsync(
-                        module, context, androidScope.SourceRoots, true, true,
-                        executionContext, cancellationToken, androidScope).ConfigureAwait(false);
+                        module, context, resolvedScope.SourceRoots, true, true,
+                        executionContext, cancellationToken, resolvedScope).ConfigureAwait(false);
                 }
                 continue;
             }

@@ -306,11 +306,12 @@ internal static class KotlinMultiplatformBuildModelResolver
 
     private static string ResolveTargetName(string arguments, string defaultName)
     {
-        var match = Regex.Match(
-            arguments,
-            @"^\s*[\""'](?<name>[^\\"']+)[\\"']\s*(?:,|$)",
-            RegexOptions.CultureInvariant);
-        return match.Success ? match.Groups["name"].Value : defaultName;
+        var value = arguments.TrimStart();
+        if (value.Length < 3 || (value[0] != '"' && value[0] != '\\''))
+            return defaultName;
+
+        var closingQuote = value.IndexOf(value[0], 1);
+        return closingQuote > 1 ? value[1..closingQuote] : defaultName;
     }
 
     private static string GetTargetKind(KotlinMultiplatformBuildModel.Target target)

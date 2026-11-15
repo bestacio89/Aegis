@@ -29,7 +29,7 @@
     "EnforcementByLanguage": {
       "C#": "Strict",
       "Java": "Strict",
-      "Kotlin": "Advisory",
+      "Kotlin": "Strict",
       "Python": "Advisory",
       "TypeScript": "Strict"
     },

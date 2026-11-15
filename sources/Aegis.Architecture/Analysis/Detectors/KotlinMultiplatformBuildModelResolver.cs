@@ -74,21 +74,13 @@ internal static class KotlinMultiplatformBuildModelResolver
             .DistinctBy(target => target.Name, StringComparer.Ordinal)
             .ToList();
 
-        var sourceSetsBlock = ExtractNestedBlock(kotlinBlock, SourceSetBlock);
+        var sourceSetsBlock = ExtractNestedBlock(kotlinBlock, SourceSetBlock) ?? string.Empty;
         var sourceSets = new List<KotlinMultiplatformBuildModel.SourceSet>();
         var hierarchyMode = "Unknown";
         var hasDynamicConfiguration = Regex.IsMatch(
             kotlinBlock,
             @"\b(?:targets\s*\.|targetPresets\s*\.|register\s*\(|applyHierarchyTemplate\s*\{)",
             RegexOptions.CultureInvariant);
-        if (sourceSetsBlock is null)
-        {
-            diagnostics.Add(CreateDiagnostic(
-                "GradleKotlinMultiplatformSourceSetsNotStaticallyResolved",
-                "The Kotlin Multiplatform sourceSets block could not be located statically.",
-                buildFile));
-        }
-        else
         {
             var declarations = SourceSetDeclaration.Matches(sourceSetsBlock)
                 .Cast<Match>()

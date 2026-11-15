@@ -12,10 +12,12 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
 {
     private readonly string _mavenRepository;
     private readonly string _gradleArtifactCache;
+    private readonly AarArtifactExtractor _aarArtifactExtractor;
 
     public LocalJvmClasspathResolver(
         string? mavenRepository = null,
-        string? gradleArtifactCache = null)
+        string? gradleArtifactCache = null,
+        string? aarExtractionCache = null)
     {
         var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _mavenRepository = Path.GetFullPath(
@@ -27,6 +29,7 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
             gradleArtifactCache
             ?? Environment.GetEnvironmentVariable("GRADLE_USER_HOME")
             ?? Path.Combine(userProfile, ".gradle", "caches", "modules-2", "files-2.1"));
+        _aarArtifactExtractor = new AarArtifactExtractor(aarExtractionCache);
         if (Environment.GetEnvironmentVariable("GRADLE_USER_HOME") is { Length: > 0 } gradleHome
             && gradleArtifactCache is null)
         {
@@ -78,13 +81,14 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
 
                 hasDeclaredDependencies = true;
                 var coordinate = $"{dependency.GroupId}:{dependency.ArtifactId}:{dependency.Version ?? "unspecified"}";
-                if (!TryResolveMavenArtifact(dependency, out var artifactPath))
+                if (!TryResolveMavenArtifact(dependency, out var artifactPaths))
                 {
                     unresolved.Add(coordinate);
                     continue;
                 }
 
-                entries.Add(artifactPath);
+                foreach (var artifactPath in artifactPaths)
+                    entries.Add(artifactPath);
             }
         }
 
@@ -136,9 +140,9 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
 
     private bool TryResolveMavenArtifact(
         MavenProjectModel.Dependency dependency,
-        out string artifactPath)
+        out IReadOnlyList<string> artifactPaths)
     {
-        artifactPath = string.Empty;
+        artifactPaths = Array.Empty<string>();
         if (string.IsNullOrWhiteSpace(dependency.Version)
             || dependency.Version.Contains("$" + "{", StringComparison.Ordinal))
             return false;
@@ -149,19 +153,33 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
             fileName += $"-{dependency.Classifier}";
         else if (dependency.Type.Equals("test-jar", StringComparison.OrdinalIgnoreCase))
             fileName += "-tests";
-        fileName += ".jar";
 
+        var isAar = dependency.Type.Equals("aar", StringComparison.OrdinalIgnoreCase);
+        var extension = isAar ? ".aar" : ".jar";
         var path = Path.Combine(
             _mavenRepository,
             groupPath,
             dependency.ArtifactId!,
             dependency.Version,
-            fileName);
+            fileName + extension);
         if (!File.Exists(path))
             return false;
 
-        artifactPath = Path.GetFullPath(path);
-        return true;
+        try
+        {
+            artifactPaths = isAar
+                ? _aarArtifactExtractor.Extract(path)
+                : [Path.GetFullPath(path)];
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is IOException
+            or UnauthorizedAccessException
+            or ArgumentException
+            or NotSupportedException)
+        {
+            return false;
+        }
     }
 
     private bool TryResolveGradleArtifact(
@@ -184,12 +202,15 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
         var prefix = $"{dependency.Artifact}-{dependency.Version}";
         var matches = Directory.EnumerateFiles(
                 versionDirectory,
-                "*.jar",
+                "*.*",
                 SearchOption.AllDirectories)
             .Where(path =>
             {
                 var fileName = Path.GetFileName(path);
-                return fileName.StartsWith(prefix, StringComparison.Ordinal)
+                var extension = Path.GetExtension(fileName);
+                return (extension.Equals(".jar", StringComparison.OrdinalIgnoreCase)
+                        || extension.Equals(".aar", StringComparison.OrdinalIgnoreCase))
+                    && fileName.StartsWith(prefix, StringComparison.Ordinal)
                     && fileName.Length > prefix.Length
                     && fileName[prefix.Length] is '.' or '-'
                     && !fileName.EndsWith("-sources.jar", StringComparison.OrdinalIgnoreCase)
@@ -203,8 +224,29 @@ public sealed class LocalJvmClasspathResolver : IJvmClasspathResolver
         if (matches.Length == 0)
             return false;
 
-        artifactPaths = matches;
-        return true;
+        try
+        {
+            var resolved = new List<string>();
+            foreach (var path in matches)
+            {
+                if (Path.GetExtension(path).Equals(".aar", StringComparison.OrdinalIgnoreCase))
+                    resolved.AddRange(_aarArtifactExtractor.Extract(path));
+                else
+                    resolved.Add(path);
+            }
+
+            artifactPaths = resolved.Distinct(PathComparer).OrderBy(path => path, PathComparer).ToArray();
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is IOException
+            or UnauthorizedAccessException
+            or ArgumentException
+            or NotSupportedException)
+        {
+            artifactPaths = Array.Empty<string>();
+            return false;
+        }
     }
 
     private static bool IsCompileConfiguration(string configuration, bool includeTestCode)

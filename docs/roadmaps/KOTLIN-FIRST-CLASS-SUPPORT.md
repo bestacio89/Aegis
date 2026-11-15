@@ -668,3 +668,19 @@ The accepted test-architecture work validates conventional and explicit Gradle K
 K6 is accepted at exact head `3a050e83bf0c4a6950ca54fbdab356cdf1f6dd5a`. The Kotlin semantic worker, Java semantic worker, WPF build validation and non-WPF quality gates all passed on that exact head.
 
 The production-readiness pass enforces positive, syntactically valid JVM heap settings and positive request timeouts before process launch. Regression tests cover malformed heap values and non-positive timeouts. Packaged worker execution, process supervision, diagnostics and partial-result behavior remain governed by the existing K0–K5 contracts.
+
+
+### K7.5.2.2 — Local JAR/AAR artifact resolution
+
+**Implementation scope:**
+- Extend the existing `LocalJvmClasspathResolver` and `JvmClasspathResolution` path; do not add an Android-only classpath contract.
+- Resolve local Gradle-cache JAR and AAR artifacts and Maven JAR/AAR artifacts from their declared coordinates only.
+- For AARs, expose only `classes.jar` and direct `libs/*.jar` compiler archives. Resources, manifests, native libraries and arbitrary archive entries are not compiler classpath entries.
+- Extract selected nested JARs into a content-addressed host cache. Archive-controlled paths are never used as destination paths.
+- Bound nested archive count and total uncompressed size; reject duplicate compiler entries and malformed archives.
+- Missing, dynamic, inaccessible or malformed artifacts remain unresolved and keep the classpath result partial.
+- No network access, dependency downloads, Gradle/Maven execution, or transitive dependency inference.
+
+**Acceptance tests:** local Gradle AAR resolution, Maven AAR resolution, nested library JAR projection, malformed archive reporting, and archive path traversal resistance. Existing JVM resolver tests remain mandatory.
+
+**Boundary:** This checkpoint resolves declared local artifacts only. It does not assemble project output directories, infer transitive closure, or enable Android semantic analysis; those belong to K7.5.2.3 and K7.5.3 respectively.

@@ -399,8 +399,10 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         return model.Dependencies.Where(dependency =>
         {
             var configuration = dependency.Configuration;
-            var owningSourceSet = allSourceSets.FirstOrDefault(name =>
-                configuration.StartsWith(name, StringComparison.OrdinalIgnoreCase));
+            var owningSourceSet = allSourceSets
+                .Where(name => configuration.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(name => name.Length)
+                .FirstOrDefault();
             if (owningSourceSet is not null)
                 return selectedSourceSets.Contains(owningSourceSet);
 
@@ -411,7 +413,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 return false;
 
             return normalized is "api" or "implementation" or "compileonly" or "compile" or "provided"
-                || includeTestCode && normalized is "testapi" or "testimplementation" or "testcompileonly" or "testcompile";
+                || (includeTestCode
+                    && normalized is "testapi" or "testimplementation" or "testcompileonly" or "testcompile");
         }).ToArray();
     }
 

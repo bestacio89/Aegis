@@ -51,8 +51,8 @@ public sealed class KotlinMultiplatformBuildModelTests
             var model = Assert.IsType<GradleBuildModel>(module.GradleBuildModel);
             var multiplatform = Assert.IsType<KotlinMultiplatformBuildModel>(model.KotlinMultiplatform);
 
-            Assert.Equal(["JVM", "Native", "Native", "JS", "Wasm"],
-                multiplatform.Targets.Select(target => target.Platform));
+            Assert.Equal(new[] { "JVM", "Native", "Native", "JS", "Wasm" },
+                multiplatform.Targets.Select(target => target.Platform).ToArray());
             Assert.Equal(5, multiplatform.SourceSets.Count);
             Assert.Contains(multiplatform.SourceSets, sourceSet =>
                 sourceSet.Name == "jvmMain"

@@ -131,7 +131,7 @@ internal static class LayerDetector
                 context,
                 module,
                 "ModuleLayerHintsAmbiguous",
-                "Multiple project-name layer hints matched with equal authority; the neutral Library layer was applied pending an explicit mapping.");
+                "Multiple project-name layer hints matched with equal authority; a conservative fallback classification was applied pending an explicit mapping.");
             return (ResolveFallbackLayer(module), 0.25);
         }
 
@@ -170,7 +170,7 @@ internal static class LayerDetector
                 context,
                 module,
                 "ModuleLayerHintsAmbiguous",
-                "Multiple source-folder layer hints matched with equal authority; the neutral Library layer was applied pending an explicit mapping.");
+                "Multiple source-folder layer hints matched with equal authority; a conservative fallback classification was applied pending an explicit mapping.");
             return (ResolveFallbackLayer(module), 0.25);
         }
 
@@ -178,7 +178,7 @@ internal static class LayerDetector
             context,
             module,
             "ModuleLayerClassificationFallback",
-            "No project or source-folder convention identified an architectural layer; a neutral Library classification was applied.");
+            "No project or source-folder convention identified an architectural layer; a conservative fallback classification was applied.");
         return (ResolveFallbackLayer(module), 0.35);
     }
 

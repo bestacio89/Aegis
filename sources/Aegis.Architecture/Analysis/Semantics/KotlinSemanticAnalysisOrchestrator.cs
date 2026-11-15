@@ -16,6 +16,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
     private readonly ILogger<KotlinSemanticAnalysisOrchestrator> _logger;
     private readonly JvmSourceRootResolver _sourceRootResolver;
     private readonly AndroidSemanticAnalysisPlanner _androidPlanner;
+    private readonly KotlinMultiplatformSemanticAnalysisPlanner _multiplatformPlanner = new();
 
     private const string KotlinLanguage = "Kotlin";
 
@@ -100,6 +101,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         var sourceRootsByModule = new Dictionary<string, IReadOnlyList<ProjectSourceRoot>>(PathComparer);
         var androidScopesByModule = new Dictionary<string, IReadOnlyList<AndroidSemanticAnalysisPlanner.Scope>>(PathComparer);
         var unsupportedModulePaths = new HashSet<string>(PathComparer);
+        var multiplatformScopesByModule =
+            new Dictionary<string, KotlinMultiplatformSemanticAnalysisPlanner.TargetScope>(PathComparer);
 
         foreach (var module in modules)
         {
@@ -109,6 +112,55 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             {
                 context.SemanticAnalysisRuns.Add(CreateUnsupportedTargetRun(module, unsupportedTarget));
                 unsupportedModulePaths.Add(NormalizeModulePath(module.Path));
+                continue;
+            }
+
+            if (module.GradleBuildModel?.KotlinMultiplatform is not null)
+            {
+                var moduleKey = NormalizeModulePath(module.Path);
+                var allSourceRoots = _sourceRootResolver.ResolveSourceRoots(module, Language);
+                var plan = _multiplatformPlanner.Resolve(module, allSourceRoots);
+                context.DiscoveryDiagnostics.AddRange(plan.Diagnostics);
+
+                foreach (var unsupportedScope in plan.Targets.Where(scope => !scope.IsSupported))
+                {
+                    var diagnostic = unsupportedScope.Diagnostic!;
+                    context.SemanticAnalysisRuns.Add(CreateUnsupportedTargetRun(
+                        module,
+                        (diagnostic.Code, diagnostic.Message),
+                        unsupportedScope.TargetName,
+                        unsupportedScope.SourceSetNames));
+                }
+
+                var supportedScopes = plan.Targets.Where(scope => scope.IsSupported).ToArray();
+                if (supportedScopes.Length != 1)
+                {
+                    if (supportedScopes.Length > 1)
+                    {
+                        context.SemanticAnalysisRuns.Add(CreateUnsupportedTargetRun(
+                            module,
+                            ("KotlinMultiplatformJvmTargetAmbiguous",
+                                "More than one JVM target was resolved for this module. Aegis requires an unambiguous target compilation scope."),
+                            null));
+                    }
+
+                    unsupportedModulePaths.Add(moduleKey);
+                    if (plan.Targets.Count == 0)
+                    {
+                        context.SemanticAnalysisRuns.Add(CreateUnsupportedTargetRun(
+                            module,
+                            ("KotlinMultiplatformTargetsNotResolved",
+                                "The Kotlin Multiplatform model contains no statically resolved compilation targets.")));
+                    }
+                    continue;
+                }
+
+                var scope = supportedScopes[0];
+                multiplatformScopesByModule[moduleKey] = scope;
+                sourceRootsByModule[moduleKey] = scope.ProductionSourceRoots
+                    .Concat(scope.TestSourceRoots)
+                    .DistinctBy(root => root.Directory, PathComparer)
+                    .ToArray();
                 continue;
             }
 
@@ -164,6 +216,24 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
 
             var moduleKey = NormalizeModulePath(module.Path);
             var roots = sourceRootsByModule[moduleKey];
+            if (multiplatformScopesByModule.TryGetValue(moduleKey, out var multiplatformScope))
+            {
+                if (multiplatformScope.ProductionSourceRoots.Count > 0)
+                {
+                    await AnalyzeScopeAsync(
+                        module,
+                        context,
+                        multiplatformScope.ProductionSourceRoots,
+                        includeTestCode: false,
+                        includeTestDependencies: false,
+                        executionContext,
+                        cancellationToken,
+                        targetName: multiplatformScope.TargetName,
+                        sourceSetNames: multiplatformScope.ProductionSourceSetNames).ConfigureAwait(false);
+                }
+                continue;
+            }
+
             if (androidScopesByModule.TryGetValue(moduleKey, out var androidScopes))
             {
                 foreach (var androidScope in androidScopes.Where(scope => !scope.IncludeTestCode))
@@ -215,6 +285,24 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
 
             var moduleKey = NormalizeModulePath(module.Path);
             var roots = sourceRootsByModule[moduleKey];
+            if (multiplatformScopesByModule.TryGetValue(moduleKey, out var multiplatformScope))
+            {
+                if (multiplatformScope.TestSourceRoots.Count > 0)
+                {
+                    await AnalyzeScopeAsync(
+                        module,
+                        context,
+                        multiplatformScope.TestSourceRoots,
+                        includeTestCode: true,
+                        includeTestDependencies: true,
+                        executionContext,
+                        cancellationToken,
+                        targetName: multiplatformScope.TargetName,
+                        sourceSetNames: multiplatformScope.TestSourceSetNames).ConfigureAwait(false);
+                }
+                continue;
+            }
+
             if (androidScopesByModule.TryGetValue(moduleKey, out var androidScopes))
             {
                 foreach (var androidScope in androidScopes.Where(scope => scope.IncludeTestCode))
@@ -292,7 +380,9 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         bool includeTestDependencies,
         SemanticAnalysisExecutionContext? executionContext,
         CancellationToken cancellationToken,
-        AndroidSemanticAnalysisPlanner.Scope? androidScope = null)
+        AndroidSemanticAnalysisPlanner.Scope? androidScope = null,
+        string? targetName = null,
+        IReadOnlyCollection<string>? sourceSetNames = null)
     {
         if (sourceRoots.Count == 0)
             return;
@@ -412,6 +502,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             ClasspathResolutionComplete = classpath.IsComplete,
             InputDiagnostics = androidScope?.Diagnostics ?? Array.Empty<AnalysisDiagnostic>(),
             BuildFiles = module.ProjectFiles.ToArray(),
+            TargetName = targetName,
+            SourceSetNames = sourceSetNames?.ToArray() ?? Array.Empty<string>(),
             RequestedCapabilities = ["symbols", "relationships", "compiler-diagnostics", "jvm-interop"],
             HasDeclaredDependencies = classpath.HasDeclaredDependencies,
             IncludeGeneratedCode = true,
@@ -423,6 +515,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
                 ["kotlin.apiVersion"] = apiVersion,
                 ["kotlin.jvmTarget"] = jvmTarget,
                 ["kotlin.moduleName"] = NormalizeModuleName(module.Name),
+                ["kotlin.target"] = targetName ?? string.Empty,
                 ["kotlin.configurationInferred"] = inferred.ToString(),
                 ["kotlin.compilerPluginsNotExecuted"] = compilerPluginsNotExecuted.ToString(),
                 ["kotlin.composeCompilerPluginEnabled"] = composePluginEnabled.ToString(),
@@ -435,6 +528,9 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         var run = executionContext is null
             ? await _coordinator.AnalyzeAsync(request, cancellationToken).ConfigureAwait(false)
             : await _coordinator.AnalyzeAsync(request, executionContext, cancellationToken).ConfigureAwait(false);
+        if (targetName is not null)
+            run = WithTargetMetadata(run, targetName, sourceSetNames);
+
         context.SemanticAnalysisRuns.Add(run);
 
         _logger.LogInformation(
@@ -447,6 +543,30 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             run.Diagnostics.Count);
     }
 
+
+    private static SemanticAnalysisRun WithTargetMetadata(
+        SemanticAnalysisRun run,
+        string targetName,
+        IReadOnlyCollection<string>? sourceSetNames) =>
+        new()
+        {
+            RunId = run.RunId,
+            Language = run.Language,
+            EngineId = run.EngineId,
+            EngineVersion = run.EngineVersion,
+            ProjectPath = run.ProjectPath,
+            TargetName = targetName,
+            SourceSetNames = sourceSetNames?.ToList() ?? [],
+            Status = run.Status,
+            StartedAtUtc = run.StartedAtUtc,
+            CompletedAtUtc = run.CompletedAtUtc,
+            AnalyzedFileCount = run.AnalyzedFileCount,
+            SkippedFileCount = run.SkippedFileCount,
+            Capabilities = run.Capabilities,
+            Symbols = run.Symbols,
+            Relationships = run.Relationships,
+            Diagnostics = run.Diagnostics
+        };
 
     private static bool TryGetUnsupportedTarget(
         ProjectModuleContext module,
@@ -463,6 +583,7 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             return true;
         }
         var androidPluginWithoutModel = module.GradleBuildModel?.Android is null
+            && module.GradleBuildModel?.KotlinMultiplatform is null
             ? plugins.FirstOrDefault(plugin => plugin.IsApplied
                 && (plugin.Id.StartsWith("com.android.", StringComparison.Ordinal)
                     || plugin.Id is "org.jetbrains.kotlin.android" or "kotlin-android"))
@@ -475,7 +596,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
         }
         var unsupportedPlugin = plugins.FirstOrDefault(plugin =>
             plugin.IsApplied
-            && (plugin.Id.Equals("org.jetbrains.kotlin.multiplatform", StringComparison.Ordinal)
+            && ((plugin.Id.Equals("org.jetbrains.kotlin.multiplatform", StringComparison.Ordinal)
+                    && module.GradleBuildModel?.KotlinMultiplatform is null)
             || plugin.Id.Equals("org.jetbrains.kotlin.js", StringComparison.Ordinal)
             || plugin.Id.StartsWith("org.jetbrains.kotlin.native", StringComparison.Ordinal)
             || plugin.Id.StartsWith("org.jetbrains.kotlin.wasm", StringComparison.Ordinal)));
@@ -509,7 +631,9 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
 
     private static SemanticAnalysisRun CreateUnsupportedTargetRun(
         ProjectModuleContext module,
-        (string Code, string Message) unsupportedTarget)
+        (string Code, string Message) unsupportedTarget,
+        string? targetName = null,
+        IReadOnlyCollection<string>? sourceSetNames = null)
     {
         var now = DateTimeOffset.UtcNow;
         return new SemanticAnalysisRun
@@ -518,6 +642,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             Language = KotlinLanguage,
             EngineId = nameof(KotlinSemanticAnalysisOrchestrator),
             ProjectPath = module.Path,
+            TargetName = targetName,
+            SourceSetNames = sourceSetNames?.ToList() ?? [],
             Status = SemanticAnalysisStatus.Unsupported,
             StartedAtUtc = now,
             CompletedAtUtc = now,

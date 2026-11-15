@@ -122,6 +122,118 @@ public sealed class KotlinSemanticAnalysisOrchestratorTests
         }
     }
 
+    [Fact]
+    public async Task Executes_only_the_jvm_source_set_closure_and_reports_other_targets_individually()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(repository);
+        var sourceSets = new[]
+        {
+            ("commonMain", ProjectSourceRootOwnership.Production),
+            ("jvmMain", ProjectSourceRootOwnership.Production),
+            ("commonTest", ProjectSourceRootOwnership.Test),
+            ("jvmTest", ProjectSourceRootOwnership.Test),
+            ("nativeMain", ProjectSourceRootOwnership.Production),
+            ("linuxMain", ProjectSourceRootOwnership.Production),
+            ("linuxX64Main", ProjectSourceRootOwnership.Production),
+            ("nativeTest", ProjectSourceRootOwnership.Test),
+            ("linuxTest", ProjectSourceRootOwnership.Test),
+            ("linuxX64Test", ProjectSourceRootOwnership.Test)
+        };
+        var roots = new List<ProjectSourceRoot>();
+        foreach (var (name, ownership) in sourceSets)
+        {
+            var directory = Path.Combine(repository, "src", name, "kotlin");
+            Directory.CreateDirectory(directory);
+            var sourceFile = Path.Combine(directory, $"{name}.kt");
+            await File.WriteAllTextAsync(sourceFile, $"package sample\nclass {name.Replace("Main", "MainType").Replace("Test", "TestType")}");
+            roots.Add(new ProjectSourceRoot
+            {
+                Directory = directory,
+                Ownership = ownership,
+                Origin = ProjectSourceRootOrigin.Conventional,
+                Languages = ["Kotlin"]
+            });
+        }
+
+        try
+        {
+            var module = new ProjectModuleContext
+            {
+                Name = "shared",
+                Path = repository,
+                BuildSystem = ArchitectureBuildSystem.Gradle,
+                Languages = ["Kotlin"],
+                SourceRoots = roots,
+                GradleBuildModel = new GradleBuildModel
+                {
+                    Plugins = [new GradleBuildModel.Plugin("org.jetbrains.kotlin.multiplatform", "2.4.21", true)],
+                    KotlinPluginVersion = "2.4.21",
+                    KotlinLanguageVersion = "2.4",
+                    KotlinApiVersion = "2.4",
+                    KotlinJvmTarget = "21",
+                    KotlinMultiplatform = new KotlinMultiplatformBuildModel
+                    {
+                        Targets =
+                        [
+                            new KotlinMultiplatformBuildModel.Target("jvm", "JVM", "jvm()"),
+                            new KotlinMultiplatformBuildModel.Target("linuxX64", "Native", "linuxX64()")
+                        ],
+                        SourceSets =
+                        [
+                            new("commonMain", "Production", "Common", null, [], "<implicit:commonMain>"),
+                            new("commonTest", "Test", "Common", null, [], "<implicit:commonTest>"),
+                            new("jvmMain", "Production", "TargetSpecific", "jvm", ["commonMain"], "jvmMain"),
+                            new("jvmTest", "Test", "TargetSpecific", "jvm", ["commonTest"], "jvmTest"),
+                            new("nativeMain", "Production", "Intermediate", null, ["commonMain"], "<implicit:nativeMain>"),
+                            new("linuxMain", "Production", "Intermediate", null, ["nativeMain"], "<implicit:linuxMain>"),
+                            new("linuxX64Main", "Production", "TargetSpecific", "linuxX64", ["linuxMain"], "<implicit:linuxX64Main>"),
+                            new("nativeTest", "Test", "Intermediate", null, ["commonTest"], "<implicit:nativeTest>"),
+                            new("linuxTest", "Test", "Intermediate", null, ["nativeTest"], "<implicit:linuxTest>"),
+                            new("linuxX64Test", "Test", "TargetSpecific", "linuxX64", ["linuxTest"], "<implicit:linuxX64Test>")
+                        ],
+                        IsComplete = true,
+                        HierarchyMode = "Default"
+                    }
+                }
+            };
+            var context = new ProjectArchitectureContext
+            {
+                ProjectName = "shared",
+                RootPath = repository,
+                Language = "Kotlin",
+                Modules = [module]
+            };
+            var adapter = new RecordingKotlinAdapter();
+            var orchestrator = new KotlinSemanticAnalysisOrchestrator(
+                [adapter],
+                new EmptyClasspathResolver(),
+                NullLogger<KotlinSemanticAnalysisOrchestrator>.Instance);
+
+            await orchestrator.AnalyzeAsync(context);
+
+            Assert.Equal(2, adapter.Requests.Count);
+            var production = Assert.Single(adapter.Requests, request => !request.IncludeTestCode);
+            var test = Assert.Single(adapter.Requests, request => request.IncludeTestCode);
+            Assert.Equal("jvm", production.TargetName);
+            Assert.Equal("jvm", test.TargetName);
+            Assert.Equal(new[] { "commonMain", "jvmMain" }, production.SourceSetNames);
+            Assert.Equal(new[] { "commonTest", "jvmTest" }, test.SourceSetNames);
+            Assert.All(production.SourceRoots, root => Assert.DoesNotContain("linux", root, StringComparison.OrdinalIgnoreCase));
+            Assert.All(test.SourceRoots, root => Assert.DoesNotContain("linux", root, StringComparison.OrdinalIgnoreCase));
+
+            var nativeRun = Assert.Single(context.SemanticAnalysisRuns, run => run.TargetName == "linuxX64");
+            Assert.Equal(SemanticAnalysisStatus.Unsupported, nativeRun.Status);
+            Assert.Contains(nativeRun.Diagnostics, diagnostic =>
+                diagnostic.Code == "KotlinMultiplatformTargetBackendNotSupported"
+                && diagnostic.AffectsCoverage);
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("com.android.application")]
     [InlineData("com.android.library")]

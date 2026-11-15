@@ -240,6 +240,8 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
             EngineId = run.EngineId,
             EngineVersion = run.EngineVersion,
             ProjectPath = run.ProjectPath,
+            TargetName = request.TargetName,
+            SourceSetNames = request.SourceSetNames.ToList(),
             Status = status,
             StartedAtUtc = run.StartedAtUtc,
             CompletedAtUtc = run.CompletedAtUtc,

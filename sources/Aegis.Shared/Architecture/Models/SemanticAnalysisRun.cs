@@ -19,6 +19,12 @@ public sealed class SemanticAnalysisRun
 
     public string ProjectPath { get; init; } = string.Empty;
 
+    /// <summary>Build target whose compiler configuration scopes this semantic run.</summary>
+    public string? TargetName { get; init; }
+
+    /// <summary>Source sets included in this target-scoped compilation.</summary>
+    public List<string> SourceSetNames { get; init; } = [];
+
     public SemanticAnalysisStatus Status { get; init; }
 
     public DateTimeOffset? StartedAtUtc { get; init; }

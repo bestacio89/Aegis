@@ -16,6 +16,12 @@ public sealed class SemanticAnalysisRequest
 
     public string ModuleName { get; init; } = string.Empty;
 
+    /// <summary>Build target whose compiler configuration scopes this semantic run.</summary>
+    public string? TargetName { get; init; }
+
+    /// <summary>Source sets included in this target-scoped compilation.</summary>
+    public IReadOnlyList<string> SourceSetNames { get; init; } = Array.Empty<string>();
+
     public string BuildSystem { get; init; } = string.Empty;
 
     public IReadOnlyList<string> SourceFiles { get; init; } = Array.Empty<string>();

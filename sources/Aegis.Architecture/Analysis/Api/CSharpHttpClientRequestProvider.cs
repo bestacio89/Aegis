@@ -58,7 +58,7 @@ public sealed class CSharpHttpClientRequestProvider
 
                 var methodName = memberAccess.Name.Identifier.ValueText;
                 var receiver = memberAccess.Expression;
-                if (!IsHttpClientReceiver(receiver, root, aliases))
+                if (!IsHttpClientReceiver(receiver, invocation, root, aliases))
                     continue;
 
                 string? httpMethod;
@@ -124,9 +124,11 @@ public sealed class CSharpHttpClientRequestProvider
 
     private static IReadOnlySet<string> GetHttpClientAliases(CompilationUnitSyntax root)
     {
-        var aliases = new HashSet<string>(StringComparer.Ordinal) { "HttpClient" };
+        var aliases = new HashSet<string>(StringComparer.Ordinal);
         foreach (var directive in root.Usings)
         {
+            if (directive.Alias is null && directive.Name?.ToString() == "System.Net.Http")
+                aliases.Add("HttpClient");
             if (directive.Alias is not null
                 && directive.Name?.ToString() == "System.Net.Http.HttpClient")
                 aliases.Add(directive.Alias.Name.Identifier.ValueText);
@@ -137,17 +139,18 @@ public sealed class CSharpHttpClientRequestProvider
 
     private static bool IsHttpClientReceiver(
         ExpressionSyntax receiver,
+        InvocationExpressionSyntax invocation,
         CompilationUnitSyntax root,
         IReadOnlySet<string> aliases)
     {
         if (receiver is ParenthesizedExpressionSyntax parenthesized)
-            return IsHttpClientReceiver(parenthesized.Expression, root, aliases);
+            return IsHttpClientReceiver(parenthesized.Expression, invocation, root, aliases);
 
         if (receiver is ObjectCreationExpressionSyntax creation)
             return IsHttpClientType(creation.Type.ToString(), aliases);
 
         if (receiver is ImplicitObjectCreationExpressionSyntax implicitCreation)
-            return FindDeclaredType(implicitCreation, root, aliases);
+            return FindDeclaredType(implicitCreation, invocation, root, aliases);
 
         var name = receiver switch
         {
@@ -156,7 +159,7 @@ public sealed class CSharpHttpClientRequestProvider
             _ => null
         };
 
-        return name is not null && FindDeclaredType(receiver, root, aliases);
+        return name is not null && FindDeclaredType(receiver, invocation, root, aliases);
     }
 
     private static bool FindDeclaredType(
@@ -177,7 +180,10 @@ public sealed class CSharpHttpClientRequestProvider
         {
             switch (declaration)
             {
-                case VariableDeclaratorSyntax variable when variable.Identifier.ValueText == name:
+                case VariableDeclaratorSyntax variable when variable.Identifier.ValueText == name
+                    && variable.SpanStart < invocation.SpanStart
+                    && variable.Ancestors().OfType<BlockSyntax>().FirstOrDefault() is { } localScope
+                    && invocation.Ancestors().Contains(localScope):
                     if (variable.Parent is VariableDeclarationSyntax variables
                         && variables.Type is not null
                         && IsHttpClientType(variables.Type.ToString(), aliases))
@@ -189,12 +195,16 @@ public sealed class CSharpHttpClientRequestProvider
                         return false;
                     break;
 
-                case ParameterSyntax parameter when parameter.Identifier.ValueText == name:
+                case ParameterSyntax parameter when parameter.Identifier.ValueText == name
+                    && parameter.Ancestors().FirstOrDefault(ancestor => ancestor is BaseMethodDeclarationSyntax or LocalFunctionStatementSyntax) is { } parameterOwner
+                    && invocation.Ancestors().Contains(parameterOwner):
                     if (IsHttpClientType(parameter.Type?.ToString(), aliases))
                         return true;
                     break;
 
-                case PropertyDeclarationSyntax property when property.Identifier.ValueText == name:
+                case PropertyDeclarationSyntax property when property.Identifier.ValueText == name
+                    && property.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault() is { } propertyOwner
+                    && invocation.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault() == propertyOwner:
                     if (IsHttpClientType(property.Type.ToString(), aliases))
                         return true;
                     if (property.Initializer?.Value is ObjectCreationExpressionSyntax propertyCreation
@@ -203,7 +213,9 @@ public sealed class CSharpHttpClientRequestProvider
                     break;
 
                 case FieldDeclarationSyntax field when field.Declaration.Variables.Any(
-                    variable => variable.Identifier.ValueText == name):
+                    variable => variable.Identifier.ValueText == name)
+                    && field.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault() is { } fieldOwner
+                    && invocation.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault() == fieldOwner:
                     if (IsHttpClientType(field.Declaration.Type.ToString(), aliases))
                         return true;
                     break;

@@ -105,6 +105,32 @@ public sealed class CSharpHttpClientRequestProviderTests
         Assert.Contains("HttpRequestMessage", string.Join(" ", evidence.ResolutionEvidence));
     }
 
+
+    [Fact]
+    public void DoesNotTreatAUserDefinedHttpClientTypeAsSystemNetHttpClient()
+    {
+        using var fixture = new CSharpFixture(
+            """
+            public sealed class HttpClient
+            {
+                public Task GetAsync(string uri) => Task.CompletedTask;
+            }
+
+            public sealed class Consumer
+            {
+                private readonly HttpClient _client = new();
+
+                public Task Read() => _client.GetAsync("/not-system-net-http");
+            }
+            """);
+
+        var evidence = new CSharpHttpClientRequestProvider().Discover(
+            [fixture.SourcePath],
+            fixture.ModulePath);
+
+        Assert.Empty(evidence);
+    }
+
     private sealed class CSharpFixture : IDisposable
     {
         private readonly string _directory = Path.Combine(

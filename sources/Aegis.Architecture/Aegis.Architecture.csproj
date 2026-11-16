@@ -77,6 +77,7 @@
 
     <ItemGroup>
       <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerEntryPoint)" />
+      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\\server-api-endpoint-analyzer.mjs" />
       <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\package.json" />
       <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\package-lock.json" />
       <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\node_modules\**\*" />

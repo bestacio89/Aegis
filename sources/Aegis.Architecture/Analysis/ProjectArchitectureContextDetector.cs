@@ -281,12 +281,12 @@ public static class ProjectArchitectureContextDetector
         ProjectArchitectureContext context,
         IReadOnlyCollection<string> files)
     {
-        var provider = new Aegis.Architecture.Analysis.Api.CSharpAspNetEndpointProvider();
         var evidence = new List<ApiEndpointEvidence>();
+        var csharpProvider = new Aegis.Architecture.Analysis.Api.CSharpAspNetEndpointProvider();
+        var typeScriptProvider = new Aegis.Architecture.Analysis.Api.TypeScriptServerApiEndpointProvider();
 
         foreach (var module in context.Modules.Where(module =>
-                     module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase)
-                     && !string.IsNullOrWhiteSpace(module.Path)))
+                     !string.IsNullOrWhiteSpace(module.Path)))
         {
             var modulePath = Path.GetFullPath(module.Path);
             var moduleFiles = files.Where(file =>
@@ -295,12 +295,28 @@ public static class ProjectArchitectureContextDetector
                 return !Path.IsPathRooted(relative)
                     && relative != ".."
                     && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
-                    && string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase);
+                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
             }).ToArray();
 
-            if (moduleFiles.Length > 0)
-                evidence.AddRange(provider.Discover(moduleFiles, modulePath));
+            if (module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase))
+            {
+                var csharpFiles = moduleFiles.Where(file =>
+                    string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase));
+                evidence.AddRange(csharpProvider.Discover(csharpFiles, modulePath));
+            }
+
+            if (module.Languages.Any(language =>
+                    language.Equals("TypeScript", StringComparison.OrdinalIgnoreCase)
+                    || language.Equals("JavaScript", StringComparison.OrdinalIgnoreCase)))
+            {
+                var scriptFiles = moduleFiles.Where(file =>
+                    Path.GetExtension(file).ToLowerInvariant() is
+                        ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs" or ".cjs");
+                evidence.AddRange(typeScriptProvider.Discover(
+                    modulePath,
+                    scriptFiles,
+                    context.DiscoveryDiagnostics));
+            }
         }
 
         context.ServerApiEndpointDiscoveryRegistry =

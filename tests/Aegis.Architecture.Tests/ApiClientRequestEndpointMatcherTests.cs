@@ -144,6 +144,39 @@ public sealed class ApiClientRequestEndpointMatcherTests
     }
 
     [Fact]
+    public void Match_does_not_root_path_relative_request_uris_without_a_base_address()
+    {
+        var relativeRequest = CreateRequest(
+            httpMethod: "GET",
+            requestUriExpression: "\"orders/42\"");
+        var rootRelativeRequest = CreateRequest(
+            httpMethod: "GET",
+            requestUriExpression: "\"/orders/42\"");
+        var endpoint = CreateEndpoint("/orders/{id}", ["GET"]);
+
+        var results = Match([relativeRequest, rootRelativeRequest], [endpoint]).Matches;
+
+        Assert.Equal(ApiClientRequestEndpointMatchStatus.Unresolved, results[0].Status);
+        Assert.Empty(results[0].Candidates);
+        Assert.Equal(ApiClientRequestEndpointMatchStatus.UniqueCandidate, results[1].Status);
+        Assert.Equal(ApiClientRequestEndpointMatchKind.RouteTemplate, Assert.Single(results[1].Candidates).MatchKind);
+    }
+
+    [Fact]
+    public void Match_keeps_query_only_request_targets_unresolved()
+    {
+        var request = CreateRequest(
+            httpMethod: "GET",
+            requestUriExpression: "\"?include=items\"");
+        var endpoint = CreateEndpoint("/api/orders", ["GET"]);
+
+        var result = Match([request], [endpoint]).Matches.Single();
+
+        Assert.Equal(ApiClientRequestEndpointMatchStatus.Unresolved, result.Status);
+        Assert.Empty(result.Candidates);
+    }
+
+    [Fact]
     public void Match_does_not_correlate_absolute_uris_without_endpoint_host_identity()
     {
         var request = CreateRequest(

@@ -15,10 +15,12 @@ Recognized constructs:
 - action-level HttpGet, HttpPost, HttpPut, HttpDelete, HttpPatch, HttpHead, and HttpOptions attributes;
 - literal Minimal API MapGet, MapPost, MapPut, MapDelete, MapPatch, MapHead, and MapOptions declarations;
 - MapMethods when its HTTP method collection is a literal collection expression or array initializer;
-- nested MapGroup prefixes, including chained group expressions.
+- nested MapGroup prefixes, including chained group expressions;
+- MVC MapControllerRoute and MapAreaRoute declarations with positional or named literal patterns;
+- MapDefaultControllerRoute with its framework-defined default pattern.
 
 Controller tokens such as [controller] remain partially resolved. Non-literal route expressions and non-literal MapMethods collections remain explicitly unresolved/partially resolved; the provider does not execute application code or infer configuration values.
 
 ## Known coverage limits
 
-This remains an incremental Phase 7 implementation, not Phase 7 completion. Java Spring MVC/WebFlux, Kotlin Spring MVC/WebFlux/Ktor, TypeScript/JavaScript Express/NestJS providers, convention-based MVC routes, semantic handler binding, and framework-specific route conventions remain outstanding. The existing API consistency evaluator is unchanged. API client discovery and matching remain separate phases.
+This remains an incremental Phase 7 implementation, not Phase 7 completion. Java Spring MVC/WebFlux, Kotlin Spring MVC/WebFlux/Ktor, TypeScript/JavaScript Express/NestJS providers, semantic handler binding, and additional framework-specific route conventions remain outstanding. The existing API consistency evaluator is unchanged. API client discovery and matching remain separate phases.

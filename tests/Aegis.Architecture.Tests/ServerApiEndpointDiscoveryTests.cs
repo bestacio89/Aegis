@@ -112,6 +112,39 @@ public sealed class ServerApiEndpointDiscoveryTests
     }
 
     [Fact]
+    public void DiscoversConventionalControllerRoutesWithNamedAndPositionalPatterns()
+    {
+        using var fixture = new SourceFixture("""
+            app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
+            app.MapAreaRoute("admin", "Admin", "admin/{controller=Dashboard}/{action=Index}/{id?}");
+            app.MapDefaultControllerRoute();
+            """);
+
+        var endpoints = new CSharpAspNetEndpointProvider().Discover([fixture.FilePath], fixture.ModulePath);
+        Assert.Equal(3, endpoints.Count);
+        Assert.Contains(endpoints, endpoint => endpoint.HandlerIdentity == "mvc-conventional-route:MapControllerRoute"
+            && endpoint.RouteTemplate == "{controller=Home}/{action=Index}/{id?}"
+            && endpoint.ResolutionStatus == ApiEndpointResolutionStatus.Resolved);
+        Assert.Contains(endpoints, endpoint => endpoint.RouteTemplate == "admin/{controller=Dashboard}/{action=Index}/{id?}");
+        Assert.Contains(endpoints, endpoint => endpoint.RouteTemplate == "{controller=Home}/{action=Index}/{id?}"
+            && endpoint.RouteCompositionEvidence.Contains("ASP.NET Core default controller route convention"));
+    }
+
+    [Fact]
+    public void RetainsDynamicConventionalRoutePatterns()
+    {
+        using var fixture = new SourceFixture("""
+            var pattern = configuration["RoutePattern"];
+            app.MapControllerRoute("default", pattern);
+            """);
+
+        var endpoint = Assert.Single(new CSharpAspNetEndpointProvider().Discover([fixture.FilePath], fixture.ModulePath));
+        Assert.Equal("pattern", endpoint.RouteTemplate);
+        Assert.Equal(ApiEndpointResolutionStatus.Dynamic, endpoint.ResolutionStatus);
+        Assert.Contains("app.MapControllerRoute(\"default\", pattern)", endpoint.DeclarationEvidence, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RegistryPreservesDuplicateRoutesAndUnresolvedEvidence()
     {
         var first = new ApiEndpointEvidence { EvidenceId = "first", ModulePath = "/repo/api", RouteTemplate = "/orders", HttpMethods = ["GET"], ResolutionStatus = ApiEndpointResolutionStatus.Resolved };

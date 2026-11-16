@@ -33,6 +33,7 @@ public sealed class CSharpAspNetEndpointProvider
             var root = CSharpSyntaxTree.ParseText(File.ReadAllText(sourceFile), path: sourceFile).GetCompilationUnitRoot();
             DiscoverControllerActions(root, sourceFile, module, results);
             DiscoverMinimalApiMappings(root, sourceFile, module, results);
+            DiscoverConventionalControllerRoutes(root, sourceFile, module, results);
         }
 
         return Array.AsReadOnly(results.ToArray());
@@ -109,6 +110,48 @@ public sealed class CSharpAspNetEndpointProvider
             results.Add(CreateEvidence(sourceFile, modulePath, invocation, handler, methods,
                 CombineRoutes(prefix.Value, route.Value), status, composition, invocation.ToString()));
         }
+    }
+
+    private static void DiscoverConventionalControllerRoutes(
+        CompilationUnitSyntax root, string sourceFile, string modulePath, ICollection<ApiEndpointEvidence> results)
+    {
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            var name = GetMethodName(invocation);
+            if (name is not ("MapControllerRoute" or "MapAreaRoute" or "MapDefaultControllerRoute"))
+                continue;
+
+            RouteValue route;
+            if (name == "MapDefaultControllerRoute")
+            {
+                route = new RouteValue("{controller=Home}/{action=Index}/{id?}",
+                    ApiEndpointResolutionStatus.Resolved, ["ASP.NET Core default controller route convention"]);
+            }
+            else
+            {
+                var patternIndex = name == "MapAreaRoute" ? 2 : 1;
+                var argument = FindArgument(invocation, "pattern", patternIndex);
+                route = argument is null
+                    ? RouteValue.Dynamic
+                    : ReadString(argument.Expression);
+            }
+
+            var evidence = route.Evidence.Append("ASP.NET Core MVC conventional route declaration");
+            results.Add(CreateEvidence(sourceFile, modulePath, invocation,
+                "mvc-conventional-route:" + name, Array.Empty<string>(), route.Value,
+                route.Status, evidence, invocation.ToString()));
+        }
+    }
+
+    private static ArgumentSyntax? FindArgument(
+        InvocationExpressionSyntax invocation, string parameterName, int positionalIndex)
+    {
+        var named = invocation.ArgumentList.Arguments.FirstOrDefault(argument =>
+            argument.NameColon?.Name.Identifier.ValueText.Equals(parameterName, StringComparison.Ordinal) == true);
+        return named ?? invocation.ArgumentList.Arguments
+            .Where(argument => argument.NameColon is null)
+            .Skip(positionalIndex)
+            .FirstOrDefault();
     }
 
     private static RouteValue ResolveGroupPrefix(

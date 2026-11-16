@@ -101,7 +101,7 @@ public sealed class SemanticRelationshipEvidenceRegistryTests
         Assert.NotSame(first, second);
         Assert.Equal("duplicate", first!.Relationship.Id);
         Assert.Equal("duplicate", second!.Relationship.Id);
-        Assert.Null(missingId!.Relationship.Id);
+        Assert.Equal(string.Empty, missingId!.Relationship.Id);
         Assert.False(registry.TryGet("1:0", out _));
     }
 

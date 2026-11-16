@@ -456,12 +456,13 @@ internal static class SemanticArchitectureComponentDetector
                         externalSymbol.QualifiedName)
                     .Where(occurrence => IsUsableSemanticRun(occurrence.Run)
                         && IsProjectSourceSymbol(occurrence.Symbol)
-                        && occurrence.Identity is not null
-                        && symbolComponents.ContainsKey(occurrence.Identity))
-                    .Select(occurrence => symbolComponents[occurrence.Identity!])
+                        && occurrence.Identity is not null)
+                    .Select(occurrence => occurrence.Identity!)
+                    .Distinct(SemanticSymbolIdentity.Comparer)
+                    .Where(identity => symbolComponents.ContainsKey(identity))
+                    .Select(identity => symbolComponents[identity])
                     .Where(component => !PathComparer.Equals(component.ModulePath, sourceProjectPath))
                     .Where(component => reachableDependencyPaths.Contains(component.ModulePath))
-                    .DistinctBy(component => component.ComponentId, StringComparer.Ordinal)
                     .ToArray();
 
                 // A qualified name plus a reachable module does not identify a

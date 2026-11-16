@@ -88,9 +88,16 @@ An additional repository-level regression creates .NET projects connected by `Pr
 
 `JavaSemanticDependencyDetector` currently exists as an implementation but is not invoked by `DependencyDetector.Analyze`; the active Java build-module dependency path invokes `JavaProjectDependencyDetector`. Phase 1 does not wire the unused detector or change dependency semantics. Its intended contract and overlap with the semantic component graph must be resolved explicitly before any activation.
 
+### Phase 1 validation
+
+The corrected regression models the existing architectural boundary: Java packages remain separate components, while C# declarations in the same build project remain within one project-level component. It verifies three components, one Java inter-component edge, one C# internal dependency, and no cross-language edge.
+
+The user confirmed the corrected PR-head CI run is green on `029f0afff89b9629c8ebe6bc3bd4561a2eecaf4e`. The earlier expectation of four components was invalid because it incorrectly assumed namespace-level C# components. No production code was changed.
+
 ### Phase 1 acceptance
 
 - Existing Java and C# regression suites remain green.
-- The new mixed Java/C# identity regression passes.
+- The corrected mixed Java/C# identity regression passes.
+- The mixed .NET ProjectReference and Maven module dependency regression passes.
 - No existing project-reference, Maven, Gradle, or language-native component behavior is removed or reinterpreted.
-- No shared relationship taxonomy or resolver behavior is changed in this phase.
+- No shared relationship taxonomy or resolver behavior was changed in Phase 1.

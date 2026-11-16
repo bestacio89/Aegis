@@ -93,6 +93,59 @@ public sealed class CSharpMassTransitMessageProviderTests
     }
 
     [Fact]
+    public void Preserves_dynamic_receive_endpoint_expressions_without_inventing_destination_identity()
+    {
+        using var fixture = new CSharpMessagingFixture(
+            """
+            using System;
+            using MassTransit;
+            using Orders.Contracts;
+
+            namespace Orders.Contracts
+            {
+                public sealed record OrderSubmitted;
+            }
+
+            namespace Orders.Application
+            {
+                public sealed class OrderConsumer : IConsumer<OrderSubmitted>
+                {
+                    public void Consume() { }
+                }
+
+                public sealed class EndpointConfiguration
+                {
+                    public void ReceiveEndpoint(string name, Action<EndpointConfiguration> configure) =>
+                        configure(this);
+
+                    public void ConfigureConsumer<T>(object context) { }
+                }
+
+                public sealed class MessagingRegistration
+                {
+                    private readonly EndpointConfiguration _endpoints = new();
+
+                    public void Configure(string endpointName) =>
+                        _endpoints.ReceiveEndpoint(
+                            endpointName,
+                            endpoint => endpoint.ConfigureConsumer<OrderConsumer>(this));
+                }
+            }
+            """);
+
+        var evidence = new CSharpMassTransitMessageProvider().Discover(
+            [fixture.SourcePath],
+            fixture.ModulePath);
+
+        var consume = Assert.Single(evidence);
+        Assert.Equal(MessageIntegrationOperation.Consume, consume.Operation);
+        Assert.Null(consume.DestinationIdentity);
+        Assert.Equal("endpointName", consume.DestinationExpression);
+        Assert.Equal(MessageDestinationKind.Unknown, consume.DestinationKind);
+        Assert.Contains("dynamic", string.Join(" ", consume.ResolutionEvidence), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Does_not_treat_arbitrary_publish_methods_as_mass_transit_messages()
     {
         using var fixture = new CSharpMessagingFixture(

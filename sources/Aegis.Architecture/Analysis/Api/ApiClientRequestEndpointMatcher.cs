@@ -250,7 +250,13 @@ public sealed class ApiClientRequestEndpointMatcher
         if (string.IsNullOrWhiteSpace(pathValue))
             return false;
 
-        path = NormalizeRoute(pathValue);
+        // Only an origin-form path has a stable route path without a base URI.
+        // A path-relative reference (for example, "orders/42") depends on the
+        // base URI path and must not be rewritten as "/orders/42".
+        if (!pathValue.StartsWith("/", StringComparison.Ordinal))
+            return false;
+
+        path = pathValue;
         return true;
     }
 

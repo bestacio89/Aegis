@@ -489,12 +489,12 @@ function discoverTypedHttpClients(sourceFile, sourcePath, results, language) {
     }
 
     const typedReceivers = new Map();
-    function addTyped(name, typeName, moduleName) {
+    function addTyped(name, typeName) {
         const binding = imports.get(typeName);
-        if (!binding || binding.imported !== typeName) return;
-        if (typeName === "HttpClient" && moduleName === "@angular/common/http")
+        if (!binding) return;
+        if (binding.imported === "HttpClient" && binding.moduleName === "@angular/common/http")
             typedReceivers.set(name, { framework: "Angular HttpClient", provider: "typescript-ast-angular-httpclient" });
-        if (typeName === "HttpService" && moduleName === "@nestjs/axios")
+        if (binding.imported === "HttpService" && binding.moduleName === "@nestjs/axios")
             typedReceivers.set(name, { framework: "NestJS HttpService", provider: "typescript-ast-nest-httpservice" });
     }
 

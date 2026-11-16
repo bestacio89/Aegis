@@ -213,17 +213,10 @@ internal class KotlinApiClientRequestCollector(
     }
 
     private fun firstValueArgument(call: IrCall): IrExpression? =
-        call.arguments.firstOrNull { it != null }
+        call.getValueArgument(0)
 
-    private fun enumArgument(call: IrCall, valueArgumentIndex: Int): String? {
-        val arguments = buildList {
-            call.arguments.getOrNull(valueArgumentIndex)?.let(::add)
-            call.arguments.filterNotNull().forEach { argument ->
-                if (none { existing -> existing === argument }) add(argument)
-            }
-        }
-        return arguments.firstNotNullOfOrNull(::springHttpMethodConstant)
-    }
+    private fun enumArgument(call: IrCall, valueArgumentIndex: Int): String? =
+        call.getValueArgument(valueArgumentIndex)?.let(::springHttpMethodConstant)
 
     private fun springHttpMethodConstant(expression: IrExpression): String? =
         when (expression) {

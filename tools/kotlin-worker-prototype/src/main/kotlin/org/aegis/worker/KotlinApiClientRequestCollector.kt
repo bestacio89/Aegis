@@ -216,20 +216,31 @@ internal class KotlinApiClientRequestCollector(
         call.arguments.firstOrNull { it != null }
 
     private fun enumArgument(call: IrCall, valueArgumentIndex: Int): String? {
-        val argument = call.arguments.getOrNull(valueArgumentIndex) ?: return null
-        return when (argument) {
-            is IrGetEnumValue -> argument.symbol.owner.name.asString()
+        val arguments = buildList {
+            call.arguments.getOrNull(valueArgumentIndex)?.let(::add)
+            call.arguments.filterNotNull().forEach { argument ->
+                if (none { existing -> existing === argument }) add(argument)
+            }
+        }
+        return arguments.firstNotNullOfOrNull(::springHttpMethodConstant)
+    }
+
+    private fun springHttpMethodConstant(expression: IrExpression): String? =
+        when (expression) {
+            is IrGetEnumValue -> {
+                val enumClass = expression.symbol.owner.parent as? IrClass
+                expression.symbol.owner.name.asString().takeIf {
+                    enumClass?.fqNameWhenAvailable?.asString() == SPRING_HTTP_METHOD
+                }
+            }
             is IrGetField -> {
-                val enumClass = argument.symbol.owner.parent as? IrClass
-                if (enumClass?.fqNameWhenAvailable?.asString() == SPRING_HTTP_METHOD) {
-                    argument.symbol.owner.name.asString()
-                } else {
-                    null
+                val enumClass = expression.symbol.owner.parent as? IrClass
+                expression.symbol.owner.name.asString().takeIf {
+                    enumClass?.fqNameWhenAvailable?.asString() == SPRING_HTTP_METHOD
                 }
             }
             else -> null
         }
-    }
 
     private fun sourceSnippet(file: IrFile, startOffset: Int, endOffset: Int): String? {
         if (startOffset < 0 || endOffset < startOffset) return null

@@ -113,6 +113,34 @@ public sealed class TypeScriptServerApiEndpointProviderTests
     }
 
     [Fact]
+    public void DiscoversExpressApplicationCreatedFromAnAliasedDefaultImport()
+    {
+        using var fixture = new TypeScriptFixture(
+            """
+            {
+              "name": "orders-api",
+              "private": true,
+              "dependencies": { "express": "^5.0.0" }
+            }
+            """,
+            """
+            import createExpress from "express";
+
+            const application = createExpress();
+            application.post("/orders", createOrder);
+            """);
+
+        var endpoints = new TypeScriptServerApiEndpointProvider().Discover(
+            fixture.ModulePath,
+            [fixture.SourcePath]);
+
+        var endpoint = Assert.Single(endpoints);
+        Assert.Equal("Express", endpoint.Framework);
+        Assert.Equal("POST", Assert.Single(endpoint.HttpMethods));
+        Assert.Equal("/orders", endpoint.RouteTemplate);
+    }
+
+    [Fact]
     public void DiscoversExpressRouterFactoryImportedWithAnAlias()
     {
         using var fixture = new TypeScriptFixture(

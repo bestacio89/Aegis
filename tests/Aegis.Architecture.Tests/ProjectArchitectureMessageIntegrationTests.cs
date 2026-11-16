@@ -41,6 +41,24 @@ public sealed class ProjectArchitectureMessageIntegrationTests
                 {
                     public Task Consume(ConsumeContext<OrderSubmitted> context) => Task.CompletedTask;
                 }
+
+                public sealed class EndpointConfiguration
+                {
+                    public void ReceiveEndpoint(string name, Action<EndpointConfiguration> configure) =>
+                        configure(this);
+
+                    public void ConfigureConsumer<T>(object context) { }
+                }
+
+                public sealed class MessagingRegistration
+                {
+                    private readonly EndpointConfiguration _endpoints = new();
+
+                    public void Configure() =>
+                        _endpoints.ReceiveEndpoint(
+                            "orders",
+                            endpoint => endpoint.ConfigureConsumer<OrderConsumer>(this));
+                }
             }
             """);
 

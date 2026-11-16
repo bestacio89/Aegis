@@ -136,19 +136,22 @@ public sealed class SemanticSymbolIndex
 
     private static string? ResolveOwnerProjectPath(SemanticAnalysisRun run, SemanticSymbol symbol)
     {
-        var owner = symbol.Origin is SemanticSymbolOrigin.Source or SemanticSymbolOrigin.Generated
-            ? run.ProjectPath
-            : symbol.OwningProjectPath;
+        var isProjectOwned = symbol.Origin is SemanticSymbolOrigin.Source or SemanticSymbolOrigin.Generated;
+        var owner = isProjectOwned ? run.ProjectPath : symbol.OwningProjectPath;
 
-        return TryNormalizePath(owner, out var normalizedPath)
+        return TryNormalizePath(owner, out var normalizedPath, requireFullyQualified: !isProjectOwned)
             ? normalizedPath
             : null;
     }
 
-    private static bool TryNormalizePath(string? path, out string normalizedPath)
+    private static bool TryNormalizePath(
+        string? path,
+        out string normalizedPath,
+        bool requireFullyQualified = true)
     {
         normalizedPath = string.Empty;
-        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
+        if (string.IsNullOrWhiteSpace(path)
+            || requireFullyQualified && !Path.IsPathFullyQualified(path))
             return false;
 
         try

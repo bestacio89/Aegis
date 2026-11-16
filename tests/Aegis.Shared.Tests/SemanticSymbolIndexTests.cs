@@ -43,7 +43,7 @@ public sealed class SemanticSymbolIndexTests
 
         Assert.Equal(3, index.Count);
         Assert.Equal([0, 1], index.ForRun(0).Select(item => item.SymbolIndex).ToArray());
-        Assert.Equal(0, index.ForRun(1)[0].RunIndex);
+        Assert.Equal(1, index.ForRun(1)[0].RunIndex);
         Assert.Equal(1, index.ForRun(1)[0].SymbolIndex);
         Assert.Equal(3, index.FindByIdentity(index.Occurrences[0].Identity!).Count);
     }

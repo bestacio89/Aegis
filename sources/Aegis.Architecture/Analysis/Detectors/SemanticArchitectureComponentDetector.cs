@@ -36,7 +36,9 @@ internal static class SemanticArchitectureComponentDetector
             .ToArray();
         var semanticRuns = semanticRunEntries.Select(entry => entry.Run).ToArray();
         var evidenceRegistry = SemanticRelationshipEvidenceRegistry.Create(context.SemanticAnalysisRuns);
+        var symbolIndex = SemanticSymbolIndex.Create(context.SemanticAnalysisRuns);
         context.RelationshipEvidenceRegistry = evidenceRegistry;
+        context.SemanticSymbolIndex = symbolIndex;
         if (semanticRuns.Length == 0)
             return;
 
@@ -88,11 +90,13 @@ internal static class SemanticArchitectureComponentDetector
         // Symbol IDs are opaque and project-scoped by the shared semantic contract.
         // Keep module identity in the key; a workspace-wide ID-only map can collapse
         // unrelated declarations when different modules emit the same ID.
-        var symbolComponents = semanticRuns
-            .SelectMany(run =>
+        var symbolComponents = semanticRunEntries
+            .SelectMany(entry =>
             {
+                var run = entry.Run;
                 var module = ResolveModule(run.ProjectPath, run.Language);
-                return run.Symbols
+                return symbolIndex.ForRun(entry.RunIndex)
+                    .Select(occurrence => occurrence.Symbol)
                     .Where(IsProjectSourceSymbol)
                     .Where(symbol =>
                         !string.IsNullOrWhiteSpace(symbol.Id)
@@ -147,31 +151,6 @@ internal static class SemanticArchitectureComponentDetector
                 item => item.Key,
                 item => item.Components[0],
                 SemanticSymbolIdentity.Comparer);
-
-        var symbolIdentitiesById = semanticRuns
-            .SelectMany(run => run.Symbols
-                .Where(IsProjectSourceSymbol)
-                .Where(symbol => !string.IsNullOrWhiteSpace(symbol.Id))
-                .Select(symbol => SemanticSymbolIdentity.Create(
-                    string.IsNullOrWhiteSpace(symbol.Language) ? run.Language : symbol.Language,
-                    run.ProjectPath,
-                    symbol.Id)))
-            .Distinct(SemanticSymbolIdentity.Comparer)
-            .GroupBy(identity => identity.SymbolId, StringComparer.Ordinal)
-            .ToDictionary(
-                group => group.Key,
-                group => group.ToArray(),
-                StringComparer.Ordinal);
-
-        var symbolComponentsByQualifiedName = symbolComponents.Values
-            .Where(component => !string.IsNullOrWhiteSpace(component.QualifiedName))
-            .GroupBy(
-                component => new QualifiedSymbolIdentity(component.Language, component.QualifiedName),
-                QualifiedSymbolIdentityComparer.Instance)
-            .ToDictionary(
-                group => group.Key,
-                group => group.ToArray(),
-                QualifiedSymbolIdentityComparer.Instance);
 
         var componentNodes = symbolComponents.Values
             .GroupBy(component => component.ComponentId, StringComparer.Ordinal)
@@ -246,7 +225,8 @@ internal static class SemanticArchitectureComponentDetector
             projectionMetrics.Add((run, metrics));
 
             var sourceModule = ResolveModule(run.ProjectPath, run.Language);
-            var runSymbols = run.Symbols
+            var runSymbols = symbolIndex.ForRun(runIndex)
+                .Select(occurrence => occurrence.Symbol)
                 .Where(IsProjectSourceSymbol)
                 .Where(symbol => !string.IsNullOrWhiteSpace(symbol.Id))
                 .GroupBy(symbol => symbol.Id, StringComparer.Ordinal)
@@ -293,8 +273,7 @@ internal static class SemanticArchitectureComponentDetector
                         || sourceModule.IsTestProject
                         || sourceModule.IsTestSupport,
                     symbolComponents,
-                    symbolIdentitiesById,
-                    symbolComponentsByQualifiedName);
+                    symbolIndex);
                 if (targetComponent is null)
                 {
                     metrics.UnresolvedTargets++;
@@ -422,16 +401,15 @@ internal static class SemanticArchitectureComponentDetector
         SymbolComponent sourceComponent,
         bool includeTestDependencies,
         IReadOnlyDictionary<SemanticSymbolIdentity, SymbolComponent> symbolComponents,
-        IReadOnlyDictionary<string, SemanticSymbolIdentity[]> symbolIdentitiesById,
-        IReadOnlyDictionary<QualifiedSymbolIdentity, SymbolComponent[]> symbolComponentsByQualifiedName)
+        SemanticSymbolIndex symbolIndex)
     {
         // External symbols emitted by a provider describe the resolved target,
         // but ProjectPath may still identify the consumer analysis context.
         // Use a distinct path as an exact owner only when it differs from the run.
-        var externalSymbols = run.Symbols
-            .Where(symbol =>
-                symbol.Id.Equals(targetSymbolId, StringComparison.Ordinal)
-                && symbol.Origin == SemanticSymbolOrigin.External)
+        var externalSymbols = symbolIndex.FindByProviderId(targetSymbolId)
+            .Where(occurrence => ReferenceEquals(occurrence.Run, run)
+                && occurrence.Symbol.Origin == SemanticSymbolOrigin.External)
+            .Select(occurrence => occurrence.Symbol)
             .ToArray();
 
         if (externalSymbols.Length > 0)
@@ -473,16 +451,17 @@ internal static class SemanticArchitectureComponentDetector
                 var targetLanguage = string.IsNullOrWhiteSpace(externalSymbol.Language)
                     ? run.Language
                     : externalSymbol.Language;
-                if (!symbolComponentsByQualifiedName.TryGetValue(
-                        new QualifiedSymbolIdentity(targetLanguage, externalSymbol.QualifiedName),
-                        out var qualifiedCandidates))
-                {
-                    continue;
-                }
-
-                var projectCandidates = qualifiedCandidates
+                var projectCandidates = symbolIndex.FindByQualifiedName(
+                        targetLanguage,
+                        externalSymbol.QualifiedName)
+                    .Where(occurrence => IsUsableSemanticRun(occurrence.Run)
+                        && IsProjectSourceSymbol(occurrence.Symbol)
+                        && occurrence.Identity is not null
+                        && symbolComponents.ContainsKey(occurrence.Identity))
+                    .Select(occurrence => symbolComponents[occurrence.Identity!])
                     .Where(component => !PathComparer.Equals(component.ModulePath, sourceProjectPath))
                     .Where(component => reachableDependencyPaths.Contains(component.ModulePath))
+                    .DistinctBy(component => component.ComponentId, StringComparer.Ordinal)
                     .ToArray();
 
                 // A qualified name plus a reachable module does not identify a
@@ -518,9 +497,17 @@ internal static class SemanticArchitectureComponentDetector
 
         // Preserve the existing Java/C# relationship contract when the target ID
         // is unique across the workspace. Never choose arbitrarily across projects.
-        return symbolIdentitiesById.TryGetValue(targetSymbolId, out var identities)
-            && identities.Length == 1
-            && symbolComponents.TryGetValue(identities[0], out var uniqueTarget)
+        var uniqueIdentities = symbolIndex.FindByProviderId(targetSymbolId)
+            .Where(occurrence => IsUsableSemanticRun(occurrence.Run)
+                && IsProjectSourceSymbol(occurrence.Symbol)
+                && occurrence.Identity is not null)
+            .Select(occurrence => occurrence.Identity!)
+            .Distinct(SemanticSymbolIdentity.Comparer)
+            .Take(2)
+            .ToArray();
+
+        return uniqueIdentities.Length == 1
+            && symbolComponents.TryGetValue(uniqueIdentities[0], out var uniqueTarget)
                 ? uniqueTarget
                 : null;
     }
@@ -748,24 +735,6 @@ internal static class SemanticArchitectureComponentDetector
         public int IncompatibleVariants { get; set; }
 
         public int ProjectedRelationships { get; set; }
-    }
-
-    private sealed record QualifiedSymbolIdentity(string Language, string QualifiedName);
-
-    private sealed class QualifiedSymbolIdentityComparer : IEqualityComparer<QualifiedSymbolIdentity>
-    {
-        public static QualifiedSymbolIdentityComparer Instance { get; } = new();
-
-        public bool Equals(QualifiedSymbolIdentity? x, QualifiedSymbolIdentity? y) =>
-            ReferenceEquals(x, y)
-            || x is not null && y is not null
-                && StringComparer.OrdinalIgnoreCase.Equals(x.Language, y.Language)
-                && StringComparer.Ordinal.Equals(x.QualifiedName, y.QualifiedName);
-
-        public int GetHashCode(QualifiedSymbolIdentity identity) =>
-            HashCode.Combine(
-                StringComparer.OrdinalIgnoreCase.GetHashCode(identity.Language),
-                StringComparer.Ordinal.GetHashCode(identity.QualifiedName));
     }
 
     private sealed record SymbolComponent(

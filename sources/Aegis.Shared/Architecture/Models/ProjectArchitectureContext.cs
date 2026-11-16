@@ -282,6 +282,14 @@ public sealed class ProjectArchitectureContext
     [System.Text.Json.Serialization.JsonIgnore]
     public SemanticRelationshipEvidenceRegistry? RelationshipEvidenceRegistry { get; set; }
 
+    /// <summary>
+    /// Snapshot-scoped index of every semantic declaration occurrence. Rebuilt
+    /// from <see cref="SemanticAnalysisRuns"/> and excluded from serialization;
+    /// it preserves ambiguity and does not apply resolution eligibility policy.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public SemanticSymbolIndex? SemanticSymbolIndex { get; set; }
+
 
     /// <summary>
     /// Production-to-production relationships used to describe the deployed

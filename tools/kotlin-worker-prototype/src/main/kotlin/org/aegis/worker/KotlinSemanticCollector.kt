@@ -64,11 +64,13 @@ class KotlinSemanticCollector(
     private val sourceTextCache = HashMap<String, String>()
 
     private val serverApiEndpoints = JsonArray()
+    private val apiClientRequests = JsonArray()
 
     fun collect(module: IrModuleFragment) {
         module.acceptChildrenVoid(DeclarationCollector())
         module.acceptChildrenVoid(RelationshipCollector())
         serverApiEndpoints.addAll(KotlinServerApiEndpointCollector(projectPath).collect(module))
+        apiClientRequests.addAll(KotlinApiClientRequestCollector(projectPath).collect(module))
     }
 
     fun toJson(analyzedFileCount: Int): JsonObject {
@@ -82,6 +84,7 @@ class KotlinSemanticCollector(
         result.add("symbols", JsonArray().also { array -> symbols.values.forEach(array::add) })
         result.add("relationships", JsonArray().also { array -> relationships.values.forEach(array::add) })
         result.add("serverApiEndpoints", serverApiEndpoints)
+        result.add("apiClientRequests", apiClientRequests)
         result.add("diagnostics", JsonArray())
         return result
     }

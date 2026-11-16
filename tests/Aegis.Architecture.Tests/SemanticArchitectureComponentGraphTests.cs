@@ -1087,6 +1087,119 @@ public sealed class SemanticArchitectureComponentGraphTests
             .Single(component => component.Id == edge.TargetComponentId).BuildModuleName);
     }
 
+    [Fact]
+    public void Preserves_java_and_csharp_component_graphs_when_symbol_ids_overlap()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"aegis-polyglot-identity-{Guid.NewGuid():N}");
+        var javaApplicationFile = Path.Combine(root, "java", "src", "Application.java");
+        var javaDomainFile = Path.Combine(root, "java", "src", "Order.java");
+        var csharpApplicationFile = Path.Combine(root, "dotnet", "Application.cs");
+        var csharpDomainFile = Path.Combine(root, "dotnet", "Order.cs");
+
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "polyglot",
+            RootPath = root,
+            Language = "Multi-Language",
+            Modules =
+            [
+                new ProjectModuleContext
+                {
+                    Name = "polyglot",
+                    Path = root,
+                    Languages = ["Java", "C#"]
+                }
+            ],
+            SemanticAnalysisRuns =
+            [
+                CreateRun("java-run", "Java", "eclipse-jdt", javaApplicationFile, javaDomainFile,
+                    "sample.application.Application", "sample.domain.Order"),
+                CreateRun("csharp-run", "C#", "roslyn-test-provider", csharpApplicationFile, csharpDomainFile,
+                    "Sample.Application.Application", "Sample.Domain.Order")
+            ]
+        };
+
+        SemanticArchitectureComponentDetector.Analyze(context);
+
+        Assert.Equal(4, context.ProductionComponents.Count);
+        Assert.Equal(2, context.ProductionComponentDependencies.Count);
+
+        foreach (var edge in context.ProductionComponentDependencies)
+        {
+            var source = context.ProductionComponents.Single(component => component.Id == edge.SourceComponentId);
+            var target = context.ProductionComponents.Single(component => component.Id == edge.TargetComponentId);
+
+            Assert.Equal(source.Language, target.Language);
+            Assert.Equal(1, edge.RelationshipCount);
+            Assert.Single(edge.ContributingRelationships);
+        }
+
+        Assert.Contains(context.ProductionComponentDependencies, edge =>
+            context.ProductionComponents.Single(component => component.Id == edge.SourceComponentId).Language == "Java");
+        Assert.Contains(context.ProductionComponentDependencies, edge =>
+            context.ProductionComponents.Single(component => component.Id == edge.SourceComponentId).Language == "C#");
+
+        SemanticAnalysisRun CreateRun(
+            string runId,
+            string language,
+            string engineId,
+            string applicationFile,
+            string domainFile,
+            string applicationQualifiedName,
+            string domainQualifiedName)
+        {
+            var applicationContainer = applicationQualifiedName[..applicationQualifiedName.LastIndexOf('.')];
+            var domainContainer = domainQualifiedName[..domainQualifiedName.LastIndexOf('.')];
+
+            return new SemanticAnalysisRun
+            {
+                RunId = runId,
+                Language = language,
+                EngineId = engineId,
+                ProjectPath = root,
+                Status = SemanticAnalysisStatus.Completed,
+                Symbols =
+                [
+                    new SemanticSymbol
+                    {
+                        Id = "application-symbol",
+                        Name = "Application",
+                        QualifiedName = applicationQualifiedName,
+                        ContainerName = applicationContainer,
+                        ContainerKind = language == "Java" ? "Package" : "Namespace",
+                        Language = language,
+                        ProjectPath = root,
+                        FilePath = applicationFile,
+                        Origin = SemanticSymbolOrigin.Source
+                    },
+                    new SemanticSymbol
+                    {
+                        Id = "domain-symbol",
+                        Name = "Order",
+                        QualifiedName = domainQualifiedName,
+                        ContainerName = domainContainer,
+                        ContainerKind = language == "Java" ? "Package" : "Namespace",
+                        Language = language,
+                        ProjectPath = root,
+                        FilePath = domainFile,
+                        Origin = SemanticSymbolOrigin.Source
+                    }
+                ],
+                Relationships =
+                [
+                    new SemanticRelationship
+                    {
+                        Id = $"{runId}-application-uses-domain",
+                        SourceSymbolId = "application-symbol",
+                        TargetSymbolId = "domain-symbol",
+                        Kind = SemanticRelationshipKind.References,
+                        ResolutionStatus = SemanticResolutionStatus.Resolved
+                    }
+                ]
+            };
+        }
+    }
+
     private sealed class PartialPackageGraphAdapter(string applicationFile, string domainFile)
         : ISemanticAnalysisAdapter
     {

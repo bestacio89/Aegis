@@ -53,3 +53,44 @@ The WPF test exercises view-model projection only; it is not a substitute for a 
 - New diagnostics are deterministic for the same semantic run and do not affect coverage scoring.
 - Polyglot graph presentation retains nodes from multiple languages without changing relationship semantics.
 - No resolver, relationship taxonomy, ledger, or production WPF behavior changes are included.
+
+
+## Phase 1 — Protect existing Java and C# behavior
+
+### Existing Java protection
+
+The existing regression suite covers the packaged Eclipse JDT worker through the production semantic pipeline, Java project discovery, Maven and Gradle project dependencies, module ownership, classpath resolution, Java component projection, and Java/Kotlin interoperability.
+
+Key executable guards include:
+
+- `JavaSemanticAnalysisEndToEndTests.Packaged_jdt_worker_produces_semantic_evidence_through_the_production_orchestrator`
+- `JavaProjectDependencyGraphTests` for Maven/Gradle module edges and production/test scope
+- `SemanticArchitectureComponentGraphTests` for Java package-level component projection
+
+### Existing C# protection
+
+C# build-module dependency behavior is guarded by the `ProjectArchitectureContextDetectorTests.Detect_maps_project_references_to_semantic_layer_edges` regression. C# semantic component projection is also covered by the existing project-level component graph regression in `SemanticArchitectureComponentGraphTests`.
+
+### New polyglot identity regression
+
+The Phase 1 addition runs Java and C# semantic evidence through the same component projection in one repository/module. Both providers deliberately emit overlapping opaque symbol IDs. The test asserts that:
+
+- all Java and C# component nodes remain present;
+- each language's relationship resolves only to its own language's target;
+- no cross-language edge is fabricated from an ID collision;
+- each provider's relationship evidence remains independently attributable.
+
+This specifically protects the Java-only and C#-only behavior while establishing a regression boundary for mixed-language repositories.
+
+An additional repository-level regression creates .NET projects connected by `ProjectReference` and Maven modules connected by project coordinates in the same repository. It asserts that both native build-graph edge families survive project discovery and dependency detection together.
+
+### Audit observation
+
+`JavaSemanticDependencyDetector` currently exists as an implementation but is not invoked by `DependencyDetector.Analyze`; the active Java build-module dependency path invokes `JavaProjectDependencyDetector`. Phase 1 does not wire the unused detector or change dependency semantics. Its intended contract and overlap with the semantic component graph must be resolved explicitly before any activation.
+
+### Phase 1 acceptance
+
+- Existing Java and C# regression suites remain green.
+- The new mixed Java/C# identity regression passes.
+- No existing project-reference, Maven, Gradle, or language-native component behavior is removed or reinterpreted.
+- No shared relationship taxonomy or resolver behavior is changed in this phase.

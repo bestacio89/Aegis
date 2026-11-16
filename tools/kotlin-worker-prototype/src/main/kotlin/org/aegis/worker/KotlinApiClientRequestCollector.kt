@@ -71,7 +71,7 @@ internal class KotlinApiClientRequestCollector(
         val functionName = qualifiedName.substringAfterLast('.')
         if (functionName !in KTOR_METHODS) return
 
-        val uri = firstValueArgument(call)
+        val uri = firstValueArgument(call, hasExtensionReceiver = true)
         val method = KTOR_METHODS[functionName]
         addEvidence(
             call = call,
@@ -212,11 +212,18 @@ internal class KotlinApiClientRequestCollector(
         })
     }
 
-    private fun firstValueArgument(call: IrCall): IrExpression? =
-        valueArgument(call, 0)
+    private fun firstValueArgument(
+        call: IrCall,
+        hasExtensionReceiver: Boolean = false
+    ): IrExpression? = valueArgument(call, 0, hasExtensionReceiver)
 
-    private fun valueArgument(call: IrCall, valueArgumentIndex: Int): IrExpression? {
-        val receiverCount = if (call.dispatchReceiver != null) 1 else 0
+    private fun valueArgument(
+        call: IrCall,
+        valueArgumentIndex: Int,
+        hasExtensionReceiver: Boolean = false
+    ): IrExpression? {
+        val receiverCount = (if (call.dispatchReceiver != null) 1 else 0)
+            + (if (hasExtensionReceiver) 1 else 0)
         return call.arguments
             .filterNotNull()
             .drop(receiverCount)

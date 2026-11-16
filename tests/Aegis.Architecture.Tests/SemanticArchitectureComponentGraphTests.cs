@@ -71,12 +71,23 @@ public sealed class SemanticArchitectureComponentGraphTests
                 Assert.Equal(SemanticAnalysisStatus.PartiallyCompleted, run.Status));
             Assert.Equal(2, context.ProductionComponents.Count);
             var edge = Assert.Single(context.ProductionComponentDependencies);
-            Assert.Equal(1, edge.RelationshipCount);
-            var relationshipReference = Assert.Single(edge.ContributingRelationships);
-            Assert.Contains(context.SemanticAnalysisRuns, run =>
-                run.RunId == relationshipReference.RunId
-                && run.Relationships.Any(relationship =>
-                    relationship.Id == relationshipReference.RelationshipId));
+            Assert.Equal(2, edge.RelationshipCount);
+            var relationshipReferences = edge.ContributingRelationships;
+            Assert.Equal(2, relationshipReferences.Count);
+            Assert.All(relationshipReferences, relationshipReference =>
+            {
+                Assert.InRange(relationshipReference.RunIndex, 0, context.SemanticAnalysisRuns.Count - 1);
+                var run = context.SemanticAnalysisRuns[relationshipReference.RunIndex];
+                Assert.Equal(run.RunId, relationshipReference.RunId);
+                Assert.InRange(relationshipReference.RelationshipIndex, 0, run.Relationships.Count - 1);
+                Assert.Equal(
+                    relationshipReference.RelationshipId,
+                    run.Relationships[relationshipReference.RelationshipIndex].Id);
+                Assert.Equal("application-uses-domain", relationshipReference.RelationshipId);
+            });
+            Assert.Equal(
+                2,
+                relationshipReferences.Select(reference => reference.RunIndex).Distinct().Count());
             Assert.Equal(0, edge.UnreferencedRelationshipCount);
             Assert.Contains(applicationFile, edge.EvidenceFiles);
             Assert.Equal(

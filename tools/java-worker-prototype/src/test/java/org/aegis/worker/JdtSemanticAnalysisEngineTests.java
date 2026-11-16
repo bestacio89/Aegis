@@ -381,10 +381,12 @@ final class JdtSemanticAnalysisEngineTests {
         Path sourceRoot = Files.createDirectories(project.resolve("src/main/java"));
         Path restTemplatePackage = Files.createDirectories(sourceRoot.resolve("org/springframework/web/client"));
         Path httpPackage = Files.createDirectories(sourceRoot.resolve("org/springframework/http"));
+        Path webClientPackage = Files.createDirectories(sourceRoot.resolve("org/springframework/web/reactive/function/client"));
         Path appPackage = Files.createDirectories(sourceRoot.resolve("example"));
 
         Path restTemplate = restTemplatePackage.resolve("RestTemplate.java");
         Path httpMethod = httpPackage.resolve("HttpMethod.java");
+        Path webClient = webClientPackage.resolve("WebClient.java");
         Path client = appPackage.resolve("OrderGateway.java");
         Files.writeString(restTemplate, """
             package org.springframework.web.client;
@@ -395,6 +397,16 @@ final class JdtSemanticAnalysisEngineTests {
                 public void delete(String url) {}
             }
             """);
+        Files.writeString(webClient, """
+            package org.springframework.web.reactive.function.client;
+            public class WebClient {
+                public UriSpec get() { return null; }
+                public UriSpec post() { return null; }
+                public static class UriSpec {
+                    public UriSpec uri(String value) { return this; }
+                }
+            }
+            """);
         Files.writeString(httpMethod, """
             package org.springframework.http;
             public enum HttpMethod { GET, POST, PUT, PATCH, DELETE }
@@ -403,13 +415,17 @@ final class JdtSemanticAnalysisEngineTests {
             package example;
             import org.springframework.web.client.RestTemplate;
             import org.springframework.http.HttpMethod;
+            import org.springframework.web.reactive.function.client.WebClient;
             public class OrderGateway {
                 private final RestTemplate client = new RestTemplate();
+                private final WebClient webClient = new WebClient();
                 public void load(String orderId) {
                     client.getForObject("/orders", Object.class);
                     client.postForObject("/orders", new Object(), Object.class);
                     client.exchange("/orders/" + orderId, HttpMethod.GET, null, Object.class);
                     client.delete("/orders/42");
+                    webClient.get().uri("/catalog/items");
+                    new UnrelatedClient().getForObject("/not-an-api-client");
                 }
             }
             """);
@@ -417,12 +433,12 @@ final class JdtSemanticAnalysisEngineTests {
         JsonObject payload = new JsonObject();
         payload.addProperty("projectPath", project.toString());
         payload.add("sourceRoots", paths(sourceRoot));
-        payload.add("sourceFiles", paths(restTemplate, httpMethod, client));
+        payload.add("sourceFiles", paths(restTemplate, webClient, httpMethod, client));
         payload.add("classpathEntries", new JsonArray());
 
         JsonObject result = new JdtSemanticAnalysisEngine().analyze(payload);
         JsonArray requests = result.getAsJsonArray("apiClientRequests");
-        assertEquals(4, requests.size());
+        assertEquals(5, requests.size());
 
         JsonObject get = requests.asList().stream().map(item -> item.getAsJsonObject())
             .filter(item -> item.get("declarationEvidence").getAsString().contains("getForObject"))
@@ -432,6 +448,14 @@ final class JdtSemanticAnalysisEngineTests {
         assertEquals(0, get.get("resolutionStatus").getAsInt());
         assertEquals("Java", get.get("language").getAsString());
         assertTrue(get.get("callerIdentity").getAsString().contains("OrderGateway#load"));
+
+
+        JsonObject webClientRequest = requests.asList().stream().map(item -> item.getAsJsonObject())
+            .filter(item -> item.get("framework").getAsString().equals("Spring WebClient"))
+            .findFirst().orElseThrow();
+        assertEquals("GET", webClientRequest.get("httpMethod").getAsString());
+        assertEquals("\"/catalog/items\"", webClientRequest.get("requestUriExpression").getAsString());
+        assertEquals(0, webClientRequest.get("resolutionStatus").getAsInt());
 
         JsonObject dynamic = requests.asList().stream().map(item -> item.getAsJsonObject())
             .filter(item -> item.get("declarationEvidence").getAsString().contains("exchange"))

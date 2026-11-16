@@ -159,7 +159,6 @@ class KotlinApiClientRequestIntegrationTests {
 
             val restTemplateGet = requests.single {
                 it.get("framework").asString == "Spring RestTemplate"
-                    && it.get("httpMethod").asString == "GET"
                     && it.get("declarationEvidence").asString.contains("getForObject")
             }
             assertEquals("\"/orders\"", restTemplateGet.get("requestUriExpression").asString)

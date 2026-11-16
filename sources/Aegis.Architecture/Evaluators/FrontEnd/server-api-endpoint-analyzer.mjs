@@ -361,6 +361,8 @@ function discoverFetch(sourceFile, sourcePath, results, language) {
             shadowed.add("fetch");
         if (ts.isParameter(node) && ts.isIdentifier(node.name) && node.name.text === "fetch")
             shadowed.add("fetch");
+        if (ts.isFunctionDeclaration(node) && node.name?.text === "fetch")
+            shadowed.add("fetch");
         ts.forEachChild(node, visit);
     }
     visit(sourceFile);
@@ -377,7 +379,8 @@ function discoverFetch(sourceFile, sourcePath, results, language) {
     function discover(node) {
         if (ts.isCallExpression(node) && isFetch(node.expression) && node.arguments.length >= 1) {
             const options = node.arguments[1];
-            const method = literalMethod(getObjectProperty(options, "method"), "GET");
+            const methodExpression = getObjectProperty(options, "method");
+            const method = methodExpression ? literalMethod(methodExpression) : "GET";
             results.push(createClientEvidence(sourceFile, sourcePath, node, language,
                 "Fetch API", "typescript-ast-fetch", method, node.arguments[0],
                 ["Fetch call grounded by the global Fetch API or an explicit fetch package import."]));
@@ -449,7 +452,8 @@ function discoverAxios(sourceFile, sourcePath, results, language) {
                 && expression.name.text === "request" && node.arguments.length >= 1) {
                 const config = node.arguments[0];
                 grounded = true; uri = configValue(config, "url");
-                method = literalMethod(configValue(config, "method"), "GET");
+                const methodExpression = configValue(config, "method");
+                method = methodExpression ? literalMethod(methodExpression) : "GET";
                 evidence.push("Axios request configuration is passed to a grounded Axios request method.");
             }
         } else if (ts.isIdentifier(expression) && importedMethods.has(expression.text)

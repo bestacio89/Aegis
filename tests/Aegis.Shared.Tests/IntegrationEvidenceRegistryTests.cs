@@ -37,7 +37,7 @@ public sealed class IntegrationEvidenceRegistryTests
     public void Domain_operations_map_to_the_existing_relationship_taxonomy()
     {
         var publish = CreateMessage("publish", "/repo/orders", IntegrationEvidenceResolutionStatus.Resolved);
-        var consume = CreateMessage("consume", "/repo/orders", IntegrationEvidenceResolutionStatus.Resolved) withOperation(MessageIntegrationOperation.Consume);
+        var consume = CreateMessage("consume", "/repo/orders", IntegrationEvidenceResolutionStatus.Resolved, MessageIntegrationOperation.Consume);
         var rpcCall = new RpcIntegrationEvidence { Operation = RpcIntegrationOperation.Call };
         var rpcEndpoint = new RpcIntegrationEvidence { Operation = RpcIntegrationOperation.Endpoint };
         var read = new DataAccessEvidence { Operation = DataIntegrationOperation.Read };
@@ -76,7 +76,8 @@ public sealed class IntegrationEvidenceRegistryTests
     private static MessageIntegrationEvidence CreateMessage(
         string evidenceId,
         string modulePath,
-        IntegrationEvidenceResolutionStatus status) =>
+        IntegrationEvidenceResolutionStatus status,
+        MessageIntegrationOperation operation = MessageIntegrationOperation.Publish) =>
         new()
         {
             EvidenceId = evidenceId,
@@ -85,26 +86,9 @@ public sealed class IntegrationEvidenceRegistryTests
             ProviderId = "roslyn-masstransit",
             ModulePath = modulePath,
             SourceFile = $"{modulePath}/Orders.cs",
-            Operation = MessageIntegrationOperation.Publish,
+            Operation = operation,
             MessageTypeIdentity = "Orders.Contracts.OrderSubmitted",
             ResolutionStatus = status,
             DeclarationEvidence = "Publish<OrderSubmitted>(message)"
-        };
-
-    private static MessageIntegrationEvidence withOperation(
-        this MessageIntegrationEvidence evidence,
-        MessageIntegrationOperation operation) =>
-        new()
-        {
-            EvidenceId = evidence.EvidenceId,
-            Language = evidence.Language,
-            Framework = evidence.Framework,
-            ProviderId = evidence.ProviderId,
-            ModulePath = evidence.ModulePath,
-            SourceFile = evidence.SourceFile,
-            Operation = operation,
-            MessageTypeIdentity = evidence.MessageTypeIdentity,
-            ResolutionStatus = evidence.ResolutionStatus,
-            DeclarationEvidence = evidence.DeclarationEvidence
         };
 }

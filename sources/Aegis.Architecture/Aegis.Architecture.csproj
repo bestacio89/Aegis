@@ -8,17 +8,11 @@
       Handles scanning orchestration, rule evaluation, and scoring.
     </Description>
 
-    <FrontendAnalyzerDirectory>
-      $(MSBuildProjectDirectory)/Evaluators/FrontEnd
-    </FrontendAnalyzerDirectory>
+    <FrontendAnalyzerDirectory>$(MSBuildProjectDirectory)/Evaluators/FrontEnd</FrontendAnalyzerDirectory>
 
-    <FrontendAnalyzerEntryPoint>
-      $(FrontendAnalyzerDirectory)/frontend-analyzer.mjs
-    </FrontendAnalyzerEntryPoint>
+    <FrontendAnalyzerEntryPoint>$(FrontendAnalyzerDirectory)/frontend-analyzer.mjs</FrontendAnalyzerEntryPoint>
 
-    <FrontendAnalyzerOutputDirectory>
-      $(OutDir)Evaluators/FrontEnd
-    </FrontendAnalyzerOutputDirectory>
+    <FrontendAnalyzerOutputDirectory>$(OutDir)Evaluators/FrontEnd</FrontendAnalyzerOutputDirectory>
   </PropertyGroup>
 
   <ItemGroup>

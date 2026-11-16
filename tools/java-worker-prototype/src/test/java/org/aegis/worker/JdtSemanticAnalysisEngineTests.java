@@ -364,7 +364,7 @@ final class JdtSemanticAnalysisEngineTests {
         JsonObject dynamic = endpoints.asList().stream().map(item -> item.getAsJsonObject())
             .filter(item -> item.get("handlerIdentity").getAsString().contains("constant"))
             .findFirst().orElseThrow();
-        assertEquals("/constant", dynamic.get("routeTemplate").getAsString());
+        assertEquals("/api/orders/constant", dynamic.get("routeTemplate").getAsString());
         assertEquals(1, dynamic.get("resolutionStatus").getAsInt());
 
         JsonObject unresolved = endpoints.asList().stream().map(item -> item.getAsJsonObject())

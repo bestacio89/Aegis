@@ -55,7 +55,7 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
         var requestMappingFile = Path.Combine(springAnnotationDirectory, "RequestMapping.java");
         var getMappingFile = Path.Combine(springAnnotationDirectory, "GetMapping.java");
         var controllerFile = Path.Combine(sourceRoot, "sample", "application", "OrdersController.kt");
-        var ktorStubRoot = Path.Combine(workspace.FullName, "compiler-stubs");
+        var ktorStubRoot = Path.Combine(sourceRoot, ".compiler-stubs");
         var ktorClientFile = Path.Combine(ktorStubRoot, "io", "ktor", "client", "HttpClient.kt");
         var ktorRequestsFile = Path.Combine(ktorStubRoot, "io", "ktor", "client", "request", "Requests.kt");
         var apiGatewayFile = Path.Combine(sourceRoot, "sample", "application", "KotlinApiGateway.kt");
@@ -175,6 +175,7 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
                 BuildSystem = "Gradle",
                 SourceFiles = [sourceFile, domainFile, controllerFile, ktorClientFile, ktorRequestsFile, apiGatewayFile],
                 SourceRoots = [sourceRoot],
+                GeneratedSourceRoots = [ktorStubRoot],
                 ReferencedSourceRoots = [javaSourceRoot],
                 RequestedCapabilities = ["symbols", "relationships", "server-api-endpoints", "api-client-requests", "compiler-diagnostics", "jvm-interop"],
                 ProviderOptions = new Dictionary<string, string>(StringComparer.Ordinal)

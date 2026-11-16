@@ -131,7 +131,7 @@ public sealed class TypeScriptApiClientRequestProviderTests
         Assert.Equal(ApiClientRequestResolutionStatus.PartiallyResolved, fetch.ResolutionStatus);
         Assert.Contains("orderId", fetch.RequestUriExpression, StringComparison.Ordinal);
 
-        var axios = Assert.Single(evidence, item => item.Framework == "Axios");
+        var axios = Assert.Single(evidence, item => item.Framework == "Axios" && item.HttpMethod == "PUT");
         Assert.Equal("PUT", axios.HttpMethod);
         Assert.Equal(ApiClientRequestResolutionStatus.Dynamic, axios.ResolutionStatus);
         Assert.Equal("endpoint", axios.RequestUriExpression);

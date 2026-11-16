@@ -3,6 +3,7 @@ package org.aegis.worker
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
@@ -10,6 +11,7 @@ import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrGetEnumValue
+import org.jetbrains.kotlin.ir.expressions.IrGetField
 import org.jetbrains.kotlin.ir.expressions.IrStringConcatenation
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
@@ -213,9 +215,21 @@ internal class KotlinApiClientRequestCollector(
     private fun firstValueArgument(call: IrCall): IrExpression? =
         call.arguments.firstOrNull { it != null }
 
-    private fun enumArgument(call: IrCall, valueArgumentIndex: Int): String? =
-        (call.arguments.getOrNull(valueArgumentIndex) as? IrGetEnumValue)
-            ?.symbol?.owner?.name?.asString()
+    private fun enumArgument(call: IrCall, valueArgumentIndex: Int): String? {
+        val argument = call.arguments.getOrNull(valueArgumentIndex) ?: return null
+        return when (argument) {
+            is IrGetEnumValue -> argument.symbol.owner.name.asString()
+            is IrGetField -> {
+                val enumClass = argument.symbol.owner.parent as? IrClass
+                if (enumClass?.fqNameWhenAvailable?.asString() == SPRING_HTTP_METHOD) {
+                    argument.symbol.owner.name.asString()
+                } else {
+                    null
+                }
+            }
+            else -> null
+        }
+    }
 
     private fun sourceSnippet(file: IrFile, startOffset: Int, endOffset: Int): String? {
         if (startOffset < 0 || endOffset < startOffset) return null
@@ -235,6 +249,7 @@ internal class KotlinApiClientRequestCollector(
     private companion object {
         const val KTOR_CLIENT_REQUEST_PREFIX = "io.ktor.client.request."
         const val SPRING_REST_TEMPLATE_PREFIX = "org.springframework.web.client.RestTemplate."
+        const val SPRING_HTTP_METHOD = "org.springframework.http.HttpMethod"
         const val SPRING_WEB_CLIENT_PREFIX = "org.springframework.web.reactive.function.client.WebClient."
         const val RESOLUTION_RESOLVED = 0
         const val RESOLUTION_PARTIALLY_RESOLVED = 1

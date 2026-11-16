@@ -339,7 +339,7 @@ final class JdtSemanticAnalysisEngineTests {
 
         JsonObject result = new JdtSemanticAnalysisEngine().analyze(payload);
         JsonArray endpoints = result.getAsJsonArray("serverApiEndpoints");
-        assertEquals(3, endpoints.size());
+        assertEquals(4, endpoints.size());
 
         JsonObject get = endpoints.asList().stream().map(item -> item.getAsJsonObject())
             .filter(item -> item.get("handlerIdentity").getAsString().contains("getOrder"))
@@ -358,10 +358,16 @@ final class JdtSemanticAnalysisEngineTests {
             .map(item -> item.getAsString()).sorted().toList());
 
         JsonObject dynamic = endpoints.asList().stream().map(item -> item.getAsJsonObject())
+            .filter(item -> item.get("handlerIdentity").getAsString().contains("constant"))
+            .findFirst().orElseThrow();
+        assertEquals("/constant", dynamic.get("routeTemplate").getAsString());
+        assertEquals(1, dynamic.get("resolutionStatus").getAsInt());
+
+        JsonObject unresolved = endpoints.asList().stream().map(item -> item.getAsJsonObject())
             .filter(item -> item.get("handlerIdentity").getAsString().contains("dynamic"))
             .findFirst().orElseThrow();
-        assertEquals("${orders.route}", dynamic.get("routeTemplate").getAsString());
-        assertEquals(3, dynamic.get("resolutionStatus").getAsInt());
+        assertEquals("${orders.route}", unresolved.get("routeTemplate").getAsString());
+        assertEquals(3, unresolved.get("resolutionStatus").getAsInt());
     }
 
     private static void deleteRecursively(Path directory) throws IOException {

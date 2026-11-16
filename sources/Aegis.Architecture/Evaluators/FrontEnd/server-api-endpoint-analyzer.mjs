@@ -50,7 +50,7 @@ function createEvidence(sourceFile, sourcePath, declaration, language, framework
     return {
         evidenceId: crypto.createHash("sha256").update(identity).digest("hex").toUpperCase(),
         language, framework, providerId: provider, modulePath: root,
-        sourceFile: sourcePath, startLine: pos.line, startColumn: pos.column,
+        sourceFile: path.resolve(root, sourcePath), startLine: pos.line, startColumn: pos.column,
         handlerIdentity: handler, httpMethods: [...new Set(methods)],
         routeTemplate: route, resolutionStatus: status,
         routeCompositionEvidence: composition,

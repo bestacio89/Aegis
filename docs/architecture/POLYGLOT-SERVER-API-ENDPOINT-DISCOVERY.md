@@ -38,3 +38,17 @@ The Ktor routing DSL is now covered for the `routing` container, nested literal 
 
 
 Ktor discovery is performed from K2 IR calls in the exact `io.ktor.server.routing` namespace. Nested `route` calls contribute route-prefix evidence while the visitor traverses their builder lambdas; endpoint calls retain their enclosing source handler, call-site position, module ownership, and declaration snippet. Non-literal String expressions are retained as dynamic evidence, while selector overloads that are not statically interpreted retain only the known prefix and a partially-resolved status.
+
+
+### TypeScript and JavaScript provider slice
+
+The TypeScript compiler API parser now discovers server-side endpoints in TypeScript, TSX, JavaScript, JSX, MJS, and CJS files owned by TypeScript/JavaScript modules:
+
+- Express: statically grounded app/router instances, direct HTTP verb methods, and chained `.route(path).get/post/...()` declarations.
+- NestJS: `@Controller` plus imported `@nestjs/common` HTTP method decorators.
+- Literal routes are resolved; template expressions are partially resolved; non-literal route expressions remain dynamic with their source expression preserved.
+- Evidence retains source file, declaration location, handler identity, methods, module ownership, provider identity, and declaration text.
+- Unrelated `.get()` calls are not treated as Express endpoints unless the receiver is grounded as an Express application/router.
+- TypeScript parser diagnostics are retained as coverage-affecting discovery diagnostics.
+
+This is syntax-backed discovery, not TypeScript type checking or runtime route evaluation. Namespace-import Nest decorators, custom decorator metadata, Express router mount-prefix composition, aliases/data-flow, and framework-specific runtime conventions remain outside this slice. Client API calls and contract matching remain later phases.

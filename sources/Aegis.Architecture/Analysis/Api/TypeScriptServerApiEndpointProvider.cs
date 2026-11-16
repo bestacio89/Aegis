@@ -181,19 +181,23 @@ public sealed class TypeScriptServerApiEndpointProvider
         if (File.Exists(outputCandidate))
             return outputCandidate;
 
-        for (var directory = new DirectoryInfo(Environment.CurrentDirectory);
-             directory is not null;
-             directory = directory.Parent)
+        var searchRoots = new[] { AppContext.BaseDirectory, Environment.CurrentDirectory };
+        foreach (var searchRoot in searchRoots)
         {
-            var sourceCandidate = Path.Combine(
-                directory.FullName,
-                "sources",
-                "Aegis.Architecture",
-                "Evaluators",
-                "FrontEnd",
-                "server-api-endpoint-analyzer.mjs");
-            if (File.Exists(sourceCandidate))
-                return sourceCandidate;
+            for (var directory = new DirectoryInfo(searchRoot);
+                 directory is not null;
+                 directory = directory.Parent)
+            {
+                var sourceCandidate = Path.Combine(
+                    directory.FullName,
+                    "sources",
+                    "Aegis.Architecture",
+                    "Evaluators",
+                    "FrontEnd",
+                    "server-api-endpoint-analyzer.mjs");
+                if (File.Exists(sourceCandidate))
+                    return sourceCandidate;
+            }
         }
 
         return null;

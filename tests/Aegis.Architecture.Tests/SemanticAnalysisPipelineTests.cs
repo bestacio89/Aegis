@@ -134,12 +134,17 @@ public sealed class SemanticAnalysisPipelineTests
                 new ApiClientRequestDiscoveryRegistry([existingCSharpRequest])
         };
 
+        Assert.Single(context.ApiClientRequestDiscoveryRegistry!.Evidence);
+
         await pipeline.AnalyzeAsync(context);
 
         Assert.Equal(2, context.SemanticAnalysisRuns.Count);
         Assert.Equal(2, context.SemanticAnalysisRuns.Sum(run => run.ApiClientRequests.Count));
         var registry = context.ApiClientRequestDiscoveryRegistry!;
-        Assert.Equal(3, registry.Count);
+        Assert.True(
+            registry.Count == 3,
+            $"Expected one pre-existing request plus two semantic requests; found {registry.Count}: "
+            + string.Join(" | ", registry.Evidence.Select(item => $"{item.Language}:{item.EvidenceId}:{item.ProviderId}")));
         Assert.Equal(["C#", "Java", "Kotlin"], registry.Evidence.Select(item => item.Language));
         Assert.Equal(2, registry.Evidence.Count(item => item.EvidenceId == "provider-local-request-id"));
         Assert.Single(registry.ForStatus(ApiClientRequestResolutionStatus.Dynamic));

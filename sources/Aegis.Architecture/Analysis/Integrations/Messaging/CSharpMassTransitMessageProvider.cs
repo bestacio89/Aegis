@@ -5,6 +5,7 @@ using Aegis.Shared.Architecture.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Aegis.Architecture.Analysis.Integrations.Messaging;
 
@@ -125,7 +126,7 @@ public sealed class CSharpMassTransitMessageProvider
                     location,
                     declarationEvidence,
                     [
-                        "The declaration implements the MassTransit IConsumer<T> contract.",
+                        $"The declaration implements the MassTransit IConsumer<{resolved.Expression ?? "unknown"}> contract.",
                         resolved.Evidence
                     ]));
             }
@@ -242,12 +243,15 @@ public sealed class CSharpMassTransitMessageProvider
         ExpressionSyntax? expression,
         SemanticModel semanticModel)
     {
-        var sourceExpression = typeSyntax?.ToString() ?? expression?.ToString();
         var type = typeSyntax is not null
             ? semanticModel.GetTypeInfo(typeSyntax).Type
             : expression is not null
                 ? semanticModel.GetTypeInfo(expression).Type
                 : null;
+        var sourceExpression = typeSyntax?.ToString()
+            ?? (type is not null && type.TypeKind != TypeKind.Error
+                ? type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+                : expression?.ToString());
 
         if (type is null || type.TypeKind == TypeKind.Error)
         {

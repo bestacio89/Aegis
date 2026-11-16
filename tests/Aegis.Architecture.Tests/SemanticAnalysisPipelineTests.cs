@@ -87,6 +87,66 @@ public sealed class SemanticAnalysisPipelineTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_merges_native_client_requests_without_deduplicating_provider_occurrences()
+    {
+        var existingCSharpRequest = new ApiClientRequestEvidence
+        {
+            EvidenceId = "csharp-request-1",
+            Language = "C#",
+            ProviderId = "roslyn-httpclient",
+            ModulePath = Path.Combine(Path.GetTempPath(), "csharp-api"),
+            HttpMethod = "GET",
+            RequestUriExpression = "\"/api/orders\"",
+            ResolutionStatus = ApiClientRequestResolutionStatus.Resolved
+        };
+        var javaRequest = new ApiClientRequestEvidence
+        {
+            EvidenceId = "provider-local-request-id",
+            Language = "Java",
+            ProviderId = "eclipse-jdt-spring-client",
+            ModulePath = Path.Combine(Path.GetTempPath(), "java-api"),
+            HttpMethod = "GET",
+            RequestUriExpression = "\"/api/orders\"",
+            ResolutionStatus = ApiClientRequestResolutionStatus.Resolved
+        };
+        var kotlinRequest = new ApiClientRequestEvidence
+        {
+            EvidenceId = "provider-local-request-id",
+            Language = "Kotlin",
+            ProviderId = "kotlin-k2-spring-client",
+            ModulePath = Path.Combine(Path.GetTempPath(), "kotlin-api"),
+            HttpMethod = "GET",
+            RequestUriExpression = "ordersEndpoint",
+            ResolutionStatus = ApiClientRequestResolutionStatus.Dynamic
+        };
+        var executionOrder = new List<string>();
+        var pipeline = new SemanticAnalysisPipeline(
+        [
+            new RecordingAnalyzer("Kotlin", executionOrder, apiClientRequests: [kotlinRequest]),
+            new RecordingAnalyzer("Java", executionOrder, apiClientRequests: [javaRequest])
+        ],
+        NullLogger<SemanticAnalysisPipeline>.Instance);
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "Polyglot",
+            RootPath = Path.GetTempPath(),
+            ApiClientRequestDiscoveryRegistry =
+                new ApiClientRequestDiscoveryRegistry([existingCSharpRequest])
+        };
+
+        await pipeline.AnalyzeAsync(context);
+
+        var registry = context.ApiClientRequestDiscoveryRegistry!;
+        Assert.Equal(3, registry.Count);
+        Assert.Equal(["C#", "Java", "Kotlin"], registry.Evidence.Select(item => item.Language));
+        Assert.Equal(2, registry.Evidence.Count(item => item.EvidenceId == "provider-local-request-id"));
+        Assert.Single(registry.ForStatus(ApiClientRequestResolutionStatus.Dynamic));
+        Assert.Contains(existingCSharpRequest, registry.Evidence);
+        Assert.Contains(javaRequest, registry.Evidence);
+        Assert.Contains(kotlinRequest, registry.Evidence);
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_respects_explicit_execution_order_for_jvm_interoperability()
     {
         var executionOrder = new List<string>();
@@ -249,7 +309,8 @@ public sealed class SemanticAnalysisPipelineTests
         ICollection<string> executionOrder,
         bool shouldFail = false,
         int executionOrderValue = 0,
-        IReadOnlyList<ApiEndpointEvidence>? serverApiEndpoints = null) : ISemanticAnalysisProjectAnalyzer
+        IReadOnlyList<ApiEndpointEvidence>? serverApiEndpoints = null,
+        IReadOnlyList<ApiClientRequestEvidence>? apiClientRequests = null) : ISemanticAnalysisProjectAnalyzer
     {
         public string Language => language;
         public int ExecutionOrder => executionOrderValue;
@@ -271,6 +332,7 @@ public sealed class SemanticAnalysisPipelineTests
                 EngineId = $"{language}-test-provider",
                 ProjectPath = context.RootPath,
                 ServerApiEndpoints = serverApiEndpoints?.ToList() ?? [],
+                ApiClientRequests = apiClientRequests?.ToList() ?? [],
                 Status = SemanticAnalysisStatus.Completed,
                 StartedAtUtc = DateTimeOffset.UtcNow,
                 CompletedAtUtc = DateTimeOffset.UtcNow

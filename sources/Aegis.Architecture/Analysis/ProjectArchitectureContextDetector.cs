@@ -311,7 +311,7 @@ public static class ProjectArchitectureContextDetector
             {
                 var scriptFiles = moduleFiles.Where(file =>
                     Path.GetExtension(file).ToLowerInvariant() is
-                        ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs" or ".cjs");
+                        ".ts" or ".tsx" or ".mts" or ".cts" or ".js" or ".jsx" or ".mjs" or ".cjs");
                 evidence.AddRange(typeScriptProvider.Discover(
                     modulePath,
                     scriptFiles,

@@ -127,7 +127,7 @@ function discoverNest(sourceFile, sourcePath, results) {
                 if (!mappings.has(imported)) continue;
                 const route = getDecoratorRoute(decorator);
                 const combined = combine(prefix.value, route.value);
-                results.push(createEvidence(sourceFile, sourcePath, decorator, "TypeScript", "NestJS",
+                results.push(createEvidence(sourceFile, sourcePath, member, "TypeScript", "NestJS",
                     "typescript-ast-nestjs", node.name.text + "." + member.name.getText(sourceFile),
                     mappings.get(imported), combined, resolveStatus(prefix.status, route.status),
                     [...prefix.evidence, ...route.evidence, "NestJS controller and route decorators"]));

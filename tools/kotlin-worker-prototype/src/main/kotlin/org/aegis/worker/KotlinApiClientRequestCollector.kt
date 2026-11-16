@@ -215,13 +215,14 @@ internal class KotlinApiClientRequestCollector(
     private fun firstValueArgument(call: IrCall): IrExpression? =
         valueArgument(call, 0)
 
-    private fun valueArgument(call: IrCall, valueArgumentIndex: Int): IrExpression? =
-        call.arguments
+    private fun valueArgument(call: IrCall, valueArgumentIndex: Int): IrExpression? {
+        val receiverCount = (if (call.dispatchReceiver != null) 1 else 0)
+            + (if (call.symbol.owner.extensionReceiverParameter != null) 1 else 0)
+        return call.arguments
             .filterNotNull()
-            .filterNot { argument ->
-                argument === call.dispatchReceiver || argument === call.extensionReceiver
-            }
+            .drop(receiverCount)
             .getOrNull(valueArgumentIndex)
+    }
 
     private fun enumArgument(call: IrCall, valueArgumentIndex: Int): String? =
         valueArgument(call, valueArgumentIndex)?.let(::springHttpMethodConstant)

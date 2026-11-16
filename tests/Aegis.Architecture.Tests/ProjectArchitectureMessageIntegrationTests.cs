@@ -27,6 +27,7 @@ public sealed class ProjectArchitectureMessageIntegrationTests
             using System;
             using System.Threading.Tasks;
             using MassTransit;
+            using Orders.Contracts;
             namespace Orders.Contracts { public sealed record OrderSubmitted(Guid Id); }
             namespace Orders.Application
             {

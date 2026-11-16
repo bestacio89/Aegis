@@ -1,4 +1,5 @@
 using Aegis.Architecture.Analysis;
+using Aegis.Shared.Architecture.Models;
 using Xunit;
 
 namespace Aegis.Architecture.Tests;
@@ -32,7 +33,8 @@ public sealed class ProjectArchitectureServerApiEndpointIntegrationTests
 
         var module = Assert.Single(context.Modules);
         Assert.Contains("TypeScript", module.Languages);
-        var endpoint = Assert.Single(context.ServerApiEndpointDiscoveryRegistry.Evidence);
+        var registry = Assert.IsType<ServerApiEndpointDiscoveryRegistry>(context.ServerApiEndpointDiscoveryRegistry);
+        var endpoint = Assert.Single(registry.Evidence);
         Assert.Equal("TypeScript", endpoint.Language);
         Assert.Equal("Express", endpoint.Framework);
         Assert.Equal(directory.Path, endpoint.ModulePath);

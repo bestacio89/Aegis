@@ -118,7 +118,8 @@ public sealed class ApiClientRequestEndpointMatcher
             }
 
             var route = NormalizeRoute(endpoint.RouteTemplate);
-            if (string.Equals(requestPath, route, StringComparison.Ordinal))
+            if (IsLiteralRouteTemplate(route)
+                && string.Equals(requestPath, route, StringComparison.Ordinal))
             {
                 candidates.Add(new ApiClientRequestEndpointMatchCandidate(
                     endpointIndex,
@@ -131,7 +132,7 @@ public sealed class ApiClientRequestEndpointMatcher
                 continue;
             }
 
-            if (RouteTemplateMatches(route, requestPath))
+            if (RouteTemplateMatches(route, requestPath, out var unsupportedRouteSyntax))
             {
                 candidates.Add(new ApiClientRequestEndpointMatchCandidate(
                     endpointIndex,
@@ -139,7 +140,20 @@ public sealed class ApiClientRequestEndpointMatcher
                     Array.AsReadOnly(new[]
                     {
                         $"HTTP method '{method}' matches.",
-                        "The request path matches the endpoint's segment-based route template."
+                        "The request path matches the endpoint's supported segment-based route template."
+                    })));
+                continue;
+            }
+
+            if (unsupportedRouteSyntax)
+            {
+                unresolvedEndpointCount++;
+                candidates.Add(new ApiClientRequestEndpointMatchCandidate(
+                    endpointIndex,
+                    ApiClientRequestEndpointMatchKind.UnresolvedEndpoint,
+                    Array.AsReadOnly(new[]
+                    {
+                        "The endpoint route contains constraints or parameter syntax this matcher does not interpret."
                     })));
             }
         }
@@ -284,9 +298,30 @@ public sealed class ApiClientRequestEndpointMatcher
         return normalized;
     }
 
-    private static bool RouteTemplateMatches(string routeTemplate, string requestPath)
+    private static bool IsLiteralRouteTemplate(string routeTemplate) =>
+        routeTemplate.Split('/').Skip(1).All(segment =>
+            !IsParameterSegment(segment)
+            && !IsOptionalParameterSegment(segment)
+            && !IsCatchAllSegment(segment)
+            && !IsUnsupportedRouteSegment(segment));
+
+    private static bool RouteTemplateMatches(
+        string routeTemplate,
+        string requestPath,
+        out bool unsupportedRouteSyntax)
     {
         var routeSegments = routeTemplate.Split('/');
+        for (var index = 1; index < routeSegments.Length; index++)
+        {
+            if (IsUnsupportedRouteSegment(routeSegments[index])
+                || IsCatchAllSegment(routeSegments[index]) && index != routeSegments.Length - 1)
+            {
+                unsupportedRouteSyntax = true;
+                return false;
+            }
+        }
+
+        unsupportedRouteSyntax = false;
         var requestSegments = requestPath.Split('/');
         return MatchSegments(routeSegments, 1, requestSegments, 1);
     }
@@ -305,10 +340,10 @@ public sealed class ApiClientRequestEndpointMatcher
             return routeIndex == routeSegments.Count - 1
                 && requestIndex < requestSegments.Count;
 
-        if (IsOptionalParameterSegment(routeSegment))
+        if (IsOptionalParameterSegment(routeSegment)
+            && MatchSegments(routeSegments, routeIndex + 1, requestSegments, requestIndex))
         {
-            if (MatchSegments(routeSegments, routeIndex + 1, requestSegments, requestIndex))
-                return true;
+            return true;
         }
 
         if (requestIndex >= requestSegments.Count)
@@ -327,22 +362,69 @@ public sealed class ApiClientRequestEndpointMatcher
         return MatchSegments(routeSegments, routeIndex + 1, requestSegments, requestIndex + 1);
     }
 
-    private static bool IsParameterSegment(string segment) =>
-        segment.Length >= 3
-        && segment[0] == '{'
-        && segment[^1] == '}'
-        || segment.Length > 1 && segment[0] == ':';
+    private static bool IsParameterSegment(string segment)
+    {
+        if (segment.Length >= 3 && segment[0] == '{' && segment[^1] == '}')
+            return IsRouteParameterName(segment[1..^1]);
 
-    private static bool IsOptionalParameterSegment(string segment) =>
-        segment.Length >= 4
-        && segment[0] == '{'
-        && segment[^2] == '?'
-        && segment[^1] == '}';
+        if (segment.Length > 1 && segment[0] == ':')
+            return IsRouteParameterName(segment[1..]);
 
-    private static bool IsCatchAllSegment(string segment) =>
-        segment == "*"
-        || segment.StartsWith("{*", StringComparison.Ordinal)
-        || segment.StartsWith("{**", StringComparison.Ordinal);
+        return false;
+    }
+
+    private static bool IsOptionalParameterSegment(string segment)
+    {
+        if (segment.Length >= 4
+            && segment[0] == '{'
+            && segment[^2] == '?'
+            && segment[^1] == '}')
+        {
+            return IsRouteParameterName(segment[1..^2]);
+        }
+
+        return segment.Length > 2
+            && segment[0] == ':'
+            && segment[^1] == '?'
+            && IsRouteParameterName(segment[1..^1]);
+    }
+
+    private static bool IsCatchAllSegment(string segment)
+    {
+        if (segment == "*")
+            return true;
+
+        if (segment.Length > 3
+            && segment.StartsWith("{*", StringComparison.Ordinal)
+            && segment.EndsWith('}'))
+        {
+            return IsRouteParameterName(segment[2..^1]);
+        }
+
+        return segment.Length > 4
+            && segment.StartsWith("{**", StringComparison.Ordinal)
+            && segment.EndsWith('}')
+            && IsRouteParameterName(segment[3..^1]);
+    }
+
+    private static bool IsUnsupportedRouteSegment(string segment)
+    {
+        if (IsCatchAllSegment(segment))
+            return false;
+
+        if (segment.Contains('{', StringComparison.Ordinal)
+            || segment.Contains('}', StringComparison.Ordinal)
+            || segment.StartsWith(':', StringComparison.Ordinal))
+        {
+            return !IsParameterSegment(segment) && !IsOptionalParameterSegment(segment);
+        }
+
+        return false;
+    }
+
+    private static bool IsRouteParameterName(string name) =>
+        name.Length > 0
+        && name.All(character => char.IsAsciiLetterOrDigit(character) || character == '_');
 
     private static ApiClientRequestEndpointMatch CreateResult(
         int requestIndex,

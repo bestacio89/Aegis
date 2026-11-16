@@ -24,6 +24,8 @@ public sealed class ProjectArchitectureMessageIntegrationTests
         File.WriteAllText(
             sourceFile,
             """
+            using System;
+            using System.Threading.Tasks;
             using MassTransit;
             namespace Orders.Contracts { public sealed record OrderSubmitted(Guid Id); }
             namespace Orders.Application

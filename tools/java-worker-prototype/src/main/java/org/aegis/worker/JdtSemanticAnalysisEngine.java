@@ -159,6 +159,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         result.add("symbols", new JsonArray());
         result.add("relationships", new JsonArray());
         result.add("serverApiEndpoints", new JsonArray());
+        result.add("apiClientRequests", new JsonArray());
         result.add("diagnostics", new JsonArray());
         return result;
     }
@@ -223,6 +224,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         private final Map<String, JsonObject> relationships = new LinkedHashMap<>();
         private final JsonArray diagnostics = new JsonArray();
         private final JsonArray serverApiEndpoints = new JsonArray();
+        private final JsonArray apiClientRequests = new JsonArray();
         private int analyzedFiles;
         private int skippedFiles;
 
@@ -326,6 +328,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                 public boolean visit(MethodInvocation node) {
                     IMethodBinding binding = node.resolveMethodBinding();
                     addCall(enclosingSymbol(node), binding, node.toString(), node, file, test, false);
+                    discoverApiClientRequest(node, file);
                     return true;
                 }
 
@@ -408,6 +411,113 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             }
         }
 
+
+        private void discoverApiClientRequest(MethodInvocation invocation, Path file) {
+            IMethodBinding binding = invocation.resolveMethodBinding();
+            if (binding == null || binding.isRecovered()) return;
+            ITypeBinding declaringType = binding.getDeclaringClass();
+            if (declaringType == null || declaringType.isRecovered()) return;
+
+            String owner = declaringType.getTypeDeclaration().getQualifiedName();
+            String name = binding.getName();
+            String framework;
+            String httpMethod = null;
+            Expression uriExpression = null;
+
+            if ("org.springframework.web.client.RestTemplate".equals(owner)) {
+                framework = "Spring RestTemplate";
+                switch (name) {
+                    case "getForObject", "getForEntity" -> { httpMethod = "GET"; uriExpression = argument(invocation, 0); }
+                    case "postForObject", "postForEntity", "postForLocation" -> { httpMethod = "POST"; uriExpression = argument(invocation, 0); }
+                    case "put" -> { httpMethod = "PUT"; uriExpression = argument(invocation, 0); }
+                    case "delete" -> { httpMethod = "DELETE"; uriExpression = argument(invocation, 0); }
+                    case "patchForObject" -> { httpMethod = "PATCH"; uriExpression = argument(invocation, 0); }
+                    case "exchange", "execute" -> {
+                        uriExpression = argument(invocation, 0);
+                        Expression methodArgument = name.equals("exchange") ? argument(invocation, 1) : null;
+                        httpMethod = enumConstant(methodArgument);
+                    }
+                    default -> { return; }
+                }
+            } else if ("org.springframework.web.reactive.function.client.WebClient".equals(owner)) {
+                framework = "Spring WebClient";
+                httpMethod = switch (name) {
+                    case "get" -> "GET";
+                    case "post" -> "POST";
+                    case "put" -> "PUT";
+                    case "patch" -> "PATCH";
+                    case "delete" -> "DELETE";
+                    default -> null;
+                };
+                if (httpMethod == null) return;
+                MethodInvocation uriCall = enclosingUriCall(invocation);
+                uriExpression = uriCall == null ? null : argument(uriCall, 0);
+            } else {
+                return;
+            }
+
+            ASTNode caller = enclosingSymbolNode(invocation);
+            IMethodBinding callerBinding = caller instanceof MethodDeclaration method
+                ? method.resolveBinding() : null;
+            String callerIdentity = callerBinding == null
+                ? (caller == null ? "" : caller.toString())
+                : methodIdentity(callerBinding.getMethodDeclaration());
+            String uriText = uriExpression == null ? null : uriExpression.toString();
+            boolean literalUri = uriExpression instanceof StringLiteral
+                || uriExpression instanceof TextBlock;
+            int resolutionStatus = uriText == null ? 2 : literalUri ? 0 : 2;
+
+            JsonObject evidence = new JsonObject();
+            evidence.addProperty("evidenceId", file + "#client#" + invocation.getStartPosition());
+            evidence.addProperty("language", "Java");
+            evidence.addProperty("framework", framework);
+            evidence.addProperty("providerId", "eclipse-jdt-api-client");
+            evidence.addProperty("modulePath", projectRoot.toString());
+            evidence.addProperty("sourceFile", file.toString());
+            evidence.addProperty("startLine", line(invocation));
+            evidence.addProperty("startColumn", column(invocation));
+            evidence.addProperty("callerIdentity", callerIdentity);
+            if (httpMethod != null) evidence.addProperty("httpMethod", httpMethod);
+            if (uriText != null) evidence.addProperty("requestUriExpression", uriText);
+            evidence.addProperty("resolutionStatus", resolutionStatus);
+            JsonArray resolutionEvidence = new JsonArray();
+            resolutionEvidence.add("Resolved invocation binding: " + owner + "#" + name);
+            if (uriExpression == null) resolutionEvidence.add("No URI argument was statically associated with the client invocation.");
+            else if (!literalUri) resolutionEvidence.add("The request URI is an expression and is not reduced to a runtime value.");
+            evidence.add("resolutionEvidence", resolutionEvidence);
+            evidence.addProperty("declarationEvidence", invocation.toString());
+            apiClientRequests.add(evidence);
+        }
+
+        private static Expression argument(MethodInvocation invocation, int index) {
+            return invocation.arguments().size() > index
+                ? (Expression) invocation.arguments().get(index) : null;
+        }
+
+        private static String enumConstant(Expression expression) {
+            if (!(expression instanceof Name name)) return null;
+            IBinding binding = name.resolveBinding();
+            if (binding instanceof IVariableBinding variable && variable.isEnumConstant())
+                return variable.getName();
+            return null;
+        }
+
+        private static MethodInvocation enclosingUriCall(MethodInvocation invocation) {
+            ASTNode current = invocation.getParent();
+            while (current instanceof MethodInvocation chained) {
+                IMethodBinding binding = chained.resolveMethodBinding();
+                ITypeBinding owner = binding == null ? null : binding.getDeclaringClass();
+                if (owner != null && "org.springframework.web.reactive.function.client.WebClient$UriSpec".equals(
+                        owner.getTypeDeclaration().getQualifiedName())
+                    && "uri".equals(binding.getName())) return chained;
+                if (chained.getExpression() == invocation) {
+                    current = chained.getParent();
+                    continue;
+                }
+                break;
+            }
+            return null;
+        }
 
         private void discoverSpringEndpoint(MethodDeclaration method, Path file) {
             List<Annotation> methodMappings = mappingAnnotations(method.modifiers());
@@ -805,6 +915,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             result.add("symbols", symbolArray);
             result.add("relationships", relationshipArray);
             result.add("serverApiEndpoints", serverApiEndpoints);
+            result.add("apiClientRequests", apiClientRequests);
             result.add("diagnostics", diagnostics);
             return result;
         }

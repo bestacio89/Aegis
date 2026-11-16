@@ -794,22 +794,28 @@ class KotlinCompilerIntegrationTests {
             assertEquals(ExitCode.OK, exitCode)
             val result = JsonParser.parseString(Files.readString(evidence)).asJsonObject
             val endpoints = result.getAsJsonArray("serverApiEndpoints").map { it.asJsonObject }
-            assertEquals(3, endpoints.size)
+            val endpointSummary = endpoints.joinToString(" | ") { endpoint ->
+                endpoint.getAsJsonArray("httpMethods").joinToString(",") { it.asString }
+                    + " " + endpoint.get("routeTemplate").asString
+                    + " status=" + endpoint.get("resolutionStatus").asInt
+            }
+            assertEquals(3, endpoints.size, endpointSummary)
 
-            val getOrder = endpoints.single {
+            val getOrder = endpoints.singleOrNull {
                 it.getAsJsonArray("httpMethods").single().asString == "GET"
                     && it.get("routeTemplate").asString == "/api/v1/orders"
-            }
+            } ?: error("Missing nested Ktor GET route. Observed: " + endpointSummary)
             assertEquals(1, getOrder.get("resolutionStatus").asInt)
             assertEquals(3, getOrder.getAsJsonArray("routeCompositionEvidence").size())
 
-            val postOrder = endpoints.single {
+            val postOrder = endpoints.singleOrNull {
                 it.getAsJsonArray("httpMethods").single().asString == "POST"
-            }
+            } ?: error("Missing Ktor POST route. Observed: " + endpointSummary)
             assertEquals("/api/v1/orders", postOrder.get("routeTemplate").asString)
             assertEquals(1, postOrder.get("resolutionStatus").asInt)
 
-            val dynamic = endpoints.single { it.get("resolutionStatus").asInt == 3 }
+            val dynamic = endpoints.singleOrNull { it.get("resolutionStatus").asInt == 3 }
+                ?: error("Missing dynamic Ktor route. Observed: " + endpointSummary)
             assertTrue(dynamic.get("routeTemplate").asString.startsWith("/api/"))
             assertTrue(dynamic.get("routeTemplate").asString.contains("dynamicRoute"))
             assertEquals(listOf("GET"), dynamic.getAsJsonArray("httpMethods").map { it.asString })

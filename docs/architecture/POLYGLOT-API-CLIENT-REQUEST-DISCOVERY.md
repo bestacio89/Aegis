@@ -23,9 +23,10 @@ Duplicate observations and dynamic expressions are retained. An unknown method o
 |---|---|---|
 | C# | Roslyn semantic symbols | `System.Net.Http.HttpClient` methods and `HttpClientJsonExtensions`, including statically correlated `HttpRequestMessage` use with `SendAsync` |
 | Java | Eclipse JDT method bindings | Spring `RestTemplate` and Spring `WebClient` request declarations |
+| Kotlin | Kotlin K2 IR | Ktor client request functions, Spring `RestTemplate`, and Spring `WebClient` URI builder calls |
 | TypeScript / JavaScript | TypeScript compiler API AST | Global or explicitly imported Fetch API calls, Axios imports/instances/configuration, Angular `HttpClient`, and NestJS `HttpService` |
 
-The TypeScript/JavaScript provider uses grounded import, factory, or type-annotation evidence. An arbitrary object's `.get()` method is not treated as an HTTP request. JavaScript and TypeScript are parsed with their respective TypeScript compiler script kinds; this is syntax-level evidence, not a claim of full TypeScript type checking.
+The Kotlin provider uses compiler-resolved IR function identities and retains source-level request expressions. The TypeScript/JavaScript provider uses grounded import, factory, or type-annotation evidence. An arbitrary object's `.get()` method is not treated as an HTTP request. JavaScript and TypeScript are parsed with their respective TypeScript compiler script kinds; this is syntax-level evidence, not a claim of full TypeScript type checking.
 
 ## Resolution rules
 

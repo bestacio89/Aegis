@@ -55,6 +55,9 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
         var requestMappingFile = Path.Combine(springAnnotationDirectory, "RequestMapping.java");
         var getMappingFile = Path.Combine(springAnnotationDirectory, "GetMapping.java");
         var controllerFile = Path.Combine(sourceRoot, "sample", "application", "OrdersController.kt");
+        var ktorClientFile = Path.Combine(sourceRoot, "io", "ktor", "client", "HttpClient.kt");
+        var ktorRequestsFile = Path.Combine(sourceRoot, "io", "ktor", "client", "request", "Requests.kt");
+        var apiGatewayFile = Path.Combine(sourceRoot, "sample", "application", "KotlinApiGateway.kt");
         Directory.CreateDirectory(springAnnotationDirectory);
         await File.WriteAllTextAsync(
             requestMethodFile,
@@ -101,6 +104,35 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
             }
             """);
         await File.WriteAllTextAsync(
+            ktorClientFile,
+            """
+            package io.ktor.client
+
+            class HttpClient
+            """);
+        await File.WriteAllTextAsync(
+            ktorRequestsFile,
+            """
+            package io.ktor.client.request
+
+            import io.ktor.client.HttpClient
+
+            suspend fun HttpClient.get(urlString: String): String = urlString
+            """);
+        await File.WriteAllTextAsync(
+            apiGatewayFile,
+            """
+            package sample.application
+
+            import io.ktor.client.HttpClient
+            import io.ktor.client.request.get
+
+            class KotlinApiGateway(private val client: HttpClient) {
+                suspend fun fetch(orderId: String): String = client.get("/api/orders/$orderId")
+            }
+            """);
+
+        await File.WriteAllTextAsync(
             controllerFile,
             """
             package sample.application
@@ -138,10 +170,10 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
                 WorkspaceRoot = workspace.FullName,
                 ModuleName = "worker-probe",
                 BuildSystem = "Gradle",
-                SourceFiles = [sourceFile, domainFile, controllerFile],
+                SourceFiles = [sourceFile, domainFile, controllerFile, ktorClientFile, ktorRequestsFile, apiGatewayFile],
                 SourceRoots = [sourceRoot],
                 ReferencedSourceRoots = [javaSourceRoot],
-                RequestedCapabilities = ["symbols", "relationships", "server-api-endpoints", "compiler-diagnostics", "jvm-interop"],
+                RequestedCapabilities = ["symbols", "relationships", "server-api-endpoints", "api-client-requests", "compiler-diagnostics", "jvm-interop"],
                 ProviderOptions = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["kotlin.compilerVersion"] = "2.4.21",
@@ -167,6 +199,15 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
             Assert.Equal("/api/orders/{id}", endpoint.RouteTemplate);
             Assert.Equal(new[] { "GET" }, endpoint.HttpMethods);
             Assert.Equal(workspace.FullName, endpoint.ModulePath);
+            Assert.Contains("api-client-requests", run.Capabilities);
+            var clientRequest = Assert.Single(run.ApiClientRequests);
+            Assert.Equal("Kotlin", clientRequest.Language);
+            Assert.Equal("Ktor Client", clientRequest.Framework);
+            Assert.Equal("GET", clientRequest.HttpMethod);
+            Assert.Contains("orderId", clientRequest.RequestUriExpression, StringComparison.Ordinal);
+            Assert.Equal(ApiClientRequestResolutionStatus.PartiallyResolved, clientRequest.ResolutionStatus);
+            Assert.Equal(workspace.FullName, clientRequest.ModulePath);
+            Assert.Contains("KotlinApiGateway.fetch", clientRequest.CallerIdentity);
             var domainSymbolIds = run.Symbols
                 .Where(symbol => symbol.ContainerName == "sample.domain")
                 .Select(symbol => symbol.Id)

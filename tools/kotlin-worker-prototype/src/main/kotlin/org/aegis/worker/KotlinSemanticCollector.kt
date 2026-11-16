@@ -956,6 +956,8 @@ class KotlinSemanticCollector(
         val source = sourceTextCache.getOrPut(path) {
             try {
                 Files.readString(Path.of(path))
+                    .replace("\r\n", "\n")
+                    .replace('\r', '\n')
             } catch (_: Exception) {
                 ""
             }

@@ -960,7 +960,7 @@ public sealed class SemanticArchitectureComponentGraphTests
     }
 
     [Fact]
-    public void Counts_relationships_without_provider_ids_and_exposes_the_traceability_gap()
+    public void Indexes_relationships_without_provider_ids_for_exact_traceability()
     {
         var projectPath = Path.Combine(Path.GetTempPath(), $"aegis-unreferenced-graph-{Guid.NewGuid():N}");
         var context = new ProjectArchitectureContext

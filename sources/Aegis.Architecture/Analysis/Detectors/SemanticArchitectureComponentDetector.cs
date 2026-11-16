@@ -36,6 +36,7 @@ internal static class SemanticArchitectureComponentDetector
             .ToArray();
         var semanticRuns = semanticRunEntries.Select(entry => entry.Run).ToArray();
         var evidenceRegistry = SemanticRelationshipEvidenceRegistry.Create(context.SemanticAnalysisRuns);
+        context.RelationshipEvidenceRegistry = evidenceRegistry;
         if (semanticRuns.Length == 0)
             return;
 

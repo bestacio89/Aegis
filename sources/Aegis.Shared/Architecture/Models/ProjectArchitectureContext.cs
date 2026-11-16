@@ -274,6 +274,16 @@ public sealed class ProjectArchitectureContext
     public List<SemanticAnalysisRun> SemanticAnalysisRuns { get; set; } = [];
 
     /// <summary>
+    /// Snapshot-scoped, lossless index of relationship observations from the
+    /// current semantic runs. Rebuilt by semantic relationship projection and
+    /// excluded from serialization because the source records remain in
+    /// <see cref="SemanticAnalysisRuns"/>.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public SemanticRelationshipEvidenceRegistry? RelationshipEvidenceRegistry { get; set; }
+
+
+    /// <summary>
     /// Production-to-production relationships used to describe the deployed
     /// architecture. Test-project relationships are intentionally excluded.
     /// </summary>

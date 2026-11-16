@@ -92,7 +92,7 @@ function importBindings(sourceFile) {
     return bindings;
 }
 
-function discoverNest(sourceFile, sourcePath, results) {
+function discoverNest(sourceFile, sourcePath, results, language) {
     const imports = importBindings(sourceFile);
     const nestNames = new Map();
     for (const [local, value] of imports)
@@ -127,7 +127,7 @@ function discoverNest(sourceFile, sourcePath, results) {
                 if (!mappings.has(imported)) continue;
                 const route = getDecoratorRoute(decorator);
                 const combined = combine(prefix.value, route.value);
-                results.push(createEvidence(sourceFile, sourcePath, member, "TypeScript", "NestJS",
+                results.push(createEvidence(sourceFile, sourcePath, member, language, "NestJS",
                     "typescript-ast-nestjs", node.name.text + "." + member.name.getText(sourceFile),
                     mappings.get(imported), combined, resolveStatus(prefix.status, route.status),
                     [...prefix.evidence, ...route.evidence, "NestJS controller and route decorators"]));
@@ -137,7 +137,7 @@ function discoverNest(sourceFile, sourcePath, results) {
     visit(sourceFile);
 }
 
-function discoverExpress(sourceFile, sourcePath, results) {
+function discoverExpress(sourceFile, sourcePath, results, language) {
     const packageJson = readJson(path.join(root, "package.json"));
     const importsExpress = sourceFile.statements.some(statement =>
         ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
@@ -161,7 +161,7 @@ function discoverExpress(sourceFile, sourcePath, results) {
                 const route = routeValue(node.arguments[0]);
                 const handler = node.arguments.slice(1).map(argument => argument.getText(sourceFile)).join(", ");
                 const receiver = receiverName(node.expression.expression);
-                results.push(createEvidence(sourceFile, sourcePath, node, "TypeScript", "Express",
+                results.push(createEvidence(sourceFile, sourcePath, node, language, "Express",
                     "typescript-ast-express", receiver + "." + method + "(" + handler + ")",
                     [methods.get(method)], route.value, route.status,
                     [...route.evidence, "Express router method declaration"]));
@@ -175,7 +175,7 @@ function discoverExpress(sourceFile, sourcePath, results) {
                         const verb = current.expression.name.text.toLowerCase();
                         if (methods.has(verb)) {
                             const handler = current.arguments.map(argument => argument.getText(sourceFile)).join(", ");
-                            results.push(createEvidence(sourceFile, sourcePath, current, "TypeScript", "Express",
+                            results.push(createEvidence(sourceFile, sourcePath, current, language, "Express",
                                 "typescript-ast-express", receiver + ".route(" + route.value + ")." + verb + "(" + handler + ")",
                                 [methods.get(verb)], route.value, route.status,
                                 [...route.evidence, "Express chained route declaration"]));
@@ -227,8 +227,9 @@ for (const file of files) {
             });
         }
     }
-    discoverNest(sourceFile, relative(fullPath), results);
-    discoverExpress(sourceFile, relative(fullPath), results);
+    const language = [".js", ".jsx", ".mjs", ".cjs"].includes(extension) ? "JavaScript" : "TypeScript";
+    discoverNest(sourceFile, relative(fullPath), results, language);
+    discoverExpress(sourceFile, relative(fullPath), results, language);
 }
 
 process.stdout.write(JSON.stringify({

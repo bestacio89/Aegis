@@ -148,7 +148,10 @@ function discoverExpress(sourceFile, sourcePath, results, language) {
             && ts.isStringLiteral(statement.moduleSpecifier)
             && statement.moduleSpecifier.text === "express") {
             const clause = statement.importClause;
-            if (clause?.name) expressFactoryNames.add(clause.name.text);
+            if (clause?.name) {
+                expressFactoryNames.add(clause.name.text);
+                expressNamespaceNames.add(clause.name.text);
+            }
             if (clause?.namedBindings && ts.isNamespaceImport(clause.namedBindings))
                 expressNamespaceNames.add(clause.namedBindings.name.text);
             if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) {

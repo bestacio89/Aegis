@@ -213,7 +213,9 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
             Assert.Equal("Kotlin", clientRequest.Language);
             Assert.Equal("Ktor Client", clientRequest.Framework);
             Assert.Equal("GET", clientRequest.HttpMethod);
-            Assert.Contains("orderId", clientRequest.RequestUriExpression, StringComparison.Ordinal);
+            Assert.True(
+                clientRequest.RequestUriExpression.Contains("orderId", StringComparison.Ordinal),
+                $"Expected the Ktor URI evidence to retain the orderId interpolation, received: '{clientRequest.RequestUriExpression}'.");
             Assert.Equal(ApiClientRequestResolutionStatus.PartiallyResolved, clientRequest.ResolutionStatus);
             Assert.Equal(workspace.FullName, clientRequest.ModulePath);
             Assert.Contains("KotlinApiGateway.fetch", clientRequest.CallerIdentity);

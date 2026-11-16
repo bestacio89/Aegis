@@ -34,7 +34,7 @@ A candidate requires both an HTTP-method match and a route-path match:
 - Exact paths produce `ExactPath` candidates.
 - Segment-based route parameters such as `{id}` and `:id` produce `RouteTemplate` candidates.
 - Optional whole-segment parameters and terminal catch-all segments are supported.
-- Embedded parameter expressions, route rewriting, percent-decoding, and framework-specific case/trailing-slash configuration are not inferred.
+- Route constraints, parameter defaults, embedded parameter expressions, custom parameter regexes, route rewriting, percent-decoding, and framework-specific case/trailing-slash configuration are not inferred.
 
 The matcher does not treat a matching method alone, a similar route string, a DTO shape, a build dependency, or a shared host name as proof of a match.
 

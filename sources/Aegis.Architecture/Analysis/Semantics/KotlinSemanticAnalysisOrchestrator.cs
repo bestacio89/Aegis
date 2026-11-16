@@ -559,8 +559,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             TargetName = targetName,
             SourceSetNames = sourceSetNames?.ToArray() ?? Array.Empty<string>(),
             RequestedCapabilities = targetName is null
-                ? ["symbols", "relationships", "compiler-diagnostics", "jvm-interop"]
-                : ["symbols", "relationships", "compiler-diagnostics", "jvm-interop", "multiplatform"],
+                ? ["symbols", "relationships", "server-api-endpoints", "api-client-requests", "compiler-diagnostics", "jvm-interop"]
+                : ["symbols", "relationships", "server-api-endpoints", "api-client-requests", "compiler-diagnostics", "jvm-interop", "multiplatform"],
             HasDeclaredDependencies = classpath.HasDeclaredDependencies,
             IncludeGeneratedCode = true,
             IncludeTestCode = includeTestCode,
@@ -621,6 +621,8 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             Capabilities = run.Capabilities,
             Symbols = run.Symbols,
             Relationships = run.Relationships,
+            ServerApiEndpoints = run.ServerApiEndpoints,
+            ApiClientRequests = run.ApiClientRequests,
             Diagnostics = run.Diagnostics
         };
 

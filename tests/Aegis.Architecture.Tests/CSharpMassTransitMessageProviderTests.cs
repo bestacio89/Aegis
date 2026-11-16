@@ -14,6 +14,7 @@ public sealed class CSharpMassTransitMessageProviderTests
             using System;
             using System.Threading.Tasks;
             using MassTransit;
+            using Orders.Contracts;
 
             namespace Orders.Contracts
             {

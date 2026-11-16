@@ -186,6 +186,13 @@ public sealed class SemanticAnalysisContractTests
     }
 
     [Fact]
+    public void Semantic_symbol_identity_rejects_relative_owner_paths()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            SemanticSymbolIdentity.Create("Kotlin", "relative/library", "symbol"));
+    }
+
+    [Fact]
     public void Semantic_symbol_identity_comparison_is_language_and_platform_path_aware()
     {
         var path = Path.Combine(Path.GetTempPath(), "aegis-identity", "library");
@@ -194,6 +201,8 @@ public sealed class SemanticAnalysisContractTests
         var caseVariantPath = SemanticSymbolIdentity.Create("kotlin", path.ToUpperInvariant(), "symbol");
 
         Assert.True(SemanticSymbolIdentity.Comparer.Equals(first, samePath));
+        Assert.Equal(first, samePath);
+        Assert.Equal(first.GetHashCode(), samePath.GetHashCode());
         Assert.Equal(
             OperatingSystem.IsWindows(),
             SemanticSymbolIdentity.Comparer.Equals(first, caseVariantPath));

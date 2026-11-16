@@ -7,7 +7,7 @@ namespace Aegis.Shared.Architecture.Models;
 /// Canonical identity for a semantic declaration. Provider symbol IDs are opaque
 /// and are only unique within the owning project and language.
 /// </summary>
-public sealed record SemanticSymbolIdentity
+public sealed class SemanticSymbolIdentity : IEquatable<SemanticSymbolIdentity>
 {
     private static readonly StringComparer ProjectPathComparer =
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
@@ -40,6 +40,8 @@ public sealed record SemanticSymbolIdentity
         ArgumentException.ThrowIfNullOrWhiteSpace(language);
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerProjectPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(symbolId);
+        if (!Path.IsPathFullyQualified(ownerProjectPath))
+            throw new ArgumentException("The owner project path must be fully qualified.", nameof(ownerProjectPath));
 
         var normalizedPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(ownerProjectPath));
         return new SemanticSymbolIdentity(language.Trim(), normalizedPath, symbolId);
@@ -75,24 +77,42 @@ public sealed record SemanticSymbolIdentity
         if (string.IsNullOrWhiteSpace(language))
             return false;
 
-        identity = Create(language, ownerProjectPath, symbol.Id);
-        return true;
+        try
+        {
+            identity = Create(language, ownerProjectPath, symbol.Id);
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or NotSupportedException
+                or PathTooLongException)
+        {
+            return false;
+        }
     }
+
+    public bool Equals(SemanticSymbolIdentity? other) =>
+        other is not null
+        && StringComparer.OrdinalIgnoreCase.Equals(Language, other.Language)
+        && ProjectPathComparer.Equals(OwnerProjectPath, other.OwnerProjectPath)
+        && StringComparer.Ordinal.Equals(SymbolId, other.SymbolId);
+
+    public override bool Equals(object? obj) =>
+        obj is SemanticSymbolIdentity other && Equals(other);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(
+            StringComparer.OrdinalIgnoreCase.GetHashCode(Language),
+            ProjectPathComparer.GetHashCode(OwnerProjectPath),
+            StringComparer.Ordinal.GetHashCode(SymbolId));
 
     private sealed class IdentityComparer : IEqualityComparer<SemanticSymbolIdentity>
     {
         public bool Equals(SemanticSymbolIdentity? x, SemanticSymbolIdentity? y) =>
             ReferenceEquals(x, y)
-            || x is not null
-                && y is not null
-                && StringComparer.OrdinalIgnoreCase.Equals(x.Language, y.Language)
-                && ProjectPathComparer.Equals(x.OwnerProjectPath, y.OwnerProjectPath)
-                && StringComparer.Ordinal.Equals(x.SymbolId, y.SymbolId);
+            || x is not null && x.Equals(y);
 
         public int GetHashCode(SemanticSymbolIdentity identity) =>
-            HashCode.Combine(
-                StringComparer.OrdinalIgnoreCase.GetHashCode(identity.Language),
-                ProjectPathComparer.GetHashCode(identity.OwnerProjectPath),
-                StringComparer.Ordinal.GetHashCode(identity.SymbolId));
+            identity.GetHashCode();
     }
 }

@@ -55,8 +55,9 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
         var requestMappingFile = Path.Combine(springAnnotationDirectory, "RequestMapping.java");
         var getMappingFile = Path.Combine(springAnnotationDirectory, "GetMapping.java");
         var controllerFile = Path.Combine(sourceRoot, "sample", "application", "OrdersController.kt");
-        var ktorClientFile = Path.Combine(sourceRoot, "io", "ktor", "client", "HttpClient.kt");
-        var ktorRequestsFile = Path.Combine(sourceRoot, "io", "ktor", "client", "request", "Requests.kt");
+        var ktorStubRoot = Path.Combine(workspace.FullName, "compiler-stubs");
+        var ktorClientFile = Path.Combine(ktorStubRoot, "io", "ktor", "client", "HttpClient.kt");
+        var ktorRequestsFile = Path.Combine(ktorStubRoot, "io", "ktor", "client", "request", "Requests.kt");
         var apiGatewayFile = Path.Combine(sourceRoot, "sample", "application", "KotlinApiGateway.kt");
         Directory.CreateDirectory(springAnnotationDirectory);
         Directory.CreateDirectory(Path.GetDirectoryName(ktorClientFile)!);

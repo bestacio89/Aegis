@@ -32,11 +32,11 @@ public sealed class CSharpHttpClientRequestProviderTests
         Assert.Equal(2, evidence.Count);
         Assert.Contains(evidence, item =>
             item.HttpMethod == "GET"
-            && item.RequestUriExpression == ""/orders""
+            && item.RequestUriExpression == "\"/orders\""
             && item.ResolutionStatus == ApiClientRequestResolutionStatus.Resolved);
         Assert.Contains(evidence, item =>
             item.HttpMethod == "GET"
-            && item.RequestUriExpression == "$"/orders/{id}""
+            && item.RequestUriExpression == "$\"/orders/{id}\""
             && item.ResolutionStatus == ApiClientRequestResolutionStatus.PartiallyResolved);
         Assert.All(evidence, item =>
         {
@@ -101,7 +101,7 @@ public sealed class CSharpHttpClientRequestProviderTests
             fixture.ModulePath));
 
         Assert.Equal("POST", evidence.HttpMethod);
-        Assert.Equal(""/orders"", evidence.RequestUriExpression);
+        Assert.Equal("\"/orders\"", evidence.RequestUriExpression);
         Assert.Contains("HttpRequestMessage", string.Join(" ", evidence.ResolutionEvidence));
     }
 

@@ -55,7 +55,7 @@ Unresolved endpoint declarations with a compatible or unknown method are retaine
 ## Deliberate limitations
 
 - Absolute request URIs remain unresolved because server endpoint evidence does not yet carry a host/base-address identity that can safely bind the URI to a module.
-- A non-empty base-address expression remains unresolved; application configuration and URI composition are not evaluated.
+- A non-empty base-address expression remains unresolved; application configuration and URI composition are not evaluated.\n- Path-relative references such as `orders/42` and query-only references remain unresolved because their effective path depends on a base URI. They are never rewritten as root-relative paths.
 - Dynamic and partially resolved request expressions remain unresolved.
 - Unresolved, dynamic, unsupported, or method-less server declarations are not promoted to confirmed candidates.
 - Matching does not create `HttpRequest` graph edges. A later projection phase consumes this derived evidence without changing the raw client or server registries.

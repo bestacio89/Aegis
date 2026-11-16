@@ -163,11 +163,11 @@ internal static class SemanticArchitectureComponentDetector
             .Where(component => !string.IsNullOrWhiteSpace(component.QualifiedName))
             .GroupBy(
                 component => new QualifiedSymbolIdentity(component.Language, component.QualifiedName),
-                QualifiedSemanticSymbolIdentity.Comparer)
+                QualifiedSymbolIdentityComparer.Instance)
             .ToDictionary(
                 group => group.Key,
                 group => group.ToArray(),
-                QualifiedSemanticSymbolIdentity.Comparer);
+                QualifiedSymbolIdentityComparer.Instance);
 
         var componentNodes = symbolComponents.Values
             .GroupBy(component => component.ComponentId, StringComparer.Ordinal)
@@ -760,24 +760,6 @@ internal static class SemanticArchitectureComponentDetector
             HashCode.Combine(
                 StringComparer.OrdinalIgnoreCase.GetHashCode(identity.Language),
                 StringComparer.Ordinal.GetHashCode(identity.QualifiedName));
-    }
-
-    private sealed class SymbolIdentityComparer : IEqualityComparer<SemanticSymbolIdentity>
-    {
-        public static SymbolIdentityComparer Instance { get; } = new();
-
-        public bool Equals(SemanticSymbolIdentity? x, SemanticSymbolIdentity? y) =>
-            ReferenceEquals(x, y)
-            || x is not null && y is not null
-                && PathComparer.Equals(x.ProjectPath, y.ProjectPath)
-                && StringComparer.OrdinalIgnoreCase.Equals(x.Language, y.Language)
-                && StringComparer.Ordinal.Equals(x.SymbolId, y.SymbolId);
-
-        public int GetHashCode(SemanticSymbolIdentity identity) =>
-            HashCode.Combine(
-                PathComparer.GetHashCode(identity.ProjectPath),
-                StringComparer.OrdinalIgnoreCase.GetHashCode(identity.Language),
-                StringComparer.Ordinal.GetHashCode(identity.SymbolId));
     }
 
     private sealed record SymbolComponent(

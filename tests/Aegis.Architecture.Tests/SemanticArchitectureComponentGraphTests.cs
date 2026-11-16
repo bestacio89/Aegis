@@ -288,18 +288,6 @@ public sealed class SemanticArchitectureComponentGraphTests
                         },
                         new SemanticSymbol
                         {
-                            Id = "explicit-owner-symbol",
-                            Name = "OwnerService",
-                            QualifiedName = "sample.second.OwnerService",
-                            ContainerName = "sample.second",
-                            ContainerKind = "Package",
-                            Language = "Kotlin",
-                            ProjectPath = secondLibraryPath,
-                            FilePath = Path.Combine(secondLibraryPath, "OwnerService.kt"),
-                            Origin = SemanticSymbolOrigin.Source
-                        },
-                        new SemanticSymbol
-                        {
                             Id = "shared-library-symbol",
                             Name = "LibraryService",
                             QualifiedName = "sample.second.LibraryService",
@@ -501,6 +489,18 @@ public sealed class SemanticArchitectureComponentGraphTests
                     Status = SemanticAnalysisStatus.Completed,
                     Symbols =
                     [
+                        new SemanticSymbol
+                        {
+                            Id = "explicit-owner-symbol",
+                            Name = "OwnerService",
+                            QualifiedName = "sample.second.OwnerService",
+                            ContainerName = "sample.second",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = secondLibraryPath,
+                            FilePath = Path.Combine(secondLibraryPath, "OwnerService.kt"),
+                            Origin = SemanticSymbolOrigin.Source
+                        },
                         new SemanticSymbol
                         {
                             Id = "shared-library-symbol",

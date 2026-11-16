@@ -825,7 +825,7 @@ class KotlinCompilerIntegrationTests {
             assertTrue(endpoints.all { it.get("framework").asString == "Ktor" })
             assertTrue(endpoints.all { it.get("providerId").asString == "kotlin-k2-ktor" })
             assertTrue(endpoints.all { it.get("modulePath").asString == workspace.toString() })
-            assertTrue(endpoints.all { it.get("sourceFile").asString == application.toString() })
+            assertTrue(endpoints.all { Path.of(it.get("sourceFile").asString).toAbsolutePath().normalize() == application.toAbsolutePath().normalize() })
             assertTrue(endpoints.all { it.get("declarationEvidence").asString.contains("get(") || it.get("declarationEvidence").asString.contains("post(") })
         } finally {
             if (previousOutput == null) System.clearProperty("aegis.kotlin.semantic.output")

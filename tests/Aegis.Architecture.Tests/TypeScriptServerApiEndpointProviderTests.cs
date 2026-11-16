@@ -97,7 +97,9 @@ public sealed class TypeScriptServerApiEndpointProviderTests
             const cache = createCache();
 
             app.get(route, getOrders);
-            cache.get("/not-an-endpoint");
+            cache.get("/not-an-endpoint", readCache);
+            unknown.get("/also-not-an-endpoint", readUnknown);
+            cache.route("/not-an-express-route").get(readCache);
             """);
 
         var endpoints = new TypeScriptServerApiEndpointProvider().Discover(

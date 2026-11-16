@@ -216,8 +216,7 @@ internal class KotlinApiClientRequestCollector(
         valueArgument(call, 0)
 
     private fun valueArgument(call: IrCall, valueArgumentIndex: Int): IrExpression? {
-        val receiverCount = (if (call.dispatchReceiver != null) 1 else 0)
-            + (if (call.symbol.owner.extensionReceiverParameter != null) 1 else 0)
+        val receiverCount = if (call.dispatchReceiver != null) 1 else 0
         return call.arguments
             .filterNotNull()
             .drop(receiverCount)

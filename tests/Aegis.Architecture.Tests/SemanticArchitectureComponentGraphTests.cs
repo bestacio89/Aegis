@@ -1022,7 +1022,11 @@ public sealed class SemanticArchitectureComponentGraphTests
 
         var edge = Assert.Single(context.ProductionComponentDependencies);
         Assert.Equal(1, edge.RelationshipCount);
-        Assert.Empty(edge.ContributingRelationships);
+        var relationshipReference = Assert.Single(edge.ContributingRelationships);
+        Assert.Equal("java-run", relationshipReference.RunId);
+        Assert.Equal(string.Empty, relationshipReference.RelationshipId);
+        Assert.Equal(0, relationshipReference.RunIndex);
+        Assert.Equal(0, relationshipReference.RelationshipIndex);
         Assert.Equal(1, edge.UnreferencedRelationshipCount);
     }
 

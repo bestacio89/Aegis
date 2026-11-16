@@ -1,13 +1,19 @@
 namespace Aegis.Shared.Architecture.Models;
 
 /// <summary>
-/// Identifies one semantic relationship within the analysis run that produced it.
-/// Relationship IDs are scoped to a run; the pair is the stable evidence reference
-/// used by aggregate dependency projections.
+/// Exact reference to one relationship observation within a semantic context
+/// snapshot. Provider IDs remain available for compatibility, while the indexes
+/// disambiguate duplicate or omitted provider IDs.
 /// </summary>
 public sealed record SemanticRelationshipReference
 {
     public string RunId { get; init; } = string.Empty;
 
     public string RelationshipId { get; init; } = string.Empty;
+
+    /// <summary>Zero-based position of the run in the source context snapshot.</summary>
+    public int RunIndex { get; init; }
+
+    /// <summary>Zero-based position of the relationship within its run.</summary>
+    public int RelationshipIndex { get; init; }
 }

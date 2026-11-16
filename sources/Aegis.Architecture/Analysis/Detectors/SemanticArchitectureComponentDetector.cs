@@ -30,9 +30,12 @@ internal static class SemanticArchitectureComponentDetector
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var semanticRuns = context.SemanticAnalysisRuns
-            .Where(IsUsableSemanticRun)
+        var semanticRunEntries = context.SemanticAnalysisRuns
+            .Select((run, runIndex) => (Run: run, RunIndex: runIndex))
+            .Where(entry => IsUsableSemanticRun(entry.Run))
             .ToArray();
+        var semanticRuns = semanticRunEntries.Select(entry => entry.Run).ToArray();
+        var evidenceRegistry = SemanticRelationshipEvidenceRegistry.Create(context.SemanticAnalysisRuns);
         if (semanticRuns.Length == 0)
             return;
 
@@ -236,7 +239,7 @@ internal static class SemanticArchitectureComponentDetector
         var edges = new Dictionary<EdgeKey, EdgeAccumulator>();
         var projectionMetrics = new List<(SemanticAnalysisRun Run, RunProjectionMetrics Metrics)>();
 
-        foreach (var run in semanticRuns)
+        foreach (var (run, runIndex) in semanticRunEntries)
         {
             var metrics = new RunProjectionMetrics();
             projectionMetrics.Add((run, metrics));
@@ -249,16 +252,17 @@ internal static class SemanticArchitectureComponentDetector
                 .Where(group => group.Count() == 1)
                 .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
 
-            var candidateRelationships = run.Relationships
-                .Where(relationship => ComponentRelationshipKinds.Contains(relationship.Kind))
+            var candidateEvidence = evidenceRegistry.ForRun(runIndex)
+                .Where(item => ComponentRelationshipKinds.Contains(item.Relationship.Kind))
                 .ToArray();
-            metrics.ObservedRelationships = candidateRelationships.Length;
+            metrics.ObservedRelationships = candidateEvidence.Length;
 
-            foreach (var relationship in candidateRelationships.Where(relationship =>
-                         (relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
+            foreach (var evidence in candidateEvidence.Where(item =>
+                         (item.Relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
                              or SemanticResolutionStatus.PartiallyResolved)
-                         && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)))
+                         && !string.IsNullOrWhiteSpace(item.Relationship.TargetSymbolId)))
             {
+                var relationship = evidence.Relationship;
                 metrics.ResolvedCandidates++;
 
                 if (!runSymbols.TryGetValue(relationship.SourceSymbolId, out var sourceSymbol))
@@ -330,7 +334,7 @@ internal static class SemanticArchitectureComponentDetector
                     edges.Add(key, accumulator);
                 }
 
-                accumulator.Add(run.RunId, relationship);
+                accumulator.Add(evidence);
                 metrics.ProjectedRelationships++;
             }
         }
@@ -379,11 +383,12 @@ internal static class SemanticArchitectureComponentDetector
             IsProjectSourceSymbol(symbol)
                 && (!string.IsNullOrWhiteSpace(symbol.ContainerKind)
                     || !string.IsNullOrWhiteSpace(symbol.ContainerName))));
-        var candidateRelationshipCount = semanticRuns.Sum(run => run.Relationships.Count(relationship =>
-            ComponentRelationshipKinds.Contains(relationship.Kind)
-            && (relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
-                or SemanticResolutionStatus.PartiallyResolved)
-            && !string.IsNullOrWhiteSpace(relationship.TargetSymbolId)));
+        var candidateRelationshipCount = semanticRunEntries.Sum(entry =>
+            evidenceRegistry.ForRun(entry.RunIndex).Count(item =>
+                ComponentRelationshipKinds.Contains(item.Relationship.Kind)
+                && (item.Relationship.ResolutionStatus is SemanticResolutionStatus.Resolved
+                    or SemanticResolutionStatus.PartiallyResolved)
+                && !string.IsNullOrWhiteSpace(item.Relationship.TargetSymbolId)));
 
         if (componentNodes.Count == 0 && sourceSymbolCount > 0)
         {
@@ -786,10 +791,10 @@ internal static class SemanticArchitectureComponentDetector
         private readonly SymbolComponent _source;
         private readonly SymbolComponent _target;
         private readonly IReadOnlyList<string> _compatibleAndroidVariants;
-        private readonly HashSet<string> _relationshipIds = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _evidenceIds = new(StringComparer.Ordinal);
         private readonly List<SemanticRelationshipReference> _relationshipReferences = [];
-        private readonly HashSet<SemanticRelationship> _unreferencedRelationships = [];
         private readonly HashSet<SemanticRelationshipKind> _relationshipKinds = [];
+        private int _unreferencedRelationshipCount;
         private readonly HashSet<string> _evidenceFiles = new(PathComparer);
         private int _resolvedRelationshipCount;
         private int _partiallyResolvedRelationshipCount;
@@ -804,25 +809,22 @@ internal static class SemanticArchitectureComponentDetector
             _compatibleAndroidVariants = compatibleAndroidVariants;
         }
 
-        public void Add(string runId, SemanticRelationship relationship)
+        public void Add(SemanticRelationshipEvidence evidence)
         {
-            if (string.IsNullOrWhiteSpace(relationship.Id))
-            {
-                if (!_unreferencedRelationships.Add(relationship))
-                    return;
-            }
-            else if (!_relationshipIds.Add(relationship.Id))
-            {
+            if (!_evidenceIds.Add(evidence.EvidenceId))
                 return;
-            }
-            else
+
+            var relationship = evidence.Relationship;
+            _relationshipReferences.Add(new SemanticRelationshipReference
             {
-                _relationshipReferences.Add(new SemanticRelationshipReference
-                {
-                    RunId = runId,
-                    RelationshipId = relationship.Id
-                });
-            }
+                RunId = evidence.RunId,
+                RelationshipId = relationship.Id,
+                RunIndex = evidence.RunIndex,
+                RelationshipIndex = evidence.RelationshipIndex
+            });
+
+            if (string.IsNullOrWhiteSpace(relationship.Id))
+                _unreferencedRelationshipCount++;
 
             _relationshipKinds.Add(relationship.Kind);
             if (relationship.ResolutionStatus == SemanticResolutionStatus.Resolved)
@@ -850,13 +852,14 @@ internal static class SemanticArchitectureComponentDetector
                 _source.ComponentId,
                 _target.ComponentId,
                 StringComparison.Ordinal),
-            RelationshipCount = _relationshipIds.Count + _unreferencedRelationships.Count,
+            RelationshipCount = _relationshipReferences.Count,
             ResolvedRelationshipCount = _resolvedRelationshipCount,
             PartiallyResolvedRelationshipCount = _partiallyResolvedRelationshipCount,
             ContributingRelationships = _relationshipReferences
-                .OrderBy(reference => reference.RelationshipId, StringComparer.Ordinal)
+                .OrderBy(reference => reference.RunIndex)
+                .ThenBy(reference => reference.RelationshipIndex)
                 .ToList(),
-            UnreferencedRelationshipCount = _unreferencedRelationships.Count,
+            UnreferencedRelationshipCount = _unreferencedRelationshipCount,
             RelationshipKinds = _relationshipKinds.OrderBy(kind => kind).ToList(),
             EvidenceFiles = _evidenceFiles.OrderBy(file => file, PathComparer).ToList(),
             AndroidVariants = _compatibleAndroidVariants.ToList(),

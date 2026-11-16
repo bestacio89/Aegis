@@ -59,6 +59,14 @@ public sealed class SemanticArchitectureProjectionDiagnosticsTests
                 },
                 new SemanticRelationship
                 {
+                    Id = "resolved-reference",
+                    SourceSymbolId = "order-service",
+                    TargetSymbolId = "order",
+                    Kind = SemanticRelationshipKind.References,
+                    ResolutionStatus = SemanticResolutionStatus.Resolved
+                },
+                new SemanticRelationship
+                {
                     Id = "unresolved-reference",
                     SourceSymbolId = "order-service",
                     UnresolvedTarget = "sample.external.MissingType",
@@ -96,7 +104,8 @@ public sealed class SemanticArchitectureProjectionDiagnosticsTests
 
         Assert.Equal(2, context.ProductionComponents.Count);
         var edge = Assert.Single(context.ProductionComponentDependencies);
-        Assert.Equal(1, edge.RelationshipCount);
+        Assert.Equal(2, edge.RelationshipCount);
+        Assert.Equal([0, 1], edge.ContributingRelationships.Select(item => item.RelationshipIndex).ToArray());
 
         var diagnostic = Assert.Single(run.Diagnostics, item =>
             item.Code == "SemanticArchitectureComponentProjectionBaseline");
@@ -104,10 +113,10 @@ public sealed class SemanticArchitectureProjectionDiagnosticsTests
         Assert.Equal("jdt-test-provider", diagnostic.EngineId);
         Assert.Equal("java-projection-run", diagnostic.RunId);
         Assert.False(diagnostic.AffectsCoverage);
-        Assert.Contains("Observed relationships=3", diagnostic.Message, StringComparison.Ordinal);
-        Assert.Contains("resolved candidates=2", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains("Observed relationships=4", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains("resolved candidates=3", diagnostic.Message, StringComparison.Ordinal);
         Assert.Contains("unresolved or targetless observations=1", diagnostic.Message, StringComparison.Ordinal);
         Assert.Contains("unresolved or ambiguous targets=1", diagnostic.Message, StringComparison.Ordinal);
-        Assert.Contains("projected relationships=1", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains("projected relationships=2", diagnostic.Message, StringComparison.Ordinal);
     }
 }

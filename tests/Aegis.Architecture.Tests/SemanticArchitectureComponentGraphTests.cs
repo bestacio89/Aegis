@@ -1121,23 +1121,27 @@ public sealed class SemanticArchitectureComponentGraphTests
 
         SemanticArchitectureComponentDetector.Analyze(context);
 
-        Assert.Equal(4, context.ProductionComponents.Count);
-        Assert.Equal(2, context.ProductionComponentDependencies.Count);
+        Assert.Equal(3, context.ProductionComponents.Count);
+        Assert.Single(context.ProductionComponentDependencies);
+        Assert.Single(context.ArchitectureComponentInternalDependencies);
 
-        foreach (var edge in context.ProductionComponentDependencies)
-        {
-            var source = context.ProductionComponents.Single(component => component.Id == edge.SourceComponentId);
-            var target = context.ProductionComponents.Single(component => component.Id == edge.TargetComponentId);
+        var javaEdge = Assert.Single(context.ProductionComponentDependencies);
+        var javaSource = context.ProductionComponents.Single(component => component.Id == javaEdge.SourceComponentId);
+        var javaTarget = context.ProductionComponents.Single(component => component.Id == javaEdge.TargetComponentId);
 
-            Assert.Equal(source.Language, target.Language);
-            Assert.Equal(1, edge.RelationshipCount);
-            Assert.Single(edge.ContributingRelationships);
-        }
+        Assert.Equal("Java", javaSource.Language);
+        Assert.Equal("Java", javaTarget.Language);
+        Assert.Equal(1, javaEdge.RelationshipCount);
+        Assert.Single(javaEdge.ContributingRelationships);
 
-        Assert.Contains(context.ProductionComponentDependencies, edge =>
-            context.ProductionComponents.Single(component => component.Id == edge.SourceComponentId).Language == "Java");
-        Assert.Contains(context.ProductionComponentDependencies, edge =>
-            context.ProductionComponents.Single(component => component.Id == edge.SourceComponentId).Language == "C#");
+        var csharpInternalEdge = Assert.Single(context.ArchitectureComponentInternalDependencies);
+        var csharpComponent = Assert.Single(context.ProductionComponents, component =>
+            component.Id == csharpInternalEdge.SourceComponentId);
+
+        Assert.Equal("C#", csharpComponent.Language);
+        Assert.Equal(csharpComponent.Id, csharpInternalEdge.TargetComponentId);
+        Assert.Equal(1, csharpInternalEdge.RelationshipCount);
+        Assert.Single(csharpInternalEdge.ContributingRelationships);
 
         SemanticAnalysisRun CreateRun(
             string runId,

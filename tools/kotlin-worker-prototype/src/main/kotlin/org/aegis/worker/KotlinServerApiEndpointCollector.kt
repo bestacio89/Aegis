@@ -7,6 +7,7 @@ import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.declarations.IrParameterKind
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
@@ -138,7 +139,7 @@ internal class KotlinServerApiEndpointCollector(
         }
 
         return expressions.map { item ->
-            val value = (item as? IrConst<*>)?.value as? String
+            val value = (item as? IrConst)?.value as? String
             if (value == null) {
                 RouteValue(item.toString(), true)
             } else {
@@ -179,8 +180,11 @@ internal class KotlinServerApiEndpointCollector(
     }
 
     private fun annotationArgument(annotation: IrConstructorCall, name: String): IrExpression? {
-        val index = annotation.symbol.owner.valueParameters.indexOfFirst { it.name.asString() == name }
-        return if (index < 0) null else annotation.getValueArgument(index)
+        val parameters = annotation.symbol.owner.parameters
+        val index = parameters.indexOfFirst {
+            it.kind == IrParameterKind.Regular && it.name.asString() == name
+        }
+        return if (index < 0) null else annotation.arguments.getOrNull(index)
     }
 
     private fun annotationEvidence(annotation: IrConstructorCall): String {
@@ -194,7 +198,9 @@ internal class KotlinServerApiEndpointCollector(
         val name = function.fqNameWhenAvailable?.asString() ?: function.name.asString()
         val receiver = function.parameters.firstOrNull { it.kind.name == "ExtensionReceiver" }
             ?.type?.toString()
-        val parameters = function.valueParameters.joinToString(",") { it.type.toString() }
+        val parameters = function.parameters
+            .filter { it.kind == IrParameterKind.Regular }
+            .joinToString(",") { it.type.toString() }
         return name + "(" + (receiver?.let { it + ";" } ?: "") + parameters + ")"
     }
 

@@ -25,9 +25,9 @@ Controller tokens such as [controller] remain partially resolved. Non-literal ro
 
 The Eclipse JDT worker discovers `@RequestMapping`, `@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping`, and `@PatchMapping` declarations through resolved annotation bindings. Class-level and method-level literal route values are composed, HTTP methods are retained, and unresolved route expressions and Spring property/SpEL placeholders remain dynamic observations; Java compile-time string constants are resolved through JDT constant-expression bindings. Evidence is returned through the semantic run and merged into the shared server endpoint registry. The provider does not execute Spring configuration, resolve external property placeholders, infer composed custom annotations, or prove handler invocation semantics.
 
-## Known coverage limits
+## Current coverage boundary
 
-This remains an incremental Phase 7 implementation, not Phase 7 completion. Kotlin Spring MVC/WebFlux/Ktor, TypeScript/JavaScript Express/NestJS providers, semantic handler binding, and additional framework-specific route conventions remain outstanding. The existing API consistency evaluator is unchanged. API client discovery and matching remain separate phases.
+The current provider set includes ASP.NET Core, Spring MVC/WebFlux, Ktor, Express, and NestJS. These providers preserve declaration-level endpoint observations but do not prove runtime reachability or handler invocation. Framework-specific conventions not explicitly listed below remain unsupported. The existing API consistency evaluator is unchanged; API client discovery and contract matching remain separate phases.
 
 
 ### Kotlin provider slice

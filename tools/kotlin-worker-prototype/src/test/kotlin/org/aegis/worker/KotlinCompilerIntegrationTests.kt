@@ -795,8 +795,8 @@ class KotlinCompilerIntegrationTests {
             val result = JsonParser.parseString(Files.readString(evidence)).asJsonObject
             val endpoints = result.getAsJsonArray("serverApiEndpoints").map { it.asJsonObject }
             val endpointSummary = endpoints.joinToString(" | ") { endpoint ->
-                endpoint.getAsJsonArray("httpMethods").joinToString(",") { it.asString }
-                    + " " + endpoint.get("routeTemplate").asString
+                val methods = endpoint.getAsJsonArray("httpMethods").joinToString(",") { it.asString }
+                methods + " " + endpoint.get("routeTemplate").asString
                     + " status=" + endpoint.get("resolutionStatus").asInt
             }
             assertEquals(3, endpoints.size, endpointSummary)

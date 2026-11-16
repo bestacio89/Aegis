@@ -332,6 +332,7 @@ public static class ProjectArchitectureContextDetector
     {
         var evidence = new List<ApiClientRequestEvidence>();
         var csharpProvider = new CSharpHttpClientRequestProvider();
+        var typeScriptProvider = new Aegis.Architecture.Analysis.Api.TypeScriptApiClientRequestProvider();
 
         foreach (var module in context.Modules.Where(module =>
                      !string.IsNullOrWhiteSpace(module.Path)
@@ -350,6 +351,29 @@ public static class ProjectArchitectureContextDetector
             var csharpFiles = moduleFiles.Where(file =>
                 string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase));
             evidence.AddRange(csharpProvider.Discover(csharpFiles, modulePath));
+        }
+
+        foreach (var module in context.Modules.Where(module =>
+                     !string.IsNullOrWhiteSpace(module.Path)
+                     && module.Languages.Any(language =>
+                         language.Equals("TypeScript", StringComparison.OrdinalIgnoreCase)
+                         || language.Equals("JavaScript", StringComparison.OrdinalIgnoreCase))))
+        {
+            var modulePath = Path.GetFullPath(module.Path);
+            var scriptFiles = files.Where(file =>
+            {
+                var relative = Path.GetRelativePath(modulePath, Path.GetFullPath(file));
+                return !Path.IsPathRooted(relative)
+                    && relative != ".."
+                    && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
+                    && Path.GetExtension(file).ToLowerInvariant() is
+                        ".ts" or ".tsx" or ".mts" or ".cts" or ".js" or ".jsx" or ".mjs" or ".cjs";
+            });
+            evidence.AddRange(typeScriptProvider.Discover(
+                modulePath,
+                scriptFiles,
+                context.DiscoveryDiagnostics));
         }
 
         context.ApiClientRequestDiscoveryRegistry =

@@ -86,6 +86,10 @@ public sealed class CSharpMassTransitMessageProviderTests
         Assert.Equal(IntegrationEvidenceResolutionStatus.Resolved, consume.ResolutionStatus);
         Assert.Contains("OrderSubmittedConsumer", consume.HandlerIdentity, StringComparison.Ordinal);
         Assert.Contains("IConsumer<OrderSubmitted>", consume.ResolutionEvidence[0], StringComparison.Ordinal);
+        Assert.Equal("orders", consume.DestinationIdentity);
+        Assert.Equal("\"orders\"", consume.DestinationExpression);
+        Assert.Equal(MessageDestinationKind.Unknown, consume.DestinationKind);
+        Assert.Contains("ReceiveEndpoint", consume.DeclarationEvidence, StringComparison.Ordinal);
     }
 
     [Fact]

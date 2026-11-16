@@ -288,6 +288,18 @@ public sealed class SemanticArchitectureComponentGraphTests
                         },
                         new SemanticSymbol
                         {
+                            Id = "explicit-owner-symbol",
+                            Name = "OwnerService",
+                            QualifiedName = "sample.second.OwnerService",
+                            ContainerName = "sample.second",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = secondLibraryPath,
+                            FilePath = Path.Combine(secondLibraryPath, "OwnerService.kt"),
+                            Origin = SemanticSymbolOrigin.Source
+                        },
+                        new SemanticSymbol
+                        {
                             Id = "shared-library-symbol",
                             Name = "LibraryService",
                             QualifiedName = "sample.second.LibraryService",
@@ -298,6 +310,18 @@ public sealed class SemanticArchitectureComponentGraphTests
                             // for external symbols; qualified-name attribution must
                             // identify the dependency module without trusting this path.
                             ProjectPath = appPath,
+                            Origin = SemanticSymbolOrigin.External
+                        },
+                        new SemanticSymbol
+                        {
+                            Id = "explicit-owner-symbol",
+                            Name = "OwnerService",
+                            QualifiedName = "sample.first.OwnerService",
+                            ContainerName = "sample.first",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = appPath,
+                            OwningProjectPath = secondLibraryPath,
                             Origin = SemanticSymbolOrigin.External
                         },
                         new SemanticSymbol
@@ -319,6 +343,14 @@ public sealed class SemanticArchitectureComponentGraphTests
                             Id = "app-uses-library",
                             SourceSymbolId = "app-service",
                             TargetSymbolId = "shared-library-symbol",
+                            Kind = SemanticRelationshipKind.Calls,
+                            ResolutionStatus = SemanticResolutionStatus.Resolved
+                        },
+                        new SemanticRelationship
+                        {
+                            Id = "app-uses-explicit-owner",
+                            SourceSymbolId = "app-service",
+                            TargetSymbolId = "explicit-owner-symbol",
                             Kind = SemanticRelationshipKind.Calls,
                             ResolutionStatus = SemanticResolutionStatus.Resolved
                         },
@@ -388,6 +420,18 @@ public sealed class SemanticArchitectureComponentGraphTests
                     Status = SemanticAnalysisStatus.Completed,
                     Symbols =
                     [
+                        new SemanticSymbol
+                        {
+                            Id = "explicit-owner-symbol",
+                            Name = "OwnerService",
+                            QualifiedName = "sample.first.OwnerService",
+                            ContainerName = "sample.first",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = firstLibraryPath,
+                            FilePath = Path.Combine(firstLibraryPath, "OwnerService.kt"),
+                            Origin = SemanticSymbolOrigin.Source
+                        },
                         new SemanticSymbol
                         {
                             Id = "shared-library-symbol",
@@ -481,6 +525,9 @@ public sealed class SemanticArchitectureComponentGraphTests
             .Single(component => component.Id == edge.SourceComponentId).BuildModuleName);
         Assert.Equal("second-library", context.ProductionComponents
             .Single(component => component.Id == edge.TargetComponentId).BuildModuleName);
+        Assert.Equal(2, edge.RelationshipCount);
+        Assert.Contains(edge.ContributingRelationships, reference =>
+            reference.RelationshipId == "app-uses-explicit-owner");
         var testEdge = Assert.Single(context.TestComponentDependencies);
         Assert.Equal("test-support", context.TestComponents
             .Single(component => component.Id == testEdge.TargetComponentId).BuildModuleName);

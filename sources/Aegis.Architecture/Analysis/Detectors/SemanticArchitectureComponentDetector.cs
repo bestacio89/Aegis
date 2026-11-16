@@ -128,8 +128,8 @@ internal static class SemanticArchitectureComponentDetector
                     });
             })
             .GroupBy(
-                item => new SymbolIdentity(item.ModulePath, item.Language, item.SymbolId),
-                SymbolIdentityComparer.Instance)
+                item => SemanticSymbolIdentity.Create(item.Language, item.ModulePath, item.SymbolId),
+                SemanticSymbolIdentity.Comparer)
             .Select(group => new
             {
                 group.Key,
@@ -142,17 +142,17 @@ internal static class SemanticArchitectureComponentDetector
             .ToDictionary(
                 item => item.Key,
                 item => item.Components[0],
-                SymbolIdentityComparer.Instance);
+                SemanticSymbolIdentity.Comparer);
 
         var symbolIdentitiesById = semanticRuns
             .SelectMany(run => run.Symbols
                 .Where(IsProjectSourceSymbol)
                 .Where(symbol => !string.IsNullOrWhiteSpace(symbol.Id))
-                .Select(symbol => new SymbolIdentity(
-                    NormalizePath(run.ProjectPath),
-                    run.Language,
+                .Select(symbol => SemanticSymbolIdentity.Create(
+                    string.IsNullOrWhiteSpace(symbol.Language) ? run.Language : symbol.Language,
+                    run.ProjectPath,
                     symbol.Id)))
-            .Distinct(SymbolIdentityComparer.Instance)
+            .Distinct(SemanticSymbolIdentity.Comparer)
             .GroupBy(identity => identity.SymbolId, StringComparer.Ordinal)
             .ToDictionary(
                 group => group.Key,
@@ -163,11 +163,11 @@ internal static class SemanticArchitectureComponentDetector
             .Where(component => !string.IsNullOrWhiteSpace(component.QualifiedName))
             .GroupBy(
                 component => new QualifiedSymbolIdentity(component.Language, component.QualifiedName),
-                QualifiedSymbolIdentityComparer.Instance)
+                QualifiedSemanticSymbolIdentity.Comparer)
             .ToDictionary(
                 group => group.Key,
                 group => group.ToArray(),
-                QualifiedSymbolIdentityComparer.Instance);
+                QualifiedSemanticSymbolIdentity.Comparer);
 
         var componentNodes = symbolComponents.Values
             .GroupBy(component => component.ComponentId, StringComparer.Ordinal)
@@ -268,7 +268,10 @@ internal static class SemanticArchitectureComponentDetector
                 }
 
                 if (!symbolComponents.TryGetValue(
-                        new SymbolIdentity(NormalizePath(run.ProjectPath), run.Language, relationship.SourceSymbolId),
+                        SemanticSymbolIdentity.Create(
+                            string.IsNullOrWhiteSpace(sourceSymbol.Language) ? run.Language : sourceSymbol.Language,
+                            run.ProjectPath,
+                            relationship.SourceSymbolId),
                         out var sourceComponent))
                 {
                     metrics.MissingSourceComponents++;
@@ -412,8 +415,8 @@ internal static class SemanticArchitectureComponentDetector
         string targetSymbolId,
         SymbolComponent sourceComponent,
         bool includeTestDependencies,
-        IReadOnlyDictionary<SymbolIdentity, SymbolComponent> symbolComponents,
-        IReadOnlyDictionary<string, SymbolIdentity[]> symbolIdentitiesById,
+        IReadOnlyDictionary<SemanticSymbolIdentity, SymbolComponent> symbolComponents,
+        IReadOnlyDictionary<string, SemanticSymbolIdentity[]> symbolIdentitiesById,
         IReadOnlyDictionary<QualifiedSymbolIdentity, SymbolComponent[]> symbolComponentsByQualifiedName)
     {
         // External symbols emitted by a provider describe the resolved target,
@@ -427,7 +430,7 @@ internal static class SemanticArchitectureComponentDetector
 
         if (externalSymbols.Length > 0)
         {
-            var candidates = new Dictionary<SymbolIdentity, SymbolComponent>(SymbolIdentityComparer.Instance);
+            var candidates = new Dictionary<SemanticSymbolIdentity, SymbolComponent>(SemanticSymbolIdentity.Comparer);
             var sourceProjectPath = NormalizePath(run.ProjectPath);
             var reachableDependencyPaths = ResolveReachableDependencyPaths(
                 context.Dependencies,
@@ -435,16 +438,14 @@ internal static class SemanticArchitectureComponentDetector
                 includeTestDependencies);
 
             foreach (var externalSymbol in externalSymbols.Where(symbol =>
-                         !string.IsNullOrWhiteSpace(symbol.ProjectPath)))
+                         !string.IsNullOrWhiteSpace(symbol.OwningProjectPath)))
             {
-                var externalProjectPath = NormalizePath(externalSymbol.ProjectPath!);
-                if (PathComparer.Equals(externalProjectPath, sourceProjectPath))
+                if (!SemanticSymbolIdentity.TryCreate(run, externalSymbol, out var exactIdentity)
+                    || exactIdentity is null)
+                {
                     continue;
+                }
 
-                var exactIdentity = new SymbolIdentity(
-                    externalProjectPath,
-                    string.IsNullOrWhiteSpace(externalSymbol.Language) ? run.Language : externalSymbol.Language,
-                    targetSymbolId);
                 if (symbolComponents.TryGetValue(exactIdentity, out var exactTarget)
                     && TryResolveCompatibleAndroidVariants(sourceComponent, exactTarget, out _))
                 {
@@ -452,8 +453,10 @@ internal static class SemanticArchitectureComponentDetector
                 }
             }
 
-            // A provider-supplied target owner is stronger than name matching.
-            if (candidates.Count > 0)
+            // An explicit owner is authoritative. If it cannot be matched to a
+            // declaration in that project, do not silently fall back to a
+            // different project merely because its qualified name happens to match.
+            if (externalSymbols.Any(symbol => !string.IsNullOrWhiteSpace(symbol.OwningProjectPath)))
                 return candidates.Count == 1 ? candidates.Values.Single() : null;
 
             foreach (var externalSymbol in externalSymbols)
@@ -489,7 +492,7 @@ internal static class SemanticArchitectureComponentDetector
                 if (!TryResolveCompatibleAndroidVariants(sourceComponent, candidate, out _))
                     continue;
 
-                var identity = new SymbolIdentity(candidate.ModulePath, candidate.Language, candidate.SymbolId);
+                var identity = SemanticSymbolIdentity.Create(candidate.Language, candidate.ModulePath, candidate.SymbolId);
                 candidates[identity] = candidate;
             }
 
@@ -497,9 +500,9 @@ internal static class SemanticArchitectureComponentDetector
         }
 
         // Same-run source declarations are already scoped by the run's project.
-        var sameProjectTarget = new SymbolIdentity(
-            NormalizePath(run.ProjectPath),
+        var sameProjectTarget = SemanticSymbolIdentity.Create(
             run.Language,
+            run.ProjectPath,
             targetSymbolId);
         if (symbolComponents.TryGetValue(sameProjectTarget, out var localTarget)
             && TryResolveCompatibleAndroidVariants(sourceComponent, localTarget, out _))
@@ -741,8 +744,6 @@ internal static class SemanticArchitectureComponentDetector
         public int ProjectedRelationships { get; set; }
     }
 
-    private sealed record SymbolIdentity(string ProjectPath, string Language, string SymbolId);
-
     private sealed record QualifiedSymbolIdentity(string Language, string QualifiedName);
 
     private sealed class QualifiedSymbolIdentityComparer : IEqualityComparer<QualifiedSymbolIdentity>
@@ -761,18 +762,18 @@ internal static class SemanticArchitectureComponentDetector
                 StringComparer.Ordinal.GetHashCode(identity.QualifiedName));
     }
 
-    private sealed class SymbolIdentityComparer : IEqualityComparer<SymbolIdentity>
+    private sealed class SymbolIdentityComparer : IEqualityComparer<SemanticSymbolIdentity>
     {
         public static SymbolIdentityComparer Instance { get; } = new();
 
-        public bool Equals(SymbolIdentity? x, SymbolIdentity? y) =>
+        public bool Equals(SemanticSymbolIdentity? x, SemanticSymbolIdentity? y) =>
             ReferenceEquals(x, y)
             || x is not null && y is not null
                 && PathComparer.Equals(x.ProjectPath, y.ProjectPath)
                 && StringComparer.OrdinalIgnoreCase.Equals(x.Language, y.Language)
                 && StringComparer.Ordinal.Equals(x.SymbolId, y.SymbolId);
 
-        public int GetHashCode(SymbolIdentity identity) =>
+        public int GetHashCode(SemanticSymbolIdentity identity) =>
             HashCode.Combine(
                 PathComparer.GetHashCode(identity.ProjectPath),
                 StringComparer.OrdinalIgnoreCase.GetHashCode(identity.Language),

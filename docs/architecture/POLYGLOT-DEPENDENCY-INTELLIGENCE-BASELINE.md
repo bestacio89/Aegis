@@ -101,3 +101,19 @@ The user confirmed the corrected PR-head CI run is green on `029f0afff89b9629c8e
 - The mixed .NET ProjectReference and Maven module dependency regression passes.
 - No existing project-reference, Maven, Gradle, or language-native component behavior is removed or reinterpreted.
 - No shared relationship taxonomy or resolver behavior was changed in Phase 1.
+
+
+## Phase 3 — Canonical symbol identity and ownership
+
+Phase 3 introduces a shared `SemanticSymbolIdentity` contract. The canonical identity is composed of language, the owning project path, and the provider's opaque symbol ID. Source/generated declarations derive their owner from the semantic run's project scope. External declarations require an explicit `OwningProjectPath`; the legacy `ProjectPath` remains analysis-context metadata and is not treated as declaration ownership.
+
+The component projector now uses the shared identity contract and platform-aware path comparison. An explicit external owner is authoritative: if that owner cannot be matched to an indexed declaration, resolution fails closed rather than falling back to a different project with a similar qualified name. External symbols without explicit ownership can still use the existing qualified-name plus reachable-build-dependency fallback, which remains ambiguity-safe.
+
+Regression coverage verifies:
+- Source declarations inherit their analysis project as owner.
+- External declarations cannot claim the consumer analysis path as owner.
+- Explicit external ownership takes precedence over a conflicting qualified name.
+- Symbol identity comparison respects language casing and operating-system path semantics.
+- Existing ambiguous-target and Java/C# identity-isolation protections remain in place.
+
+No worker protocol or UI behavior changes in this phase. Existing providers may continue omitting explicit external ownership; those observations remain eligible for the conservative fallback rather than being assigned fabricated ownership.

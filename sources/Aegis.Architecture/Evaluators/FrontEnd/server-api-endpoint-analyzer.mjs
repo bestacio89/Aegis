@@ -139,15 +139,99 @@ function discoverNest(sourceFile, sourcePath, results, language) {
 
 function discoverExpress(sourceFile, sourcePath, results, language) {
     const packageJson = readJson(path.join(root, "package.json"));
-    const importsExpress = sourceFile.statements.some(statement =>
-        ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
-        && (statement.moduleSpecifier.text === "express" || statement.moduleSpecifier.text.startsWith("express/")));
-    if (!hasDependency(packageJson, "express") && !importsExpress) return;
+    const expressFactoryNames = new Set();
+    const expressNamespaceNames = new Set();
+    const routerFactoryNames = new Set();
+
+    for (const statement of sourceFile.statements) {
+        if (ts.isImportDeclaration(statement)
+            && ts.isStringLiteral(statement.moduleSpecifier)
+            && statement.moduleSpecifier.text === "express") {
+            const clause = statement.importClause;
+            if (clause?.name) expressFactoryNames.add(clause.name.text);
+            if (clause?.namedBindings && ts.isNamespaceImport(clause.namedBindings))
+                expressNamespaceNames.add(clause.namedBindings.name.text);
+            if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+                for (const element of clause.namedBindings.elements) {
+                    if ((element.propertyName?.text ?? element.name.text) === "Router")
+                        routerFactoryNames.add(element.name.text);
+                }
+            }
+        }
+
+        if (ts.isVariableStatement(statement)) {
+            for (const declaration of statement.declarationList.declarations) {
+                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+                const initializer = declaration.initializer;
+                if (ts.isCallExpression(initializer)
+                    && ts.isIdentifier(initializer.expression)
+                    && initializer.expression.text === "require"
+                    && initializer.arguments.length === 1
+                    && ts.isStringLiteral(initializer.arguments[0])
+                    && initializer.arguments[0].text === "express") {
+                    expressNamespaceNames.add(declaration.name.text);
+                }
+            }
+        }
+    }
+
+    const expressInstances = new Set();
+    function isExpressRequire(expression) {
+        return ts.isCallExpression(expression)
+            && ts.isIdentifier(expression.expression)
+            && expression.expression.text === "require"
+            && expression.arguments.length === 1
+            && ts.isStringLiteral(expression.arguments[0])
+            && expression.arguments[0].text === "express";
+    }
+
+    function collectInstances(node) {
+        if (ts.isVariableDeclaration(node)
+            && ts.isIdentifier(node.name)
+            && node.initializer
+            && ts.isCallExpression(node.initializer)) {
+            const callee = node.initializer.expression;
+            if (ts.isIdentifier(callee)
+                && expressFactoryNames.has(callee.text)) {
+                expressInstances.add(node.name.text);
+            } else if (ts.isPropertyAccessExpression(callee)
+                && callee.name.text === "Router"
+                && ts.isIdentifier(callee.expression)
+                && expressNamespaceNames.has(callee.expression.text)) {
+                expressInstances.add(node.name.text);
+            } else if (ts.isIdentifier(callee)
+                && routerFactoryNames.has(callee.text)) {
+                expressInstances.add(node.name.text);
+            } else if (isExpressRequire(callee)) {
+                expressInstances.add(node.name.text);
+            }
+        }
+        ts.forEachChild(node, collectInstances);
+    }
+    collectInstances(sourceFile);
+
+    if (!hasDependency(packageJson, "express")
+        && expressFactoryNames.size === 0
+        && expressNamespaceNames.size === 0
+        && routerFactoryNames.size === 0) return;
 
     const methods = new Map([
         ["get", "GET"], ["post", "POST"], ["put", "PUT"], ["delete", "DELETE"],
         ["patch", "PATCH"], ["head", "HEAD"], ["options", "OPTIONS"], ["all", "ALL"]
     ]);
+
+    function isExpressRouterExpression(expression) {
+        if (ts.isIdentifier(expression))
+            return expressInstances.has(expression.text);
+
+        if (ts.isCallExpression(expression)
+            && ts.isPropertyAccessExpression(expression.expression)
+            && expression.expression.name.text === "route") {
+            return isExpressRouterExpression(expression.expression.expression);
+        }
+
+        return false;
+    }
 
     function receiverName(expression) {
         return ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)
@@ -157,18 +241,24 @@ function discoverExpress(sourceFile, sourcePath, results, language) {
     function visit(node) {
         if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
             const method = node.expression.name.text.toLowerCase();
-            if (methods.has(method) && node.arguments.length >= 2) {
+            const receiver = node.expression.expression;
+            const groundedReceiver = isExpressRouterExpression(receiver);
+
+            if (groundedReceiver && methods.has(method) && node.arguments.length >= 2
+                && !(ts.isCallExpression(receiver)
+                    && ts.isPropertyAccessExpression(receiver.expression)
+                    && receiver.expression.name.text === "route")) {
                 const route = routeValue(node.arguments[0]);
                 const handler = node.arguments.slice(1).map(argument => argument.getText(sourceFile)).join(", ");
-                const receiver = receiverName(node.expression.expression);
                 results.push(createEvidence(sourceFile, sourcePath, node, language, "Express",
-                    "typescript-ast-express", receiver + "." + method + "(" + handler + ")",
+                    "typescript-ast-express", receiverName(receiver) + "." + method + "(" + handler + ")",
                     [methods.get(method)], route.value, route.status,
-                    [...route.evidence, "Express router method declaration"]));
+                    [...route.evidence, "Express application/router method declaration"]));
             }
-            if (method === "route" && node.arguments.length >= 1) {
+
+            if (groundedReceiver && method === "route" && node.arguments.length >= 1) {
                 const route = routeValue(node.arguments[0]);
-                const receiver = receiverName(node.expression.expression);
+                const baseReceiver = receiverName(receiver);
                 let current = node.parent;
                 while (ts.isPropertyAccessExpression(current) || ts.isCallExpression(current)) {
                     if (ts.isCallExpression(current) && ts.isPropertyAccessExpression(current.expression)) {
@@ -176,7 +266,7 @@ function discoverExpress(sourceFile, sourcePath, results, language) {
                         if (methods.has(verb)) {
                             const handler = current.arguments.map(argument => argument.getText(sourceFile)).join(", ");
                             results.push(createEvidence(sourceFile, sourcePath, current, language, "Express",
-                                "typescript-ast-express", receiver + ".route(" + route.value + ")." + verb + "(" + handler + ")",
+                                "typescript-ast-express", baseReceiver + ".route(" + route.value + ")." + verb + "(" + handler + ")",
                                 [methods.get(verb)], route.value, route.status,
                                 [...route.evidence, "Express chained route declaration"]));
                         }
@@ -189,7 +279,6 @@ function discoverExpress(sourceFile, sourcePath, results, language) {
     }
     visit(sourceFile);
 }
-
 let input = "";
 for await (const chunk of process.stdin) input += chunk;
 let files;

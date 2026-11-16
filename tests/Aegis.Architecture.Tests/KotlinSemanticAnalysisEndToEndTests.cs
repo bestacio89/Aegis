@@ -43,32 +43,62 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
             }
             """);
 
-        var springAnnotationsFile = Path.Combine(
-            sourceRoot,
+        var javaSourceRoot = Path.Combine(workspace.FullName, "src", "main", "java");
+        var springAnnotationDirectory = Path.Combine(
+            javaSourceRoot,
             "org",
             "springframework",
             "web",
             "bind",
-            "annotation",
-            "SpringAnnotations.kt");
+            "annotation");
+        var requestMethodFile = Path.Combine(springAnnotationDirectory, "RequestMethod.java");
+        var requestMappingFile = Path.Combine(springAnnotationDirectory, "RequestMapping.java");
+        var getMappingFile = Path.Combine(springAnnotationDirectory, "GetMapping.java");
         var controllerFile = Path.Combine(sourceRoot, "sample", "application", "OrdersController.kt");
-        Directory.CreateDirectory(Path.GetDirectoryName(springAnnotationsFile)!);
+        Directory.CreateDirectory(springAnnotationDirectory);
         await File.WriteAllTextAsync(
-            springAnnotationsFile,
+            requestMethodFile,
             """
-            package org.springframework.web.bind.annotation
+            package org.springframework.web.bind.annotation;
 
-            enum class RequestMethod { GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS }
+            public enum RequestMethod {
+                GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+            }
+            """);
+        await File.WriteAllTextAsync(
+            requestMappingFile,
+            """
+            package org.springframework.web.bind.annotation;
 
-            @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
-            annotation class RequestMapping(
-                val value: String = "",
-                val path: String = "",
-                val method: Array<RequestMethod> = []
-            )
+            import java.lang.annotation.ElementType;
+            import java.lang.annotation.Retention;
+            import java.lang.annotation.RetentionPolicy;
+            import java.lang.annotation.Target;
 
-            @Target(AnnotationTarget.FUNCTION)
-            annotation class GetMapping(val value: String = "")
+            @Retention(RetentionPolicy.RUNTIME)
+            @Target({ElementType.TYPE, ElementType.METHOD})
+            public @interface RequestMapping {
+                String[] value() default {};
+                String[] path() default {};
+                RequestMethod[] method() default {};
+            }
+            """);
+        await File.WriteAllTextAsync(
+            getMappingFile,
+            """
+            package org.springframework.web.bind.annotation;
+
+            import java.lang.annotation.ElementType;
+            import java.lang.annotation.Retention;
+            import java.lang.annotation.RetentionPolicy;
+            import java.lang.annotation.Target;
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @Target(ElementType.METHOD)
+            public @interface GetMapping {
+                String[] value() default {};
+                String[] path() default {};
+            }
             """);
         await File.WriteAllTextAsync(
             controllerFile,
@@ -108,8 +138,9 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
                 WorkspaceRoot = workspace.FullName,
                 ModuleName = "worker-probe",
                 BuildSystem = "Gradle",
-                SourceFiles = [sourceFile, domainFile, springAnnotationsFile, controllerFile],
+                SourceFiles = [sourceFile, domainFile, controllerFile],
                 SourceRoots = [sourceRoot],
+                ReferencedSourceRoots = [javaSourceRoot],
                 RequestedCapabilities = ["symbols", "relationships", "server-api-endpoints", "compiler-diagnostics", "jvm-interop"],
                 ProviderOptions = new Dictionary<string, string>(StringComparer.Ordinal)
                 {

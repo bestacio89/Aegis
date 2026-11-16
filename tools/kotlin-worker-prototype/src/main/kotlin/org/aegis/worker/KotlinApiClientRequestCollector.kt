@@ -261,6 +261,8 @@ internal class KotlinApiClientRequestCollector(
         if (startOffset < 0 || endOffset < startOffset) return null
         return try {
             val source = Files.readString(Path.of(file.fileEntry.name))
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
             if (endOffset > source.length) null else source.substring(startOffset, endOffset).trim()
         } catch (_: Exception) {
             null

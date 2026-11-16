@@ -154,6 +154,7 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
             Capabilities = ["symbols", "relationships", "compiler-diagnostics"],
             Symbols = DeserializeArray<SemanticSymbol>(result, "symbols"),
             Relationships = DeserializeArray<SemanticRelationship>(result, "relationships"),
+            ServerApiEndpoints = DeserializeArray<ApiEndpointEvidence>(result, "serverApiEndpoints"),
             Diagnostics = DeserializeArray<AnalysisDiagnostic>(result, "diagnostics")
         };
     }

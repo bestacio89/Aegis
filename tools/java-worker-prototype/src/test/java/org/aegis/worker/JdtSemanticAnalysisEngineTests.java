@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -278,6 +279,90 @@ final class JdtSemanticAnalysisEngineTests {
         assertEquals(0, result.get("skippedFileCount").getAsInt());
         assertTrue(result.getAsJsonArray("symbols").asList().stream().anyMatch(item ->
             item.getAsJsonObject().get("qualifiedName").getAsString().equals("com.generated.Service")));
+    }
+
+
+    @Test
+    void discovers_spring_controller_routes_from_resolved_annotation_bindings() throws Exception {
+        Path project = Files.createDirectories(workspace.resolve("spring-project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("src/main/java"));
+        Path annotationRoot = Files.createDirectories(sourceRoot.resolve("org/springframework/web/bind/annotation"));
+        Path controllerRoot = Files.createDirectories(sourceRoot.resolve("example"));
+        Files.writeString(annotationRoot.resolve("RequestMethod.java"), """
+            package org.springframework.web.bind.annotation;
+            public enum RequestMethod { GET, POST, PUT, DELETE, PATCH }
+            """);
+        Files.writeString(annotationRoot.resolve("RequestMapping.java"), """
+            package org.springframework.web.bind.annotation;
+            import java.lang.annotation.*;
+            @Target({ElementType.TYPE, ElementType.METHOD})
+            public @interface RequestMapping {
+                String[] value() default {};
+                String[] path() default {};
+                RequestMethod[] method() default {};
+            }
+            """);
+        Files.writeString(annotationRoot.resolve("GetMapping.java"), """
+            package org.springframework.web.bind.annotation;
+            import java.lang.annotation.*;
+            @Target(ElementType.METHOD)
+            public @interface GetMapping {
+                String[] value() default {};
+                String[] path() default {};
+            }
+            """);
+        Files.writeString(controllerRoot.resolve("OrdersController.java"), """
+            package example;
+            import org.springframework.web.bind.annotation.*;
+            @RequestMapping("/api/orders")
+            public final class OrdersController {
+                @GetMapping("/{id}")
+                public String getOrder() { return "ok"; }
+
+                @RequestMapping(path = "/search", method = {RequestMethod.GET, RequestMethod.POST})
+                public String search() { return "ok"; }
+
+                static final String DYNAMIC_ROUTE = "/dynamic";
+                @GetMapping(DYNAMIC_ROUTE)
+                public String dynamic() { return "ok"; }
+            }
+            """);
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("projectPath", project.toString());
+        payload.add("sourceRoots", paths(sourceRoot));
+        payload.add("sourceFiles", paths(
+            annotationRoot.resolve("RequestMethod.java"),
+            annotationRoot.resolve("RequestMapping.java"),
+            annotationRoot.resolve("GetMapping.java"),
+            controllerRoot.resolve("OrdersController.java")));
+        payload.add("classpathEntries", new JsonArray());
+
+        JsonObject result = new JdtSemanticAnalysisEngine().analyze(payload);
+        JsonArray endpoints = result.getAsJsonArray("serverApiEndpoints");
+        assertEquals(3, endpoints.size());
+
+        JsonObject get = endpoints.asList().stream().map(item -> item.getAsJsonObject())
+            .filter(item -> item.get("handlerIdentity").getAsString().contains("getOrder"))
+            .findFirst().orElseThrow();
+        assertEquals("/api/orders/{id}", get.get("routeTemplate").getAsString());
+        assertEquals(List.of("GET"), get.getAsJsonArray("httpMethods").asList().stream()
+            .map(item -> item.getAsString()).toList());
+        assertEquals(1, get.get("resolutionStatus").getAsInt());
+        assertEquals(2, get.getAsJsonArray("routeCompositionEvidence").size());
+
+        JsonObject search = endpoints.asList().stream().map(item -> item.getAsJsonObject())
+            .filter(item -> item.get("handlerIdentity").getAsString().contains("search"))
+            .findFirst().orElseThrow();
+        assertEquals("/api/orders/search", search.get("routeTemplate").getAsString());
+        assertEquals(List.of("GET", "POST"), search.getAsJsonArray("httpMethods").asList().stream()
+            .map(item -> item.getAsString()).sorted().toList());
+
+        JsonObject dynamic = endpoints.asList().stream().map(item -> item.getAsJsonObject())
+            .filter(item -> item.get("handlerIdentity").getAsString().contains("dynamic"))
+            .findFirst().orElseThrow();
+        assertEquals("DYNAMIC_ROUTE", dynamic.get("routeTemplate").getAsString());
+        assertEquals(3, dynamic.get("resolutionStatus").getAsInt());
     }
 
     private static void deleteRecursively(Path directory) throws IOException {

@@ -158,6 +158,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         result.addProperty("skippedFileCount", skipped);
         result.add("symbols", new JsonArray());
         result.add("relationships", new JsonArray());
+        result.add("serverApiEndpoints", new JsonArray());
         result.add("diagnostics", new JsonArray());
         return result;
     }
@@ -221,6 +222,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         private final Map<String, JsonObject> symbols = new LinkedHashMap<>();
         private final Map<String, JsonObject> relationships = new LinkedHashMap<>();
         private final JsonArray diagnostics = new JsonArray();
+        private final JsonArray serverApiEndpoints = new JsonArray();
         private int analyzedFiles;
         private int skippedFiles;
 
@@ -305,6 +307,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                 public boolean visit(MethodDeclaration node) {
                     IMethodBinding binding = node.resolveBinding();
                     addMethod(binding, node, file, test, generated);
+                    discoverSpringEndpoint(node, file);
                     return true;
                 }
 
@@ -404,6 +407,148 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                 diagnostics.add(diagnostic);
             }
         }
+
+
+        private void discoverSpringEndpoint(MethodDeclaration method, Path file) {
+            List<Annotation> methodMappings = mappingAnnotations(method.modifiers());
+            if (methodMappings.isEmpty()) return;
+
+            ASTNode parent = method.getParent();
+            while (parent != null && !(parent instanceof AbstractTypeDeclaration)) parent = parent.getParent();
+            List<Annotation> classMappings = parent instanceof AbstractTypeDeclaration type
+                ? mappingAnnotations(type.modifiers()) : List.of();
+
+            List<RouteValue> classRoutes = classMappings.isEmpty()
+                ? List.of(new RouteValue("", false))
+                : classMappings.stream().flatMap(annotation -> routeValues(annotation).stream()).toList();
+            List<RouteValue> methodRoutes = methodMappings.stream()
+                .flatMap(annotation -> routeValues(annotation).stream()).toList();
+
+            IMethodBinding binding = method.resolveBinding();
+            String handler = binding == null
+                ? (parent instanceof AbstractTypeDeclaration type ? type.getName().getIdentifier() : "")
+                    + "#" + method.getName().getIdentifier()
+                : methodIdentity(binding.getMethodDeclaration());
+            List<String> methods = methodMappings.stream()
+                .flatMap(annotation -> httpMethods(annotation).stream())
+                .distinct().sorted().toList();
+
+            int routeIndex = 0;
+            for (RouteValue classRoute : classRoutes) {
+                for (RouteValue methodRoute : methodRoutes) {
+                    JsonObject endpoint = new JsonObject();
+                    endpoint.addProperty("evidenceId", file + "#" + method.getStartPosition()
+                        + "#" + handler + "#" + routeIndex++);
+                    endpoint.addProperty("language", "Java");
+                    endpoint.addProperty("framework", "Spring MVC/WebFlux");
+                    endpoint.addProperty("providerId", "eclipse-jdt-spring");
+                    endpoint.addProperty("modulePath", projectRoot.toString());
+                    endpoint.addProperty("sourceFile", file.toString());
+                    endpoint.addProperty("startLine", line(method));
+                    endpoint.addProperty("startColumn", column(method));
+                    endpoint.addProperty("handlerIdentity", handler);
+                    JsonArray httpMethods = new JsonArray();
+                    methods.forEach(httpMethods::add);
+                    endpoint.add("httpMethods", httpMethods);
+                    endpoint.addProperty("routeTemplate", combineRoutes(classRoute.value, methodRoute.value));
+                    endpoint.addProperty("resolutionStatus", classRoute.dynamic || methodRoute.dynamic ? 3 : 1);
+                    JsonArray composition = new JsonArray();
+                    classMappings.forEach(annotation -> composition.add(annotation.toString()));
+                    methodMappings.forEach(annotation -> composition.add(annotation.toString()));
+                    endpoint.add("routeCompositionEvidence", composition);
+                    endpoint.addProperty("declarationEvidence", method.toString());
+                    serverApiEndpoints.add(endpoint);
+                }
+            }
+        }
+
+        private static List<Annotation> mappingAnnotations(List<?> modifiers) {
+            List<Annotation> result = new ArrayList<>();
+            for (Object modifier : modifiers) {
+                if (!(modifier instanceof Annotation annotation)) continue;
+                String name = annotationTypeName(annotation);
+                if (name != null && Set.of(
+                    "org.springframework.web.bind.annotation.RequestMapping",
+                    "org.springframework.web.bind.annotation.GetMapping",
+                    "org.springframework.web.bind.annotation.PostMapping",
+                    "org.springframework.web.bind.annotation.PutMapping",
+                    "org.springframework.web.bind.annotation.DeleteMapping",
+                    "org.springframework.web.bind.annotation.PatchMapping").contains(name)) {
+                    result.add(annotation);
+                }
+            }
+            return result;
+        }
+
+        private static String annotationTypeName(Annotation annotation) {
+            ITypeBinding binding = annotation.resolveTypeBinding();
+            return binding == null || binding.isRecovered()
+                ? null : binding.getTypeDeclaration().getQualifiedName();
+        }
+
+        private static List<RouteValue> routeValues(Annotation annotation) {
+            Expression expression = annotationMember(annotation, "path");
+            if (expression == null) expression = annotationMember(annotation, "value");
+            if (expression == null) return List.of(new RouteValue("", false));
+            List<Expression> expressions = new ArrayList<>();
+            if (expression instanceof ArrayInitializer array) {
+                for (Object item : array.expressions()) expressions.add((Expression) item);
+            } else expressions.add(expression);
+            List<RouteValue> result = new ArrayList<>();
+            for (Expression item : expressions) {
+                result.add(item instanceof StringLiteral literal
+                    ? new RouteValue(literal.getLiteralValue(), false)
+                    : new RouteValue(item.toString(), true));
+            }
+            return result;
+        }
+
+        private static Expression annotationMember(Annotation annotation, String name) {
+            if (annotation instanceof SingleMemberAnnotation single && name.equals("value")) return single.getValue();
+            if (!(annotation instanceof NormalAnnotation normal)) return null;
+            for (Object item : normal.values()) {
+                MemberValuePair pair = (MemberValuePair) item;
+                if (pair.getName().getIdentifier().equals(name)) return pair.getValue();
+            }
+            return null;
+        }
+
+        private static List<String> httpMethods(Annotation annotation) {
+            String annotationName = annotationTypeName(annotation);
+            String fixed = switch (annotationName == null ? "" : annotationName) {
+                case "org.springframework.web.bind.annotation.GetMapping" -> "GET";
+                case "org.springframework.web.bind.annotation.PostMapping" -> "POST";
+                case "org.springframework.web.bind.annotation.PutMapping" -> "PUT";
+                case "org.springframework.web.bind.annotation.DeleteMapping" -> "DELETE";
+                case "org.springframework.web.bind.annotation.PatchMapping" -> "PATCH";
+                default -> null;
+            };
+            if (fixed != null) return List.of(fixed);
+            Expression expression = annotationMember(annotation, "method");
+            if (expression == null) return List.of();
+            List<Expression> values = new ArrayList<>();
+            if (expression instanceof ArrayInitializer array) {
+                for (Object item : array.expressions()) values.add((Expression) item);
+            } else values.add(expression);
+            List<String> result = new ArrayList<>();
+            for (Expression value : values) {
+                String text = value.toString();
+                String name = text.substring(text.lastIndexOf('.') + 1);
+                if (Set.of("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE").contains(name))
+                    result.add(name);
+            }
+            return result;
+        }
+
+        private static String combineRoutes(String prefix, String route) {
+            String left = prefix == null ? "" : prefix.trim();
+            String right = route == null ? "" : route.trim();
+            if (left.isEmpty()) return right;
+            if (right.isEmpty()) return left;
+            return "/" + (left + "/" + right).replaceAll("^/+", "").replaceAll("/+$", "");
+        }
+
+        private record RouteValue(String value, boolean dynamic) {}
 
         private String addType(ITypeBinding binding, ASTNode node, Path file, boolean test, boolean generated, int kind) {
             String id = binding == null ? fallbackId(file, node, "type") : bindingId(binding);
@@ -653,6 +798,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             relationships.values().forEach(relationshipArray::add);
             result.add("symbols", symbolArray);
             result.add("relationships", relationshipArray);
+            result.add("serverApiEndpoints", serverApiEndpoints);
             result.add("diagnostics", diagnostics);
             return result;
         }

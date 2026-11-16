@@ -97,6 +97,7 @@ public sealed class SemanticAnalysisPipeline
         }
 
         RecordMissingLanguageAnalyzers(context);
+        MergeServerEndpointEvidence(context);
         ModuleRoleDetector.Analyze(context.Modules);
 
         var architectureMap = await ArchitectureMapConfigurationLoader.LoadAsync(
@@ -105,6 +106,16 @@ public sealed class SemanticAnalysisPipeline
 
         ProjectArchitectureComponents(context, architectureMap.Configuration);
         context.ArchitectureClassificationDiagnostics.InsertRange(0, architectureMap.Diagnostics);
+    }
+
+
+    private static void MergeServerEndpointEvidence(ProjectArchitectureContext context)
+    {
+        var evidence = (context.ServerApiEndpointDiscoveryRegistry?.Evidence
+                ?? Array.Empty<ApiEndpointEvidence>())
+            .Concat(context.SemanticAnalysisRuns.SelectMany(run => run.ServerApiEndpoints))
+            .ToArray();
+        context.ServerApiEndpointDiscoveryRegistry = new ServerApiEndpointDiscoveryRegistry(evidence);
     }
 
     private void RecordMissingLanguageAnalyzers(ProjectArchitectureContext context)

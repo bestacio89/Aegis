@@ -75,6 +75,7 @@ public static class ProjectArchitectureContextDetector
 
         DiscoverServerApiEndpoints(ctx, files);
         DiscoverApiClientRequests(ctx, files);
+        DiscoverMessageIntegrations(ctx, files);
 
         // Framework discovery enriches module-owned evidence (notably Java
         // Maven/Gradle frameworks). Recompute roles only after that evidence
@@ -378,6 +379,35 @@ public static class ProjectArchitectureContextDetector
 
         context.ApiClientRequestDiscoveryRegistry =
             new ApiClientRequestDiscoveryRegistry(evidence);
+    }
+
+    private static void DiscoverMessageIntegrations(
+        ProjectArchitectureContext context,
+        IReadOnlyCollection<string> files)
+    {
+        var evidence = new List<MessageIntegrationEvidence>();
+        var provider = new CSharpMassTransitMessageProvider();
+
+        foreach (var module in context.Modules.Where(module =>
+                     !string.IsNullOrWhiteSpace(module.Path)
+                     && module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase)))
+        {
+            var modulePath = Path.GetFullPath(module.Path);
+            var moduleFiles = files.Where(file =>
+            {
+                var relative = Path.GetRelativePath(modulePath, Path.GetFullPath(file));
+                return !Path.IsPathRooted(relative)
+                    && relative != ".."
+                    && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+            });
+            var csharpFiles = moduleFiles.Where(file =>
+                string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase));
+            evidence.AddRange(provider.Discover(csharpFiles, modulePath));
+        }
+
+        context.MessageIntegrationEvidenceRegistry =
+            new IntegrationEvidenceRegistry<MessageIntegrationEvidence>(evidence);
     }
 
     private static void LoadApplicationIntegrations(ProjectArchitectureContext context)

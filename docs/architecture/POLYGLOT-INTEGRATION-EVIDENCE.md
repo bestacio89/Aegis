@@ -56,3 +56,12 @@ These statuses describe source-analysis evidence only. They do not represent run
 - Provider-native declarations and source positions remain available; normalization does not discard evidence.
 - Messaging, RPC, and data discovery are separate from cross-module matching and graph projection.
 - No graph edges are created by these contracts or registries.
+
+
+## Phase 10B — C# MassTransit discovery
+
+The initial messaging provider uses Roslyn syntax and semantic information already available in Aegis. It recognizes `IPublishEndpoint.Publish` and `ConsumeContext.Publish` calls, plus `IConsumer<T>` declarations, when grounded by the MassTransit namespace/type identity.
+
+Message contract identity is resolved from the generic argument or statically typed message expression when the source compilation can establish it. Otherwise, the original expression is retained with partial/unresolved status. MassTransit publish is type-routed; this provider does not invent a queue, topic, or exchange destination. Point-to-point `Send`, broker topology, runtime registration, and delivery are outside this provider slice.
+
+The provider runs only against C# source files owned by discovered C# modules. It does not infer message relationships from package references or arbitrary methods named `Publish`.

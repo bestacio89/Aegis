@@ -135,7 +135,7 @@ internal class KotlinApiClientRequestCollector(
             "patch" -> "PATCH"
             "delete" -> "DELETE"
             "head" -> "HEAD"
-            "method" -> builderCall?.let { enumArgument(it, 0) }
+            "method" -> builderCall?.let { enumArgument(it) }
             else -> null
         }
         val evidence = mutableListOf(

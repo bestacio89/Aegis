@@ -1,3 +1,4 @@
+using System.IO;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Xunit;
@@ -11,9 +12,9 @@ public sealed class SemanticSymbolIndexTests
     {
         var runs = new[]
         {
-            CreateRun("java", "Java", "/workspace/java",
+            CreateRun("java", "Java", ProjectPath("java"),
                 CreateSymbol("same-id", "sample.Order", "Java", SemanticSymbolOrigin.Source)),
-            CreateRun("kotlin", "Kotlin", "/workspace/kotlin",
+            CreateRun("kotlin", "Kotlin", ProjectPath("kotlin"),
                 CreateSymbol("same-id", "sample.Order", "Kotlin", SemanticSymbolOrigin.Source))
         };
 
@@ -23,7 +24,7 @@ public sealed class SemanticSymbolIndexTests
         Assert.Equal(2, index.FindByProviderId("same-id").Count);
         Assert.Empty(index.FindByQualifiedName("C#", "sample.Order"));
         Assert.Single(index.FindByQualifiedName("Java", "sample.Order"));
-        Assert.Single(index.FindByOwnerProjectPath("/workspace/java"));
+        Assert.Single(index.FindByOwnerProjectPath(ProjectPath("java")));
         Assert.NotEqual(
             index.FindByProviderId("same-id")[0].Identity,
             index.FindByProviderId("same-id")[1].Identity);
@@ -35,8 +36,8 @@ public sealed class SemanticSymbolIndexTests
         var symbol = CreateSymbol("duplicate", "sample.Type", "Java", SemanticSymbolOrigin.Source);
         var runs = new[]
         {
-            CreateRun("run-a", "Java", "/workspace/a", symbol, symbol),
-            CreateRun("run-b", "Java", "/workspace/a", symbol)
+            CreateRun("run-a", "Java", ProjectPath("a"), symbol, symbol),
+            CreateRun("run-b", "Java", ProjectPath("a"), symbol)
         };
 
         var index = SemanticSymbolIndex.Create(runs);
@@ -44,7 +45,7 @@ public sealed class SemanticSymbolIndexTests
         Assert.Equal(3, index.Count);
         Assert.Equal([0, 1], index.ForRun(0).Select(item => item.SymbolIndex).ToArray());
         Assert.Equal(1, index.ForRun(1)[0].RunIndex);
-        Assert.Equal(1, index.ForRun(1)[0].SymbolIndex);
+        Assert.Equal(0, index.ForRun(1)[0].SymbolIndex);
         Assert.Equal(3, index.FindByIdentity(index.Occurrences[0].Identity!).Count);
     }
 
@@ -54,7 +55,7 @@ public sealed class SemanticSymbolIndexTests
         var run = CreateRun(
             "consumer",
             "Java",
-            "/workspace/consumer",
+            ProjectPath("consumer"),
             CreateSymbol("external-no-owner", "library.Type", "Java", SemanticSymbolOrigin.External),
             new SemanticSymbol
             {
@@ -62,17 +63,17 @@ public sealed class SemanticSymbolIndexTests
                 QualifiedName = "library.OwnedType",
                 Language = "Java",
                 Origin = SemanticSymbolOrigin.External,
-                OwningProjectPath = "/workspace/library"
+                OwningProjectPath = ProjectPath("library")
             });
 
         var index = SemanticSymbolIndex.Create([run]);
 
         Assert.Null(index.ForRun(0)[0].Identity);
         Assert.Null(index.ForRun(0)[0].OwnerProjectPath);
-        Assert.Equal("/workspace/library", index.ForRun(0)[1].Identity!.OwnerProjectPath);
-        Assert.Empty(index.FindByOwnerProjectPath("/workspace/consumer")
+        Assert.Equal(ProjectPath("library"), index.ForRun(0)[1].Identity!.OwnerProjectPath);
+        Assert.Empty(index.FindByOwnerProjectPath(ProjectPath("consumer"))
             .Where(item => item.Symbol.Origin == SemanticSymbolOrigin.External));
-        Assert.Single(index.FindByOwnerProjectPath("/workspace/library"));
+        Assert.Single(index.FindByOwnerProjectPath(ProjectPath("library")));
     }
 
     [Fact]
@@ -81,7 +82,7 @@ public sealed class SemanticSymbolIndexTests
         var failed = CreateRun(
             "failed",
             "Java",
-            "/workspace/failed",
+            ProjectPath("failed"),
             new SemanticSymbol { Id = "", QualifiedName = "sample.NoId", Origin = SemanticSymbolOrigin.Source },
             new SemanticSymbol { Id = "invalid-owner", QualifiedName = "sample.External", Origin = SemanticSymbolOrigin.External,
                 OwningProjectPath = "relative/path" });
@@ -109,10 +110,10 @@ public sealed class SemanticSymbolIndexTests
     {
         var index = SemanticSymbolIndex.Create(
         [
-            CreateRun("empty", "Java", "/workspace/empty"),
-            CreateRun("java", "Java", "/workspace/java",
+            CreateRun("empty", "Java", ProjectPath("empty")),
+            CreateRun("java", "Java", ProjectPath("java"),
                 CreateSymbol("java-type", "same.Name", "Java", SemanticSymbolOrigin.Source)),
-            CreateRun("ts", "TypeScript", "/workspace/ts",
+            CreateRun("ts", "TypeScript", ProjectPath("ts"),
                 CreateSymbol("ts-type", "same.Name", "TypeScript", SemanticSymbolOrigin.Source))
         ]);
 
@@ -122,6 +123,9 @@ public sealed class SemanticSymbolIndexTests
         Assert.Single(index.FindByQualifiedName("TypeScript", "same.Name"));
         Assert.Empty(index.FindByQualifiedName("Kotlin", "same.Name"));
     }
+
+    private static string ProjectPath(string name) =>
+        Path.Combine(Path.GetTempPath(), "aegis-symbol-index-tests", name);
 
     private static SemanticAnalysisRun CreateRun(
         string runId,

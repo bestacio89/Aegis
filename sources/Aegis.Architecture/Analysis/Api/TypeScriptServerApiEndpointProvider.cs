@@ -177,10 +177,6 @@ public sealed class TypeScriptServerApiEndpointProvider
             "FrontEnd",
             "server-api-endpoint-analyzer.mjs");
 
-        var outputCandidate = Path.Combine(AppContext.BaseDirectory, relativePath);
-        if (File.Exists(outputCandidate))
-            return outputCandidate;
-
         var searchRoots = new[] { AppContext.BaseDirectory, Environment.CurrentDirectory };
         foreach (var searchRoot in searchRoots)
         {
@@ -195,12 +191,28 @@ public sealed class TypeScriptServerApiEndpointProvider
                     "Evaluators",
                     "FrontEnd",
                     "server-api-endpoint-analyzer.mjs");
-                if (File.Exists(sourceCandidate))
+                if (HasTypeScriptRuntime(sourceCandidate))
                     return sourceCandidate;
             }
         }
 
-        return null;
+        var outputCandidate = Path.Combine(AppContext.BaseDirectory, relativePath);
+        return HasTypeScriptRuntime(outputCandidate)
+            ? outputCandidate
+            : null;
+    }
+
+    private static bool HasTypeScriptRuntime(string analyzerPath)
+    {
+        if (!File.Exists(analyzerPath))
+            return false;
+
+        var runtimeManifest = Path.Combine(
+            Path.GetDirectoryName(analyzerPath)!,
+            "node_modules",
+            "typescript",
+            "package.json");
+        return File.Exists(runtimeManifest);
     }
 
     private static bool IsWithinModule(string filePath, string modulePath)

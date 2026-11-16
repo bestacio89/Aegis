@@ -43,7 +43,9 @@ public sealed class TypeScriptServerApiEndpointProviderTests
             [fixture.SourcePath],
             diagnostics);
 
-        Assert.Empty(diagnostics);
+        Assert.True(
+            diagnostics.Count == 0,
+            string.Join(Environment.NewLine, diagnostics.Select(item => $"{item.Code}: {item.Message}")));
         Assert.Equal(5, endpoints.Count);
         Assert.Contains(endpoints, endpoint =>
             endpoint.Framework == "Express"

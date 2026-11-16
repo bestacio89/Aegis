@@ -28,3 +28,10 @@ The Eclipse JDT worker discovers `@RequestMapping`, `@GetMapping`, `@PostMapping
 ## Known coverage limits
 
 This remains an incremental Phase 7 implementation, not Phase 7 completion. Kotlin Spring MVC/WebFlux/Ktor, TypeScript/JavaScript Express/NestJS providers, semantic handler binding, and additional framework-specific route conventions remain outstanding. The existing API consistency evaluator is unchanged. API client discovery and matching remain separate phases.
+
+
+### Kotlin provider slice
+
+The Kotlin K2 IR worker now emits Spring MVC/WebFlux server endpoint observations from compiler-resolved mapping annotations. Class-level and method-level route values are composed; HTTP methods from method mappings are retained; compile-time string constants are resolved by the compiler; Spring property/SpEL placeholders remain dynamic. Each observation retains module ownership, source location, handler identity, route-composition evidence, and declaration text. The Kotlin host client maps the worker output into the shared `SemanticAnalysisRun.ServerApiEndpoints` contract, which the existing pipeline merges into the shared registry.
+
+Ktor routing DSL discovery, composed/custom Spring annotations, inherited mapping semantics, and Kotlin convention-based routes remain outside this slice and must not be treated as covered. Client discovery and contract matching remain Phases 8–9.

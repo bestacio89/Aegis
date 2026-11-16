@@ -43,6 +43,48 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
             }
             """);
 
+        var springAnnotationsFile = Path.Combine(
+            sourceRoot,
+            "org",
+            "springframework",
+            "web",
+            "bind",
+            "annotation",
+            "SpringAnnotations.kt");
+        var controllerFile = Path.Combine(sourceRoot, "sample", "application", "OrdersController.kt");
+        Directory.CreateDirectory(Path.GetDirectoryName(springAnnotationsFile)!);
+        await File.WriteAllTextAsync(
+            springAnnotationsFile,
+            """
+            package org.springframework.web.bind.annotation
+
+            enum class RequestMethod { GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS }
+
+            @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
+            annotation class RequestMapping(
+                val value: String = "",
+                val path: String = "",
+                val method: Array<RequestMethod> = []
+            )
+
+            @Target(AnnotationTarget.FUNCTION)
+            annotation class GetMapping(val value: String = "")
+            """);
+        await File.WriteAllTextAsync(
+            controllerFile,
+            """
+            package sample.application
+
+            import org.springframework.web.bind.annotation.GetMapping
+            import org.springframework.web.bind.annotation.RequestMapping
+
+            @RequestMapping("/api/orders")
+            class OrdersController {
+                @GetMapping("/{id}")
+                fun getOrder(id: String): String = id
+            }
+            """);
+
         var services = new ServiceCollection();
         services.AddLogging();
         services.Configure<KotlinWorkerOptions>(_ => { });
@@ -66,9 +108,9 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
                 WorkspaceRoot = workspace.FullName,
                 ModuleName = "worker-probe",
                 BuildSystem = "Gradle",
-                SourceFiles = [sourceFile, domainFile],
+                SourceFiles = [sourceFile, domainFile, springAnnotationsFile, controllerFile],
                 SourceRoots = [sourceRoot],
-                RequestedCapabilities = ["symbols", "relationships", "compiler-diagnostics", "jvm-interop"],
+                RequestedCapabilities = ["symbols", "relationships", "server-api-endpoints", "compiler-diagnostics", "jvm-interop"],
                 ProviderOptions = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["kotlin.compilerVersion"] = "2.4.21",
@@ -88,6 +130,12 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
             Assert.Contains(run.Symbols, symbol =>
                 symbol.QualifiedName == "sample.application.WorkerProbe"
                 && symbol.Language == "Kotlin");
+            var endpoint = Assert.Single(run.ServerApiEndpoints);
+            Assert.Equal("Kotlin", endpoint.Language);
+            Assert.Equal("Spring MVC/WebFlux", endpoint.Framework);
+            Assert.Equal("/api/orders/{id}", endpoint.RouteTemplate);
+            Assert.Equal(new[] { "GET" }, endpoint.HttpMethods);
+            Assert.Equal(workspace.FullName, endpoint.ModulePath);
             var domainSymbolIds = run.Symbols
                 .Where(symbol => symbol.ContainerName == "sample.domain")
                 .Select(symbol => symbol.Id)

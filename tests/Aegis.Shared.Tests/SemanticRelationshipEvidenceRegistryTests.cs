@@ -73,7 +73,7 @@ public sealed class SemanticRelationshipEvidenceRegistryTests
         Assert.Same(failedRunRelationship, registry.ForRun(1)[0].Relationship);
         Assert.Equal("Java", registry.ForRun(0)[0].Language);
         Assert.Equal("Kotlin", registry.ForRun(1)[0].Language);
-        Assert.Null(registry.ForRun(0)[3].Relationship.Id);
+        Assert.Equal(string.Empty, registry.ForRun(0)[3].Relationship.Id);
     }
 
     [Fact]

@@ -56,15 +56,15 @@ internal class KotlinApiClientRequestCollector(
             val function = expression.symbol.owner
             val qualifiedName = function.fqNameWhenAvailable?.asString()
             if (file != null && qualifiedName != null) {
-                discoverKtorRequest(expression, qualifiedName, file)
-                discoverRestTemplateRequest(expression, qualifiedName, file)
-                discoverWebClientRequest(expression, qualifiedName, file)
+                discoverKtorRequest(expression, qualifiedName, file, currentCaller)
+                discoverRestTemplateRequest(expression, qualifiedName, file, currentCaller)
+                discoverWebClientRequest(expression, qualifiedName, file, currentCaller)
             }
             expression.acceptChildrenVoid(this)
         }
     }
 
-    private fun discoverKtorRequest(call: IrCall, qualifiedName: String, file: IrFile) {
+    private fun discoverKtorRequest(call: IrCall, qualifiedName: String, file: IrFile, callerIdentity: String?) {
         if (!qualifiedName.startsWith(KTOR_CLIENT_REQUEST_PREFIX)) return
         val functionName = qualifiedName.substringAfterLast('.')
         if (functionName !in KTOR_METHODS) return
@@ -81,11 +81,12 @@ internal class KotlinApiClientRequestCollector(
             uriExpression = uri,
             evidence = listOf(
                 "Kotlin IR resolved the call to the Ktor client request API '$qualifiedName'."
-            )
+            ),
+            callerIdentity = callerIdentity
         )
     }
 
-    private fun discoverRestTemplateRequest(call: IrCall, qualifiedName: String, file: IrFile) {
+    private fun discoverRestTemplateRequest(call: IrCall, qualifiedName: String, file: IrFile, callerIdentity: String?) {
         if (!qualifiedName.startsWith(SPRING_REST_TEMPLATE_PREFIX)) return
         val functionName = qualifiedName.substringAfterLast('.')
         val method = when (functionName) {
@@ -111,15 +112,16 @@ internal class KotlinApiClientRequestCollector(
                 listOf("The HTTP method argument is not a statically resolved enum constant.")
             } else {
                 emptyList()
-            }
+            },
+            callerIdentity = callerIdentity
         )
     }
 
-    private fun discoverWebClientRequest(call: IrCall, qualifiedName: String, file: IrFile) {
+    private fun discoverWebClientRequest(call: IrCall, qualifiedName: String, file: IrFile, callerIdentity: String?) {
         if (!qualifiedName.startsWith(SPRING_WEB_CLIENT_PREFIX)
             || !qualifiedName.endsWith(".uri")) return
 
-        val receiver = call.dispatchReceiver ?: call.extensionReceiver
+        val receiver = call.dispatchReceiver
         val builderCall = receiver as? IrCall
         val builderFunction = builderCall?.symbol?.owner
         val builderName = builderFunction?.name?.asString()
@@ -154,7 +156,8 @@ internal class KotlinApiClientRequestCollector(
             providerId = "kotlin-k2-spring-webclient",
             httpMethod = method,
             uriExpression = firstValueArgument(call),
-            evidence = evidence
+            evidence = evidence,
+            callerIdentity = callerIdentity
         )
     }
 
@@ -166,7 +169,8 @@ internal class KotlinApiClientRequestCollector(
         providerId: String,
         httpMethod: String?,
         uriExpression: IrExpression?,
-        evidence: List<String>
+        evidence: List<String>,
+        callerIdentity: String?
     ) {
         val sourcePath = file.fileEntry.name
         val uriText = uriExpression?.let { sourceSnippet(file, it.startOffset, it.endOffset) ?: it.toString() }
@@ -196,7 +200,7 @@ internal class KotlinApiClientRequestCollector(
             addProperty("sourceFile", sourcePath)
             addProperty("startLine", file.fileEntry.getLineNumber(call.startOffset) + 1)
             addProperty("startColumn", file.fileEntry.getColumnNumber(call.startOffset) + 1)
-            addProperty("callerIdentity", currentCaller ?: "<top-level>")
+            addProperty("callerIdentity", callerIdentity ?: "<top-level>")
             addProperty("httpMethod", httpMethod)
             addProperty("requestUriExpression", uriText)
             add("baseAddressExpression", com.google.gson.JsonNull.INSTANCE)

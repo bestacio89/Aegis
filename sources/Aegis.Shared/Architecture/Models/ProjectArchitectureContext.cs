@@ -313,6 +313,18 @@ public sealed class ProjectArchitectureContext
     [System.Text.Json.Serialization.JsonIgnore]
     public ApiClientRequestEndpointMatchRegistry? ApiClientRequestEndpointMatchRegistry { get; set; }
 
+    /// <summary>Source-level message publish/consume observations; not proof of delivery.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IntegrationEvidenceRegistry<MessageIntegrationEvidence>? MessageIntegrationEvidenceRegistry { get; set; }
+
+    /// <summary>Source-level RPC call/endpoint observations; not proof of invocation.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IntegrationEvidenceRegistry<RpcIntegrationEvidence>? RpcIntegrationEvidenceRegistry { get; set; }
+
+    /// <summary>Source-level data access and mapping observations; not proof of runtime I/O.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IntegrationEvidenceRegistry<DataAccessEvidence>? DataAccessEvidenceRegistry { get; set; }
+
 
     /// <summary>
     /// Production-to-production relationships used to describe the deployed

@@ -419,6 +419,9 @@ final class JdtSemanticAnalysisEngineTests {
             public class OrderGateway {
                 private final RestTemplate client = new RestTemplate();
                 private final WebClient webClient = new WebClient();
+                public static class UnrelatedClient {
+                    public Object getForObject(String url) { return null; }
+                }
                 public void load(String orderId) {
                     client.getForObject("/orders", Object.class);
                     client.postForObject("/orders", new Object(), Object.class);

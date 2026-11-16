@@ -37,7 +37,7 @@ public sealed class TypeScriptApiClientRequestProviderTests
                     this.http.delete("/orders/42");
                     this.service.post("/orders", {});
                     axios.get("/catalog");
-                    const client = axios.create();
+                    const client = axios.create({ baseURL: "/api" });
                     client.delete("/catalog/42");
                     fetch("/health");
                     fetch("/submit", { method: "POST" });
@@ -75,6 +75,9 @@ public sealed class TypeScriptApiClientRequestProviderTests
             item.Framework == "Axios"
             && item.HttpMethod == "DELETE"
             && item.RequestUriExpression == "\"/catalog/42\"");
+        var axiosInstanceRequest = Assert.Single(evidence, item =>
+            item.Framework == "Axios" && item.HttpMethod == "DELETE");
+        Assert.Equal("\"/api\"", axiosInstanceRequest.BaseAddressExpression);
         Assert.Contains(evidence, item =>
             item.Framework == "Fetch API"
             && item.HttpMethod == "GET"
@@ -113,6 +116,7 @@ public sealed class TypeScriptApiClientRequestProviderTests
             async function send(orderId: string, endpoint: string) {
                 fetch(`/orders/${orderId}`);
                 axios.request({ url: endpoint, method: "PUT" });
+                axios.request({ url: endpoint, method });
                 unknown.get("/not-a-client");
             }
             """);
@@ -121,7 +125,7 @@ public sealed class TypeScriptApiClientRequestProviderTests
             fixture.ModulePath,
             [fixture.SourcePath]);
 
-        Assert.Equal(2, evidence.Count);
+        Assert.Equal(3, evidence.Count);
         var fetch = Assert.Single(evidence, item => item.Framework == "Fetch API");
         Assert.Equal("GET", fetch.HttpMethod);
         Assert.Equal(ApiClientRequestResolutionStatus.PartiallyResolved, fetch.ResolutionStatus);
@@ -131,6 +135,9 @@ public sealed class TypeScriptApiClientRequestProviderTests
         Assert.Equal("PUT", axios.HttpMethod);
         Assert.Equal(ApiClientRequestResolutionStatus.Dynamic, axios.ResolutionStatus);
         Assert.Equal("endpoint", axios.RequestUriExpression);
+        var dynamicMethod = Assert.Single(evidence, item =>
+            item.Framework == "Axios" && item.HttpMethod is null);
+        Assert.Equal(ApiClientRequestResolutionStatus.Dynamic, dynamicMethod.ResolutionStatus);
     }
 
     [Fact]

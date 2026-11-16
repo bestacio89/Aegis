@@ -72,6 +72,8 @@ public static class ProjectArchitectureContextDetector
             ctx,
             files);
 
+        DiscoverServerApiEndpoints(ctx, files);
+
         // Framework discovery enriches module-owned evidence (notably Java
         // Maven/Gradle frameworks). Recompute roles only after that evidence
         // is available; the initial pass in ModuleDetector handles manifest-
@@ -273,6 +275,36 @@ public static class ProjectArchitectureContextDetector
         }
 
         return files;
+    }
+
+    private static void DiscoverServerApiEndpoints(
+        ProjectArchitectureContext context,
+        IReadOnlyCollection<string> files)
+    {
+        var provider = new Aegis.Architecture.Analysis.Api.CSharpAspNetEndpointProvider();
+        var evidence = new List<ApiEndpointEvidence>();
+
+        foreach (var module in context.Modules.Where(module =>
+                     module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase)
+                     && !string.IsNullOrWhiteSpace(module.Path)))
+        {
+            var modulePath = Path.GetFullPath(module.Path);
+            var moduleFiles = files.Where(file =>
+            {
+                var relative = Path.GetRelativePath(modulePath, Path.GetFullPath(file));
+                return !Path.IsPathRooted(relative)
+                    && relative != ".."
+                    && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
+                    && string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase);
+            }).ToArray();
+
+            if (moduleFiles.Length > 0)
+                evidence.AddRange(provider.Discover(moduleFiles, modulePath));
+        }
+
+        context.ServerApiEndpointDiscoveryRegistry =
+            new ServerApiEndpointDiscoveryRegistry(evidence);
     }
 
     private static void LoadApplicationIntegrations(ProjectArchitectureContext context)

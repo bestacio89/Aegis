@@ -298,6 +298,10 @@ public sealed class ProjectArchitectureContext
     [System.Text.Json.Serialization.JsonIgnore]
     public SemanticRelationshipNormalizationRegistry? SemanticRelationshipNormalizationRegistry { get; set; }
 
+    /// <summary>Lossless server endpoint observations discovered for this project.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ServerApiEndpointDiscoveryRegistry? ServerApiEndpointDiscoveryRegistry { get; set; }
+
 
     /// <summary>
     /// Production-to-production relationships used to describe the deployed

@@ -179,7 +179,8 @@ internal class KotlinApiClientRequestCollector(
         val uriStatus = when {
             uriExpression == null -> RESOLUTION_DYNAMIC
             (uriExpression as? IrConst)?.value is String -> RESOLUTION_RESOLVED
-            uriExpression is IrStringConcatenation -> RESOLUTION_PARTIALLY_RESOLVED
+            uriExpression is IrStringConcatenation || hasKotlinTemplateInterpolation(uriText) ->
+                RESOLUTION_PARTIALLY_RESOLVED
             else -> RESOLUTION_DYNAMIC
         }
         val resolutionEvidence = JsonArray().also { values ->
@@ -249,6 +250,52 @@ internal class KotlinApiClientRequestCollector(
             }
             else -> null
         }
+
+    private fun hasKotlinTemplateInterpolation(source: String?): Boolean {
+        if (source.isNullOrEmpty()) return false
+        for (index in source.indices) {
+            if (source[index] != '
+        if (startOffset < 0 || endOffset < startOffset) return null
+        return try {
+            val source = Files.readString(Path.of(file.fileEntry.name))
+            if (endOffset > source.length) null else source.substring(startOffset, endOffset).trim()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun stableHash(value: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
+    private companion object {
+        const val KTOR_CLIENT_REQUEST_PREFIX = "io.ktor.client.request."
+        const val SPRING_REST_TEMPLATE_PREFIX = "org.springframework.web.client.RestTemplate."
+        const val SPRING_HTTP_METHOD = "org.springframework.http.HttpMethod"
+        const val SPRING_WEB_CLIENT_PREFIX = "org.springframework.web.reactive.function.client.WebClient."
+        const val RESOLUTION_RESOLVED = 0
+        const val RESOLUTION_PARTIALLY_RESOLVED = 1
+        const val RESOLUTION_DYNAMIC = 2
+
+        val KTOR_METHODS = mapOf(
+            "get" to "GET",
+            "post" to "POST",
+            "put" to "PUT",
+            "delete" to "DELETE",
+            "patch" to "PATCH",
+            "head" to "HEAD",
+            "options" to "OPTIONS",
+            "request" to null
+        )
+    }
+}
+ || (index > 0 && source[index - 1] == '\\')) continue
+            val next = source.getOrNull(index + 1) ?: continue
+            if (next == '{' || Character.isJavaIdentifierStart(next)) return true
+        }
+        return false
+    }
 
     private fun sourceSnippet(file: IrFile, startOffset: Int, endOffset: Int): String? {
         if (startOffset < 0 || endOffset < startOffset) return null

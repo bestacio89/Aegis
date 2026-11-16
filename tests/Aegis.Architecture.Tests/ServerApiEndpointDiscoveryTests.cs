@@ -51,6 +51,53 @@ public sealed class ServerApiEndpointDiscoveryTests
     }
 
     [Fact]
+    public void DiscoversNestedMinimalApiGroupPrefixes()
+    {
+        using var fixture = new SourceFixture("""
+            var api = app.MapGroup("/api");
+            var version = api.MapGroup("/v2");
+            version.MapGet("/orders", GetOrders);
+            app.MapGroup("/health").MapGet("/ready", GetReadiness);
+            """);
+
+        var endpoints = new CSharpAspNetEndpointProvider().Discover([fixture.FilePath], fixture.ModulePath);
+        Assert.Equal(2, endpoints.Count);
+        Assert.Contains(endpoints, endpoint => endpoint.RouteTemplate == "/api/v2/orders");
+        Assert.Contains(endpoints, endpoint => endpoint.RouteTemplate == "/health/ready");
+    }
+
+    [Fact]
+    public void DiscoversMapMethodsWithLiteralMethodCollections()
+    {
+        using var fixture = new SourceFixture("""
+            app.MapMethods("/orders", ["GET", "POST"], HandleOrders);
+            app.MapMethods("/health", new[] { "HEAD", "OPTIONS" }, HandleHealth);
+            """);
+
+        var endpoints = new CSharpAspNetEndpointProvider().Discover([fixture.FilePath], fixture.ModulePath);
+        Assert.Equal(2, endpoints.Count);
+        Assert.Contains(endpoints, endpoint => endpoint.RouteTemplate == "/orders"
+            && endpoint.HttpMethods.SequenceEqual(["GET", "POST"])
+            && endpoint.ResolutionStatus == ApiEndpointResolutionStatus.Resolved);
+        Assert.Contains(endpoints, endpoint => endpoint.RouteTemplate == "/health"
+            && endpoint.HttpMethods.SequenceEqual(["HEAD", "OPTIONS"]));
+    }
+
+    [Fact]
+    public void RetainsDynamicMapMethodsCollectionWithoutInventingMethods()
+    {
+        using var fixture = new SourceFixture("""
+            var methods = GetAllowedMethods();
+            app.MapMethods("/orders", methods, HandleOrders);
+            """);
+
+        var endpoint = Assert.Single(new CSharpAspNetEndpointProvider().Discover([fixture.FilePath], fixture.ModulePath));
+        Assert.Empty(endpoint.HttpMethods);
+        Assert.Equal(ApiEndpointResolutionStatus.PartiallyResolved, endpoint.ResolutionStatus);
+        Assert.Contains("app.MapMethods(\"/orders\", methods, HandleOrders)", endpoint.DeclarationEvidence, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RetainsDynamicRoutesInsteadOfInventingLiteralTemplates()
     {
         using var fixture = new SourceFixture("""

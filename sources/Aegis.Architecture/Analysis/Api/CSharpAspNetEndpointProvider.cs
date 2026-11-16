@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Aegis.Architecture.Analysis.Api;
 
-/// <summary>Discovers ASP.NET Core controller actions and literal Minimal API mappings from C# syntax trees.</summary>
+/// <summary>Discovers ASP.NET Core controller actions and Minimal API mappings from C# syntax trees.</summary>
 public sealed class CSharpAspNetEndpointProvider
 {
     private static readonly IReadOnlyDictionary<string, string> HttpMethods =
@@ -77,32 +77,142 @@ public sealed class CSharpAspNetEndpointProvider
         var groupPrefixes = new Dictionary<string, RouteValue>(StringComparer.Ordinal);
         foreach (var declaration in root.DescendantNodes().OfType<VariableDeclaratorSyntax>())
         {
-            if (declaration.Initializer?.Value is InvocationExpressionSyntax invocation
-                && invocation.Expression.ToString().EndsWith("MapGroup", StringComparison.Ordinal))
-                groupPrefixes[declaration.Identifier.ValueText] = ReadFirstRouteArgument(invocation);
+            if (declaration.Initializer?.Value is not InvocationExpressionSyntax invocation
+                || !IsMapGroup(invocation))
+                continue;
+
+            var receiver = GetReceiver(invocation);
+            var parent = ResolveGroupPrefix(receiver, groupPrefixes, new HashSet<string>(StringComparer.Ordinal));
+            var route = ReadFirstRouteArgument(invocation);
+            groupPrefixes[declaration.Identifier.ValueText] = new RouteValue(
+                CombineRoutes(parent.Value, route.Value),
+                ResolveStatus(parent.Status, route.Status),
+                parent.Evidence.Concat(route.Evidence).ToArray());
         }
 
         foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
-            var name = invocation.Expression switch
-            {
-                MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
-                IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
-                _ => string.Empty
-            };
-            if (!TryGetMinimalApiMethod(name, out var httpMethod)) continue;
+            if (!TryGetMinimalApiMethods(invocation, out var methods, out var methodsResolved)) continue;
 
             var route = ReadFirstRouteArgument(invocation);
-            var receiver = invocation.Expression is MemberAccessExpressionSyntax access
-                ? access.Expression.ToString() : string.Empty;
-            var prefix = groupPrefixes.TryGetValue(receiver, out var group) ? group : RouteValue.Empty;
-            var handler = invocation.ArgumentList.Arguments.Skip(1).FirstOrDefault()?.Expression.ToString()
-                ?? "unresolved-handler";
+            var prefix = ResolveGroupPrefix(GetReceiver(invocation), groupPrefixes, new HashSet<string>(StringComparer.Ordinal));
+            var handler = invocation.ArgumentList.Arguments.Skip(invocation.Expression.ToString().EndsWith("MapMethods", StringComparison.Ordinal) ? 2 : 1)
+                .FirstOrDefault()?.Expression.ToString() ?? "unresolved-handler";
+            var status = ResolveStatus(prefix.Status, route.Status);
+            var composition = prefix.Evidence.Concat(route.Evidence).ToList();
+            if (!methodsResolved)
+            {
+                composition.Add("HTTP methods are not statically resolvable");
+                status = ResolveStatus(status, ApiEndpointResolutionStatus.PartiallyResolved);
+            }
 
-            results.Add(CreateEvidence(sourceFile, modulePath, invocation, handler, [httpMethod],
-                CombineRoutes(prefix.Value, route.Value), ResolveStatus(prefix.Status, route.Status),
-                prefix.Evidence.Concat(route.Evidence), invocation.ToString()));
+            results.Add(CreateEvidence(sourceFile, modulePath, invocation, handler, methods,
+                CombineRoutes(prefix.Value, route.Value), status, composition, invocation.ToString()));
         }
+    }
+
+    private static RouteValue ResolveGroupPrefix(
+        ExpressionSyntax? receiver,
+        IReadOnlyDictionary<string, RouteValue> groupPrefixes,
+        ISet<string> visited)
+    {
+        if (receiver is null) return RouteValue.Empty;
+        if (receiver is IdentifierNameSyntax identifier)
+        {
+            if (!visited.Add(identifier.Identifier.ValueText)) return RouteValue.Dynamic;
+            return groupPrefixes.TryGetValue(identifier.Identifier.ValueText, out var group)
+                ? group : RouteValue.Empty;
+        }
+
+        if (receiver is InvocationExpressionSyntax invocation && IsMapGroup(invocation))
+        {
+            var parent = ResolveGroupPrefix(GetReceiver(invocation), groupPrefixes, visited);
+            var route = ReadFirstRouteArgument(invocation);
+            return new RouteValue(
+                CombineRoutes(parent.Value, route.Value),
+                ResolveStatus(parent.Status, route.Status),
+                parent.Evidence.Concat(route.Evidence).ToArray());
+        }
+
+        return RouteValue.Empty;
+    }
+
+    private static bool IsMapGroup(InvocationExpressionSyntax invocation) =>
+        GetMethodName(invocation).Equals("MapGroup", StringComparison.Ordinal);
+
+    private static ExpressionSyntax? GetReceiver(InvocationExpressionSyntax invocation) =>
+        invocation.Expression is MemberAccessExpressionSyntax member ? member.Expression : null;
+
+    private static string GetMethodName(InvocationExpressionSyntax invocation) =>
+        invocation.Expression switch
+        {
+            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            _ => string.Empty
+        };
+
+    private static bool TryGetMinimalApiMethods(
+        InvocationExpressionSyntax invocation, out IReadOnlyList<string> methods, out bool resolved)
+    {
+        var name = GetMethodName(invocation);
+        if (name.Equals("MapMethods", StringComparison.Ordinal))
+        {
+            var argument = invocation.ArgumentList.Arguments.Skip(1).FirstOrDefault()?.Expression;
+            methods = ReadMethodCollection(argument, out resolved);
+            return true;
+        }
+
+        if (name.StartsWith("Map", StringComparison.Ordinal)
+            && HttpMethods.TryGetValue("Http" + name[3..], out var method))
+        {
+            methods = [method];
+            resolved = true;
+            return true;
+        }
+
+        methods = Array.Empty<string>();
+        resolved = false;
+        return false;
+    }
+
+    private static IReadOnlyList<string> ReadMethodCollection(ExpressionSyntax? expression, out bool resolved)
+    {
+        IEnumerable<ExpressionSyntax>? expressions = expression switch
+        {
+            CollectionExpressionSyntax collection => collection.Elements.OfType<ExpressionElementSyntax>()
+                .Select(element => element.Expression),
+            ImplicitArrayCreationExpressionSyntax array => array.Initializer.Expressions,
+            ArrayCreationExpressionSyntax array when array.Initializer is not null => array.Initializer.Expressions,
+            _ => null
+        };
+
+        if (expressions is null)
+        {
+            resolved = false;
+            return Array.Empty<string>();
+        }
+
+        var values = new List<string>();
+        foreach (var item in expressions)
+        {
+            if (item is not LiteralExpressionSyntax literal
+                || !literal.IsKind(SyntaxKind.StringLiteralExpression))
+            {
+                resolved = false;
+                return Array.Empty<string>();
+            }
+
+            var value = literal.Token.ValueText.Trim();
+            if (value.Length == 0)
+            {
+                resolved = false;
+                return Array.Empty<string>();
+            }
+            values.Add(value.ToUpperInvariant());
+        }
+
+        resolved = values.Count > 0;
+        return Array.AsReadOnly(values.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
     }
 
     private static ApiEndpointEvidence CreateEvidence(
@@ -183,12 +293,6 @@ public sealed class CSharpAspNetEndpointProvider
     }
 
     private static bool TryGetHttpMethod(string name, out string method) => HttpMethods.TryGetValue(name, out method!);
-
-    private static bool TryGetMinimalApiMethod(string name, out string method)
-    {
-        var normalized = name.StartsWith("Map", StringComparison.Ordinal) ? name[3..] : string.Empty;
-        return HttpMethods.TryGetValue("Http" + normalized, out method!);
-    }
 
     private static StringComparer PathComparer => OperatingSystem.IsWindows()
         ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;

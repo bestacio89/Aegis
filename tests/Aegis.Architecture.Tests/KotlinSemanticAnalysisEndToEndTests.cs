@@ -55,7 +55,7 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
         var requestMappingFile = Path.Combine(springAnnotationDirectory, "RequestMapping.java");
         var getMappingFile = Path.Combine(springAnnotationDirectory, "GetMapping.java");
         var controllerFile = Path.Combine(sourceRoot, "sample", "application", "OrdersController.kt");
-        var ktorStubRoot = Path.Combine(sourceRoot, ".compiler-stubs");
+        var ktorStubRoot = Path.Combine(workspace.FullName, "compiler-stubs");
         var ktorClientFile = Path.Combine(ktorStubRoot, "io", "ktor", "client", "HttpClient.kt");
         var ktorRequestsFile = Path.Combine(ktorStubRoot, "io", "ktor", "client", "request", "Requests.kt");
         var apiGatewayFile = Path.Combine(sourceRoot, "sample", "application", "KotlinApiGateway.kt");
@@ -122,6 +122,11 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
 
             suspend fun HttpClient.get(urlString: String): String = urlString
             """);
+        var ktorStubJar = Path.Combine(workspace.FullName, "ktor-client-stubs.jar");
+        await KotlinCompilerFixture.CompileToJarAsync(
+            packageDirectory,
+            [ktorClientFile, ktorRequestsFile],
+            ktorStubJar);
         await File.WriteAllTextAsync(
             apiGatewayFile,
             """
@@ -173,10 +178,10 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
                 WorkspaceRoot = workspace.FullName,
                 ModuleName = "worker-probe",
                 BuildSystem = "Gradle",
-                SourceFiles = [sourceFile, domainFile, controllerFile, ktorClientFile, ktorRequestsFile, apiGatewayFile],
+                SourceFiles = [sourceFile, domainFile, controllerFile, apiGatewayFile],
                 SourceRoots = [sourceRoot],
-                GeneratedSourceRoots = [ktorStubRoot],
                 ReferencedSourceRoots = [javaSourceRoot],
+                ClasspathEntries = [ktorStubJar],
                 RequestedCapabilities = ["symbols", "relationships", "server-api-endpoints", "api-client-requests", "compiler-diagnostics", "jvm-interop"],
                 ProviderOptions = new Dictionary<string, string>(StringComparer.Ordinal)
                 {

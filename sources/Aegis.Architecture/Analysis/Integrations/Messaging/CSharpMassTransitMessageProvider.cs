@@ -52,8 +52,9 @@ public sealed class CSharpMassTransitMessageProvider
             var root = tree.GetCompilationUnitRoot();
             var semanticModel = compilation.GetSemanticModel(tree, ignoreAccessibility: true);
             var hasMassTransitImport = HasMassTransitImport(root);
+            var receiveEndpoints = DiscoverReceiveEndpoints(root, semanticModel, hasMassTransitImport);
 
-            DiscoverConsumers(root, semanticModel, module, hasMassTransitImport, evidence);
+            DiscoverConsumers(root, semanticModel, module, hasMassTransitImport, receiveEndpoints, evidence);
             DiscoverPublishCalls(root, semanticModel, module, hasMassTransitImport, evidence);
         }
 
@@ -84,6 +85,7 @@ public sealed class CSharpMassTransitMessageProvider
         SemanticModel semanticModel,
         string modulePath,
         bool hasMassTransitImport,
+        IReadOnlyDictionary<string, IReadOnlyList<ResolvedMessageDestination>> receiveEndpoints,
         ICollection<MessageIntegrationEvidence> evidence)
     {
         foreach (var declaration in root.DescendantNodes().OfType<TypeDeclarationSyntax>())
@@ -115,22 +117,120 @@ public sealed class CSharpMassTransitMessageProvider
                 var handler = GetHandlerIdentity(declaration, consumeMethod, semanticModel);
                 var location = sourceNode.GetLocation().GetLineSpan().StartLinePosition;
                 var declarationEvidence = consumeMethod?.ToString() ?? baseType.ToString();
+                var consumerIdentity = semanticModel.GetDeclaredSymbol(declaration)?
+                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                var destinations = consumerIdentity is not null
+                    && receiveEndpoints.TryGetValue(consumerIdentity, out var configuredDestinations)
+                        ? configuredDestinations
+                        : Array.Empty<ResolvedMessageDestination>();
 
-                evidence.Add(CreateEvidence(
-                    modulePath,
-                    sourceNode,
-                    "consume",
-                    handler,
-                    MessageIntegrationOperation.Consume,
-                    resolved,
-                    location,
-                    declarationEvidence,
-                    [
-                        $"The declaration implements the MassTransit IConsumer<{resolved.Expression ?? "unknown"}> contract.",
-                        resolved.Evidence
-                    ]));
+                if (destinations.Count == 0)
+                {
+                    evidence.Add(CreateEvidence(
+                        modulePath,
+                        sourceNode,
+                        "consume",
+                        handler,
+                        MessageIntegrationOperation.Consume,
+                        resolved,
+                        location,
+                        declarationEvidence,
+                        [
+                            $"The declaration implements the MassTransit IConsumer<{resolved.Expression ?? "unknown"}> contract.",
+                            resolved.Evidence
+                        ]));
+                    continue;
+                }
+
+                foreach (var destination in destinations)
+                {
+                    evidence.Add(CreateEvidence(
+                        modulePath,
+                        sourceNode,
+                        $"consume:{destination.EvidenceKey}",
+                        handler,
+                        MessageIntegrationOperation.Consume,
+                        resolved,
+                        location,
+                        $"{declarationEvidence}{Environment.NewLine}{destination.DeclarationEvidence}",
+                        [
+                            $"The declaration implements the MassTransit IConsumer<{resolved.Expression ?? "unknown"}> contract.",
+                            resolved.Evidence,
+                            destination.ResolutionEvidence
+                        ],
+                        destination));
+                }
             }
         }
+    }
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<ResolvedMessageDestination>> DiscoverReceiveEndpoints(
+        CompilationUnitSyntax root,
+        SemanticModel semanticModel,
+        bool hasMassTransitImport)
+    {
+        if (!hasMassTransitImport)
+            return new Dictionary<string, IReadOnlyList<ResolvedMessageDestination>>(StringComparer.Ordinal);
+
+        var destinations = new Dictionary<string, List<ResolvedMessageDestination>>(StringComparer.Ordinal);
+
+        foreach (var receiveEndpoint in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (receiveEndpoint.Expression is not MemberAccessExpressionSyntax memberAccess
+                || memberAccess.Name.Identifier.ValueText != "ReceiveEndpoint"
+                || receiveEndpoint.ArgumentList.Arguments.FirstOrDefault()?.Expression is not ExpressionSyntax destinationExpression)
+            {
+                continue;
+            }
+
+            var destinationIdentity = destinationExpression is LiteralExpressionSyntax literal
+                && literal.IsKind(SyntaxKind.StringLiteralExpression)
+                    ? literal.Token.ValueText
+                    : null;
+            var destinationEvidence = destinationExpression.ToString();
+            var destinationKey = $"{receiveEndpoint.SpanStart}:{receiveEndpoint.Span.Length}";
+
+            foreach (var configureConsumer in receiveEndpoint.DescendantNodes()
+                         .OfType<InvocationExpressionSyntax>())
+            {
+                if (configureConsumer.Expression is not MemberAccessExpressionSyntax configureAccess
+                    || configureAccess.Name is not GenericNameSyntax genericName
+                    || genericName.Identifier.ValueText != "ConfigureConsumer")
+                {
+                    continue;
+                }
+
+                var consumerTypeSyntax = genericName.TypeArgumentList.Arguments.FirstOrDefault();
+                if (consumerTypeSyntax is null)
+                    continue;
+
+                var consumerType = semanticModel.GetTypeInfo(consumerTypeSyntax).Type;
+                var consumerIdentity = consumerType is not null && consumerType.TypeKind != TypeKind.Error
+                    ? consumerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    : consumerTypeSyntax.ToString();
+
+                if (!destinations.TryGetValue(consumerIdentity, out var consumerDestinations))
+                {
+                    consumerDestinations = [];
+                    destinations.Add(consumerIdentity, consumerDestinations);
+                }
+
+                consumerDestinations.Add(new ResolvedMessageDestination(
+                    destinationIdentity,
+                    destinationEvidence,
+                    MessageDestinationKind.Unknown,
+                    destinationKey,
+                    destinationIdentity is not null
+                        ? "MassTransit ReceiveEndpoint declares an explicit endpoint identity; the underlying broker entity kind is not inferred."
+                        : "The MassTransit ReceiveEndpoint destination is dynamic; its original expression is retained without evaluation.",
+                    receiveEndpoint.ToString()));
+            }
+        }
+
+        return destinations.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<ResolvedMessageDestination>)Array.AsReadOnly(pair.Value.ToArray()),
+            StringComparer.Ordinal);
     }
 
     private static void DiscoverPublishCalls(
@@ -320,7 +420,8 @@ public sealed class CSharpMassTransitMessageProvider
         ResolvedMessageType messageType,
         LinePosition linePosition,
         string declarationEvidence,
-        IReadOnlyList<string> resolutionEvidence)
+        IReadOnlyList<string> resolutionEvidence,
+        ResolvedMessageDestination? destination = null)
     {
         var sourceFile = declaration.SyntaxTree.FilePath;
         var identity = $"{sourceFile}|{declaration.SpanStart}|{declaration.Span.Length}|{operationKey}";
@@ -339,7 +440,9 @@ public sealed class CSharpMassTransitMessageProvider
             Operation = operation,
             MessageTypeIdentity = messageType.Identity,
             MessageTypeExpression = messageType.Expression,
-            DestinationKind = MessageDestinationKind.Unknown,
+            DestinationKind = destination?.Kind ?? MessageDestinationKind.Unknown,
+            DestinationIdentity = destination?.Identity,
+            DestinationExpression = destination?.Expression,
             HandlerIdentity = handlerIdentity,
             ResolutionStatus = messageType.Status,
             ResolutionEvidence = Array.AsReadOnly(resolutionEvidence.ToArray()),
@@ -352,6 +455,14 @@ public sealed class CSharpMassTransitMessageProvider
         string? Expression,
         IntegrationEvidenceResolutionStatus Status,
         string Evidence);
+
+    private sealed record ResolvedMessageDestination(
+        string? Identity,
+        string? Expression,
+        MessageDestinationKind Kind,
+        string EvidenceKey,
+        string ResolutionEvidence,
+        string DeclarationEvidence);
 
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;

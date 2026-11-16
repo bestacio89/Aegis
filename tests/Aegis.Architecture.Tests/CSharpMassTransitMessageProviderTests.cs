@@ -11,6 +11,8 @@ public sealed class CSharpMassTransitMessageProviderTests
     {
         using var fixture = new CSharpMessagingFixture(
             """
+            using System;
+            using System.Threading.Tasks;
             using MassTransit;
 
             namespace Orders.Contracts

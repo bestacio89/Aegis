@@ -180,8 +180,8 @@ class KotlinApiClientRequestIntegrationTests {
             val ktorGet = requests.single {
                 it.get("framework").asString == "Ktor Client" && it.get("httpMethod").asString == "GET"
             }
-            assertEquals(1, ktorGet.get("resolutionStatus").asInt)
             assertTrue(ktorGet.get("requestUriExpression").asString.contains("orderId"), ktorGet.get("requestUriExpression").asString)
+            assertEquals(1, ktorGet.get("resolutionStatus").asInt)
 
             val ktorPost = requests.single {
                 it.get("framework").asString == "Ktor Client" && it.get("httpMethod").asString == "POST"

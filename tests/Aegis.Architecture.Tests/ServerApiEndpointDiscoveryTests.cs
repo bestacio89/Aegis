@@ -59,8 +59,9 @@ public sealed class ServerApiEndpointDiscoveryTests
             """);
 
         var endpoint = Assert.Single(new CSharpAspNetEndpointProvider().Discover([fixture.FilePath], fixture.ModulePath));
-        Assert.Equal("configuration[\"OrdersRoute\"]", endpoint.RouteTemplate);
+        Assert.Equal("route", endpoint.RouteTemplate);
         Assert.Equal(ApiEndpointResolutionStatus.Dynamic, endpoint.ResolutionStatus);
+        Assert.Contains("app.MapGet(route, GetOrders)", endpoint.DeclarationEvidence, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -264,7 +264,8 @@ public sealed class CSharpMassTransitMessageProvider
                 "The message contract expression is retained, but Roslyn could not resolve a concrete message type.");
         }
 
-        if (type.TypeKind == TypeKind.TypeParameter || type.TypeKind == TypeKind.Anonymous)
+        if (type.TypeKind == TypeKind.TypeParameter
+            || type is INamedTypeSymbol { IsAnonymousType: true })
         {
             return new ResolvedMessageType(
                 null,

@@ -151,6 +151,15 @@ public sealed class SemanticAnalysisPipelineTests
         Assert.Contains(existingCSharpRequest, registry.Evidence);
         Assert.Contains(javaRequest, registry.Evidence);
         Assert.Contains(kotlinRequest, registry.Evidence);
+
+        await pipeline.AnalyzeAsync(context);
+
+        Assert.Equal(4, context.SemanticAnalysisRuns.Count);
+        Assert.Equal(5, context.ApiClientRequestDiscoveryRegistry!.Count);
+        Assert.Equal(
+            4,
+            context.ApiClientRequestDiscoveryRegistry.Evidence.Count(item =>
+                item.EvidenceId == "provider-local-request-id"));
     }
 
     [Fact]

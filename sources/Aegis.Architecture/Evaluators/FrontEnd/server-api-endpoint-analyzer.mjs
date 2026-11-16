@@ -329,6 +329,8 @@ function createClientEvidence(sourceFile, sourcePath, node, language, framework,
 function getObjectProperty(object, name) {
     if (!object || !ts.isObjectLiteralExpression(object)) return null;
     for (const property of object.properties) {
+        if (ts.isShorthandPropertyAssignment(property) && property.name.text === name)
+            return property.name;
         if (!ts.isPropertyAssignment(property)) continue;
         const key = property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
             ? property.name.text : null;

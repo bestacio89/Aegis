@@ -254,7 +254,15 @@ internal class KotlinApiClientRequestCollector(
     private fun hasKotlinTemplateInterpolation(source: String?): Boolean {
         if (source.isNullOrEmpty()) return false
         for (index in source.indices) {
-            if (source[index] != '
+            if (source[index] != '$') continue
+            if (index > 0 && source[index - 1] == '\\') continue
+            val next = source.getOrNull(index + 1) ?: continue
+            if (next == '{' || Character.isJavaIdentifierStart(next)) return true
+        }
+        return false
+    }
+
+    private fun sourceSnippet(file: IrFile, startOffset: Int, endOffset: Int): String? {
         if (startOffset < 0 || endOffset < startOffset) return null
         return try {
             val source = Files.readString(Path.of(file.fileEntry.name))

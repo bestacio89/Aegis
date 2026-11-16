@@ -1,6 +1,7 @@
 using Aegis.Architecture.Analysis.Api;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
+using Xunit;
 
 namespace Aegis.Architecture.Tests;
 

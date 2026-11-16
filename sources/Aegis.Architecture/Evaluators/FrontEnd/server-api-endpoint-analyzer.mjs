@@ -309,7 +309,7 @@ function findAncestor(node, predicate) {
 }
 
 function createClientEvidence(sourceFile, sourcePath, node, language, framework, provider,
-    method, uriExpression, resolutionEvidence) {
+    method, uriExpression, resolutionEvidence, baseAddressExpression = null) {
     const uri = requestValue(uriExpression);
     const pos = position(node, sourceFile);
     const identity = sourcePath + "|client|" + node.getStart(sourceFile) + "|" + node.getWidth(sourceFile);
@@ -318,7 +318,8 @@ function createClientEvidence(sourceFile, sourcePath, node, language, framework,
         language, framework, providerId: provider, modulePath: root,
         sourceFile: path.resolve(root, sourcePath), startLine: pos.line, startColumn: pos.column,
         callerIdentity: callerIdentity(node, sourceFile),
-        httpMethod: method ?? null, requestUriExpression: uri.value, baseAddressExpression: null,
+        httpMethod: method ?? null, requestUriExpression: uri.value,
+        baseAddressExpression: baseAddressExpression?.getText(sourceFile) ?? null,
         resolutionStatus: uri.status,
         resolutionEvidence: [...resolutionEvidence, ...uri.evidence],
         declarationEvidence: node.getText(sourceFile)
@@ -419,7 +420,7 @@ function discoverAxios(sourceFile, sourcePath, results, language) {
         }
     }
 
-    const instances = new Set();
+    const instances = new Map();
     function visitDeclarations(node) {
         if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
             && node.initializer && ts.isCallExpression(node.initializer)
@@ -428,7 +429,7 @@ function discoverAxios(sourceFile, sourcePath, results, language) {
             && ts.isIdentifier(node.initializer.expression.expression)
             && (axiosNames.has(node.initializer.expression.expression.text)
                 || axiosNamespaceNames.has(node.initializer.expression.expression.text)))
-            instances.add(node.name.text);
+            instances.set(node.name.text, getObjectProperty(node.initializer.arguments[0], "baseURL"));
         ts.forEachChild(node, visitDeclarations);
     }
     visitDeclarations(sourceFile);
@@ -440,13 +441,14 @@ function discoverAxios(sourceFile, sourcePath, results, language) {
     function visit(node) {
         if (!ts.isCallExpression(node)) { ts.forEachChild(node, visit); return; }
         const expression = node.expression;
-        let grounded = false, framework = "Axios", method = null, uri = null, evidence = [];
+        let grounded = false, framework = "Axios", method = null, uri = null, evidence = [], baseAddress = null;
         if (ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)) {
             const receiver = expression.expression.text;
             const verb = expression.name.text.toLowerCase();
             if ((axiosNames.has(receiver) || axiosNamespaceNames.has(receiver) || instances.has(receiver))
                 && verbs.has(verb) && node.arguments.length >= 1) {
                 grounded = true; method = verbs.get(verb); uri = node.arguments[0];
+                baseAddress = instances.get(receiver) ?? null;
                 evidence.push("Axios method receiver is grounded by an axios import, require, or axios.create instance.");
             } else if ((axiosNames.has(receiver) || axiosNamespaceNames.has(receiver) || instances.has(receiver))
                 && expression.name.text === "request" && node.arguments.length >= 1) {
@@ -454,6 +456,7 @@ function discoverAxios(sourceFile, sourcePath, results, language) {
                 grounded = true; uri = configValue(config, "url");
                 const methodExpression = configValue(config, "method");
                 method = methodExpression ? literalMethod(methodExpression) : "GET";
+                baseAddress = configValue(config, "baseURL");
                 evidence.push("Axios request configuration is passed to a grounded Axios request method.");
             }
         } else if (ts.isIdentifier(expression) && importedMethods.has(expression.text)
@@ -474,7 +477,7 @@ function discoverAxios(sourceFile, sourcePath, results, language) {
 
         if (grounded)
             results.push(createClientEvidence(sourceFile, sourcePath, node, language,
-                framework, "typescript-ast-axios", method, uri, evidence));
+                framework, "typescript-ast-axios", method, uri, evidence, baseAddress));
         ts.forEachChild(node, visit);
     }
     visit(sourceFile);

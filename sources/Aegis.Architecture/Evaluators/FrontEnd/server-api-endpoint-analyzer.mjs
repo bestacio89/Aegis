@@ -515,9 +515,14 @@ function discoverTypedHttpClients(sourceFile, sourcePath, results, language) {
     const verbs = new Map([["get","GET"],["post","POST"],["put","PUT"],["patch","PATCH"],
         ["delete","DELETE"],["head","HEAD"],["options","OPTIONS"]]);
     function visit(node) {
-        if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
-            && ts.isIdentifier(node.expression.expression)) {
-            const receiver = typedReceivers.get(node.expression.expression.text);
+        if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+            const receiverExpression = node.expression.expression;
+            const receiverName = ts.isIdentifier(receiverExpression)
+                ? receiverExpression.text
+                : ts.isPropertyAccessExpression(receiverExpression)
+                    && receiverExpression.expression.kind === ts.SyntaxKind.ThisKeyword
+                    ? receiverExpression.name.text : null;
+            const receiver = receiverName ? typedReceivers.get(receiverName) : null;
             if (receiver) {
                 const name = node.expression.name.text.toLowerCase();
                 let method = verbs.get(name) ?? null;

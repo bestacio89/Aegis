@@ -18,6 +18,7 @@ import org.jetbrains.kotlin.ir.expressions.IrSpreadElement
 import org.jetbrains.kotlin.ir.expressions.IrVararg
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
+import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import java.nio.file.Files
@@ -89,7 +90,7 @@ internal class KotlinServerApiEndpointCollector(
             when {
                 functionName == "routing" -> expression.acceptChildrenVoid(this)
                 functionName == "route" -> {
-                    val route = ktorPath(expression)
+                    val route = ktorPath(expression, currentFile)
                     routeStack.add(route)
                     routeEvidenceStack.add("route path=[" + route.value + "]")
                     try {
@@ -178,7 +179,7 @@ internal class KotlinServerApiEndpointCollector(
         routeEvidenceStack: List<String>
     ) {
         val method = KTOR_HTTP_METHODS.getValue(functionName)
-        val path = ktorPath(call)
+        val path = ktorPath(call, file)
         val prefix = composeRoutePrefix(routeStack)
         val route = if (path.partiallyResolved) prefix.value else combineRoutes(prefix.value, path.value)
         val status = when {
@@ -219,7 +220,7 @@ internal class KotlinServerApiEndpointCollector(
         return name.substringAfterLast('.')
     }
 
-    private fun ktorPath(call: IrCall): RouteValue {
+    private fun ktorPath(call: IrCall, file: IrFile?): RouteValue {
         val parameters = call.symbol.owner.parameters
         val namedIndex = parameters.indexOfFirst { it.name.asString() == "path" }
         val argumentIndex = if (namedIndex >= 0) {
@@ -230,11 +231,14 @@ internal class KotlinServerApiEndpointCollector(
         val expression = (if (argumentIndex < 0) null else call.arguments.getOrNull(argumentIndex))
             ?: return RouteValue("", false, true)
         val literal = (expression as? IrConst)?.value as? String
-        val typeName = expression.type.toString()
+        val typeName = expression.type.classFqName?.asString()
+        val sourceExpression = file?.let {
+            sourceSnippet(it, expression.startOffset, expression.endOffset)
+        } ?: expression.toString()
         return when {
             literal != null -> RouteValue(literal, false)
-            typeName.startsWith("kotlin.String") -> RouteValue(expression.toString(), true)
-            else -> RouteValue(expression.toString() + " [type=" + typeName + "]", false, true)
+            typeName == "kotlin.String" -> RouteValue(sourceExpression, true)
+            else -> RouteValue(sourceExpression, false, true)
         }
     }
 

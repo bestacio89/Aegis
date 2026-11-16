@@ -68,6 +68,23 @@ public sealed class ApiClientRequestEndpointMatcherTests
     }
 
     [Fact]
+    public void Match_does_not_ignore_unmodelled_route_constraints()
+    {
+        var request = CreateRequest("GET", "\"/orders/not-a-number\"");
+        var constrainedAspNetEndpoint = CreateEndpoint("/orders/{id:int}", ["GET"]);
+        var constrainedExpressEndpoint = CreateEndpoint("/orders/:id(\\\\d+)", ["GET"]);
+
+        var results = Match(
+            [request],
+            [constrainedAspNetEndpoint, constrainedExpressEndpoint]).Matches.Single();
+
+        Assert.Equal(ApiClientRequestEndpointMatchStatus.Unresolved, results.Status);
+        Assert.Equal(2, results.Candidates.Count);
+        Assert.All(results.Candidates, candidate =>
+            Assert.Equal(ApiClientRequestEndpointMatchKind.UnresolvedEndpoint, candidate.MatchKind));
+    }
+
+    [Fact]
     public void Match_uses_conservative_case_sensitive_path_comparison()
     {
         var request = CreateRequest("GET", "\"/api/orders\"");

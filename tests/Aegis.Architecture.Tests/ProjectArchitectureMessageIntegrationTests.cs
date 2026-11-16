@@ -77,8 +77,10 @@ public sealed class ProjectArchitectureMessageIntegrationTests
         });
         Assert.Contains(registry.Evidence, evidence =>
             evidence.RelationshipKind == ArchitectureRelationshipKind.MessagePublish);
-        Assert.Contains(registry.Evidence, evidence =>
+        var consume = Assert.Single(registry.Evidence, evidence =>
             evidence.RelationshipKind == ArchitectureRelationshipKind.MessageConsume);
+        Assert.Equal("orders", consume.DestinationIdentity);
+        Assert.Equal(MessageDestinationKind.Unknown, consume.DestinationKind);
     }
 
     private sealed class TemporaryDirectory : IDisposable

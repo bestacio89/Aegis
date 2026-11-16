@@ -496,8 +496,14 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             } else expressions.add(expression);
             List<RouteValue> result = new ArrayList<>();
             for (Expression item : expressions) {
-                result.add(item instanceof StringLiteral literal
-                    ? new RouteValue(literal.getLiteralValue(), false)
+                if (item instanceof StringLiteral literal) {
+                    String value = literal.getLiteralValue();
+                    result.add(new RouteValue(value, value.contains("${") || value.contains("#{")));
+                    continue;
+                }
+                Object constant = item.resolveConstantExpressionValue();
+                result.add(constant instanceof String value
+                    ? new RouteValue(value, value.contains("${") || value.contains("#{"))
                     : new RouteValue(item.toString(), true));
             }
             return result;
@@ -541,8 +547,8 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         }
 
         private static String combineRoutes(String prefix, String route) {
-            String left = prefix == null ? "" : prefix.trim();
-            String right = route == null ? "" : route.trim();
+            String left = prefix == null ? "" : prefix.trim().replaceAll("^/+|/+$", "");
+            String right = route == null ? "" : route.trim().replaceAll("^/+|/+$", "");
             if (left.isEmpty()) return right;
             if (right.isEmpty()) return left;
             return "/" + (left + "/" + right).replaceAll("^/+", "").replaceAll("/+$", "");

@@ -23,7 +23,7 @@ Controller tokens such as [controller] remain partially resolved. Non-literal ro
 
 ## Java Spring MVC/WebFlux provider
 
-The Eclipse JDT worker discovers `@RequestMapping`, `@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping`, and `@PatchMapping` declarations through resolved annotation bindings. Class-level and method-level literal route values are composed, HTTP methods are retained, and unresolved route expressions remain dynamic observations. Evidence is returned through the semantic run and merged into the shared server endpoint registry. The provider does not execute Spring configuration, resolve external property placeholders, infer composed custom annotations, or prove handler invocation semantics.
+The Eclipse JDT worker discovers `@RequestMapping`, `@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping`, and `@PatchMapping` declarations through resolved annotation bindings. Class-level and method-level literal route values are composed, HTTP methods are retained, and unresolved route expressions and Spring property/SpEL placeholders remain dynamic observations; Java compile-time string constants are resolved through JDT constant-expression bindings. Evidence is returned through the semantic run and merged into the shared server endpoint registry. The provider does not execute Spring configuration, resolve external property placeholders, infer composed custom annotations, or prove handler invocation semantics.
 
 ## Known coverage limits
 

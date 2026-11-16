@@ -322,8 +322,7 @@ final class JdtSemanticAnalysisEngineTests {
                 @RequestMapping(path = "/search", method = {RequestMethod.GET, RequestMethod.POST})
                 public String search() { return "ok"; }
 
-                static final String DYNAMIC_ROUTE = "/dynamic";
-                @GetMapping(DYNAMIC_ROUTE)
+                @GetMapping("${orders.route}")
                 public String dynamic() { return "ok"; }
             }
             """);
@@ -361,7 +360,7 @@ final class JdtSemanticAnalysisEngineTests {
         JsonObject dynamic = endpoints.asList().stream().map(item -> item.getAsJsonObject())
             .filter(item -> item.get("handlerIdentity").getAsString().contains("dynamic"))
             .findFirst().orElseThrow();
-        assertEquals("DYNAMIC_ROUTE", dynamic.get("routeTemplate").getAsString());
+        assertEquals("${orders.route}", dynamic.get("routeTemplate").getAsString());
         assertEquals(3, dynamic.get("resolutionStatus").getAsInt());
     }
 

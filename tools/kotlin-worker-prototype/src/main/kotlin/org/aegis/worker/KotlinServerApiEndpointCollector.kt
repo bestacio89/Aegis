@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrParameterKind
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
@@ -29,6 +30,7 @@ internal class KotlinServerApiEndpointCollector(
 
     fun collect(module: IrModuleFragment): JsonArray {
         module.acceptChildrenVoid(EndpointVisitor())
+        module.acceptChildrenVoid(KtorEndpointVisitor())
         return endpoints
     }
 
@@ -51,6 +53,59 @@ internal class KotlinServerApiEndpointCollector(
                 discoverSpringEndpoint(declaration, declaration.parent as? IrClass, currentFile)
             }
             declaration.acceptChildrenVoid(this)
+        }
+    }
+
+    private inner class KtorEndpointVisitor : IrVisitorVoid() {
+        private var currentFile: IrFile? = null
+        private var currentHandler: String? = null
+        private val routeStack = mutableListOf<RouteValue>()
+        private val routeEvidenceStack = mutableListOf<String>()
+
+        override fun visitElement(element: IrElement) {
+            element.acceptChildrenVoid(this)
+        }
+
+        override fun visitFile(declaration: IrFile) {
+            val previous = currentFile
+            currentFile = declaration
+            declaration.acceptChildrenVoid(this)
+            currentFile = previous
+        }
+
+        override fun visitSimpleFunction(declaration: IrSimpleFunction) {
+            val previous = currentHandler
+            if (declaration.origin == IrDeclarationOrigin.DEFINED) {
+                currentHandler = handlerIdentity(declaration)
+            }
+            declaration.acceptChildrenVoid(this)
+            currentHandler = previous
+        }
+
+        override fun visitCall(expression: IrCall) {
+            val functionName = ktorFunctionName(expression)
+            when {
+                functionName == "routing" -> expression.acceptChildrenVoid(this)
+                functionName == "route" -> {
+                    val route = ktorPath(expression)
+                    routeStack.add(route)
+                    routeEvidenceStack.add("route path=[" + route.value + "]")
+                    try {
+                        expression.acceptChildrenVoid(this)
+                    } finally {
+                        routeEvidenceStack.removeAt(routeEvidenceStack.lastIndex)
+                        routeStack.removeAt(routeStack.lastIndex)
+                    }
+                }
+                functionName != null && KTOR_HTTP_METHODS.containsKey(functionName) -> {
+                    val file = currentFile
+                    if (file != null) {
+                        discoverKtorEndpoint(expression, functionName, file, currentHandler, routeStack, routeEvidenceStack)
+                    }
+                    expression.acceptChildrenVoid(this)
+                }
+                else -> expression.acceptChildrenVoid(this)
+            }
         }
     }
 
@@ -81,7 +136,11 @@ internal class KotlinServerApiEndpointCollector(
         classRoutes.forEach { classRoute ->
             methodRoutes.forEach { methodRoute ->
                 val route = combineRoutes(classRoute.value, methodRoute.value)
-                val status = if (classRoute.dynamic || methodRoute.dynamic) 3 else 1
+                val status = when {
+                    classRoute.dynamic || methodRoute.dynamic -> 3
+                    classRoute.partiallyResolved || methodRoute.partiallyResolved -> 2
+                    else -> 1
+                }
                 val evidenceIdentity = sourcePath + "|" + function.startOffset + "|" + handler + "|" + routeIndex
                 val endpoint = JsonObject().apply {
                     addProperty("evidenceId", "kotlin-spring:" + stableHash(evidenceIdentity))
@@ -106,6 +165,87 @@ internal class KotlinServerApiEndpointCollector(
                 routeIndex++
             }
         }
+    }
+
+    private fun discoverKtorEndpoint(
+        call: IrCall,
+        functionName: String,
+        file: IrFile,
+        enclosingHandler: String?,
+        routeStack: List<RouteValue>,
+        routeEvidenceStack: List<String>
+    ) {
+        val method = KTOR_HTTP_METHODS.getValue(functionName)
+        val path = ktorPath(call)
+        val prefix = composeRoutePrefix(routeStack)
+        val route = if (path.partiallyResolved) prefix.value else combineRoutes(prefix.value, path.value)
+        val status = when {
+            prefix.dynamic || path.dynamic -> 3
+            prefix.partiallyResolved || path.partiallyResolved -> 2
+            else -> 1
+        }
+        val sourcePath = file.fileEntry.name
+        val handler = (enclosingHandler ?: sourcePath) + "#ktor-" + functionName + "@" + call.startOffset
+        val evidenceIdentity = sourcePath + "|" + call.startOffset + "|" + handler
+        val declarationEvidence = sourceSnippet(file, call.startOffset, call.endOffset) ?: call.toString()
+        val endpointEvidence = functionName + " path=[" + path.value + "]"
+        val endpoint = JsonObject().apply {
+            addProperty("evidenceId", "kotlin-ktor:" + stableHash(evidenceIdentity))
+            addProperty("language", "Kotlin")
+            addProperty("framework", "Ktor")
+            addProperty("providerId", "kotlin-k2-ktor")
+            addProperty("modulePath", modulePath)
+            addProperty("sourceFile", sourcePath)
+            addProperty("startLine", file.fileEntry.getLineNumber(call.startOffset) + 1)
+            addProperty("startColumn", file.fileEntry.getColumnNumber(call.startOffset) + 1)
+            addProperty("handlerIdentity", handler)
+            add("httpMethods", JsonArray().also { values -> values.add(method) })
+            addProperty("routeTemplate", route)
+            addProperty("resolutionStatus", status)
+            add("routeCompositionEvidence", JsonArray().also { values ->
+                routeEvidenceStack.forEach(values::add)
+                values.add(endpointEvidence)
+            })
+            addProperty("declarationEvidence", declarationEvidence)
+        }
+        endpoints.add(endpoint)
+    }
+
+    private fun ktorFunctionName(call: IrCall): String? {
+        val name = call.symbol.owner.fqNameWhenAvailable?.asString() ?: return null
+        if (!name.startsWith(KTOR_ROUTING_PREFIX)) return null
+        return name.substringAfterLast('.')
+    }
+
+    private fun ktorPath(call: IrCall): RouteValue {
+        val parameters = call.symbol.owner.parameters
+        val namedIndex = parameters.indexOfFirst { it.name.asString() == "path" }
+        val argumentIndex = if (namedIndex >= 0) {
+            namedIndex
+        } else {
+            parameters.indexOfFirst { it.kind == IrParameterKind.Regular }
+        }
+        val expression = (if (argumentIndex < 0) null else call.arguments.getOrNull(argumentIndex))
+            ?: return RouteValue("", false, true)
+        val literal = (expression as? IrConst)?.value as? String
+        return when {
+            literal != null -> RouteValue(literal, false)
+            expression.type.toString() == "kotlin.String" -> RouteValue(expression.toString(), true)
+            else -> RouteValue(expression.toString(), false, true)
+        }
+    }
+
+    private fun composeRoutePrefix(routeStack: List<RouteValue>): RouteValue {
+        var prefix = RouteValue("", false)
+        routeStack.forEach { route ->
+            val value = if (route.partiallyResolved) prefix.value else combineRoutes(prefix.value, route.value)
+            prefix = RouteValue(
+                value,
+                prefix.dynamic || route.dynamic,
+                prefix.partiallyResolved || route.partiallyResolved
+            )
+        }
+        return prefix
     }
 
     private fun mappingAnnotations(annotations: List<IrConstructorCall>): List<IrConstructorCall> =
@@ -229,9 +369,23 @@ internal class KotlinServerApiEndpointCollector(
             .digest(value.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
 
-    private data class RouteValue(val value: String, val dynamic: Boolean)
+    private data class RouteValue(
+        val value: String,
+        val dynamic: Boolean,
+        val partiallyResolved: Boolean = false
+    )
 
     private companion object {
+        const val KTOR_ROUTING_PREFIX = "io.ktor.server.routing."
+        val KTOR_HTTP_METHODS = mapOf(
+            "get" to "GET",
+            "post" to "POST",
+            "put" to "PUT",
+            "delete" to "DELETE",
+            "patch" to "PATCH",
+            "head" to "HEAD",
+            "options" to "OPTIONS"
+        )
         val SPRING_MAPPING_ANNOTATIONS = setOf(
             "org.springframework.web.bind.annotation.RequestMapping",
             "org.springframework.web.bind.annotation.GetMapping",

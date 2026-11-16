@@ -705,6 +705,131 @@ class KotlinCompilerIntegrationTests {
     }
 
     @Test
+    fun ktorRoutingDslProducesNestedServerEndpointEvidence() {
+        val workspace = Files.createTempDirectory("aegis-kotlin-ktor-endpoints-")
+        val application = workspace.resolve("KtorApplication.kt")
+        val routing = workspace.resolve("KtorRouting.kt")
+        val destination = workspace.resolve("classes")
+        val evidence = workspace.resolve("semantic.json")
+        Files.createDirectories(destination)
+        Files.writeString(
+            routing,
+            """
+            package io.ktor.server.routing
+
+            class Route
+
+            fun Route.route(path: String, build: Route.() -> Unit) {
+                build()
+            }
+
+            fun Route.get(path: String, body: Route.() -> Unit) {
+                body()
+            }
+
+            fun Route.post(path: String, body: Route.() -> Unit) {
+                body()
+            }
+
+            fun routing(build: Route.() -> Unit): Route {
+                val route = Route()
+                route.build()
+                return route
+            }
+            """.trimIndent()
+        )
+        Files.writeString(
+            application,
+            """
+            package sample.ktor
+
+            import io.ktor.server.routing.get
+            import io.ktor.server.routing.post
+            import io.ktor.server.routing.route
+            import io.ktor.server.routing.routing
+
+            fun module() {
+                routing {
+                    route("/api") {
+                        route("/v1") {
+                            get("/orders") {}
+                            post("/orders") {}
+                        }
+                        get(dynamicRoute()) {}
+                    }
+                }
+            }
+
+            private fun dynamicRoute(): String = "/dynamic"
+            """.trimIndent()
+        )
+
+        val pluginPath = Path.of(
+            KotlinWorkerPluginRegistrar::class.java.protectionDomain.codeSource.location.toURI()
+        ).toString()
+        val stdlibPath = Path.of(
+            Unit::class.java.protectionDomain.codeSource.location.toURI()
+        ).toString()
+        val arguments = K2JVMCompilerArguments().apply {
+            this.destination = destination.toString()
+            this.classpath = stdlibPath
+            this.noStdlib = true
+            this.noReflect = true
+            this.jvmTarget = "21"
+            this.languageVersion = "2.4"
+            this.apiVersion = "2.4"
+            this.moduleName = "ktor-endpoint-fixture"
+            this.pluginClasspaths = arrayOf(pluginPath)
+            this.freeArgs = listOf(application.toString(), routing.toString())
+        }
+
+        val previousOutput = System.getProperty("aegis.kotlin.semantic.output")
+        val previousProject = System.getProperty("aegis.kotlin.semantic.project")
+        try {
+            System.setProperty("aegis.kotlin.semantic.output", evidence.toString())
+            System.setProperty("aegis.kotlin.semantic.project", workspace.toString())
+            val messages = PrintingMessageCollector(System.err, MessageRenderer.PLAIN_RELATIVE_PATHS, false)
+            val exitCode = K2JVMCompiler().exec(messages, Services.EMPTY, arguments)
+
+            assertEquals(ExitCode.OK, exitCode)
+            val result = JsonParser.parseString(Files.readString(evidence)).asJsonObject
+            val endpoints = result.getAsJsonArray("serverApiEndpoints").map { it.asJsonObject }
+            assertEquals(3, endpoints.size)
+
+            val getOrder = endpoints.single {
+                it.getAsJsonArray("httpMethods").single().asString == "GET"
+                    && it.get("routeTemplate").asString == "/api/v1/orders"
+            }
+            assertEquals(1, getOrder.get("resolutionStatus").asInt)
+            assertEquals(3, getOrder.getAsJsonArray("routeCompositionEvidence").size())
+
+            val postOrder = endpoints.single {
+                it.getAsJsonArray("httpMethods").single().asString == "POST"
+            }
+            assertEquals("/api/v1/orders", postOrder.get("routeTemplate").asString)
+            assertEquals(1, postOrder.get("resolutionStatus").asInt)
+
+            val dynamic = endpoints.single { it.get("resolutionStatus").asInt == 3 }
+            assertTrue(dynamic.get("routeTemplate").asString.startsWith("/api/"))
+            assertTrue(dynamic.get("routeTemplate").asString.contains("dynamicRoute"))
+            assertEquals(listOf("GET"), dynamic.getAsJsonArray("httpMethods").map { it.asString })
+
+            assertTrue(endpoints.all { it.get("language").asString == "Kotlin" })
+            assertTrue(endpoints.all { it.get("framework").asString == "Ktor" })
+            assertTrue(endpoints.all { it.get("providerId").asString == "kotlin-k2-ktor" })
+            assertTrue(endpoints.all { it.get("modulePath").asString == workspace.toString() })
+            assertTrue(endpoints.all { it.get("sourceFile").asString == application.toString() })
+            assertTrue(endpoints.all { it.get("declarationEvidence").asString.contains("get(") || it.get("declarationEvidence").asString.contains("post(") })
+        } finally {
+            if (previousOutput == null) System.clearProperty("aegis.kotlin.semantic.output")
+            else System.setProperty("aegis.kotlin.semantic.output", previousOutput)
+            if (previousProject == null) System.clearProperty("aegis.kotlin.semantic.project")
+            else System.setProperty("aegis.kotlin.semantic.project", previousProject)
+            workspace.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `local declaration identities remain stable when source line offsets change`() {
         val workspace = Files.createTempDirectory("aegis-kotlin-local-identities-")
         val source = workspace.resolve("LocalDeclarations.kt")

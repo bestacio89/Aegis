@@ -7,7 +7,7 @@ namespace Aegis.Architecture.Analysis.Semantics;
 public sealed class JavaSemanticAnalysisAdapter : ISemanticAnalysisAdapter
 {
     private static readonly IReadOnlyCollection<string> Capabilities =
-        Array.AsReadOnly(new[] { "symbols", "relationships", "server-api-endpoints", "compiler-diagnostics" });
+        Array.AsReadOnly(new[] { "symbols", "relationships", "server-api-endpoints", "api-client-requests", "compiler-diagnostics" });
 
     private readonly IJavaWorkerClient _workerClient;
 
@@ -105,6 +105,7 @@ public sealed class JavaSemanticAnalysisAdapter : ISemanticAnalysisAdapter
             Symbols = run.Symbols,
             Relationships = run.Relationships,
             ServerApiEndpoints = run.ServerApiEndpoints,
+            ApiClientRequests = run.ApiClientRequests,
             Diagnostics = diagnostics
         };
     }

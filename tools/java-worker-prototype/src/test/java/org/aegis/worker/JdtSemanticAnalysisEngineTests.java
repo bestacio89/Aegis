@@ -374,6 +374,73 @@ final class JdtSemanticAnalysisEngineTests {
         assertEquals(3, unresolved.get("resolutionStatus").getAsInt());
     }
 
+
+    @Test
+    void discovers_spring_rest_template_outbound_requests_with_binding_provenance() throws Exception {
+        Path project = Files.createDirectories(workspace.resolve("client-project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("src/main/java"));
+        Path restTemplatePackage = Files.createDirectories(sourceRoot.resolve("org/springframework/web/client"));
+        Path httpPackage = Files.createDirectories(sourceRoot.resolve("org/springframework/http"));
+        Path appPackage = Files.createDirectories(sourceRoot.resolve("example"));
+
+        Path restTemplate = restTemplatePackage.resolve("RestTemplate.java");
+        Path httpMethod = httpPackage.resolve("HttpMethod.java");
+        Path client = appPackage.resolve("OrderGateway.java");
+        Files.writeString(restTemplate, """
+            package org.springframework.web.client;
+            public class RestTemplate {
+                public <T> T getForObject(String url, Class<T> responseType) { return null; }
+                public <T> T postForObject(String url, Object request, Class<T> responseType) { return null; }
+                public <T> T exchange(String url, org.springframework.http.HttpMethod method, Object request, Class<T> responseType) { return null; }
+                public void delete(String url) {}
+            }
+            """);
+        Files.writeString(httpMethod, """
+            package org.springframework.http;
+            public enum HttpMethod { GET, POST, PUT, PATCH, DELETE }
+            """);
+        Files.writeString(client, """
+            package example;
+            import org.springframework.web.client.RestTemplate;
+            import org.springframework.http.HttpMethod;
+            public class OrderGateway {
+                private final RestTemplate client = new RestTemplate();
+                public void load(String orderId) {
+                    client.getForObject("/orders", Object.class);
+                    client.postForObject("/orders", new Object(), Object.class);
+                    client.exchange("/orders/" + orderId, HttpMethod.GET, null, Object.class);
+                    client.delete("/orders/42");
+                }
+            }
+            """);
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("projectPath", project.toString());
+        payload.add("sourceRoots", paths(sourceRoot));
+        payload.add("sourceFiles", paths(restTemplate, httpMethod, client));
+        payload.add("classpathEntries", new JsonArray());
+
+        JsonObject result = new JdtSemanticAnalysisEngine().analyze(payload);
+        JsonArray requests = result.getAsJsonArray("apiClientRequests");
+        assertEquals(4, requests.size());
+
+        JsonObject get = requests.asList().stream().map(item -> item.getAsJsonObject())
+            .filter(item -> item.get("declarationEvidence").getAsString().contains("getForObject"))
+            .findFirst().orElseThrow();
+        assertEquals("GET", get.get("httpMethod").getAsString());
+        assertEquals("\"/orders\"", get.get("requestUriExpression").getAsString());
+        assertEquals(0, get.get("resolutionStatus").getAsInt());
+        assertEquals("Java", get.get("language").getAsString());
+        assertTrue(get.get("callerIdentity").getAsString().contains("OrderGateway#load"));
+
+        JsonObject dynamic = requests.asList().stream().map(item -> item.getAsJsonObject())
+            .filter(item -> item.get("declarationEvidence").getAsString().contains("exchange"))
+            .findFirst().orElseThrow();
+        assertEquals("GET", dynamic.get("httpMethod").getAsString());
+        assertEquals(2, dynamic.get("resolutionStatus").getAsInt());
+        assertTrue(dynamic.get("requestUriExpression").getAsString().contains("orderId"));
+    }
+
     private static void deleteRecursively(Path directory) throws IOException {
         try (var paths = Files.walk(directory)) {
             paths.sorted(Comparator.reverseOrder()).forEach(path -> {

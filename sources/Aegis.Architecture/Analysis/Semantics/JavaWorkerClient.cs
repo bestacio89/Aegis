@@ -151,10 +151,11 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
             CompletedAtUtc = DateTimeOffset.UtcNow,
             AnalyzedFileCount = result.GetProperty("analyzedFileCount").GetInt32(),
             SkippedFileCount = result.GetProperty("skippedFileCount").GetInt32(),
-            Capabilities = ["symbols", "relationships", "server-api-endpoints", "compiler-diagnostics"],
+            Capabilities = ["symbols", "relationships", "server-api-endpoints", "api-client-requests", "compiler-diagnostics"],
             Symbols = DeserializeArray<SemanticSymbol>(result, "symbols"),
             Relationships = DeserializeArray<SemanticRelationship>(result, "relationships"),
             ServerApiEndpoints = DeserializeArray<ApiEndpointEvidence>(result, "serverApiEndpoints"),
+            ApiClientRequests = DeserializeArray<ApiClientRequestEvidence>(result, "apiClientRequests"),
             Diagnostics = DeserializeArray<AnalysisDiagnostic>(result, "diagnostics")
         };
     }

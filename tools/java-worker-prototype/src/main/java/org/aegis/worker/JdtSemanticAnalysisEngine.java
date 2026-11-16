@@ -507,8 +507,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             while (current instanceof MethodInvocation chained) {
                 IMethodBinding binding = chained.resolveMethodBinding();
                 ITypeBinding owner = binding == null ? null : binding.getDeclaringClass();
-                if (owner != null && "org.springframework.web.reactive.function.client.WebClient$UriSpec".equals(
-                        owner.getTypeDeclaration().getQualifiedName())
+                if (owner != null && owner.getTypeDeclaration().getQualifiedName().endsWith(".WebClient.UriSpec")
                     && "uri".equals(binding.getName())) return chained;
                 if (chained.getExpression() == invocation) {
                     current = chained.getParent();

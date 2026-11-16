@@ -412,9 +412,9 @@ public sealed class ApiClientRequestEndpointMatcher
         if (IsCatchAllSegment(segment))
             return false;
 
-        if (segment.Contains('{', StringComparison.Ordinal)
-            || segment.Contains('}', StringComparison.Ordinal)
-            || segment.StartsWith(':', StringComparison.Ordinal))
+        if (segment.Contains('{')
+            || segment.Contains('}')
+            || segment.StartsWith(':'))
         {
             return !IsParameterSegment(segment) && !IsOptionalParameterSegment(segment);
         }

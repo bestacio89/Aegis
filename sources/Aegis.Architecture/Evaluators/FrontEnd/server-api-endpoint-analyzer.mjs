@@ -471,7 +471,9 @@ function discoverAxios(sourceFile, sourcePath, results, language) {
             && node.arguments.length >= 1) {
             const config = node.arguments[0];
             grounded = true; uri = configValue(config, "url");
-            method = literalMethod(configValue(config, "method"), "GET");
+            const methodExpression = configValue(config, "method");
+            method = methodExpression ? literalMethod(methodExpression) : "GET";
+            baseAddress = configValue(config, "baseURL");
             evidence.push("Axios callable instance is grounded by an axios import or require.");
         }
 

@@ -59,6 +59,8 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
         var ktorRequestsFile = Path.Combine(sourceRoot, "io", "ktor", "client", "request", "Requests.kt");
         var apiGatewayFile = Path.Combine(sourceRoot, "sample", "application", "KotlinApiGateway.kt");
         Directory.CreateDirectory(springAnnotationDirectory);
+        Directory.CreateDirectory(Path.GetDirectoryName(ktorClientFile)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(ktorRequestsFile)!);
         await File.WriteAllTextAsync(
             requestMethodFile,
             """

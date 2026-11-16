@@ -322,6 +322,10 @@ final class JdtSemanticAnalysisEngineTests {
                 @RequestMapping(path = "/search", method = {RequestMethod.GET, RequestMethod.POST})
                 public String search() { return "ok"; }
 
+                static final String CONSTANT_ROUTE = "/constant";
+                @GetMapping(CONSTANT_ROUTE)
+                public String constant() { return "ok"; }
+
                 @GetMapping("${orders.route}")
                 public String dynamic() { return "ok"; }
             }

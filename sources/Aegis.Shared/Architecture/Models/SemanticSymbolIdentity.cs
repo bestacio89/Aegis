@@ -40,9 +40,6 @@ public sealed class SemanticSymbolIdentity : IEquatable<SemanticSymbolIdentity>
         ArgumentException.ThrowIfNullOrWhiteSpace(language);
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerProjectPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(symbolId);
-        if (!Path.IsPathFullyQualified(ownerProjectPath))
-            throw new ArgumentException("The owner project path must be fully qualified.", nameof(ownerProjectPath));
-
         var normalizedPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(ownerProjectPath));
         return new SemanticSymbolIdentity(language.Trim(), normalizedPath, symbolId);
     }
@@ -70,6 +67,12 @@ public sealed class SemanticSymbolIdentity : IEquatable<SemanticSymbolIdentity>
             : symbol.OwningProjectPath;
         if (string.IsNullOrWhiteSpace(ownerProjectPath))
             return false;
+
+        if (symbol.Origin is not (SemanticSymbolOrigin.Source or SemanticSymbolOrigin.Generated)
+            && !Path.IsPathFullyQualified(ownerProjectPath))
+        {
+            return false;
+        }
 
         var language = string.IsNullOrWhiteSpace(symbol.Language)
             ? run.Language

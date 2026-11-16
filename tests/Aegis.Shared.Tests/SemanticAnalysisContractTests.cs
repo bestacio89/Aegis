@@ -186,10 +186,33 @@ public sealed class SemanticAnalysisContractTests
     }
 
     [Fact]
-    public void Semantic_symbol_identity_rejects_relative_owner_paths()
+    public void Canonical_symbol_identity_normalizes_relative_analysis_paths()
     {
-        Assert.Throws<ArgumentException>(() =>
-            SemanticSymbolIdentity.Create("Kotlin", "relative/library", "symbol"));
+        var identity = SemanticSymbolIdentity.Create("Kotlin", Path.Combine("relative", "library"), "symbol");
+
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine("relative", "library")),
+            identity.OwnerProjectPath);
+    }
+
+    [Fact]
+    public void External_symbol_identity_rejects_relative_owner_paths()
+    {
+        var run = new SemanticAnalysisRun
+        {
+            Language = "Kotlin",
+            ProjectPath = Path.GetFullPath(Path.Combine("workspace", "consumer"))
+        };
+        var externalSymbol = new SemanticSymbol
+        {
+            Id = "external-symbol-id",
+            Language = "Kotlin",
+            OwningProjectPath = Path.Combine("relative", "library"),
+            Origin = SemanticSymbolOrigin.External
+        };
+
+        Assert.False(SemanticSymbolIdentity.TryCreate(run, externalSymbol, out var identity));
+        Assert.Null(identity);
     }
 
     [Fact]

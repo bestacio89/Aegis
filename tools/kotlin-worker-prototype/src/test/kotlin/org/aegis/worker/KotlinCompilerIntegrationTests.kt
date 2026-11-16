@@ -614,9 +614,7 @@ class KotlinCompilerIntegrationTests {
             annotation class PostMapping(val value: String = "")
             """.trimIndent()
         )
-        Files.writeString(
-            application,
-            """
+        val applicationSource = """
             package sample.api
 
             import org.springframework.web.bind.annotation.GetMapping
@@ -637,152 +635,11 @@ class KotlinCompilerIntegrationTests {
                 @PostMapping(CONSTANT_ROUTE)
                 fun create(): String = "created"
 
-                @GetMapping("\${'
-        val workspace = Files.createTempDirectory("aegis-kotlin-local-identities-")
-        val source = workspace.resolve("LocalDeclarations.kt")
-        val firstOutput = workspace.resolve("first-semantic.json")
-        val secondOutput = workspace.resolve("second-semantic.json")
-        val firstClasses = workspace.resolve("first-classes")
-        val secondClasses = workspace.resolve("second-classes")
-        val sourceText = """
-            package sample
-
-            fun outer() {
-                class LocalType
-                fun localFunction(value: String): LocalType = LocalType()
-                localFunction("value")
-                listOf(1).forEach {
-                    class LambdaLocal
-                    LambdaLocal()
-                }
-            }
-        """.trimIndent()
-
-        try {
-            Files.writeString(source, sourceText)
-            val first = compileLocalDeclarationFixture(workspace, source, firstOutput, firstClasses)
-            val firstIds = first.getAsJsonArray("symbols")
-                .map { it.asJsonObject }
-                .filter { it.get("name").asString in setOf("LocalType", "localFunction", "LambdaLocal") }
-                .map { it.get("id").asString }
-                .sorted()
-
-            Files.writeString(source, "\n\n\n" + sourceText)
-            val second = compileLocalDeclarationFixture(workspace, source, secondOutput, secondClasses)
-            val secondIds = second.getAsJsonArray("symbols")
-                .map { it.asJsonObject }
-                .filter { it.get("name").asString in setOf("LocalType", "localFunction", "LambdaLocal") }
-                .map { it.get("id").asString }
-                .sorted()
-
-            assertEquals(3, firstIds.size)
-            assertEquals(3, firstIds.distinct().size)
-            assertEquals(firstIds, secondIds)
-        } finally {
-            workspace.toFile().deleteRecursively()
-        }
-    }
-
-    private fun compileLocalDeclarationFixture(
-        workspace: Path,
-        source: Path,
-        evidence: Path,
-        destination: Path
-    ): com.google.gson.JsonObject {
-        Files.createDirectories(destination)
-        val pluginPath = Path.of(
-            KotlinWorkerPluginRegistrar::class.java.protectionDomain.codeSource.location.toURI()
-        ).toString()
-        val stdlibPath = Path.of(
-            Unit::class.java.protectionDomain.codeSource.location.toURI()
-        ).toString()
-        val arguments = K2JVMCompilerArguments().apply {
-            this.destination = destination.toString()
-            this.classpath = stdlibPath
-            this.noStdlib = true
-            this.noReflect = true
-            this.jvmTarget = "21"
-            this.languageVersion = "2.4"
-            this.apiVersion = "2.4"
-            this.moduleName = "local-identity-fixture"
-            this.pluginClasspaths = arrayOf(pluginPath)
-            this.freeArgs = listOf(source.toString())
-        }
-
-        val previousOutput = System.getProperty("aegis.kotlin.semantic.output")
-        val previousProject = System.getProperty("aegis.kotlin.semantic.project")
-        try {
-            System.setProperty("aegis.kotlin.semantic.output", evidence.toString())
-            System.setProperty("aegis.kotlin.semantic.project", workspace.toString())
-            val messages = PrintingMessageCollector(
-                System.err,
-                MessageRenderer.PLAIN_RELATIVE_PATHS,
-                false
-            )
-            val exitCode = K2JVMCompiler().exec(messages, Services.EMPTY, arguments)
-            assertEquals(ExitCode.OK, exitCode)
-            return JsonParser.parseString(Files.readString(evidence)).asJsonObject
-        } finally {
-            if (previousOutput == null) System.clearProperty("aegis.kotlin.semantic.output")
-            else System.setProperty("aegis.kotlin.semantic.output", previousOutput)
-            if (previousProject == null) System.clearProperty("aegis.kotlin.semantic.project")
-            else System.setProperty("aegis.kotlin.semantic.project", previousProject)
-        }
-    }
-
-    private fun verifyJavaCanConsumeKotlinOutput(
-        workspace: Path,
-        kotlinOutput: Path,
-        stdlibPath: String
-    ) {
-        val javaCompiler = ToolProvider.getSystemJavaCompiler()
-            ?: error("A JDK compiler is required for Java/Kotlin interoperability validation.")
-        val javaSource = workspace.resolve("java-caller/interop/JavaCaller.java")
-        val javaOutput = workspace.resolve("java-caller-classes")
-        Files.createDirectories(javaSource.parent)
-        Files.createDirectories(javaOutput)
-        Files.writeString(
-            javaSource,
-            """
-            package interop;
-
-            public final class JavaCaller {
-                public String call(sample.Service service, sample.User user) {
-                    service.execute();
-                    service.verify();
-                    return sample.ApplicationKt.label(user, "id") + user.getId();
-                }
-            }
-            """.trimIndent()
-        )
-
-        val fileManager = javaCompiler.getStandardFileManager(null, null, null)
-        try {
-            val compilationUnits = fileManager.getJavaFileObjectsFromPaths(
-                listOf(
-                    javaSource,
-                    workspace.resolve("java/interop/JavaRepository.java"),
-                    workspace.resolve("java/interop/JavaContract.java")
-                )
-            )
-            val options = listOf(
-                "-classpath",
-                listOf(kotlinOutput.toString(), stdlibPath).joinToString(System.getProperty("path.separator")),
-                "-d",
-                javaOutput.toString()
-            )
-            val task = javaCompiler.getTask(null, fileManager, null, options, null, compilationUnits)
-            assertTrue(task.call(), "Java source must resolve Kotlin classes, top-level functions and properties.")
-        } finally {
-            fileManager.close()
-        }
-    }
-}
-}{orders.route}")
+                @GetMapping("ROUTE_DOLLAR{orders.route}")
                 fun dynamic(): String = "dynamic"
             }
-            """.trimIndent()
-        )
+            """.trimIndent().replace("ROUTE_DOLLAR", "\\" + '$')
+        Files.writeString(application, applicationSource)
 
         val pluginPath = Path.of(
             KotlinWorkerPluginRegistrar::class.java.protectionDomain.codeSource.location.toURI()
@@ -830,7 +687,7 @@ class KotlinCompilerIntegrationTests {
             assertEquals(1, create.get("resolutionStatus").asInt)
 
             val dynamic = endpoints.single { it.get("handlerIdentity").asString.contains("dynamic") }
-            assertEquals("/api/orders/" + "$" + "{orders.route}", dynamic.get("routeTemplate").asString)
+            assertEquals("/api/orders/" + '$' + "{orders.route}", dynamic.get("routeTemplate").asString)
             assertEquals(3, dynamic.get("resolutionStatus").asInt)
 
             assertTrue(endpoints.all { it.get("language").asString == "Kotlin" })

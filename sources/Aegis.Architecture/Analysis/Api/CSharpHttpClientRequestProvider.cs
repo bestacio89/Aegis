@@ -9,18 +9,22 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Aegis.Architecture.Analysis.Api;
 
 /// <summary>
-/// Discovers outbound requests made through explicitly declared System.Net.Http.HttpClient
-/// instances. This is syntax-backed evidence, not a claim of runtime execution or reachability.
+/// Discovers outbound requests whose receiver and invoked API resolve to the
+/// framework's HttpClient symbols. Source syntax is retained as evidence.
 /// </summary>
 public sealed class CSharpHttpClientRequestProvider
 {
-    private static readonly IReadOnlyDictionary<string, string> Methods =
+    private const string HttpClientType = "System.Net.Http.HttpClient";
+    private const string HttpClientJsonExtensionsType = "System.Net.Http.Json.HttpClientJsonExtensions";
+
+    private static readonly IReadOnlyDictionary<string, string> HttpMethods =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["GetAsync"] = "GET",
             ["GetStringAsync"] = "GET",
             ["GetByteArrayAsync"] = "GET",
             ["GetStreamAsync"] = "GET",
+            ["GetFromJsonAsync"] = "GET",
             ["PostAsync"] = "POST",
             ["PostAsJsonAsync"] = "POST",
             ["PutAsync"] = "PUT",
@@ -30,6 +34,9 @@ public sealed class CSharpHttpClientRequestProvider
             ["DeleteAsync"] = "DELETE"
         };
 
+    private static readonly Lazy<IReadOnlyList<MetadataReference>> PlatformReferences =
+        new(CreatePlatformReferences);
+
     public IReadOnlyList<ApiClientRequestEvidence> Discover(
         IEnumerable<string> sourceFiles,
         string modulePath)
@@ -38,65 +45,76 @@ public sealed class CSharpHttpClientRequestProvider
         ArgumentException.ThrowIfNullOrWhiteSpace(modulePath);
 
         var module = Path.GetFullPath(modulePath);
-        var evidence = new List<ApiClientRequestEvidence>();
+        var files = sourceFiles
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct(PathComparer)
+            .Where(File.Exists)
+            .OrderBy(path => path, PathComparer)
+            .ToArray();
 
-        foreach (var sourceFile in sourceFiles
-                     .Where(path => !string.IsNullOrWhiteSpace(path))
-                     .Select(Path.GetFullPath)
-                     .Distinct(PathComparer)
-                     .Where(File.Exists)
-                     .OrderBy(path => path, PathComparer))
+        if (files.Length == 0 || PlatformReferences.Value.Count == 0)
+            return Array.Empty<ApiClientRequestEvidence>();
+
+        var trees = files.Select(file =>
+            CSharpSyntaxTree.ParseText(File.ReadAllText(file), path: file)).ToArray();
+        var compilation = CSharpCompilation.Create(
+            "Aegis.ApiClientDiscovery",
+            trees,
+            PlatformReferences.Value,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        var evidence = new List<ApiClientRequestEvidence>();
+        foreach (var tree in trees)
         {
-            var root = CSharpSyntaxTree.ParseText(File.ReadAllText(sourceFile), path: sourceFile)
-                .GetCompilationUnitRoot();
-            var aliases = GetHttpClientAliases(root);
+            var root = tree.GetCompilationUnitRoot();
+            var semanticModel = compilation.GetSemanticModel(tree, ignoreAccessibility: true);
 
             foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
             {
                 if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
                     continue;
 
-                var methodName = memberAccess.Name.Identifier.ValueText;
-                var receiver = memberAccess.Expression;
-                if (!IsHttpClientReceiver(receiver, invocation, root, aliases))
+                var method = semanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+                if (method is null || !TryGetHttpMethod(method, out var httpMethod))
                     continue;
 
-                string? httpMethod;
+                var receiverType = semanticModel.GetTypeInfo(memberAccess.Expression).Type;
+                if (receiverType?.ToDisplayString() != HttpClientType)
+                    continue;
+
                 ExpressionSyntax? uriExpression;
                 var resolutionEvidence = new List<string>
                 {
-                    "Receiver is declared as System.Net.Http.HttpClient or constructed directly with HttpClient."
+                    "Roslyn resolved the invocation and receiver to the System.Net.Http HttpClient API."
                 };
 
-                if (Methods.TryGetValue(methodName, out var knownMethod))
+                if (method.Name == "SendAsync")
                 {
-                    httpMethod = knownMethod;
-                    uriExpression = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
-                    if (uriExpression is null)
-                        resolutionEvidence.Add("Request URI argument is missing.");
-                }
-                else if (methodName == "SendAsync")
-                {
-                    var requestArgument = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
-                    var request = ResolveHttpRequestMessage(requestArgument, root);
+                    var requestExpression = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
+                    var request = ResolveHttpRequestMessage(requestExpression, semanticModel);
                     httpMethod = request.Method;
                     uriExpression = request.Uri;
                     resolutionEvidence.AddRange(request.Evidence);
                 }
                 else
                 {
-                    continue;
+                    uriExpression = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
                 }
 
                 if (uriExpression is null)
+                {
+                    resolutionEvidence.Add("Request URI could not be recovered from the call site.");
                     continue;
+                }
 
                 var (uri, status, uriEvidence) = ReadExpression(uriExpression);
                 resolutionEvidence.AddRange(uriEvidence);
 
+                var sourceFile = tree.FilePath;
                 var location = invocation.GetLocation().GetLineSpan();
                 var caller = GetCallerIdentity(invocation);
-                var identityInput = $"{sourceFile}|{invocation.SpanStart}|{invocation.Span.Length}|{methodName}";
+                var identityInput = $"{sourceFile}|{invocation.SpanStart}|{invocation.Span.Length}|{method.Name}";
                 var evidenceId = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identityInput)));
 
                 evidence.Add(new ApiClientRequestEvidence
@@ -104,7 +122,7 @@ public sealed class CSharpHttpClientRequestProvider
                     EvidenceId = evidenceId,
                     Language = "C#",
                     Framework = "System.Net.Http.HttpClient",
-                    ProviderId = "csharp-roslyn-httpclient-syntax",
+                    ProviderId = "csharp-roslyn-httpclient-symbols",
                     ModulePath = module,
                     SourceFile = sourceFile,
                     StartLine = location.StartLinePosition.Line + 1,
@@ -122,140 +140,62 @@ public sealed class CSharpHttpClientRequestProvider
         return Array.AsReadOnly(evidence.ToArray());
     }
 
-    private static IReadOnlySet<string> GetHttpClientAliases(CompilationUnitSyntax root)
+    private static IReadOnlyList<MetadataReference> CreatePlatformReferences()
     {
-        var aliases = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var directive in root.Usings)
-        {
-            if (directive.Alias is null && directive.Name?.ToString() == "System.Net.Http")
-                aliases.Add("HttpClient");
-            if (directive.Alias is not null
-                && directive.Name?.ToString() == "System.Net.Http.HttpClient")
-                aliases.Add(directive.Alias.Name.Identifier.ValueText);
-        }
+        var trustedAssemblies = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
+        if (string.IsNullOrWhiteSpace(trustedAssemblies))
+            return Array.Empty<MetadataReference>();
 
-        return aliases;
+        return trustedAssemblies
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Distinct(PathComparer)
+            .Select(path => MetadataReference.CreateFromFile(path))
+            .ToArray();
     }
 
-    private static bool IsHttpClientReceiver(
-        ExpressionSyntax receiver,
-        InvocationExpressionSyntax invocation,
-        CompilationUnitSyntax root,
-        IReadOnlySet<string> aliases)
+    private static bool TryGetHttpMethod(IMethodSymbol method, out string? httpMethod)
     {
-        if (receiver is ParenthesizedExpressionSyntax parenthesized)
-            return IsHttpClientReceiver(parenthesized.Expression, invocation, root, aliases);
+        httpMethod = null;
+        var declaringType = method.ContainingType.ToDisplayString();
 
-        if (receiver is ObjectCreationExpressionSyntax creation)
-            return IsHttpClientType(creation.Type.ToString(), aliases);
+        if (declaringType == HttpClientType && method.Name == "SendAsync")
+            return true;
 
-        if (receiver is ImplicitObjectCreationExpressionSyntax implicitCreation)
-            return FindDeclaredType(implicitCreation, invocation, root, aliases);
+        if (declaringType == HttpClientType && HttpMethods.TryGetValue(method.Name, out httpMethod))
+            return true;
 
-        var name = receiver switch
-        {
-            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
-            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
-            _ => null
-        };
-
-        return name is not null && FindDeclaredType(receiver, invocation, root, aliases);
-    }
-
-    private static bool FindDeclaredType(
-        SyntaxNode receiver,
-        CompilationUnitSyntax root,
-        IReadOnlySet<string> aliases)
-    {
-        var name = receiver switch
-        {
-            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
-            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
-            _ => null
-        };
-        if (name is null)
-            return false;
-
-        foreach (var declaration in root.DescendantNodes())
-        {
-            switch (declaration)
-            {
-                case VariableDeclaratorSyntax variable when variable.Identifier.ValueText == name
-                    && variable.SpanStart < invocation.SpanStart
-                    && variable.Ancestors().OfType<BlockSyntax>().FirstOrDefault() is { } localScope
-                    && invocation.Ancestors().Contains(localScope):
-                    if (variable.Parent is VariableDeclarationSyntax variables
-                        && variables.Type is not null
-                        && IsHttpClientType(variables.Type.ToString(), aliases))
-                        return true;
-                    if (variable.Initializer?.Value is ObjectCreationExpressionSyntax creation
-                        && IsHttpClientType(creation.Type.ToString(), aliases))
-                        return true;
-                    if (variable.Initializer?.Value is ImplicitObjectCreationExpressionSyntax)
-                        return false;
-                    break;
-
-                case ParameterSyntax parameter when parameter.Identifier.ValueText == name
-                    && parameter.Ancestors().FirstOrDefault(ancestor => ancestor is BaseMethodDeclarationSyntax or LocalFunctionStatementSyntax) is { } parameterOwner
-                    && invocation.Ancestors().Contains(parameterOwner):
-                    if (IsHttpClientType(parameter.Type?.ToString(), aliases))
-                        return true;
-                    break;
-
-                case PropertyDeclarationSyntax property when property.Identifier.ValueText == name
-                    && property.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault() is { } propertyOwner
-                    && invocation.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault() == propertyOwner:
-                    if (IsHttpClientType(property.Type.ToString(), aliases))
-                        return true;
-                    if (property.Initializer?.Value is ObjectCreationExpressionSyntax propertyCreation
-                        && IsHttpClientType(propertyCreation.Type.ToString(), aliases))
-                        return true;
-                    break;
-
-                case FieldDeclarationSyntax field when field.Declaration.Variables.Any(
-                    variable => variable.Identifier.ValueText == name)
-                    && field.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault() is { } fieldOwner
-                    && invocation.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault() == fieldOwner:
-                    if (IsHttpClientType(field.Declaration.Type.ToString(), aliases))
-                        return true;
-                    break;
-            }
-        }
+        if (declaringType == HttpClientJsonExtensionsType
+            && HttpMethods.TryGetValue(method.Name, out httpMethod))
+            return true;
 
         return false;
     }
 
-    private static bool IsHttpClientType(string? typeName, IReadOnlySet<string> aliases)
-    {
-        if (string.IsNullOrWhiteSpace(typeName))
-            return false;
-
-        var normalized = typeName.Replace("global::", string.Empty, StringComparison.Ordinal);
-        var genericStart = normalized.IndexOf('<');
-        if (genericStart >= 0)
-            normalized = normalized[..genericStart];
-
-        return aliases.Contains(normalized)
-            || normalized == "System.Net.Http.HttpClient";
-    }
-
     private static (string? Method, ExpressionSyntax? Uri, IReadOnlyList<string> Evidence)
-        ResolveHttpRequestMessage(ExpressionSyntax? requestExpression, CompilationUnitSyntax root)
+        ResolveHttpRequestMessage(
+            ExpressionSyntax? requestExpression,
+            SemanticModel semanticModel)
     {
-        if (requestExpression is not IdentifierNameSyntax identifier)
-            return (null, null, ["SendAsync request object could not be resolved to a local declaration."]);
+        if (requestExpression is null)
+            return (null, null, ["SendAsync request argument is missing."]);
 
-        var declaration = root.DescendantNodes().OfType<VariableDeclaratorSyntax>()
-            .FirstOrDefault(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText);
+        var symbol = semanticModel.GetSymbolInfo(requestExpression).Symbol;
+        var declaration = symbol?.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax())
+            .OfType<VariableDeclaratorSyntax>()
+            .FirstOrDefault();
+
         if (declaration?.Initializer?.Value is not ObjectCreationExpressionSyntax creation
-            || !creation.Type.ToString().EndsWith("HttpRequestMessage", StringComparison.Ordinal))
+            || creation.Type.ToString().EndsWith("HttpRequestMessage", StringComparison.Ordinal) is false)
             return (null, null, ["SendAsync request object is not a statically visible HttpRequestMessage construction."]);
 
         var arguments = creation.ArgumentList?.Arguments ?? default;
         if (arguments.Count < 2)
             return (null, null, ["HttpRequestMessage constructor does not expose both method and URI arguments."]);
 
-        var method = arguments[0].Expression.ToString() switch
+        var method = semanticModel.GetConstantValue(arguments[0].Expression);
+        var methodName = arguments[0].Expression.ToString();
+        var httpMethod = methodName switch
         {
             "HttpMethod.Get" => "GET",
             "HttpMethod.Post" => "POST",
@@ -264,11 +204,13 @@ public sealed class CSharpHttpClientRequestProvider
             "HttpMethod.Patch" => "PATCH",
             "HttpMethod.Head" => "HEAD",
             "HttpMethod.Options" => "OPTIONS",
-            _ => null
+            _ => method.HasValue && method.Value is string value
+                ? value.ToUpperInvariant()
+                : null
         };
 
-        return (method, arguments[1].Expression,
-            ["SendAsync was correlated to a local HttpRequestMessage constructor; custom HttpMethod expressions remain unknown."]);
+        return (httpMethod, arguments[1].Expression,
+            ["SendAsync was correlated to the local HttpRequestMessage declaration; dynamic HttpMethod expressions remain unknown."]);
     }
 
     private static (string Value, ApiClientRequestResolutionStatus Status, IReadOnlyList<string> Evidence)

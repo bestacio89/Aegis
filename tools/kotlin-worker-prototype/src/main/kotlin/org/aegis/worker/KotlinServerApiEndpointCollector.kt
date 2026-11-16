@@ -230,10 +230,11 @@ internal class KotlinServerApiEndpointCollector(
         val expression = (if (argumentIndex < 0) null else call.arguments.getOrNull(argumentIndex))
             ?: return RouteValue("", false, true)
         val literal = (expression as? IrConst)?.value as? String
+        val typeName = expression.type.toString()
         return when {
             literal != null -> RouteValue(literal, false)
-            expression.type.toString() == "kotlin.String" -> RouteValue(expression.toString(), true)
-            else -> RouteValue(expression.toString(), false, true)
+            typeName.startsWith("kotlin.String") -> RouteValue(expression.toString(), true)
+            else -> RouteValue(expression.toString() + " [type=" + typeName + "]", false, true)
         }
     }
 

@@ -97,7 +97,7 @@ internal class KotlinApiClientRequestCollector(
             "put" -> "PUT"
             "delete" -> "DELETE"
             "patchForObject" -> "PATCH"
-            "exchange", "execute" -> enumArgument(call, 1)
+            "exchange", "execute" -> enumArgument(call)
             else -> return
         }
         addEvidence(

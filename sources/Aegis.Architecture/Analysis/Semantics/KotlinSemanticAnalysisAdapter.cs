@@ -250,6 +250,7 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
             Capabilities = run.Capabilities,
             Symbols = run.Symbols,
             Relationships = run.Relationships,
+            ServerApiEndpoints = run.ServerApiEndpoints,
             Diagnostics = diagnostics
         };
     }

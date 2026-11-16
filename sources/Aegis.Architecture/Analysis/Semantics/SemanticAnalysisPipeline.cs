@@ -105,9 +105,21 @@ public sealed class SemanticAnalysisPipeline
             cancellationToken).ConfigureAwait(false);
 
         ProjectArchitectureComponents(context, architectureMap.Configuration);
+        MatchApiClientRequestsToServerEndpoints(context);
         context.ArchitectureClassificationDiagnostics.InsertRange(0, architectureMap.Diagnostics);
     }
 
+
+    private static void MatchApiClientRequestsToServerEndpoints(ProjectArchitectureContext context)
+    {
+        var clientRequests = context.ApiClientRequestDiscoveryRegistry
+            ?? new ApiClientRequestDiscoveryRegistry(Array.Empty<ApiClientRequestEvidence>());
+        var serverEndpoints = context.ServerApiEndpointDiscoveryRegistry
+            ?? new ServerApiEndpointDiscoveryRegistry(Array.Empty<ApiEndpointEvidence>());
+        context.ApiClientRequestEndpointMatchRegistry =
+            new Aegis.Architecture.Analysis.Api.ApiClientRequestEndpointMatcher()
+                .Match(clientRequests, serverEndpoints);
+    }
 
     private static void MergeServerEndpointEvidence(ProjectArchitectureContext context)
     {

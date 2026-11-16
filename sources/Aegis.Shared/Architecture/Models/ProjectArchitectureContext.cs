@@ -306,6 +306,13 @@ public sealed class ProjectArchitectureContext
     [System.Text.Json.Serialization.JsonIgnore]
     public ApiClientRequestDiscoveryRegistry? ApiClientRequestDiscoveryRegistry { get; set; }
 
+    /// <summary>
+    /// Derived static correlations between outbound requests and server endpoint candidates.
+    /// These are not proof of runtime invocation or delivery.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ApiClientRequestEndpointMatchRegistry? ApiClientRequestEndpointMatchRegistry { get; set; }
+
 
     /// <summary>
     /// Production-to-production relationships used to describe the deployed

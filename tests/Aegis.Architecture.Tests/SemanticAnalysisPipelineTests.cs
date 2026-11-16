@@ -163,6 +163,54 @@ public sealed class SemanticAnalysisPipelineTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_projects_static_client_endpoint_candidates_into_the_context()
+    {
+        var request = new ApiClientRequestEvidence
+        {
+            EvidenceId = "client-request",
+            Language = "C#",
+            Framework = "System.Net.Http.HttpClient",
+            ProviderId = "roslyn-httpclient",
+            ModulePath = Path.Combine(Path.GetTempPath(), "orders-client"),
+            SourceFile = Path.Combine(Path.GetTempPath(), "orders-client", "OrdersClient.cs"),
+            CallerIdentity = "OrdersClient.GetOrder",
+            HttpMethod = "GET",
+            RequestUriExpression = "\"/api/orders/42\"",
+            ResolutionStatus = ApiClientRequestResolutionStatus.Resolved
+        };
+        var endpoint = new ApiEndpointEvidence
+        {
+            EvidenceId = "server-endpoint",
+            Language = "Java",
+            Framework = "Spring MVC/WebFlux",
+            ProviderId = "eclipse-jdt-spring",
+            ModulePath = Path.Combine(Path.GetTempPath(), "orders-server"),
+            SourceFile = Path.Combine(Path.GetTempPath(), "orders-server", "OrdersController.java"),
+            HandlerIdentity = "OrdersController#getOrder",
+            HttpMethods = ["GET"],
+            RouteTemplate = "/api/orders/{id}",
+            ResolutionStatus = ApiEndpointResolutionStatus.Resolved
+        };
+        var pipeline = new SemanticAnalysisPipeline(
+            [new RecordingAnalyzer("C#", [])],
+            NullLogger<SemanticAnalysisPipeline>.Instance);
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "Orders",
+            RootPath = Path.GetTempPath(),
+            ApiClientRequestDiscoveryRegistry = new ApiClientRequestDiscoveryRegistry([request]),
+            ServerApiEndpointDiscoveryRegistry = new ServerApiEndpointDiscoveryRegistry([endpoint])
+        };
+
+        await pipeline.AnalyzeAsync(context);
+
+        var match = Assert.Single(context.ApiClientRequestEndpointMatchRegistry!.Matches);
+        Assert.Equal(ApiClientRequestEndpointMatchStatus.UniqueCandidate, match.Status);
+        Assert.Equal(0, match.ClientRequestIndex);
+        Assert.Equal(0, Assert.Single(match.Candidates).EndpointIndex);
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_respects_explicit_execution_order_for_jvm_interoperability()
     {
         var executionOrder = new List<string>();

@@ -216,14 +216,20 @@ internal class KotlinApiClientRequestCollector(
     private fun firstValueArgument(call: IrCall): IrExpression? =
         valueArgument(call, 0)
 
-    private fun valueArgument(call: IrCall, valueArgumentIndex: Int): IrExpression? {
-        val receiverArgumentCount = call.arguments.size - call.symbol.owner.valueParameters.size
-        if (receiverArgumentCount < 0) return null
-        return call.arguments.getOrNull(receiverArgumentCount + valueArgumentIndex)
-    }
+    private fun firstValueArgument(call: IrCall): IrExpression? =
+        call.arguments.zip(call.symbol.owner.parameters)
+            .firstOrNull { (_, parameter) ->
+                parameter.type.toString().removeSuffix("?") == "kotlin.String"
+            }
+            ?.first
 
-    private fun enumArgument(call: IrCall, valueArgumentIndex: Int): String? =
-        valueArgument(call, valueArgumentIndex)?.let(::springHttpMethodConstant)
+    private fun enumArgument(call: IrCall): String? =
+        call.arguments.zip(call.symbol.owner.parameters)
+            .firstOrNull { (_, parameter) ->
+                parameter.type.toString().removeSuffix("?") == SPRING_HTTP_METHOD
+            }
+            ?.first
+            ?.let(::springHttpMethodConstant)
 
     private fun springHttpMethodConstant(expression: IrExpression): String? =
         when (expression) {

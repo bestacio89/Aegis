@@ -25,6 +25,7 @@ public enum ArchitectureRelationshipKind
     Registration = 206,
     DynamicLoading = 207,
     Actualizes = 208,
+    UsesAnnotation = 209,
 
     // HTTP and API integration.
     HttpRequest = 300,

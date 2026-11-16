@@ -15,6 +15,7 @@ public sealed class ArchitectureRelationshipTaxonomyTests
         Assert.Equal(200, (int)ArchitectureRelationshipKind.Declares);
         Assert.Equal(203, (int)ArchitectureRelationshipKind.Calls);
         Assert.Equal(204, (int)ArchitectureRelationshipKind.References);
+        Assert.Equal(209, (int)ArchitectureRelationshipKind.UsesAnnotation);
 
         Assert.Equal(300, (int)ArchitectureRelationshipKind.HttpRequest);
         Assert.Equal(301, (int)ArchitectureRelationshipKind.HttpRoute);

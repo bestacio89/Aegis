@@ -1,3 +1,5 @@
+using Aegis.Shared.Architecture.Enums;
+
 namespace Aegis.Shared.Architecture.Models;
 
 /// <summary>
@@ -12,6 +14,7 @@ public sealed record SemanticRelationshipEvidence(
     string Language,
     string EngineId,
     string ProjectPath,
+    SemanticAnalysisStatus RunStatus,
     SemanticRelationship Relationship)
 {
     /// <summary>Unique within one registry snapshot, not a cross-scan persistent ID.</summary>

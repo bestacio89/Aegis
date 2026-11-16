@@ -57,6 +57,7 @@ public sealed class SemanticRelationshipEvidenceRegistry
                     run.Language,
                     run.EngineId,
                     run.ProjectPath,
+                    run.Status,
                     relationship);
 
                 evidence.Add(item);

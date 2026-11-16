@@ -39,6 +39,8 @@ internal static class SemanticArchitectureComponentDetector
         var symbolIndex = SemanticSymbolIndex.Create(context.SemanticAnalysisRuns);
         context.RelationshipEvidenceRegistry = evidenceRegistry;
         context.SemanticSymbolIndex = symbolIndex;
+        context.SemanticRelationshipNormalizationRegistry =
+            SemanticRelationshipNormalizationRegistry.Create(evidenceRegistry, symbolIndex);
         if (semanticRuns.Length == 0)
             return;
 

@@ -290,6 +290,14 @@ public sealed class ProjectArchitectureContext
     [System.Text.Json.Serialization.JsonIgnore]
     public SemanticSymbolIndex? SemanticSymbolIndex { get; set; }
 
+    /// <summary>
+    /// Snapshot-scoped normalized view of native semantic relationship evidence.
+    /// Derived from the relationship registry and symbol index; excluded from
+    /// serialization because provider-native runs remain the source of truth.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public SemanticRelationshipNormalizationRegistry? SemanticRelationshipNormalizationRegistry { get; set; }
+
 
     /// <summary>
     /// Production-to-production relationships used to describe the deployed

@@ -9,7 +9,7 @@ Define a stable, language-neutral vocabulary before changing symbol identity, ev
 | Range | Family | Kinds | Meaning |
 |---|---|---|---|
 | 100–199 | Build topology | BuildProjectReference, BuildModuleDependency, BuildPackageDependency | Declared build/package reachability. Not proof of a source-level call or runtime interaction. |
-| 200–299 | Native semantic | Declares, Inherits, Implements, Calls, References, DependencyInjection, Registration, DynamicLoading, Actualizes | Language/compiler/parser facts about declarations and source-level semantics. |
+| 200–299 | Native semantic | Declares, Inherits, Implements, Calls, References, DependencyInjection, Registration, DynamicLoading, Actualizes, UsesAnnotation | Language/compiler/parser facts about declarations and source-level semantics. |
 | 300–399 | HTTP/API | HttpRequest, HttpRoute | Client-to-route or route-to-handler integration evidence. |
 | 400–499 | Messaging | MessagePublish, MessageConsume | Producer and consumer observations. Matching a topic/channel is correlation, not proof of delivery. |
 | 500–599 | RPC | RpcCall, RpcEndpoint | Remote invocation and exposed endpoint evidence. |

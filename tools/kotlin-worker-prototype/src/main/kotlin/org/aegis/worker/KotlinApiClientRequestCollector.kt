@@ -214,9 +214,6 @@ internal class KotlinApiClientRequestCollector(
     }
 
     private fun firstValueArgument(call: IrCall): IrExpression? =
-        valueArgument(call, 0)
-
-    private fun firstValueArgument(call: IrCall): IrExpression? =
         call.arguments.zip(call.symbol.owner.parameters)
             .firstOrNull { (_, parameter) ->
                 parameter.type.toString().removeSuffix("?") == "kotlin.String"

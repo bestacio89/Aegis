@@ -13,7 +13,6 @@ import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrGetEnumValue
 import org.jetbrains.kotlin.ir.expressions.IrGetField
 import org.jetbrains.kotlin.ir.expressions.IrStringConcatenation
-import org.jetbrains.kotlin.ir.expressions.getValueArgument
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
@@ -214,10 +213,18 @@ internal class KotlinApiClientRequestCollector(
     }
 
     private fun firstValueArgument(call: IrCall): IrExpression? =
-        call.getValueArgument(0)
+        valueArgument(call, 0)
+
+    private fun valueArgument(call: IrCall, valueArgumentIndex: Int): IrExpression? =
+        call.arguments
+            .filterNotNull()
+            .filterNot { argument ->
+                argument === call.dispatchReceiver || argument === call.extensionReceiver
+            }
+            .getOrNull(valueArgumentIndex)
 
     private fun enumArgument(call: IrCall, valueArgumentIndex: Int): String? =
-        call.getValueArgument(valueArgumentIndex)?.let(::springHttpMethodConstant)
+        valueArgument(call, valueArgumentIndex)?.let(::springHttpMethodConstant)
 
     private fun springHttpMethodConstant(expression: IrExpression): String? =
         when (expression) {

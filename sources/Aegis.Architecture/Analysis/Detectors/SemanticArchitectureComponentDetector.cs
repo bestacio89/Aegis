@@ -41,6 +41,20 @@ internal static class SemanticArchitectureComponentDetector
         context.SemanticSymbolIndex = symbolIndex;
         context.SemanticRelationshipNormalizationRegistry =
             SemanticRelationshipNormalizationRegistry.Create(evidenceRegistry, symbolIndex);
+
+        // Client request declarations are source evidence, not graph edges.
+        // Rebuild the registry from the non-Java baseline plus all semantic runs
+        // so repeated detector execution cannot duplicate worker observations.
+        var existingClientEvidence = context.ApiClientRequestDiscoveryRegistry?.Evidence
+            .Where(evidence => !evidence.ProviderId.Equals(
+                "eclipse-jdt-api-client",
+                StringComparison.OrdinalIgnoreCase))
+            ?? Enumerable.Empty<ApiClientRequestEvidence>();
+        var semanticClientEvidence = context.SemanticAnalysisRuns
+            .SelectMany(run => run.ApiClientRequests);
+        context.ApiClientRequestDiscoveryRegistry =
+            new ApiClientRequestDiscoveryRegistry(existingClientEvidence.Concat(semanticClientEvidence));
+
         if (semanticRuns.Length == 0)
             return;
 

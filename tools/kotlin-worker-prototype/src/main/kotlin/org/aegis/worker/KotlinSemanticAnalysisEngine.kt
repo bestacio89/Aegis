@@ -123,6 +123,7 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
             add("symbols")
             add("relationships")
             add("server-api-endpoints")
+            add("api-client-requests")
             add("compiler-diagnostics")
             add("jvm-interop")
             if (request.multiplatform) add("multiplatform")

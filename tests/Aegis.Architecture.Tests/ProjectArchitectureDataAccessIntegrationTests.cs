@@ -177,6 +177,46 @@ public sealed class ProjectArchitectureDataAccessIntegrationTests
     }
 
     [Fact]
+    public void Keeps_Entity_Framework_Core_mapping_with_dynamic_schema_partially_resolved()
+    {
+        using var directory = new TemporaryDirectory();
+        var sourceFile = Path.Combine(directory.Path, "DynamicSchemaMapping.cs");
+        File.WriteAllText(sourceFile, """
+            namespace Microsoft.EntityFrameworkCore
+            {
+                public sealed class EntityTypeBuilder<T> { }
+                public sealed class ModelBuilder
+                {
+                    public EntityTypeBuilder<T> Entity<T>() => new();
+                }
+                public static class RelationalEntityTypeBuilderExtensions
+                {
+                    public static EntityTypeBuilder<T> ToTable<T>(this EntityTypeBuilder<T> builder, string name, string? schema = null) => builder;
+                }
+            }
+            namespace Persistence
+            {
+                using Microsoft.EntityFrameworkCore;
+                public sealed class Order { }
+                public sealed class OrdersDbContext
+                {
+                    protected void OnModelCreating(ModelBuilder modelBuilder, string schema) =>
+                        modelBuilder.Entity<Order>().ToTable("orders", schema);
+                }
+            }
+            """);
+
+        var evidence = new CSharpEntityFrameworkDataAccessProvider()
+            .Discover([sourceFile], directory.Path);
+
+        var mapping = Assert.Single(evidence);
+        Assert.Equal(DataIntegrationOperation.Mapping, mapping.Operation);
+        Assert.Equal("global::Persistence.Order", mapping.SourceDataIdentity);
+        Assert.Null(mapping.TargetDataIdentity);
+        Assert.Equal(IntegrationEvidenceResolutionStatus.Dynamic, mapping.ResolutionStatus);
+    }
+
+    [Fact]
     public void Does_not_classify_query_composition_or_unrelated_methods_as_data_access()
     {
         using var directory = new TemporaryDirectory();

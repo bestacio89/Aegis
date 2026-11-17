@@ -300,7 +300,7 @@ public sealed class CSharpMassTransitMessageProvider
                     ? literal.Token.ValueText
                     : null;
             var destinationEvidence = destinationExpression.ToString();
-            var destinationKey = $"{receiveEndpoint.SpanStart}:{receiveEndpoint.Span.Length}";
+            var destinationKey = $"{receiveEndpoint.SyntaxTree.FilePath}|{receiveEndpoint.SpanStart}:{receiveEndpoint.Span.Length}";
 
             foreach (var configureConsumer in receiveEndpoint.DescendantNodes()
                          .OfType<InvocationExpressionSyntax>())

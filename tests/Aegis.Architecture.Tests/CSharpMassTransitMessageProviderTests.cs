@@ -249,6 +249,16 @@ public sealed class CSharpMassTransitMessageProviderTests
                     public Task Consume(ConsumeContext<OrderSubmitted> context) =>
                         Task.CompletedTask;
                 }
+
+                public sealed class AdditionalRegistration
+                {
+                    private readonly EndpointConfiguration _endpoints = new();
+
+                    public void Configure() =>
+                        _endpoints.ReceiveEndpoint(
+                            "orders-alt",
+                            endpoint => endpoint.ConfigureConsumer<OrderConsumer>(this));
+                }
             }
             """);
 
@@ -256,10 +266,16 @@ public sealed class CSharpMassTransitMessageProviderTests
             [fixture.SourcePath, consumerFile],
             fixture.ModulePath);
 
-        var consume = Assert.Single(evidence, item =>
-            item.Operation == MessageIntegrationOperation.Consume);
-        Assert.Equal("orders", consume.DestinationIdentity);
-        Assert.Contains("ReceiveEndpoint", consume.DeclarationEvidence, StringComparison.Ordinal);
+        var consumes = evidence
+            .Where(item => item.Operation == MessageIntegrationOperation.Consume)
+            .ToArray();
+        Assert.Equal(2, consumes.Length);
+        Assert.Equal(
+            new[] { "orders", "orders-alt" },
+            consumes.Select(item => item.DestinationIdentity).OrderBy(value => value, StringComparer.Ordinal));
+        Assert.Equal(2, consumes.Select(item => item.EvidenceId).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(consumes, consume =>
+            Assert.Contains("ReceiveEndpoint", consume.DeclarationEvidence, StringComparison.Ordinal));
     }
 
     private sealed class CSharpMessagingFixture : IDisposable

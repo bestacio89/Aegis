@@ -4,5 +4,6 @@ namespace Aegis.Shared.Architecture.Enums;
 public enum MessageIntegrationOperation
 {
     Publish,
-    Consume
+    Consume,
+    Send
 }

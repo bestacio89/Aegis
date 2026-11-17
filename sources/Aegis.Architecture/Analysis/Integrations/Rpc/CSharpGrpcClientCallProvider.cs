@@ -20,7 +20,8 @@ public sealed class CSharpGrpcClientCallProvider
 
     public IReadOnlyList<RpcIntegrationEvidence> Discover(
         IEnumerable<string> sourceFiles,
-        string modulePath)
+        string modulePath,
+        IReadOnlyCollection<RpcIntegrationEvidence>? serviceContracts = null)
     {
         ArgumentNullException.ThrowIfNull(sourceFiles);
         ArgumentException.ThrowIfNullOrWhiteSpace(modulePath);
@@ -67,7 +68,15 @@ public sealed class CSharpGrpcClientCallProvider
                 if (string.IsNullOrWhiteSpace(methodName))
                     continue;
 
-                var methodIdentity = serviceIdentity + "." + methodName;
+                var matchingContracts = serviceContracts?
+                    .Where(contract => contract.Operation == RpcIntegrationOperation.Endpoint
+                        && contract.ServiceIdentity?.EndsWith("." + (clientType.ContainingType?.Name ?? clientType.Name.Replace("Client", string.Empty, StringComparison.Ordinal)), StringComparison.Ordinal) == true
+                        && contract.MethodIdentity?.EndsWith("." + methodName, StringComparison.Ordinal) == true)
+                    .ToArray() ?? Array.Empty<RpcIntegrationEvidence>();
+                var contractMatch = matchingContracts.Length == 1 ? matchingContracts[0] : null;
+                var methodIdentity = contractMatch?.MethodIdentity ?? serviceIdentity + "." + methodName;
+                if (contractMatch is not null)
+                    serviceIdentity = contractMatch.ServiceIdentity ?? serviceIdentity;
                 var receiver = invocation.Expression is MemberAccessExpressionSyntax memberAccess
                     ? memberAccess.Expression.ToString()
                     : clientType.Name;
@@ -91,11 +100,18 @@ public sealed class CSharpGrpcClientCallProvider
                     TargetIdentity = methodIdentity,
                     TargetExpression = receiver,
                     HandlerIdentity = GetCallerIdentity(invocation),
-                    ResolutionStatus = IntegrationEvidenceResolutionStatus.Resolved,
+                    ResolutionStatus = matchingContracts.Length > 1
+                        ? IntegrationEvidenceResolutionStatus.PartiallyResolved
+                        : IntegrationEvidenceResolutionStatus.Resolved,
                     ResolutionEvidence = Array.AsReadOnly(new[]
                     {
                         "Roslyn resolved the invocation to a method declared by a client type deriving from Grpc.Core.ClientBase<T>.",
                         "The generated client type supplies the service identity; the Async suffix is removed to recover the RPC contract method name.",
+                        contractMatch is not null
+                            ? "The generated client service and method uniquely match a Protocol Buffers service contract in the same module."
+                            : matchingContracts.Length > 1
+                                ? "Multiple Protocol Buffers service contracts match the generated client service and method; contract identity remains ambiguous."
+                                : "No unique Protocol Buffers contract match was available; the generated client identity is retained.",
                         "The receiver expression is retained without evaluating channel configuration or network destination."
                     }),
                     DeclarationEvidence = invocation.ToString()

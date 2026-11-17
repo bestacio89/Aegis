@@ -118,7 +118,7 @@
             </Grid.ColumnDefinitions>
             <TextBox
                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                ToolTip="Search source, target, layers, dependency type, or evidence file"
+                ToolTip="Search graph domain, endpoints, relationship kind, scope, or evidence reference"
                 MinHeight="38" Padding="12,8" Margin="0,0,10,0"
                 Background="{StaticResource Brush.PanelElevated}"
                 Foreground="{StaticResource Brush.TextPrimary}"
@@ -187,7 +187,6 @@
                         <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" Width="90" />
                         <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="110" />
                         <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="*" />
-                        <DataGridTextColumn Header="Evidence file(s)" Binding="{Binding File}" Width="1.4*" />
                     </DataGrid.Columns>
                     </DataGrid>
                     <Border Background="{StaticResource Brush.PanelElevated}" Padding="24"

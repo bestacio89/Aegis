@@ -93,3 +93,20 @@ The collector preserves source location, handler/caller identity, message type a
 Kotlin observations are adapted into the existing `MessageIntegrationEvidence` contract and appended to the existing occurrence-preserving `IntegrationEvidenceRegistry<MessageIntegrationEvidence>` alongside C# and Java evidence. No parallel Kotlin-specific registry or aggregation path is introduced.
 
 The Java and Kotlin providers retain destination kind as `Unknown` where the source declaration does not establish queue/topic semantics. Neither provider evaluates runtime configuration, inspects broker topology, correlates publishers and consumers, creates graph edges, or claims successful delivery.
+
+
+## Phase 10D — C# Entity Framework Core data access
+
+The C# data-access provider is technology-specific by design. It uses Roslyn semantic bindings to discover EF Core query execution, tracked and bulk mutations, relational entity-to-table/view mappings, schema-qualified store identities, and strongly typed property-to-column mappings. Dynamic schema and column expressions retain partial identity and are not promoted to resolved mappings.
+
+This implementation does not imply EF Core support in Java, Kotlin, TypeScript, or JavaScript. Those ecosystems require independent providers for their own persistence technologies. The shared `DataAccessEvidence` contract remains technology-neutral; `Technology`, store/object identities, mapping endpoints, and source expressions preserve provider-specific facts without importing EF Core types into shared contracts.
+
+## Phase 10E — Cross-domain integration normalization and regression corpus
+
+`IntegrationEvidenceCatalog` provides one immutable cross-domain index over the existing typed messaging, RPC, and data-access registries. Each catalog entry carries a domain discriminator and a snapshot-local occurrence index while referencing the original `IIntegrationEvidence` instance. It does not copy domain evidence into a parallel contract, collapse provider IDs, match endpoints, or infer relationships.
+
+The catalog supports indexes by language, owning module, provider, normalized relationship kind, and resolution status. Original typed registries remain authoritative, and the catalog is a derived, non-serialized property on `ProjectArchitectureContext`.
+
+The shared regression corpus exercises heterogeneous provider metadata across the existing contract families (Java/Kotlin messaging and RPC observations alongside C# EF Core data observations), duplicate IDs across and within domains, repeated occurrences, dynamic and partially resolved evidence, case-insensitive language/module lookups, provider-specific lookup, relationship classification, empty domain snapshots, and preservation of original evidence object identity. This validates the common evidence boundary; it does not claim that persistence providers exist for languages where none have been implemented.
+
+**Validation boundary:** language-specific discovery remains the responsibility of each native provider and its own compiler/semantic worker. Cross-domain catalog construction is aggregation only; it performs no cross-language symbol resolution, message/RPC/data correlation, runtime reachability analysis, or graph-edge creation.

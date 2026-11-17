@@ -221,7 +221,8 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             ? default
             : semanticModel.GetConstantValue(schemaArgument);
         var resolved = nameIdentity.HasValue && nameIdentity.Value is string storeObjectName
-            && !string.IsNullOrWhiteSpace(storeObjectName);
+            && !string.IsNullOrWhiteSpace(storeObjectName)
+            && (schemaArgument is null || schemaIdentity.HasValue);
         var schema = schemaIdentity.HasValue && schemaIdentity.Value is string schemaName
             && !string.IsNullOrWhiteSpace(schemaName)
                 ? schemaName

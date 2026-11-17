@@ -4,6 +4,7 @@ using Aegis.Architecture.Analysis.Api;
 using Aegis.Architecture.Analysis.Detectors;
 using Aegis.Architecture.Analysis.Integrations.Messaging;
 using Aegis.Architecture.Analysis.Integrations.Rpc;
+using Aegis.Architecture.Analysis.Integrations.Data;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
 
@@ -79,6 +80,7 @@ public static class ProjectArchitectureContextDetector
         DiscoverApiClientRequests(ctx, files);
         DiscoverMessageIntegrations(ctx, files);
         DiscoverRpcIntegrations(ctx, files);
+        DiscoverDataAccessIntegrations(ctx, files);
 
         // Framework discovery enriches module-owned evidence (notably Java
         // Maven/Gradle frameworks). Recompute roles only after that evidence
@@ -453,6 +455,35 @@ public static class ProjectArchitectureContextDetector
 
         context.RpcIntegrationEvidenceRegistry =
             new IntegrationEvidenceRegistry<RpcIntegrationEvidence>(evidence);
+    }
+
+    private static void DiscoverDataAccessIntegrations(
+        ProjectArchitectureContext context,
+        IReadOnlyCollection<string> files)
+    {
+        var evidence = new List<DataAccessEvidence>();
+        var csharpProvider = new CSharpEntityFrameworkDataAccessProvider();
+
+        foreach (var module in context.Modules.Where(module =>
+                     !string.IsNullOrWhiteSpace(module.Path)
+                     && module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase)))
+        {
+            var modulePath = Path.GetFullPath(module.Path);
+            var moduleFiles = files.Where(file =>
+            {
+                var relative = Path.GetRelativePath(modulePath, Path.GetFullPath(file));
+                return !Path.IsPathRooted(relative)
+                    && relative != ".."
+                    && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+            });
+            var csharpFiles = moduleFiles.Where(file =>
+                string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase));
+            evidence.AddRange(csharpProvider.Discover(csharpFiles, modulePath));
+        }
+
+        context.DataAccessEvidenceRegistry =
+            new IntegrationEvidenceRegistry<DataAccessEvidence>(evidence);
     }
 
     private static void LoadApplicationIntegrations(ProjectArchitectureContext context)

@@ -169,6 +169,7 @@ public sealed class CSharpMassTransitMessageProviderTests
             """
             using System;
             using FakeMessaging;
+            using MassTransit;
 
             namespace FakeMessaging
             {

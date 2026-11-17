@@ -23,6 +23,19 @@ public sealed class CSharpMassTransitMessageProviderTests
 
             namespace Orders.Application
             {
+                public sealed class OrderSender
+                {
+                    private readonly ISendEndpoint _sendEndpoint;
+
+                    public OrderSender(ISendEndpoint sendEndpoint)
+                    {
+                        _sendEndpoint = sendEndpoint;
+                    }
+
+                    public Task Send(OrderSubmitted message) =>
+                        _sendEndpoint.Send(message);
+                }
+
                 public sealed class OrderPublisher
                 {
                     private readonly IPublishEndpoint _publishEndpoint;
@@ -58,9 +71,20 @@ public sealed class CSharpMassTransitMessageProviderTests
             [fixture.SourcePath],
             fixture.ModulePath);
 
-        Assert.Equal(2, evidence.Count);
+        Assert.Equal(3, evidence.Count);
+        var send = Assert.Single(evidence, item => item.Operation == MessageIntegrationOperation.Send);
         var publish = Assert.Single(evidence, item => item.Operation == MessageIntegrationOperation.Publish);
         var consume = Assert.Single(evidence, item => item.Operation == MessageIntegrationOperation.Consume);
+
+        Assert.Equal("C#", send.Language);
+        Assert.Equal("MassTransit", send.Framework);
+        Assert.Equal("roslyn-masstransit", send.ProviderId);
+        Assert.EndsWith("Orders.Contracts.OrderSubmitted", send.MessageTypeIdentity, StringComparison.Ordinal);
+        Assert.Equal("OrderSubmitted", send.MessageTypeExpression);
+        Assert.Equal(IntegrationEvidenceResolutionStatus.Resolved, send.ResolutionStatus);
+        Assert.Equal(MessageDestinationKind.Unknown, send.DestinationKind);
+        Assert.Contains("ISendEndpoint", string.Join(" ", send.ResolutionEvidence), StringComparison.Ordinal);
+        Assert.Equal(ArchitectureRelationshipKind.MessageSend, send.RelationshipKind);
 
         Assert.Equal("C#", publish.Language);
         Assert.Equal("MassTransit", publish.Framework);
@@ -288,6 +312,7 @@ public sealed class CSharpMassTransitMessageProviderTests
 
                 public interface IConsumer<T> { }
                 public interface IPublishEndpoint { Task Publish<T>(T message); }
+                public interface ISendEndpoint { Task Send<T>(T message); }
                 public interface IReceiveEndpointConfigurator { }
                 public interface IBusFactoryConfigurator { }
                 public interface ConsumeContext<T> { }

@@ -98,6 +98,7 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
     private static bool TryDiscoverRead(
         InvocationExpressionSyntax invocation,
         IMethodSymbol method,
+        SemanticModel semanticModel,
         string module,
         out DataAccessEvidence evidence)
     {
@@ -162,7 +163,6 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
         evidence = CreateEvidence(
             invocation,
             method,
-            semanticModel,
             module,
             DataIntegrationOperation.Write,
             GetStoreIdentity(receiverType, memberAccess.Expression, semanticModel),
@@ -178,7 +178,6 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
     private static DataAccessEvidence CreateEvidence(
         InvocationExpressionSyntax invocation,
         IMethodSymbol method,
-        SemanticModel semanticModel,
         string module,
         DataIntegrationOperation operation,
         string? storeIdentity,

@@ -66,7 +66,7 @@ public sealed class UnifiedArchitectureGraphProjectorTests
 
         var projection = UnifiedArchitectureGraphProjector.Project(context);
 
-        projection.Edges.Should().HaveCount(3);
+        projection.Edges.Should().HaveCount(2);
         projection.Edges.Should().ContainSingle(edge =>
             edge.Domain == ArchitectureGraphEdgeDomain.Build
             && edge.RelationshipKinds.Contains(ArchitectureRelationshipKind.BuildProjectReference));
@@ -149,7 +149,7 @@ public sealed class UnifiedArchitectureGraphProjectorTests
 
         var projection = UnifiedArchitectureGraphProjector.Project(context);
 
-        projection.Edges.Should().HaveCount(2);
+        projection.Edges.Should().HaveCount(3);
         projection.Edges.Should().Contain(edge => edge.Domain == ArchitectureGraphEdgeDomain.Messaging);
         projection.Edges.Should().Contain(edge => edge.Domain == ArchitectureGraphEdgeDomain.Rpc);
         var dataReadEdge = projection.Edges.Should()

@@ -80,7 +80,7 @@ class KotlinMessageIntegrationTests {
                 @KafkaListener(topics = ["orders"])
                 fun consumeKafka(order: OrderSubmitted) {}
 
-                @KafkaListener(topics = ["\${'
+                @KafkaListener(topics = ["\${'$'}{messaging.orders.topic}"])
                 fun consumeDynamicKafka(order: OrderSubmitted) {}
 
                 @KafkaListener(topicPattern = "orders.*")

@@ -167,6 +167,7 @@ public sealed class CSharpMassTransitMessageProviderTests
     {
         using var fixture = new CSharpMessagingFixture(
             """
+            using System;
             using FakeMessaging;
 
             namespace FakeMessaging

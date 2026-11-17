@@ -433,10 +433,20 @@ public static class ProjectArchitectureContextDetector
                     && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
             });
 
+            var ownedFiles = moduleFiles.ToArray();
             evidence.AddRange(provider.Discover(
-                moduleFiles.Where(file =>
+                ownedFiles.Where(file =>
                     string.Equals(Path.GetExtension(file), ".proto", StringComparison.OrdinalIgnoreCase)),
                 modulePath));
+
+            if (module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase))
+            {
+                var grpcClientProvider = new CSharpGrpcClientCallProvider();
+                evidence.AddRange(grpcClientProvider.Discover(
+                    ownedFiles.Where(file =>
+                        string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase)),
+                    modulePath));
+            }
         }
 
         context.RpcIntegrationEvidenceRegistry =

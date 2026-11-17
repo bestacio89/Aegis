@@ -160,6 +160,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         result.add("relationships", new JsonArray());
         result.add("serverApiEndpoints", new JsonArray());
         result.add("apiClientRequests", new JsonArray());
+        result.add("messageIntegrations", new JsonArray());
         result.add("diagnostics", new JsonArray());
         return result;
     }
@@ -225,6 +226,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         private final JsonArray diagnostics = new JsonArray();
         private final JsonArray serverApiEndpoints = new JsonArray();
         private final JsonArray apiClientRequests = new JsonArray();
+        private final JsonArray messageIntegrations = new JsonArray();
         private int analyzedFiles;
         private int skippedFiles;
 
@@ -310,6 +312,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                     IMethodBinding binding = node.resolveBinding();
                     addMethod(binding, node, file, test, generated);
                     discoverSpringEndpoint(node, file);
+                    discoverSpringKafkaListener(node, file);
                     return true;
                 }
 
@@ -329,6 +332,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                     IMethodBinding binding = node.resolveMethodBinding();
                     addCall(enclosingSymbol(node), binding, node.toString(), node, file, test, false);
                     discoverApiClientRequest(node, file);
+                    discoverSpringKafkaSend(node, file);
                     return true;
                 }
 
@@ -411,6 +415,182 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             }
         }
 
+
+
+        private void discoverSpringKafkaListener(MethodDeclaration method, Path file) {
+            List<Annotation> listeners = new ArrayList<>();
+            for (Object modifier : method.modifiers()) {
+                if (modifier instanceof Annotation annotation
+                    && "org.springframework.kafka.annotation.KafkaListener".equals(annotationTypeName(annotation))) {
+                    listeners.add(annotation);
+                }
+            }
+            if (listeners.isEmpty()) return;
+
+            IMethodBinding handlerBinding = method.resolveBinding();
+            String handlerIdentity = handlerBinding == null || handlerBinding.isRecovered()
+                ? null : methodIdentity(handlerBinding.getMethodDeclaration());
+            String messageType = handlerBinding == null || handlerBinding.isRecovered()
+                ? null : listenerPayloadType(handlerBinding);
+            for (Annotation listener : listeners) {
+                for (String member : List.of("topics", "topicPattern")) {
+                    Expression expression = annotationMember(listener, member);
+                    if (expression == null) continue;
+                    for (Expression value : annotationExpressions(expression)) {
+                        addKafkaListenerEvidence(method, file, listener, value, handlerIdentity,
+                            messageType, "topicPattern".equals(member));
+                    }
+                }
+                Expression partitions = annotationMember(listener, "topicPartitions");
+                if (partitions != null) {
+                    for (Expression value : annotationExpressions(partitions)) {
+                        if (!(value instanceof Annotation partition)
+                            || !"org.springframework.kafka.annotation.TopicPartition".equals(annotationTypeName(partition))) {
+                            continue;
+                        }
+                        Expression topic = annotationMember(partition, "topic");
+                        if (topic != null) {
+                            addKafkaListenerEvidence(method, file, listener, topic, handlerIdentity,
+                                messageType, false);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void addKafkaListenerEvidence(
+            MethodDeclaration method,
+            Path file,
+            Annotation listener,
+            Expression destination,
+            String handlerIdentity,
+            String messageType,
+            boolean pattern) {
+            Object constant = destination.resolveConstantExpressionValue();
+            String destinationIdentity = !pattern && constant instanceof String value
+                && !value.contains("${") && !value.contains("#{") ? value : null;
+            int resolutionStatus = destinationIdentity != null ? 0 : 2;
+            if (handlerIdentity == null) resolutionStatus = 3;
+
+            JsonObject evidence = new JsonObject();
+            evidence.addProperty("evidenceId", file + "#kafka-listener@" + listener.getStartPosition()
+                + "#destination@" + destination.getStartPosition());
+            evidence.addProperty("language", "Java");
+            evidence.addProperty("framework", "Spring Kafka");
+            evidence.addProperty("providerId", "eclipse-jdt-spring-kafka");
+            evidence.addProperty("modulePath", projectRoot.toString());
+            evidence.addProperty("sourceFile", file.toString());
+            evidence.addProperty("startLine", line(method));
+            evidence.addProperty("startColumn", column(method));
+            evidence.addProperty("operation", 1);
+            if (messageType != null) evidence.addProperty("messageTypeIdentity", messageType);
+            evidence.addProperty("messageTypeExpression", method.parameters().isEmpty()
+                ? "" : method.parameters().get(0).toString());
+            evidence.addProperty("destinationKind", 1);
+            if (destinationIdentity != null) evidence.addProperty("destinationIdentity", destinationIdentity);
+            evidence.addProperty("destinationExpression", destination.toString());
+            if (handlerIdentity != null) evidence.addProperty("handlerIdentity", handlerIdentity);
+            evidence.addProperty("resolutionStatus", resolutionStatus);
+            JsonArray resolutionEvidence = new JsonArray();
+            resolutionEvidence.add("Resolved annotation binding: org.springframework.kafka.annotation.KafkaListener");
+            resolutionEvidence.add(pattern
+                ? "topicPattern is retained as a pattern expression; it is not reduced to a single destination."
+                : destinationIdentity != null
+                    ? "Destination expression resolved to a compile-time string constant."
+                    : "Destination expression is retained without runtime evaluation.");
+            if (handlerIdentity == null) resolutionEvidence.add("Listener handler method binding is unavailable or recovered.");
+            evidence.add("resolutionEvidence", resolutionEvidence);
+            evidence.addProperty("declarationEvidence", listener.toString() + " " + method.getName());
+            messageIntegrations.add(evidence);
+        }
+
+        private void discoverSpringKafkaSend(MethodInvocation invocation, Path file) {
+            IMethodBinding binding = invocation.resolveMethodBinding();
+            if (binding == null || binding.isRecovered() || !"send".equals(binding.getName())) return;
+            ITypeBinding declaringType = binding.getMethodDeclaration().getDeclaringClass();
+            if (declaringType == null || declaringType.isRecovered()
+                || !"org.springframework.kafka.core.KafkaTemplate".equals(
+                    declaringType.getTypeDeclaration().getQualifiedName())) return;
+
+            ITypeBinding[] parameterTypes = binding.getParameterTypes();
+            if ((parameterTypes.length != 2 && parameterTypes.length != 3)
+                || !"java.lang.String".equals(parameterTypes[0].getErasure().getQualifiedName())
+                || invocation.arguments().size() != parameterTypes.length) return;
+
+            Expression destination = argument(invocation, 0);
+            Expression payload = argument(invocation, parameterTypes.length - 1);
+            if (destination == null || payload == null) return;
+
+            Object constant = destination.resolveConstantExpressionValue();
+            String destinationIdentity = constant instanceof String value
+                && !value.contains("${") && !value.contains("#{") ? value : null;
+            ITypeBinding payloadBinding = payload.resolveTypeBinding();
+            String messageType = payloadBinding == null || payloadBinding.isRecovered()
+                ? null : payloadBinding.getTypeDeclaration().getQualifiedName();
+            ASTNode callerNode = enclosingSymbolNode(invocation);
+            String callerIdentity = callerNode instanceof MethodDeclaration caller
+                && caller.resolveBinding() != null
+                ? methodIdentity(caller.resolveBinding().getMethodDeclaration())
+                : null;
+            int resolutionStatus = destinationIdentity != null && messageType != null ? 0 : 2;
+
+            JsonObject evidence = new JsonObject();
+            evidence.addProperty("evidenceId", file + "#kafka-send@" + invocation.getStartPosition());
+            evidence.addProperty("language", "Java");
+            evidence.addProperty("framework", "Spring Kafka");
+            evidence.addProperty("providerId", "eclipse-jdt-spring-kafka");
+            evidence.addProperty("modulePath", projectRoot.toString());
+            evidence.addProperty("sourceFile", file.toString());
+            evidence.addProperty("startLine", line(invocation));
+            evidence.addProperty("startColumn", column(invocation));
+            evidence.addProperty("operation", 2);
+            if (messageType != null) evidence.addProperty("messageTypeIdentity", messageType);
+            evidence.addProperty("messageTypeExpression", payload.toString());
+            evidence.addProperty("destinationKind", 1);
+            if (destinationIdentity != null) evidence.addProperty("destinationIdentity", destinationIdentity);
+            evidence.addProperty("destinationExpression", destination.toString());
+            if (callerIdentity != null) evidence.addProperty("handlerIdentity", callerIdentity);
+            evidence.addProperty("resolutionStatus", resolutionStatus);
+            JsonArray resolutionEvidence = new JsonArray();
+            resolutionEvidence.add("Resolved invocation binding: org.springframework.kafka.core.KafkaTemplate#send");
+            resolutionEvidence.add(destinationIdentity != null
+                ? "Destination expression resolved to a compile-time string constant."
+                : "Destination expression is retained without runtime evaluation.");
+            if (messageType == null) resolutionEvidence.add("Payload expression type binding is unavailable or recovered.");
+            evidence.add("resolutionEvidence", resolutionEvidence);
+            evidence.addProperty("declarationEvidence", invocation.toString());
+            messageIntegrations.add(evidence);
+        }
+
+        private static List<Expression> annotationExpressions(Expression expression) {
+            if (expression instanceof ArrayInitializer array) {
+                List<Expression> values = new ArrayList<>();
+                for (Object item : array.expressions()) values.add((Expression) item);
+                return values;
+            }
+            return List.of(expression);
+        }
+
+        private static String listenerPayloadType(IMethodBinding handler) {
+            ITypeBinding[] parameters = handler.getParameterTypes();
+            if (parameters.length == 0) return null;
+            ITypeBinding type = parameters[0];
+            String erasedName = type.getErasure().getQualifiedName();
+            ITypeBinding[] arguments = type.getTypeArguments();
+            if ("org.apache.kafka.clients.consumer.ConsumerRecord".equals(erasedName)
+                && arguments.length >= 2) return arguments[1].getTypeDeclaration().getQualifiedName();
+            if ("org.springframework.messaging.Message".equals(erasedName)
+                && arguments.length >= 1) return arguments[0].getTypeDeclaration().getQualifiedName();
+            if (("java.util.List".equals(erasedName) || "java.util.Collection".equals(erasedName))
+                && arguments.length >= 1) {
+                ITypeBinding element = arguments[0];
+                ITypeBinding[] elementArguments = element.getTypeArguments();
+                if ("org.apache.kafka.clients.consumer.ConsumerRecord".equals(element.getErasure().getQualifiedName())
+                    && elementArguments.length >= 2) return elementArguments[1].getTypeDeclaration().getQualifiedName();
+                return element.getTypeDeclaration().getQualifiedName();
+            }
+            return type.getTypeDeclaration().getQualifiedName();
+        }
 
         private void discoverApiClientRequest(MethodInvocation invocation, Path file) {
             IMethodBinding binding = invocation.resolveMethodBinding();
@@ -915,6 +1095,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
             result.add("relationships", relationshipArray);
             result.add("serverApiEndpoints", serverApiEndpoints);
             result.add("apiClientRequests", apiClientRequests);
+            result.add("messageIntegrations", messageIntegrations);
             result.add("diagnostics", diagnostics);
             return result;
         }

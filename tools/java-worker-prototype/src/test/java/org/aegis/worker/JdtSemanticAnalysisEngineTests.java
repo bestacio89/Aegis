@@ -468,6 +468,146 @@ final class JdtSemanticAnalysisEngineTests {
         assertTrue(dynamic.get("requestUriExpression").getAsString().contains("orderId"));
     }
 
+
+    @Test
+    void discovers_spring_kafka_listeners_and_kafka_template_sends_from_resolved_bindings() throws Exception {
+        Path project = Files.createDirectories(workspace.resolve("spring-kafka-project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("src/main/java"));
+        Path kafkaAnnotationRoot = Files.createDirectories(sourceRoot.resolve("org/springframework/kafka/annotation"));
+        Path kafkaCoreRoot = Files.createDirectories(sourceRoot.resolve("org/springframework/kafka/core"));
+        Path kafkaModelRoot = Files.createDirectories(sourceRoot.resolve("org/apache/kafka/clients/consumer"));
+        Path appRoot = Files.createDirectories(sourceRoot.resolve("example"));
+        Files.writeString(kafkaAnnotationRoot.resolve("KafkaListener.java"), """
+            package org.springframework.kafka.annotation;
+            import java.lang.annotation.*;
+            @Target(ElementType.METHOD)
+            public @interface KafkaListener {
+                String[] topics() default {};
+                String topicPattern() default "";
+                TopicPartition[] topicPartitions() default {};
+            }
+            """);
+        Files.writeString(kafkaAnnotationRoot.resolve("TopicPartition.java"), """
+            package org.springframework.kafka.annotation;
+            import java.lang.annotation.*;
+            @Target({})
+            public @interface TopicPartition {
+                String topic();
+                String[] partitions() default {};
+            }
+            """);
+        Files.writeString(kafkaCoreRoot.resolve("KafkaTemplate.java"), """
+            package org.springframework.kafka.core;
+            public class KafkaTemplate<K, V> {
+                public Object send(String topic, V data) { return null; }
+                public Object send(String topic, K key, V data) { return null; }
+            }
+            """);
+        Files.writeString(kafkaModelRoot.resolve("ConsumerRecord.java"), """
+            package org.apache.kafka.clients.consumer;
+            public class ConsumerRecord<K, V> {}
+            """);
+        Path unrelatedAnnotation = appRoot.resolve("KafkaListener.java");
+        Files.writeString(unrelatedAnnotation, """
+            package example;
+            import java.lang.annotation.*;
+            @Target(ElementType.METHOD)
+            public @interface KafkaListener { String[] topics() default {}; }
+            """);
+        Path listener = appRoot.resolve("OrderListener.java");
+        Files.writeString(listener, """
+            package example;
+            import org.springframework.kafka.annotation.KafkaListener;
+            import org.apache.kafka.clients.consumer.ConsumerRecord;
+            public final class OrderListener {
+                @KafkaListener(
+                    topics = {"orders", "${orders.topic}"},
+                    topicPattern = "#{@topicPattern}",
+                    topicPartitions = {@org.springframework.kafka.annotation.TopicPartition(topic = "priority-orders", partitions = {"0"})})
+                public void consume(ConsumerRecord<String, String> record) {}
+                @example.KafkaListener(topics = {"not-kafka"})
+                public void unrelated(String value) {}
+            }
+            """);
+        Path sender = appRoot.resolve("OrderSender.java");
+        Files.writeString(sender, """
+            package example;
+            import org.springframework.kafka.core.KafkaTemplate;
+            public final class OrderSender {
+                private final KafkaTemplate<String, String> kafka = new KafkaTemplate<>();
+                public void send(String topic, String payload) {
+                    kafka.send("orders", payload);
+                    kafka.send(topic, "order-42", payload);
+                    new UnrelatedSender().send("not-kafka", payload);
+                }
+                static final class UnrelatedSender {
+                    Object send(String topic, String payload) { return null; }
+                }
+            }
+            """);
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("projectPath", project.toString());
+        payload.add("sourceRoots", paths(sourceRoot));
+        payload.add("sourceFiles", paths(
+            kafkaAnnotationRoot.resolve("KafkaListener.java"),
+            kafkaAnnotationRoot.resolve("TopicPartition.java"),
+            kafkaCoreRoot.resolve("KafkaTemplate.java"),
+            kafkaModelRoot.resolve("ConsumerRecord.java"),
+            unrelatedAnnotation,
+            listener,
+            sender));
+        payload.add("classpathEntries", new JsonArray());
+
+        JsonObject result = new JdtSemanticAnalysisEngine().analyze(payload);
+        JsonArray integrations = result.getAsJsonArray("messageIntegrations");
+        assertEquals(6, integrations.size());
+
+        List<JsonObject> values = integrations.asList().stream().map(item -> item.getAsJsonObject()).toList();
+        List<JsonObject> consumes = values.stream()
+            .filter(item -> item.get("operation").getAsInt() == 1).toList();
+        List<JsonObject> sends = values.stream()
+            .filter(item -> item.get("operation").getAsInt() == 2).toList();
+        assertEquals(4, consumes.size());
+        assertEquals(2, sends.size());
+
+        JsonObject literalTopic = consumes.stream()
+            .filter(item -> item.has("destinationIdentity")
+                && item.get("destinationIdentity").getAsString().equals("orders"))
+            .findFirst().orElseThrow();
+        assertEquals(0, literalTopic.get("resolutionStatus").getAsInt());
+        assertEquals("java.lang.String", literalTopic.get("messageTypeIdentity").getAsString());
+        assertTrue(literalTopic.get("handlerIdentity").getAsString().contains("OrderListener#consume"));
+
+        JsonObject dynamicTopic = consumes.stream()
+            .filter(item -> item.get("destinationExpression").getAsString().contains("orders.topic"))
+            .findFirst().orElseThrow();
+        assertEquals(2, dynamicTopic.get("resolutionStatus").getAsInt());
+        assertFalse(dynamicTopic.has("destinationIdentity"));
+
+        JsonObject pattern = consumes.stream()
+            .filter(item -> item.get("destinationExpression").getAsString().contains("topicPattern"))
+            .findFirst().orElseThrow();
+        assertEquals(2, pattern.get("resolutionStatus").getAsInt());
+
+        JsonObject literalSend = sends.stream()
+            .filter(item -> item.has("destinationIdentity"))
+            .findFirst().orElseThrow();
+        assertEquals("orders", literalSend.get("destinationIdentity").getAsString());
+        assertEquals("java.lang.String", literalSend.get("messageTypeIdentity").getAsString());
+        assertEquals(0, literalSend.get("resolutionStatus").getAsInt());
+
+        JsonObject dynamicSend = sends.stream()
+            .filter(item -> !item.has("destinationIdentity"))
+            .findFirst().orElseThrow();
+        assertEquals(2, dynamicSend.get("resolutionStatus").getAsInt());
+        assertTrue(dynamicSend.get("destinationExpression").getAsString().contains("topic"));
+        assertTrue(values.stream().allMatch(item ->
+            item.get("framework").getAsString().equals("Spring Kafka")
+                && item.get("providerId").getAsString().equals("eclipse-jdt-spring-kafka")
+                && item.get("destinationKind").getAsInt() == 1));
+    }
+
     private static void deleteRecursively(Path directory) throws IOException {
         try (var paths = Files.walk(directory)) {
             paths.sorted(Comparator.reverseOrder()).forEach(path -> {

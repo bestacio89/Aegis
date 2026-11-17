@@ -283,6 +283,14 @@ public sealed class JavaSemanticAnalysisOrchestrator : ISemanticAnalysisProjectA
         var run = await _coordinator.AnalyzeAsync(request, cancellationToken)
             .ConfigureAwait(false);
         context.SemanticAnalysisRuns.Add(run);
+        if (run.MessageIntegrations.Count > 0)
+        {
+            var existingEvidence = context.MessageIntegrationEvidenceRegistry?.Evidence
+                ?? Array.Empty<MessageIntegrationEvidence>();
+            context.MessageIntegrationEvidenceRegistry =
+                new IntegrationEvidenceRegistry<MessageIntegrationEvidence>(
+                    existingEvidence.Concat(run.MessageIntegrations));
+        }
 
         _logger.LogInformation(
             "Java {SourceSet} analysis for module {ModuleName} completed with status {Status}: {SymbolCount} symbols, {RelationshipCount} relationships, {DiagnosticCount} diagnostics.",

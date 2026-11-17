@@ -26,7 +26,7 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
         "ToList", "ToArray", "First", "FirstOrDefault", "Single", "SingleOrDefault",
         "Last", "LastOrDefault", "Any", "All", "Count", "LongCount", "Min", "Max",
         "Sum", "Average", "ToDictionary", "ToHashSet", "Find", "FindAsync",
-        "ToListAsync", "ToArrayAsync", "FirstAsync", "FirstOrDefaultAsync",
+        "ToListAsync", "ToArrayAsync", "FirstAsync", "FirstOrDefaultAsync", "ExecuteUpdate", "ExecuteUpdateAsync", "ExecuteDelete", "ExecuteDeleteAsync",
         "SingleAsync", "SingleOrDefaultAsync", "LastAsync", "LastOrDefaultAsync",
         "AnyAsync", "CountAsync", "LongCountAsync", "ToDictionaryAsync"
     };
@@ -194,7 +194,7 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             StoreIdentity = storeIdentity,
             DataObjectIdentity = entityIdentity,
             DataObjectExpression = dataObjectExpression,
-            SourceDataIdentity = operation == DataIntegrationOperation.Write ? caller : null,
+            SourceDataIdentity = null,
             QueryExpression = invocation.ToString(),
             ResolutionStatus = status,
             ResolutionEvidence = Array.AsReadOnly(new[] { resolutionEvidence }),
@@ -215,15 +215,14 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             || namespaceName == "Microsoft.EntityFrameworkCore"
                 && containingType.Name.EndsWith("EntityFrameworkQueryableExtensions", StringComparison.Ordinal)
             || namespaceName == "System.Linq"
-                && containingType.Name == "Queryable";
+                && containingType.Name is "Queryable" or "Enumerable";
     }
 
     private static ITypeSymbol? GetQueryableEntityType(ITypeSymbol? type)
     {
         for (var current = type as INamedTypeSymbol; current is not null; current = current.BaseType)
         {
-            if (current.OriginalDefinition.ToDisplayString() is "System.Linq.IQueryable<T>"
-                or "System.Collections.Generic.IEnumerable<T>")
+            if (current.OriginalDefinition.ToDisplayString() == "System.Linq.IQueryable<T>")
                 return current.TypeArguments[0];
 
             foreach (var implemented in current.AllInterfaces)

@@ -81,6 +81,10 @@ public static class ProjectArchitectureContextDetector
         DiscoverMessageIntegrations(ctx, files);
         DiscoverRpcIntegrations(ctx, files);
         DiscoverDataAccessIntegrations(ctx, files);
+        ctx.IntegrationEvidenceCatalog = new IntegrationEvidenceCatalog(
+            ctx.MessageIntegrationEvidenceRegistry,
+            ctx.RpcIntegrationEvidenceRegistry,
+            ctx.DataAccessEvidenceRegistry);
 
         // Framework discovery enriches module-owned evidence (notably Java
         // Maven/Gradle frameworks). Recompute roles only after that evidence

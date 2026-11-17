@@ -60,10 +60,36 @@ These statuses describe source-analysis evidence only. They do not represent run
 
 ## Phase 10B — C# MassTransit discovery
 
-The initial messaging provider uses Roslyn syntax and semantic information already available in Aegis. It recognizes `IPublishEndpoint.Publish` and `ConsumeContext.Publish` calls, plus `IConsumer<T>` declarations, when grounded by the MassTransit namespace/type identity.
+The C# provider uses Roslyn syntax and semantic information already available in Aegis. It recognizes `IPublishEndpoint.Publish` and `ConsumeContext.Publish` calls, `ISendEndpoint.Send` calls, and `IConsumer<T>` declarations only when their symbols are grounded in the MassTransit namespace/type identity.
 
-Message contract identity is resolved from the generic argument or statically typed message expression when the source compilation can establish it. Otherwise, the original expression is retained with partial/unresolved status. MassTransit publish is type-routed; this provider does not invent a queue, topic, or exchange destination. Point-to-point `Send`, broker topology, runtime registration, and delivery are outside this provider slice.
+Message contract identity is resolved from the generic argument or statically typed message expression when the source compilation can establish it. Otherwise, the original expression is retained with partial/unresolved status. Publish remains type-routed and Send remains endpoint-oriented; neither operation is treated as proof of successful delivery or a runtime route.
 
-The provider also inspects MassTransit `ReceiveEndpoint` registrations and associates a statically grounded `ConfigureConsumer<T>` registration with the matching `IConsumer<T>` declaration. A literal endpoint name is retained as `DestinationIdentity`; a non-literal endpoint expression is retained as `DestinationExpression` without evaluating it. The destination kind remains `Unknown` because MassTransit receive endpoints are transport-neutral at this boundary; the provider does not guess whether the underlying broker entity is a queue, topic, or exchange. Multiple endpoint registrations remain separate evidence occurrences.
+The provider inspects MassTransit `ReceiveEndpoint` registrations and associates a statically grounded `ConfigureConsumer<T>` registration with the matching `IConsumer<T>` declaration. A literal endpoint name is retained as `DestinationIdentity`; a non-literal endpoint expression is retained as `DestinationExpression` without evaluating it. The destination kind remains `Unknown` because MassTransit receive endpoints are transport-neutral at this boundary; the provider does not guess whether the underlying broker entity is a queue, topic, or exchange. Multiple endpoint registrations remain separate evidence occurrences.
 
-The provider runs only against C# source files owned by discovered C# modules. It does not infer message relationships from package references or arbitrary methods named `Publish`. Matching publishers to consumers, resolving broker topology, point-to-point `Send` flow, runtime registration, and delivery remain outside this provider slice.
+The provider runs only against C# source files owned by discovered C# modules. It does not infer message relationships from package references or arbitrary methods named `Publish` or `Send`. Broker topology, runtime registration beyond the statically grounded consumer association, and delivery remain outside this provider slice.
+
+## Java — Spring Kafka and Spring JMS
+
+The Java semantic worker uses Eclipse JDT bindings to recognize exact framework declarations rather than method names alone:
+
+- Spring Kafka consumers through `org.springframework.kafka.annotation.KafkaListener`.
+- Spring Kafka producers through `org.springframework.kafka.core.KafkaTemplate.send`.
+- Spring JMS consumers through `org.springframework.jms.annotation.JmsListener`.
+- Spring JMS producers through `org.springframework.jms.core.JmsTemplate.convertAndSend`.
+
+Listener destinations, producer destinations, message expressions/types, handler or caller identity, source positions, and declaration evidence are retained. Literal destinations can be resolved; placeholders and dynamic expressions remain unresolved/dynamic evidence. Overload argument mapping is based on resolved method bindings and parameter identities. Unrelated annotations with the same simple name and unrelated methods with the same method name are not accepted as framework evidence.
+
+The Java provider does not infer queue/topic semantics from Spring JMS configuration or Kafka API usage, evaluate runtime placeholders, inspect broker topology, correlate publishers with consumers, or claim message delivery.
+
+## Kotlin — Spring Kafka and Spring JMS
+
+The Kotlin semantic worker uses the existing K2 IR pipeline and a dedicated `KotlinMessageIntegrationCollector`. It recognizes the same exact Spring Kafka and Spring JMS annotation and API declarations as the Java provider:
+
+- `@KafkaListener` and `KafkaTemplate.send` / `sendDefault`.
+- `@JmsListener` and `JmsTemplate.convertAndSend`.
+
+The collector preserves source location, handler/caller identity, message type and expression, destination identity and expression, provider/framework provenance, resolution status, and declaration evidence. It handles listener topic arrays and topic patterns, producer overloads using IR parameter identities, and JMS message post-processor overloads. Literal destinations are retained; placeholders, patterns, computed expressions, and APIs without an explicit destination (such as `sendDefault`) do not receive fabricated destination identities.
+
+Kotlin observations are adapted into the existing `MessageIntegrationEvidence` contract and appended to the existing occurrence-preserving `IntegrationEvidenceRegistry<MessageIntegrationEvidence>` alongside C# and Java evidence. No parallel Kotlin-specific registry or aggregation path is introduced.
+
+The Java and Kotlin providers retain destination kind as `Unknown` where the source declaration does not establish queue/topic semantics. Neither provider evaluates runtime configuration, inspects broker topology, correlates publishers and consumers, creates graph edges, or claims successful delivery.

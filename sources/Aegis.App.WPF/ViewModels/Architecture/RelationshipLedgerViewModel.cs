@@ -12,8 +12,8 @@ using System.Windows.Data;
 namespace Aegis.Wpf.ViewModels.Architecture;
 
 /// <summary>
-/// Presents build dependencies and semantic relationship projections as
-/// independently filterable records while retaining their evidence provenance.
+/// Presents the authoritative unified graph projection as a filterable relationship
+/// ledger. Unprojected observations and user declarations remain separate.
 /// </summary>
 public sealed partial class RelationshipLedgerViewModel : ObservableObject
 {
@@ -208,7 +208,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             ProviderRelationshipKind = edge.ProviderRelationshipKind,
             Direction = $"{source.Name} → {target.Name}",
             Scope = edge.Scope,
-            RelationshipCount = edge.Evidence.Count,
+            EvidenceOccurrenceCount = edge.Evidence.Count,
             IsInternal = string.Equals(edge.SourceNodeId, edge.TargetNodeId, StringComparison.Ordinal),
             EvidenceReferences = FormatGraphEvidenceReferences(edge.Evidence)
         };
@@ -352,21 +352,16 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             Graph edge: {dependency.GraphEdgeId}
             Direction: {dependency.Direction}
             {dependency.Source} -> {dependency.Target}
-            Evidence occurrences: {dependency.RelationshipCount}
-            Source layer: {dependency.SourceLayer}
-            Target layer: {dependency.TargetLayer}
+            Evidence occurrences: {dependency.EvidenceOccurrenceCount}
+            Source classification: {dependency.SourceLayer}
+            Target classification: {dependency.TargetLayer}
             Dependency type: {dependency.DependencyType}
             Provider relationship kind: {dependency.ProviderRelationshipKind}
             Scope: {dependency.Scope}
-            Source project: {dependency.SourceProjectPath}
-            Target project: {dependency.TargetProjectPath}
-            Evidence files: {dependency.File}
-            Resolved relationships: {dependency.ResolvedRelationshipCount}
-            Partially resolved relationships: {dependency.PartiallyResolvedRelationshipCount}
-            Unreferenced relationships: {dependency.UnreferencedRelationshipCount}
+            Source module: {dependency.SourceProjectPath}
+            Target module: {dependency.TargetProjectPath}
             Internal dependency: {dependency.IsInternal}
-            Semantic references: {dependency.EvidenceReferences}
-            Code-container contributions: {dependency.CodeContainerContributions}
+            Evidence references: {dependency.EvidenceReferences}
             """);
     }
 
@@ -395,6 +390,10 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
 
         var query = SearchText.Trim();
         return Contains(dependency.RelationshipLevel, query)
+            || Contains(dependency.GraphDomain, query)
+            || Contains(dependency.GraphEdgeId, query)
+            || Contains(dependency.Direction, query)
+            || Contains(dependency.ProviderRelationshipKind, query)
             || Contains(dependency.Source, query)
             || Contains(dependency.Target, query)
             || Contains(dependency.SourceLayer, query)

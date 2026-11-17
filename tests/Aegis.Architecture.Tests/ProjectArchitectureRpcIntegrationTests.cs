@@ -49,9 +49,6 @@ public sealed class ProjectArchitectureRpcIntegrationTests
                     {
                         public Task<GetOrderResponse> GetOrderAsync(GetOrderRequest request) =>
                             Task.FromResult(new GetOrderResponse());
-
-                        public Task<GetOrderResponse> GetOtherAsync(GetOrderRequest request) =>
-                            Task.FromResult(new GetOrderResponse());
                     }
                 }
 
@@ -88,7 +85,7 @@ public sealed class ProjectArchitectureRpcIntegrationTests
         var call = Assert.Single(registry.Evidence, item =>
             item.Operation == RpcIntegrationOperation.Call);
         Assert.Equal("Commerce.Orders.GetOrder", call.MethodIdentity);
-        Assert.Equal("commerce", endpoint.ServiceIdentity);
+        Assert.Equal("commerce.Orders", endpoint.ServiceIdentity);
         Assert.Equal("commerce.Orders.GetOrder", endpoint.TargetIdentity);
         Assert.Equal("_client", call.TargetExpression);
         Assert.Equal("OrderQuery.ExecuteAsync", call.HandlerIdentity);

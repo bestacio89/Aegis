@@ -24,6 +24,32 @@ public sealed class ProjectArchitectureMessageIntegrationTests
         File.WriteAllText(
             sourceFile,
             """
+            namespace MassTransit
+            {
+                using System;
+                using System.Threading.Tasks;
+
+                public interface IConsumer<T> { }
+                public interface IPublishEndpoint { Task Publish<T>(T message); }
+                public interface IReceiveEndpointConfigurator { }
+                public interface IBusFactoryConfigurator { }
+                public interface ConsumeContext<T> { }
+
+                public sealed class EndpointConfiguration : IBusFactoryConfigurator { }
+
+                public static class RegistrationExtensions
+                {
+                    public static void ReceiveEndpoint(
+                        this IBusFactoryConfigurator configurator,
+                        string name,
+                        Action<IReceiveEndpointConfigurator> configure) { }
+
+                    public static void ConfigureConsumer<T>(
+                        this IReceiveEndpointConfigurator configurator,
+                        object context) { }
+                }
+            }
+
             using System;
             using System.Threading.Tasks;
             using MassTransit;
@@ -40,14 +66,6 @@ public sealed class ProjectArchitectureMessageIntegrationTests
                 public sealed class OrderConsumer : IConsumer<OrderSubmitted>
                 {
                     public Task Consume(ConsumeContext<OrderSubmitted> context) => Task.CompletedTask;
-                }
-
-                public sealed class EndpointConfiguration
-                {
-                    public void ReceiveEndpoint(string name, Action<EndpointConfiguration> configure) =>
-                        configure(this);
-
-                    public void ConfigureConsumer<T>(object context) { }
                 }
 
                 public sealed class MessagingRegistration

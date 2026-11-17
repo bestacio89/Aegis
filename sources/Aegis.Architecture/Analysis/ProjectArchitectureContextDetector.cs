@@ -3,6 +3,7 @@
 using Aegis.Architecture.Analysis.Api;
 using Aegis.Architecture.Analysis.Detectors;
 using Aegis.Architecture.Analysis.Integrations.Messaging;
+using Aegis.Architecture.Analysis.Integrations.Rpc;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
 

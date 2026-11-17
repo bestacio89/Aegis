@@ -38,7 +38,7 @@
                         <TextBlock Text="VISIBLE / TOTAL" Style="{StaticResource Text.Eyebrow}" />
                         <TextBlock Text="{Binding FilteredDependencies, StringFormat={}{0:N0}}"
                                    Style="{StaticResource Text.KpiValue}" FontSize="22" />
-                        <TextBlock Text="{Binding TotalDependencies, StringFormat='of {0:N0} records'}"
+                        <TextBlock Text="{Binding TotalDependencies, StringFormat='of {0:N0} graph edges'}"
                                    Foreground="{StaticResource Brush.TextMuted}" FontSize="11" />
                     </StackPanel>
                 </Border>
@@ -183,7 +183,7 @@
                         <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
                         <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="110" />
                         <DataGridTextColumn Header="Direction / type" Binding="{Binding DependencyType}" Width="155" />
-                        <DataGridTextColumn Header="Evidence" Binding="{Binding RelationshipCount}" Width="75" />
+                        <DataGridTextColumn Header="Evidence" Binding="{Binding EvidenceOccurrenceCount}" Width="75" />
                         <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" Width="90" />
                         <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="110" />
                         <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="*" />
@@ -248,7 +248,7 @@
                             <TextBlock Text="{Binding SelectedDependency.GraphDomain, TargetNullValue='Not supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
                             <TextBlock Text="EVIDENCE OCCURRENCES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
-                            <TextBlock Text="{Binding SelectedDependency.RelationshipCount, TargetNullValue='Not supplied'}"
+                            <TextBlock Text="{Binding SelectedDependency.EvidenceOccurrenceCount, TargetNullValue='Not supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
                             <TextBlock Text="SOURCE LAYER" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.SourceLayer, TargetNullValue='Not classified'}"
@@ -273,16 +273,8 @@
                             <TextBlock Text="PROVIDER RELATIONSHIP KIND" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.ProviderRelationshipKind, TargetNullValue='Not supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" TextWrapping="Wrap" />
-                            <TextBlock Text="DISCOVERY EVIDENCE FILES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
-                            <TextBlock Text="{Binding SelectedDependency.File, TargetNullValue='No source file supplied'}"
-                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12"
-                                       TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
-                            <TextBlock Text="SEMANTIC SOURCE REFERENCES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="SOURCE EVIDENCE REFERENCES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.EvidenceReferences, TargetNullValue='No exact provider references supplied'}"
-                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
-                                       TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
-                            <TextBlock Text="CONTRIBUTING CODE CONTAINER EDGES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
-                            <TextBlock Text="{Binding SelectedDependency.CodeContainerContributions, TargetNullValue='No lower-level contribution data supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
                                        TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
                             <TextBlock

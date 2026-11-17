@@ -148,9 +148,6 @@ public sealed class ProtobufRpcContractProvider
         int limit)
     {
         var index = start;
-        if (index < limit && tokens[index].Value == "stream")
-            index++;
-
         if (index >= limit || tokens[index].Value != "(")
             return RpcSignature.Incomplete(start);
 
@@ -174,8 +171,15 @@ public sealed class ProtobufRpcContractProvider
         if (responseEnd < 0)
             return RpcSignature.Incomplete(start);
 
-        var requestType = JoinType(tokens, requestStart + 1, requestEnd);
-        var responseType = JoinType(tokens, index + 1, responseEnd);
+        var requestTypeStart = requestStart + 1;
+        var responseTypeStart = index + 1;
+        if (requestTypeStart < requestEnd && tokens[requestTypeStart].Value == "stream")
+            requestTypeStart++;
+        if (responseTypeStart < responseEnd && tokens[responseTypeStart].Value == "stream")
+            responseTypeStart++;
+
+        var requestType = JoinType(tokens, requestTypeStart, requestEnd);
+        var responseType = JoinType(tokens, responseTypeStart, responseEnd);
         var endIndex = responseEnd + 1;
         if (endIndex < limit && tokens[endIndex].Value == "{")
         {

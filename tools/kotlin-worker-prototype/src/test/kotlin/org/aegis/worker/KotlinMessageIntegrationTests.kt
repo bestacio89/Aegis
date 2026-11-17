@@ -131,31 +131,32 @@ class KotlinMessageIntegrationTests {
             val messagesFound = result.getAsJsonArray("messageIntegrations").map { it.asJsonObject }
             assertEquals(9, messagesFound.size)
 
+            assertTrue(messagesFound.all { it.has("destinationIdentity") }, messagesFound.toString())
             val kafkaConsumers = messagesFound.filter {
                 it.get("framework").asString == "Spring Kafka"
                     && it.get("operation").asInt == 1
             }
             assertEquals(3, kafkaConsumers.size)
             val literalKafka = kafkaConsumers.single {
-                it.get("destinationIdentity").asString == "orders"
+                it.get("destinationIdentity")?.takeUnless { value -> value.isJsonNull }?.asString == "orders"
             }
             assertEquals(0, literalKafka.get("resolutionStatus").asInt)
             val dynamicKafka = kafkaConsumers.single {
-                it.get("destinationIdentity").isJsonNull
+                it.get("destinationIdentity") == null || it.get("destinationIdentity").isJsonNull
             }
             assertEquals(2, dynamicKafka.get("resolutionStatus").asInt)
             assertTrue(dynamicKafka.get("destinationExpression").asString.contains("messaging.orders.topic"))
             val patternKafka = kafkaConsumers.single {
                 it.get("destinationExpression").asString.contains("orders.*")
             }
-            assertTrue(patternKafka.get("destinationIdentity").isJsonNull)
+            assertTrue(patternKafka.get("destinationIdentity") == null || patternKafka.get("destinationIdentity").isJsonNull)
             assertEquals(2, patternKafka.get("resolutionStatus").asInt)
 
             val jmsConsumer = messagesFound.single {
                 it.get("framework").asString == "Spring JMS"
                     && it.get("operation").asInt == 1
             }
-            assertEquals("orders.queue", jmsConsumer.get("destinationIdentity").asString)
+            assertEquals("orders.queue", jmsConsumer.get("destinationIdentity")?.asString)
             assertEquals("sample.OrderSubmitted", jmsConsumer.get("messageTypeIdentity").asString)
 
             val kafkaPublishers = messagesFound.filter {
@@ -163,8 +164,8 @@ class KotlinMessageIntegrationTests {
                     && it.get("operation").asInt == 0
             }
             assertEquals(3, kafkaPublishers.size)
-            assertTrue(kafkaPublishers.any { it.get("destinationIdentity").asString == "orders.keyed" })
-            val defaultPublisher = kafkaPublishers.single { it.get("destinationIdentity").isJsonNull }
+            assertTrue(kafkaPublishers.any { it.get("destinationIdentity")?.asString == "orders.keyed" })
+            val defaultPublisher = kafkaPublishers.single { it.get("destinationIdentity") == null || it.get("destinationIdentity").isJsonNull }
             assertEquals(2, defaultPublisher.get("resolutionStatus").asInt)
 
             val jmsPublishers = messagesFound.filter {
@@ -172,7 +173,7 @@ class KotlinMessageIntegrationTests {
                     && it.get("operation").asInt == 0
             }
             assertEquals(2, jmsPublishers.size)
-            assertTrue(jmsPublishers.any { it.get("destinationIdentity").asString == "orders.post" })
+            assertTrue(jmsPublishers.any { it.get("destinationIdentity")?.asString == "orders.post" })
             assertTrue(messagesFound.all { it.get("language").asString == "Kotlin" })
             assertTrue(messagesFound.all { it.get("modulePath").asString == workspace.toString() })
             assertTrue(messagesFound.all { it.get("destinationKind").asInt == 0 })

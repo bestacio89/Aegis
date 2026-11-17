@@ -21,6 +21,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private readonly ArchitectureOverviewViewModel _architectureOverview;
     private readonly DependencyGraphViewModel _dependencyGraph = new();
+    private readonly SystemLandscapeViewModel _systemLandscape = new();
     private readonly RelationshipLedgerViewModel _relationshipLedger = new();
     private readonly SectionDashboardViewModel _sectionDashboard;
     private readonly LayerDashboardViewModel _layerDashboard;
@@ -63,6 +64,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _configurationWorkspace = configurationWorkspace;
 
         _architectureWorkspace = new ArchitectureWorkspaceViewModel(
+            _systemLandscape,
             _architectureOverview,
             _dependencyGraph,
             _relationshipLedger,
@@ -295,6 +297,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ProjectArchitectureContext context)
     {
         _architectureOverview.Update(report, context);
+        _systemLandscape.Update(context);
         _dependencyGraph.Update(context);
         _relationshipLedger.Update(context);
         _layerDashboard.Update(report);

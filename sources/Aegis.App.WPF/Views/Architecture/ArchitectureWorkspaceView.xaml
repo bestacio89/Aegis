@@ -8,6 +8,9 @@
     Foreground="{StaticResource Brush.TextPrimary}">
 
     <UserControl.Resources>
+        <DataTemplate DataType="{x:Type archivm:SystemLandscapeViewModel}">
+            <artchiviews:SystemLandscapeView />
+        </DataTemplate>
         <DataTemplate DataType="{x:Type archivm:ArchitectureOverviewViewModel}">
             <artchiviews:ArchitectureOverviewView />
         </DataTemplate>

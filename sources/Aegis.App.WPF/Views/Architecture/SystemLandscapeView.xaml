@@ -1,0 +1,149 @@
+<UserControl
+    x:Class="Aegis.Wpf.Views.Architecture.SystemLandscapeView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:archivm="clr-namespace:Aegis.Wpf.ViewModels.Architecture"
+    Background="{StaticResource Brush.Ink}"
+    Foreground="{StaticResource Brush.TextPrimary}"
+    FontFamily="{StaticResource Font.Body}">
+
+    <UserControl.Resources>
+        <DataTemplate DataType="{x:Type archivm:SystemLandscapeRegionViewModel}">
+            <Border Background="{StaticResource Brush.PanelElevated}" BorderBrush="{StaticResource Brush.Line}"
+                    BorderThickness="1" CornerRadius="6" Padding="12" Margin="6">
+                <StackPanel>
+                    <TextBlock Text="{Binding Role}" Style="{StaticResource Text.Eyebrow}" Foreground="{StaticResource Brush.AccentStructural}" />
+                    <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0" />
+                    <TextBlock Text="{Binding Description}" Foreground="{StaticResource Brush.TextMuted}"
+                               FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    <TextBlock Text="IMPLEMENTATION BOUNDARIES" Style="{StaticResource Text.Eyebrow}" Margin="0,10,0,4" />
+                    <ItemsControl ItemsSource="{Binding CodeContainers}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource Brush.Panel}" BorderBrush="{StaticResource Brush.Line}"
+                                        BorderThickness="1" CornerRadius="4" Padding="7,5" Margin="0,0,5,5">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding ImplementationKind}" FontSize="9" Foreground="{StaticResource Brush.TextMuted}" />
+                                        <TextBlock Text="{Binding ClassificationSource}" FontSize="8" Foreground="{StaticResource Brush.AccentStructural}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="NESTED COMPONENTS" Style="{StaticResource Text.Eyebrow}" Margin="0,8,0,4" />
+                    <ItemsControl ItemsSource="{Binding Children}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="12">
+            <Border Style="{StaticResource Card.Structural}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="SYSTEM LANDSCAPE" Style="{StaticResource Text.Eyebrow}" Foreground="{StaticResource Brush.AccentStructural}" />
+                    <TextBlock Text="{Binding ProjectName}" Style="{StaticResource Text.Title}" Margin="0,5,0,0" />
+                    <TextBlock Text="{Binding LandscapeDescription}" Foreground="{StaticResource Brush.TextMuted}"
+                               FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+
+            <UniformGrid Columns="6" Margin="-5,0,-5,8">
+                <Border Style="{StaticResource Card.Kpi}" MinHeight="66"><StackPanel><TextBlock Text="LOGICAL REGIONS" Style="{StaticResource Text.Eyebrow}" /><TextBlock Text="{Binding LogicalRegionCount}" Style="{StaticResource Text.KpiValue}" FontSize="22" /></StackPanel></Border>
+                <Border Style="{StaticResource Card.Kpi}" MinHeight="66"><StackPanel><TextBlock Text="CODE CONTAINERS" Style="{StaticResource Text.Eyebrow}" /><TextBlock Text="{Binding CodeContainerCount}" Style="{StaticResource Text.KpiValue}" FontSize="22" /></StackPanel></Border>
+                <Border Style="{StaticResource Card.Kpi}" MinHeight="66"><StackPanel><TextBlock Text="BUILD MODULES" Style="{StaticResource Text.Eyebrow}" /><TextBlock Text="{Binding BuildModuleCount}" Style="{StaticResource Text.KpiValue}" FontSize="22" /></StackPanel></Border>
+                <Border Style="{StaticResource Card.Kpi}" MinHeight="66"><StackPanel><TextBlock Text="EXTERNAL RESOURCES" Style="{StaticResource Text.Eyebrow}" /><TextBlock Text="{Binding ExternalResourceCount}" Style="{StaticResource Text.KpiValue}" FontSize="22" /></StackPanel></Border>
+                <Border Style="{StaticResource Card.Kpi}" MinHeight="66"><StackPanel><TextBlock Text="DISCOVERED LINKS" Style="{StaticResource Text.Eyebrow}" /><TextBlock Text="{Binding RelationshipCount}" Style="{StaticResource Text.KpiValue}" FontSize="22" /></StackPanel></Border>
+                <Border Style="{StaticResource Card.Kpi}" MinHeight="66"><StackPanel><TextBlock Text="UNPROJECTED" Style="{StaticResource Text.Eyebrow}" /><TextBlock Text="{Binding UnprojectedEvidenceCount}" Style="{StaticResource Text.KpiValue}" FontSize="22" /></StackPanel></Border>
+            </UniformGrid>
+
+            <Border Style="{StaticResource Card.Structural}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="LOGICAL SYSTEM STRUCTURE" Style="{StaticResource Text.Eyebrow}" Foreground="{StaticResource Brush.AccentStructural}" />
+                    <TextBlock Text="Nested regions reflect existing architecture classification. Implementation boundaries appear only where membership is unambiguous."
+                               Foreground="{StaticResource Brush.TextMuted}" FontSize="11" Margin="0,4,0,8" TextWrapping="Wrap" />
+                    <ItemsControl ItemsSource="{Binding RootRegions}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Style="{StaticResource Card.Structural}" Margin="0,0,5,10">
+                    <StackPanel>
+                        <TextBlock Text="BUILD BOUNDARIES" Style="{StaticResource Text.Eyebrow}" Foreground="{StaticResource Brush.AccentStructural}" />
+                        <ItemsControl ItemsSource="{Binding BuildModules}">
+                            <ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="0,6,0,0"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" /><TextBlock Text="{Binding Detail}" FontSize="10" Foreground="{StaticResource Brush.TextMuted}" /></StackPanel></DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" Style="{StaticResource Card.Structural}" Margin="5,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="EXTERNAL SYSTEMS &amp; RESOURCES" Style="{StaticResource Text.Eyebrow}" Foreground="{StaticResource Brush.AccentStructural}" />
+                        <ItemsControl ItemsSource="{Binding ExternalResources}">
+                            <ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="0,6,0,0"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" /><TextBlock Text="{Binding Detail}" FontSize="10" Foreground="{StaticResource Brush.TextMuted}" /></StackPanel></DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Border Style="{StaticResource Card.Structural}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="INTERACTION TOPOLOGY" Style="{StaticResource Text.Eyebrow}" Foreground="{StaticResource Brush.AccentStructural}" />
+                    <TextBlock Text="Directed connections from the unified evidence graph. Each edge remains distinct; this is not a runtime reachability claim."
+                               Foreground="{StaticResource Brush.TextMuted}" FontSize="11" Margin="0,4,0,8" TextWrapping="Wrap" />
+                    <ItemsControl ItemsSource="{Binding Relationships}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="100" /><ColumnDefinition Width="*" /><ColumnDefinition Width="90" /><ColumnDefinition Width="110" /></Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Domain}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Brush.AccentStructural}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Connection}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Scope}" FontSize="10" Foreground="{StaticResource Brush.TextMuted}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding EvidenceSummary}" FontSize="9" HorizontalAlignment="Right" Foreground="{StaticResource Brush.TextMuted}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Style="{StaticResource Card.Structural}" Margin="0,0,5,10">
+                    <StackPanel>
+                        <TextBlock Text="DECLARED INTEGRATIONS" Style="{StaticResource Text.Eyebrow}" />
+                        <ItemsControl ItemsSource="{Binding DeclaredIntegrations}">
+                            <ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="0,5,0,0"><TextBlock Text="{Binding SourceModuleName}" FontSize="11" /><TextBlock Text="{Binding TargetModuleName}" FontSize="11" Foreground="{StaticResource Brush.TextMuted}" /><TextBlock Text="{Binding Protocol}" FontSize="9" Foreground="{StaticResource Brush.TextMuted}" /></StackPanel></DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" Style="{StaticResource Card.Structural}" Margin="5,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="UNCLASSIFIED CODE CONTAINERS" Style="{StaticResource Text.Eyebrow}" />
+                        <ItemsControl ItemsSource="{Binding UnclassifiedCodeContainers}">
+                            <ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="0,5,0,0"><TextBlock Text="{Binding Name}" FontSize="11" /><TextBlock Text="{Binding ClassificationSource}" FontSize="9" Foreground="{StaticResource Brush.TextMuted}" /></StackPanel></DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Border Style="{StaticResource Card.Structural}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="UNPROJECTED EVIDENCE &amp; PRESENTATION DIAGNOSTICS" Style="{StaticResource Text.Eyebrow}" />
+                    <ItemsControl ItemsSource="{Binding UnprojectedEvidence}">
+                        <ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="0,4,0,0"><TextBlock Text="{Binding Reason}" FontSize="10" FontWeight="SemiBold" /><TextBlock Text="{Binding Explanation}" FontSize="10" Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap" /></StackPanel></DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ItemsControl ItemsSource="{Binding ProjectionDiagnostics}">
+                        <ItemsControl.ItemTemplate><DataTemplate><TextBlock Margin="0,4,0,0" Text="{Binding}" FontSize="10" Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap" /></DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

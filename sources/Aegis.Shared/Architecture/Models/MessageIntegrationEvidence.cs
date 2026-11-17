@@ -28,6 +28,7 @@ public sealed class MessageIntegrationEvidence : IIntegrationEvidence
     {
         MessageIntegrationOperation.Publish => ArchitectureRelationshipKind.MessagePublish,
         MessageIntegrationOperation.Consume => ArchitectureRelationshipKind.MessageConsume,
+        MessageIntegrationOperation.Send => ArchitectureRelationshipKind.MessageSend,
         _ => ArchitectureRelationshipKind.Unknown
     };
 }

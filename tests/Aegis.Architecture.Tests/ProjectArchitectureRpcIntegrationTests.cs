@@ -35,7 +35,10 @@ public sealed class ProjectArchitectureRpcIntegrationTests
 
             namespace Grpc.Core
             {
-                public abstract class ClientBase<T>\n                {\n                    public Task<TResult> WithCallCredentials<TResult>() => Task.FromResult(default(TResult)!);\n                }
+                public abstract class ClientBase<T>
+                {
+                    public Task<TResult> WithCallCredentials<TResult>() => Task.FromResult(default(TResult)!);
+                }
             }
 
             namespace Commerce

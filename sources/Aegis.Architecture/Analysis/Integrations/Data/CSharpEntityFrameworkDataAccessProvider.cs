@@ -34,7 +34,13 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
     private static readonly HashSet<string> WriteMethods = new(StringComparer.Ordinal)
     {
         "Add", "AddAsync", "AddRange", "AddRangeAsync", "Update", "UpdateRange",
-        "Attach", "AttachRange", "Remove", "RemoveRange"
+        "Attach", "AttachRange", "Remove", "RemoveRange",
+        "ExecuteUpdate", "ExecuteUpdateAsync", "ExecuteDelete", "ExecuteDeleteAsync"
+    };
+
+    private static readonly HashSet<string> BulkWriteMethods = new(StringComparer.Ordinal)
+    {
+        "ExecuteUpdate", "ExecuteUpdateAsync", "ExecuteDelete", "ExecuteDeleteAsync"
     };
 
     public IReadOnlyList<DataAccessEvidence> Discover(
@@ -138,12 +144,20 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             return false;
 
         var receiverType = semanticModel.GetTypeInfo(memberAccess.Expression).Type;
-        if (!IsDbContext(receiverType) && GetDbSetEntityType(receiverType) is null)
+        var queryEntityType = GetQueryableEntityType(receiverType);
+        var isBulkQueryMutation = BulkWriteMethods.Contains(method.Name)
+            && method.ContainingType.Name == "EntityFrameworkQueryableExtensions"
+            && queryEntityType is not null;
+        if (!isBulkQueryMutation
+            && !IsDbContext(receiverType)
+            && GetDbSetEntityType(receiverType) is null)
             return false;
 
         var argument = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
         var argumentType = argument is null ? null : semanticModel.GetTypeInfo(argument).Type;
-        var entityType = argumentType ?? GetDbSetEntityType(receiverType);
+        var entityType = isBulkQueryMutation
+            ? queryEntityType
+            : argumentType ?? GetDbSetEntityType(receiverType);
         if (entityType is null)
             return false;
 
@@ -155,7 +169,9 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             DataIntegrationOperation.Write,
             GetStoreIdentity(receiverType, memberAccess.Expression),
             entityType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-            argument?.ToString() ?? memberAccess.Expression.ToString(),
+            isBulkQueryMutation
+                ? memberAccess.Expression.ToString()
+                : argument?.ToString() ?? memberAccess.Expression.ToString(),
             "Roslyn resolved an Entity Framework Core tracked-entity mutation method.",
             IntegrationEvidenceResolutionStatus.Resolved);
         return true;

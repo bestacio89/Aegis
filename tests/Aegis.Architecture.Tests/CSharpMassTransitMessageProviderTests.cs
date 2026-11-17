@@ -154,7 +154,7 @@ public sealed class CSharpMassTransitMessageProviderTests
     }
 
     [Fact]
-    public void Does_not_treat_arbitrary_publish_methods_as_mass_transit_messages()
+    public void Does_not_treat_arbitrary_publish_or_send_methods_as_mass_transit_messages()
     {
         using var fixture = new CSharpMessagingFixture(
             """
@@ -163,17 +163,27 @@ public sealed class CSharpMassTransitMessageProviderTests
             namespace Orders.Application
             {
                 public sealed record OrderSubmitted;
+
                 public sealed class CustomPublisher
                 {
                     public void Publish(OrderSubmitted message) { }
                 }
 
+                public sealed class CustomSender
+                {
+                    public void Send(OrderSubmitted message) { }
+                }
+
                 public sealed class OrderService
                 {
                     private readonly CustomPublisher _publisher = new();
+                    private readonly CustomSender _sender = new();
 
-                    public void Submit(OrderSubmitted message) =>
+                    public void Submit(OrderSubmitted message)
+                    {
                         _publisher.Publish(message);
+                        _sender.Send(message);
+                    }
                 }
             }
             """);

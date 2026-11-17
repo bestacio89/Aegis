@@ -7,7 +7,7 @@ namespace Aegis.Architecture.Analysis.Projection;
 /// Builds a deterministic unified graph from existing build, semantic, and
 /// integration projections. This class performs no discovery or identity inference.
 /// </summary>
-internal static class UnifiedArchitectureGraphProjector
+internal static partial class UnifiedArchitectureGraphProjector
 {
     public static ArchitectureGraphProjection Project(ProjectArchitectureContext context)
     {
@@ -98,6 +98,7 @@ internal static class UnifiedArchitectureGraphProjector
             edges,
             unprojected);
         ProjectIntegrationEvidence(context, context.Modules, nodes, edges, unprojected);
+        ProjectApiEvidence(context, context.Modules, nodes, edges, unprojected);
 
         return new ArchitectureGraphProjection(
             nodes.Values.OrderBy(node => node.Id, StringComparer.Ordinal),

@@ -67,13 +67,26 @@ public sealed class CSharpMassTransitMessageProvider
 
     private static IReadOnlyList<MetadataReference> CreateMetadataReferences(string modulePath)
     {
-        var references = new Dictionary<string, MetadataReference>(PathComparer);
+        var references = new List<MetadataReference>();
+        var assemblyIdentities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var reference in PlatformReferences.Value)
         {
-            if (reference is PortableExecutableReference portable
-                && portable.FilePath is string filePath)
+            if (reference is not PortableExecutableReference portable
+                || portable.FilePath is not string filePath)
             {
-                references.TryAdd(Path.GetFullPath(filePath), reference);
+                continue;
+            }
+
+            references.Add(reference);
+            try
+            {
+                assemblyIdentities.Add(
+                    System.Reflection.AssemblyName.GetAssemblyName(filePath).FullName ?? filePath);
+            }
+            catch (BadImageFormatException)
+            {
+                // Platform references are expected to be managed assemblies.
             }
         }
 
@@ -117,11 +130,8 @@ public sealed class CSharpMassTransitMessageProvider
 
                         foreach (var compileAsset in compileAssets.EnumerateObject())
                         {
-                            if (compileAsset.Name.EndsWith("/_._", StringComparison.Ordinal)
-                                || !compileAsset.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                            {
+                            if (!compileAsset.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                                 continue;
-                            }
 
                             foreach (var packageFolder in packageFolders.EnumerateObject())
                             {
@@ -129,14 +139,21 @@ public sealed class CSharpMassTransitMessageProvider
                                     packageFolder.Name,
                                     libraryPath,
                                     compileAsset.Name.Replace('/', Path.DirectorySeparatorChar)));
-                                if (!File.Exists(candidate) || references.ContainsKey(candidate))
+                                if (!File.Exists(candidate))
                                     continue;
 
                                 try
                                 {
-                                    references.Add(
-                                        candidate,
-                                        MetadataReference.CreateFromFile(candidate));
+                                    var identity = System.Reflection.AssemblyName
+                                        .GetAssemblyName(candidate)
+                                        .FullName;
+                                    if (string.IsNullOrWhiteSpace(identity)
+                                        || !assemblyIdentities.Add(identity))
+                                    {
+                                        continue;
+                                    }
+
+                                    references.Add(MetadataReference.CreateFromFile(candidate));
                                 }
                                 catch (BadImageFormatException)
                                 {
@@ -159,7 +176,7 @@ public sealed class CSharpMassTransitMessageProvider
             }
         }
 
-        return Array.AsReadOnly(references.Values.ToArray());
+        return Array.AsReadOnly(references.ToArray());
     }
 
     private static IReadOnlyList<MetadataReference> CreatePlatformReferences()
@@ -194,7 +211,7 @@ public sealed class CSharpMassTransitMessageProvider
                     .FirstOrDefault();
                 if (generic is null
                     || !generic.Identifier.ValueText.Equals("IConsumer", StringComparison.Ordinal)
-                    || !IsMassTransitType(baseType.Type, semanticModel, hasMassTransitImport))
+                    || !IsMassTransitType(baseType.Type, semanticModel))
                 {
                     continue;
                 }

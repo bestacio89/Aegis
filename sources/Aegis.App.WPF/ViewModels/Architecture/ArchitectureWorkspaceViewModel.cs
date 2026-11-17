@@ -15,6 +15,8 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
     private readonly RuleDashboardViewModel _rules;
     private readonly FindingsLedgerViewModel _findings;
     private readonly ReportVisualizationViewModel _reports;
+
+    private ArchitectureWorkspaceSection? _selectedSection;
     private ArchitectureTab? _selectedTab;
 
     public ArchitectureWorkspaceViewModel(
@@ -28,34 +30,90 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         FindingsLedgerViewModel findings,
         ReportVisualizationViewModel reports)
     {
-        _systemLandscape = systemLandscape;
-        _overview = overview;
-        _dependencyGraph = dependencyGraph;
-        _relationshipLedger = relationshipLedger;
-        _sections = sections;
-        _layers = layers;
-        _rules = rules;
-        _findings = findings;
-        _reports = reports;
+        _systemLandscape = systemLandscape ?? throw new ArgumentNullException(nameof(systemLandscape));
+        _overview = overview ?? throw new ArgumentNullException(nameof(overview));
+        _dependencyGraph = dependencyGraph ?? throw new ArgumentNullException(nameof(dependencyGraph));
+        _relationshipLedger = relationshipLedger ?? throw new ArgumentNullException(nameof(relationshipLedger));
+        _sections = sections ?? throw new ArgumentNullException(nameof(sections));
+        _layers = layers ?? throw new ArgumentNullException(nameof(layers));
+        _rules = rules ?? throw new ArgumentNullException(nameof(rules));
+        _findings = findings ?? throw new ArgumentNullException(nameof(findings));
+        _reports = reports ?? throw new ArgumentNullException(nameof(reports));
 
-        Tabs =
+        Sections =
         [
-            new ArchitectureTab("System Landscape", "⌂", _systemLandscape),
-            new ArchitectureTab("Overview", "◈", _overview),
-            new ArchitectureTab("Dependency Graph", "⌘", _dependencyGraph),
-            new ArchitectureTab("Relationship Ledger", "▤", _relationshipLedger),
-            new ArchitectureTab("Sections", "▦", _sections),
-            new ArchitectureTab("Layers", "◫", _layers),
-            new ArchitectureTab("Rules & Metrics", "◎", _rules),
-            new ArchitectureTab("Findings", "⚑", _findings),
-            new ArchitectureTab("Reports", "▤", _reports)
+            new ArchitectureWorkspaceSection(
+                "System",
+                "⌂",
+                "Explore the system landscape, its logical boundaries, implementation units, and external resources.",
+                [new ArchitectureTab("System Landscape", "⌂", _systemLandscape)]),
+            new ArchitectureWorkspaceSection(
+                "Assessment",
+                "◈",
+                "Review the architecture assessment, health indicators, and the system's overall structural posture.",
+                [new ArchitectureTab("Overview", "◈", _overview)]),
+            new ArchitectureWorkspaceSection(
+                "Dependencies",
+                "⌘",
+                "Investigate directed dependencies and inspect the evidence behind each discovered relationship.",
+                [
+                    new ArchitectureTab("Dependency Graph", "⌘", _dependencyGraph),
+                    new ArchitectureTab("Relationship Ledger", "▤", _relationshipLedger)
+                ]),
+            new ArchitectureWorkspaceSection(
+                "Governance",
+                "◎",
+                "Evaluate architectural boundaries, layer conformance, rules, metrics, and detected findings.",
+                [
+                    new ArchitectureTab("Sections", "▦", _sections),
+                    new ArchitectureTab("Layers", "◫", _layers),
+                    new ArchitectureTab("Rules & Metrics", "◎", _rules),
+                    new ArchitectureTab("Findings", "⚑", _findings)
+                ]),
+            new ArchitectureWorkspaceSection(
+                "Reports",
+                "▤",
+                "Review and export the evidence-backed architecture assessment.",
+                [new ArchitectureTab("Reports", "▤", _reports)])
         ];
 
-        SelectedTab = Tabs[0];
+        Tabs = Array.AsReadOnly(Sections.SelectMany(section => section.Tabs).ToArray());
+        SelectedSection = Sections[0];
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
-    public ObservableCollection<ArchitectureTab> Tabs { get; }
+
+    public ObservableCollection<ArchitectureWorkspaceSection> Sections { get; }
+
+    /// <summary>
+    /// Flat compatibility view of all navigable tabs.
+    /// </summary>
+    public IReadOnlyList<ArchitectureTab> Tabs { get; }
+
+    public ArchitectureWorkspaceSection? SelectedSection
+    {
+        get => _selectedSection;
+        set
+        {
+            if (ReferenceEquals(_selectedSection, value))
+            {
+                return;
+            }
+
+            if (value is not null && !Sections.Contains(value))
+            {
+                return;
+            }
+
+            _selectedSection = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SectionDescription));
+            OnPropertyChanged(nameof(SectionViewCount));
+
+            SelectedTab = value?.SelectedTab;
+            OnPropertyChanged(nameof(ActiveContent));
+        }
+    }
 
     public ArchitectureTab? SelectedTab
     {
@@ -63,9 +121,24 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         set
         {
             if (ReferenceEquals(_selectedTab, value))
+            {
                 return;
+            }
+
+            if (value is not null &&
+                (_selectedSection is null ||
+                 !_selectedSection.Tabs.Any(tab => ReferenceEquals(tab, value))))
+            {
+                return;
+            }
 
             _selectedTab = value;
+
+            if (value is not null)
+            {
+                _selectedSection?.SelectTab(value);
+            }
+
             OnPropertyChanged();
             OnPropertyChanged(nameof(ActiveContent));
         }
@@ -73,17 +146,43 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
 
     public object? ActiveContent => SelectedTab?.ViewModel;
 
+    public string SectionDescription =>
+        SelectedSection?.Description ?? "Select an architecture work area.";
+
+    public int SectionViewCount => SelectedSection?.Tabs.Count ?? 0;
+
+    /// <summary>
+    /// Selects a view by its historical name. Unknown names are ignored so
+    /// compatibility commands cannot accidentally change the active view.
+    /// </summary>
     public void SelectTab(string name)
     {
-        var tab = Tabs.FirstOrDefault(candidate =>
-            string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase)
-            || (name.Equals("Rules", StringComparison.OrdinalIgnoreCase)
-                && candidate.Name.Equals("Rules & Metrics", StringComparison.OrdinalIgnoreCase))
-            || (name.Equals("Rules & Findings", StringComparison.OrdinalIgnoreCase)
-                && candidate.Name.Equals("Rules & Metrics", StringComparison.OrdinalIgnoreCase)));
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
 
-        if (tab is not null)
+        var normalizedName = name.Trim();
+        if (normalizedName.Equals("Rules", StringComparison.OrdinalIgnoreCase) ||
+            normalizedName.Equals("Rules & Findings", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedName = "Rules & Metrics";
+        }
+
+        foreach (var section in Sections)
+        {
+            var tab = section.Tabs.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, normalizedName, StringComparison.OrdinalIgnoreCase));
+
+            if (tab is null)
+            {
+                continue;
+            }
+
+            SelectedSection = section;
             SelectedTab = tab;
+            return;
+        }
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>

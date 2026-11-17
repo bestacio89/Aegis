@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Microsoft.CodeAnalysis;
@@ -35,7 +36,11 @@ public sealed class CSharpMassTransitMessageProvider
             .OrderBy(path => path, PathComparer)
             .ToArray();
 
-        if (files.Length == 0 || PlatformReferences.Value.Count == 0)
+        if (files.Length == 0)
+            return Array.Empty<MessageIntegrationEvidence>();
+
+        var metadataReferences = CreateMetadataReferences(module);
+        if (metadataReferences.Count == 0)
             return Array.Empty<MessageIntegrationEvidence>();
 
         var trees = files.Select(file =>
@@ -43,7 +48,7 @@ public sealed class CSharpMassTransitMessageProvider
         var compilation = CSharpCompilation.Create(
             "Aegis.MassTransitMessageDiscovery",
             trees,
-            PlatformReferences.Value,
+            metadataReferences,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
         var evidence = new List<MessageIntegrationEvidence>();
@@ -58,6 +63,103 @@ public sealed class CSharpMassTransitMessageProvider
         }
 
         return Array.AsReadOnly(evidence.ToArray());
+    }
+
+    private static IReadOnlyList<MetadataReference> CreateMetadataReferences(string modulePath)
+    {
+        var references = new Dictionary<string, MetadataReference>(PathComparer);
+        foreach (var reference in PlatformReferences.Value)
+        {
+            if (reference is PortableExecutableReference portable
+                && portable.FilePath is string filePath)
+            {
+                references.TryAdd(Path.GetFullPath(filePath), reference);
+            }
+        }
+
+        foreach (var projectFile in Directory.EnumerateFiles(
+                     modulePath,
+                     "*.csproj",
+                     SearchOption.AllDirectories))
+        {
+            var assetsFile = Path.Combine(
+                Path.GetDirectoryName(projectFile)!,
+                "obj",
+                "project.assets.json");
+            if (!File.Exists(assetsFile))
+                continue;
+
+            try
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(assetsFile));
+                var root = document.RootElement;
+                if (!root.TryGetProperty("packageFolders", out var packageFolders)
+                    || !root.TryGetProperty("targets", out var targets)
+                    || !root.TryGetProperty("libraries", out var libraries))
+                {
+                    continue;
+                }
+
+                foreach (var target in targets.EnumerateObject())
+                {
+                    foreach (var library in target.Value.EnumerateObject())
+                    {
+                        if (!library.Value.TryGetProperty("compile", out var compileAssets)
+                            || !libraries.TryGetProperty(library.Name, out var libraryMetadata)
+                            || !libraryMetadata.TryGetProperty("path", out var libraryPathElement))
+                        {
+                            continue;
+                        }
+
+                        var libraryPath = libraryPathElement.GetString();
+                        if (string.IsNullOrWhiteSpace(libraryPath))
+                            continue;
+
+                        foreach (var compileAsset in compileAssets.EnumerateObject())
+                        {
+                            if (compileAsset.Name.EndsWith("/_._", StringComparison.Ordinal)
+                                || !compileAsset.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            foreach (var packageFolder in packageFolders.EnumerateObject())
+                            {
+                                var candidate = Path.GetFullPath(Path.Combine(
+                                    packageFolder.Name,
+                                    libraryPath,
+                                    compileAsset.Name.Replace('/', Path.DirectorySeparatorChar)));
+                                if (!File.Exists(candidate) || references.ContainsKey(candidate))
+                                    continue;
+
+                                try
+                                {
+                                    references.Add(
+                                        candidate,
+                                        MetadataReference.CreateFromFile(candidate));
+                                }
+                                catch (BadImageFormatException)
+                                {
+                                    // Native and non-managed assets are not Roslyn metadata references.
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception exception) when (
+                exception is IOException
+                    or UnauthorizedAccessException
+                    or JsonException
+                    or ArgumentException
+                    or NotSupportedException)
+            {
+                // An unavailable assets file cannot establish framework symbols.
+                // The provider remains fail-closed instead of falling back to syntax names.
+            }
+        }
+
+        return Array.AsReadOnly(references.Values.ToArray());
     }
 
     private static IReadOnlyList<MetadataReference> CreatePlatformReferences()

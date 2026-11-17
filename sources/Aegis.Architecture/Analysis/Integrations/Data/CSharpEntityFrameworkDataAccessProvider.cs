@@ -268,7 +268,7 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             contextType = contextType.BaseType;
 
         if (contextType is not null)
-            return contextType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            return receiverType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
         var property = receiverType.GetMembers().OfType<IPropertySymbol>()
             .FirstOrDefault(candidate => GetDbSetEntityType(candidate.Type) is not null);

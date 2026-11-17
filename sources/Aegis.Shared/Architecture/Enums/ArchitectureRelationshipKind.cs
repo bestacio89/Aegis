@@ -34,6 +34,7 @@ public enum ArchitectureRelationshipKind
     // Messaging integration.
     MessagePublish = 400,
     MessageConsume = 401,
+    MessageSend = 402,
 
     // Remote procedure calls.
     RpcCall = 500,

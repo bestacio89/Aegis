@@ -109,7 +109,7 @@ public sealed class ProjectArchitectureDataAccessIntegrationTests
                 }
                 public static class RelationalEntityTypeBuilderExtensions
                 {
-                    public static EntityTypeBuilder<T> ToTable<T>(this EntityTypeBuilder<T> builder, string name) => builder;
+                    public static EntityTypeBuilder<T> ToTable<T>(this EntityTypeBuilder<T> builder, string name, string? schema = null) => builder;
                 }
             }
             namespace Persistence
@@ -119,7 +119,7 @@ public sealed class ProjectArchitectureDataAccessIntegrationTests
                 public sealed class OrdersDbContext
                 {
                     protected void OnModelCreating(ModelBuilder modelBuilder) =>
-                        modelBuilder.Entity<Order>().ToTable("orders");
+                        modelBuilder.Entity<Order>().ToTable("orders", "sales");
                 }
             }
             """);
@@ -130,7 +130,7 @@ public sealed class ProjectArchitectureDataAccessIntegrationTests
         var mapping = Assert.Single(evidence);
         Assert.Equal(DataIntegrationOperation.Mapping, mapping.Operation);
         Assert.Equal("global::Persistence.Order", mapping.SourceDataIdentity);
-        Assert.Equal("orders", mapping.TargetDataIdentity);
+        Assert.Equal("sales.orders", mapping.TargetDataIdentity);
         Assert.Equal(IntegrationEvidenceResolutionStatus.Resolved, mapping.ResolutionStatus);
         Assert.Equal(ArchitectureRelationshipKind.DataMapping, mapping.RelationshipKind);
     }
@@ -149,7 +149,7 @@ public sealed class ProjectArchitectureDataAccessIntegrationTests
                 }
                 public static class RelationalEntityTypeBuilderExtensions
                 {
-                    public static EntityTypeBuilder<T> ToView<T>(this EntityTypeBuilder<T> builder, string name) => builder;
+                    public static EntityTypeBuilder<T> ToView<T>(this EntityTypeBuilder<T> builder, string name, string? schema = null) => builder;
                 }
             }
             namespace Persistence
@@ -159,7 +159,7 @@ public sealed class ProjectArchitectureDataAccessIntegrationTests
                 public sealed class ReportingDbContext
                 {
                     protected void OnModelCreating(ModelBuilder modelBuilder) =>
-                        modelBuilder.Entity<OrderSummary>().ToView("order_summary");
+                        modelBuilder.Entity<OrderSummary>().ToView(name: "order_summary", schema: "reporting");
                 }
             }
             """);
@@ -170,7 +170,7 @@ public sealed class ProjectArchitectureDataAccessIntegrationTests
         var mapping = Assert.Single(evidence);
         Assert.Equal(DataIntegrationOperation.Mapping, mapping.Operation);
         Assert.Equal("global::Persistence.OrderSummary", mapping.SourceDataIdentity);
-        Assert.Equal("order_summary", mapping.TargetDataIdentity);
+        Assert.Equal("reporting.order_summary", mapping.TargetDataIdentity);
         Assert.Equal("global::Persistence.ReportingDbContext", mapping.StoreIdentity);
         Assert.Equal(IntegrationEvidenceResolutionStatus.Resolved, mapping.ResolutionStatus);
         Assert.Equal(ArchitectureRelationshipKind.DataMapping, mapping.RelationshipKind);

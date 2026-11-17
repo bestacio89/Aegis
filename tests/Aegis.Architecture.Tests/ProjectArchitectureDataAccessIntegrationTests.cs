@@ -217,6 +217,102 @@ public sealed class ProjectArchitectureDataAccessIntegrationTests
     }
 
     [Fact]
+    public void Detects_Entity_Framework_Core_strongly_typed_property_to_column_mappings()
+    {
+        using var directory = new TemporaryDirectory();
+        var sourceFile = Path.Combine(directory.Path, "PropertyMappings.cs");
+        File.WriteAllText(sourceFile, """
+            using System;
+            using System.Linq.Expressions;
+
+            namespace Microsoft.EntityFrameworkCore
+            {
+                public sealed class PropertyBuilder<T> { }
+                public sealed class EntityTypeBuilder<T>
+                {
+                    public PropertyBuilder<TProperty> Property<TProperty>(Expression<Func<T, TProperty>> selector) => new();
+                }
+                public sealed class ModelBuilder
+                {
+                    public EntityTypeBuilder<T> Entity<T>() => new();
+                }
+                public static class RelationalPropertyBuilderExtensions
+                {
+                    public static PropertyBuilder<T> HasColumnName<T>(this PropertyBuilder<T> builder, string name) => builder;
+                }
+            }
+            namespace Persistence
+            {
+                using Microsoft.EntityFrameworkCore;
+                public sealed class Order { public Guid Id { get; init; } }
+                public sealed class OrdersDbContext
+                {
+                    protected void OnModelCreating(ModelBuilder modelBuilder) =>
+                        modelBuilder.Entity<Order>().Property(order => order.Id).HasColumnName("order_id");
+                }
+            }
+            """);
+
+        var evidence = new CSharpEntityFrameworkDataAccessProvider()
+            .Discover([sourceFile], directory.Path);
+
+        var mapping = Assert.Single(evidence);
+        Assert.Equal(DataIntegrationOperation.Mapping, mapping.Operation);
+        Assert.Equal("global::Persistence.Order.Id", mapping.SourceDataIdentity);
+        Assert.Equal("order_id", mapping.TargetDataIdentity);
+        Assert.Equal("global::Persistence.OrdersDbContext", mapping.StoreIdentity);
+        Assert.Equal(IntegrationEvidenceResolutionStatus.Resolved, mapping.ResolutionStatus);
+        Assert.Equal(ArchitectureRelationshipKind.DataMapping, mapping.RelationshipKind);
+    }
+
+    [Fact]
+    public void Keeps_Entity_Framework_Core_property_mapping_with_dynamic_column_name_unresolved()
+    {
+        using var directory = new TemporaryDirectory();
+        var sourceFile = Path.Combine(directory.Path, "DynamicPropertyMapping.cs");
+        File.WriteAllText(sourceFile, """
+            using System;
+            using System.Linq.Expressions;
+
+            namespace Microsoft.EntityFrameworkCore
+            {
+                public sealed class PropertyBuilder<T> { }
+                public sealed class EntityTypeBuilder<T>
+                {
+                    public PropertyBuilder<TProperty> Property<TProperty>(Expression<Func<T, TProperty>> selector) => new();
+                }
+                public sealed class ModelBuilder
+                {
+                    public EntityTypeBuilder<T> Entity<T>() => new();
+                }
+                public static class RelationalPropertyBuilderExtensions
+                {
+                    public static PropertyBuilder<T> HasColumnName<T>(this PropertyBuilder<T> builder, string name) => builder;
+                }
+            }
+            namespace Persistence
+            {
+                using Microsoft.EntityFrameworkCore;
+                public sealed class Order { public Guid Id { get; init; } }
+                public sealed class OrdersDbContext
+                {
+                    protected void OnModelCreating(ModelBuilder modelBuilder, string columnName) =>
+                        modelBuilder.Entity<Order>().Property(order => order.Id).HasColumnName(columnName);
+                }
+            }
+            """);
+
+        var evidence = new CSharpEntityFrameworkDataAccessProvider()
+            .Discover([sourceFile], directory.Path);
+
+        var mapping = Assert.Single(evidence);
+        Assert.Equal(DataIntegrationOperation.Mapping, mapping.Operation);
+        Assert.Equal("global::Persistence.Order.Id", mapping.SourceDataIdentity);
+        Assert.Null(mapping.TargetDataIdentity);
+        Assert.Equal(IntegrationEvidenceResolutionStatus.Dynamic, mapping.ResolutionStatus);
+    }
+
+    [Fact]
     public void Does_not_classify_query_composition_or_unrelated_methods_as_data_access()
     {
         using var directory = new TemporaryDirectory();

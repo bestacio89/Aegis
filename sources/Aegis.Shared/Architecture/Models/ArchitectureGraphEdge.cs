@@ -11,7 +11,7 @@ public sealed record ArchitectureGraphEdge
     public ArchitectureGraphEdgeDomain Domain { get; init; }
     public string Scope { get; init; } = "Production";
     public string ProviderRelationshipKind { get; init; } = string.Empty;
-    public List<ArchitectureRelationshipKind> RelationshipKinds { get; init; } = [];
-    public List<string> AndroidVariants { get; init; } = [];
-    public List<ArchitectureGraphEvidenceReference> Evidence { get; init; } = [];
+    public IReadOnlyList<ArchitectureRelationshipKind> RelationshipKinds { get; init; } = Array.Empty<ArchitectureRelationshipKind>();
+    public IReadOnlyList<string> AndroidVariants { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<ArchitectureGraphEvidenceReference> Evidence { get; init; } = Array.Empty<ArchitectureGraphEvidenceReference>();
 }

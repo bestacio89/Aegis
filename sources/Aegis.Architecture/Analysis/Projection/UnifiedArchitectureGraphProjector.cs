@@ -65,7 +65,7 @@ internal static class UnifiedArchitectureGraphProjector
             });
         }
 
-        ProjectBuildDependencies(context, modules, nodes, edges, unprojected);
+        ProjectBuildDependencies(context, context.Modules, nodes, edges, unprojected);
         ProjectSemanticDependencies(
             context,
             context.ArchitectureComponentDependencies.Concat(context.ArchitectureComponentInternalDependencies),
@@ -82,7 +82,7 @@ internal static class UnifiedArchitectureGraphProjector
             nodes,
             edges,
             unprojected);
-        ProjectIntegrationEvidence(context, modules, nodes, edges, unprojected);
+        ProjectIntegrationEvidence(context, context.Modules, nodes, edges, unprojected);
 
         return new ArchitectureGraphProjection(
             nodes.Values.OrderBy(node => node.Id, StringComparer.Ordinal),
@@ -95,7 +95,7 @@ internal static class UnifiedArchitectureGraphProjector
 
     private static void ProjectBuildDependencies(
         ProjectArchitectureContext context,
-        IReadOnlyDictionary<string, ProjectModuleContext> modules,
+        IEnumerable<ProjectModuleContext> modules,
         IDictionary<string, ArchitectureGraphNode> nodes,
         ICollection<ArchitectureGraphEdge> edges,
         ICollection<ArchitectureGraphUnprojectedEvidence> unprojected)
@@ -111,13 +111,25 @@ internal static class UnifiedArchitectureGraphProjector
                 ProviderId = dependency.DependencyType
             };
 
-            if (!TryResolveModule(dependency.SourceProjectPath, modules, out var source)
-                || !TryResolveModule(dependency.TargetProjectPath, modules, out var target))
+            var sourceResolved = TryResolveModule(
+                dependency.SourceProjectPath,
+                modules,
+                out var source,
+                out var sourceAmbiguous);
+            var targetResolved = TryResolveModule(
+                dependency.TargetProjectPath,
+                modules,
+                out var target,
+                out var targetAmbiguous);
+
+            if (!sourceResolved || !targetResolved)
             {
                 unprojected.Add(new ArchitectureGraphUnprojectedEvidence
                 {
                     Evidence = evidence,
-                    Reason = ArchitectureGraphUnprojectedReason.MissingEndpoint,
+                    Reason = sourceAmbiguous || targetAmbiguous
+                        ? ArchitectureGraphUnprojectedReason.AmbiguousEndpointOwnership
+                        : ArchitectureGraphUnprojectedReason.MissingEndpoint,
                     Explanation = "The build dependency does not resolve to exactly one discovered module at both endpoints."
                 });
                 continue;
@@ -142,8 +154,8 @@ internal static class UnifiedArchitectureGraphProjector
                 Domain = ArchitectureGraphEdgeDomain.Build,
                 Scope = NormalizeScope(dependency.Scope, source, target),
                 ProviderRelationshipKind = dependency.DependencyType,
-                RelationshipKinds = [relationshipKind],
-                Evidence = [evidence]
+                RelationshipKinds = Array.AsReadOnly(new[] { relationshipKind }),
+                Evidence = Array.AsReadOnly(new[] { evidence })
             });
         }
     }
@@ -179,7 +191,9 @@ internal static class UnifiedArchitectureGraphProjector
             {
                 var matches = context.RelationshipEvidenceRegistry?.Evidence
                     .Where(item =>
-                        string.Equals(item.RunId, relationshipReference.RunId, StringComparison.Ordinal)
+                        item.RunIndex == relationshipReference.RunIndex
+                        && item.RelationshipIndex == relationshipReference.RelationshipIndex
+                        && string.Equals(item.RunId, relationshipReference.RunId, StringComparison.Ordinal)
                         && string.Equals(item.Relationship.Id, relationshipReference.RelationshipId, StringComparison.Ordinal))
                     .ToArray() ?? [];
 
@@ -245,22 +259,22 @@ internal static class UnifiedArchitectureGraphProjector
                 Domain = ArchitectureGraphEdgeDomain.NativeSemantic,
                 Scope = dependency.Scope,
                 ProviderRelationshipKind = dependency.DependencyType,
-                RelationshipKinds = kinds.OrderBy(kind => kind).ToList(),
-                AndroidVariants = dependency.AndroidVariants
+                RelationshipKinds = Array.AsReadOnly(kinds.OrderBy(kind => kind).ToArray()),
+                AndroidVariants = Array.AsReadOnly(dependency.AndroidVariants
                     .Where(value => !string.IsNullOrWhiteSpace(value))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-                    .ToList(),
-                Evidence = references
+                    .ToArray()),
+                Evidence = Array.AsReadOnly(references
                     .OrderBy(reference => reference.OccurrenceIndex)
-                    .ToList()
+                    .ToArray())
             });
         }
     }
 
     private static void ProjectIntegrationEvidence(
         ProjectArchitectureContext context,
-        IReadOnlyDictionary<string, ProjectModuleContext> modules,
+        IEnumerable<ProjectModuleContext> modules,
         IDictionary<string, ArchitectureGraphNode> nodes,
         ICollection<ArchitectureGraphEdge> edges,
         ICollection<ArchitectureGraphUnprojectedEvidence> unprojected)
@@ -298,12 +312,14 @@ internal static class UnifiedArchitectureGraphProjector
                 continue;
             }
 
-            if (!TryResolveModule(occurrence.Evidence.ModulePath, modules, out var module))
+            if (!TryResolveModule(occurrence.Evidence.ModulePath, modules, out var module, out var ambiguousOwner))
             {
                 unprojected.Add(new ArchitectureGraphUnprojectedEvidence
                 {
                     Evidence = evidenceReference,
-                    Reason = ArchitectureGraphUnprojectedReason.AmbiguousEndpointOwnership,
+                    Reason = ambiguousOwner
+                        ? ArchitectureGraphUnprojectedReason.AmbiguousEndpointOwnership
+                        : ArchitectureGraphUnprojectedReason.MissingEndpoint,
                     Explanation = "The integration observation is not owned by exactly one discovered build module."
                 });
                 continue;
@@ -352,8 +368,8 @@ internal static class UnifiedArchitectureGraphProjector
                     _ => throw new ArgumentOutOfRangeException(nameof(occurrence.Domain))
                 },
                 Scope = IsTestModule(module) ? "Test" : "Production",
-                RelationshipKinds = [occurrence.Evidence.RelationshipKind],
-                Evidence = [evidenceReference]
+                RelationshipKinds = Array.AsReadOnly(new[] { occurrence.Evidence.RelationshipKind }),
+                Evidence = Array.AsReadOnly(new[] { evidenceReference })
             });
         }
     }
@@ -377,25 +393,33 @@ internal static class UnifiedArchitectureGraphProjector
                 => new ResolvedResource(rpc.TargetIdentity!, "RpcTarget", ResourceDirection.Outbound),
             DataAccessEvidence data
                 when !string.IsNullOrWhiteSpace(data.StoreIdentity)
-                => new ResolvedResource(data.StoreIdentity!, "DataStore", ResourceDirection.Outbound),
+                => new ResolvedResource(
+                    data.StoreIdentity!,
+                    "DataStore",
+                    data.Operation == DataIntegrationOperation.Read
+                        ? ResourceDirection.Inbound
+                        : ResourceDirection.Outbound),
             _ => null
         };
 
     private static bool TryResolveModule(
         string path,
-        IReadOnlyDictionary<string, ProjectModuleContext> modules,
-        out ProjectModuleContext module)
+        IEnumerable<ProjectModuleContext> modules,
+        out ProjectModuleContext module,
+        out bool ambiguous)
     {
         module = null!;
+        ambiguous = false;
         if (!TryNormalizePath(path, out var normalizedPath))
             return false;
 
-        var matches = modules.Values
+        var matches = modules
             .Where(candidate => TryNormalizePath(candidate.Path, out var candidatePath)
                 && PathComparer.Equals(candidatePath, normalizedPath))
             .Take(2)
             .ToArray();
 
+        ambiguous = matches.Length > 1;
         if (matches.Length != 1)
             return false;
 

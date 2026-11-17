@@ -52,7 +52,9 @@ public sealed class UnifiedArchitectureGraphProjectorTests
                         new SemanticRelationshipReference
                         {
                             RunId = "run-2",
-                            RelationshipId = "duplicate-id"
+                            RelationshipId = "duplicate-id",
+                            RunIndex = 1,
+                            RelationshipIndex = 0
                         }
                     ]
                 }
@@ -64,7 +66,7 @@ public sealed class UnifiedArchitectureGraphProjectorTests
 
         var projection = UnifiedArchitectureGraphProjector.Project(context);
 
-        projection.Edges.Should().HaveCount(2);
+        projection.Edges.Should().HaveCount(3);
         projection.Edges.Should().ContainSingle(edge =>
             edge.Domain == ArchitectureGraphEdgeDomain.Build
             && edge.RelationshipKinds.Contains(ArchitectureRelationshipKind.BuildProjectReference));
@@ -127,6 +129,15 @@ public sealed class UnifiedArchitectureGraphProjectorTests
                     Operation = DataIntegrationOperation.Read,
                     DataObjectIdentity = "orders",
                     ResolutionStatus = IntegrationEvidenceResolutionStatus.Resolved
+                },
+                new DataAccessEvidence
+                {
+                    EvidenceId = "data-read-resolved",
+                    ProviderId = "shared-provider",
+                    ModulePath = modulePath,
+                    Operation = DataIntegrationOperation.Read,
+                    StoreIdentity = "orders-db",
+                    ResolutionStatus = IntegrationEvidenceResolutionStatus.Resolved
                 }
             ])
         };
@@ -141,6 +152,10 @@ public sealed class UnifiedArchitectureGraphProjectorTests
         projection.Edges.Should().HaveCount(2);
         projection.Edges.Should().Contain(edge => edge.Domain == ArchitectureGraphEdgeDomain.Messaging);
         projection.Edges.Should().Contain(edge => edge.Domain == ArchitectureGraphEdgeDomain.Rpc);
+        var dataReadEdge = projection.Edges.Should()
+            .ContainSingle(edge => edge.Domain == ArchitectureGraphEdgeDomain.DataAccess).Subject;
+        dataReadEdge.SourceNodeId.Should().StartWith("resource:");
+        dataReadEdge.TargetNodeId.Should().StartWith("module:");
         projection.Nodes.Where(node => node.Kind == ArchitectureGraphNodeKind.ExternalResource)
             .Select(node => node.Id)
             .Should().OnlyHaveUniqueItems();

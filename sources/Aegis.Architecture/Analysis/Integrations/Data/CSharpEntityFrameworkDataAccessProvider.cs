@@ -228,12 +228,9 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             resolved
                 ? "Roslyn resolved an Entity Framework Core relational ToTable mapping and its literal table identity."
                 : "Roslyn resolved an Entity Framework Core relational ToTable mapping; the table identity is dynamic or unavailable.",
-            resolved ? IntegrationEvidenceResolutionStatus.Resolved : IntegrationEvidenceResolutionStatus.Dynamic) with
-        {
-            SourceDataIdentity = entityIdentity,
-            TargetDataIdentity = resolved ? (string)tableIdentity.Value! : null,
-            DataObjectExpression = memberAccess.Expression.ToString()
-        };
+            resolved ? IntegrationEvidenceResolutionStatus.Resolved : IntegrationEvidenceResolutionStatus.Dynamic,
+            sourceDataIdentity: entityIdentity,
+            targetDataIdentity: resolved ? (string)tableIdentity.Value! : null);
         return true;
     }
     private static DataAccessEvidence CreateEvidence(
@@ -245,7 +242,9 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
         string? entityIdentity,
         string dataObjectExpression,
         string resolutionEvidence,
-        IntegrationEvidenceResolutionStatus status)
+        IntegrationEvidenceResolutionStatus status,
+        string? sourceDataIdentity = null,
+        string? targetDataIdentity = null)
     {
         var location = invocation.GetLocation().GetLineSpan();
         var sourceFile = invocation.SyntaxTree.FilePath;
@@ -267,7 +266,8 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             StoreIdentity = storeIdentity,
             DataObjectIdentity = entityIdentity,
             DataObjectExpression = dataObjectExpression,
-            SourceDataIdentity = null,
+            SourceDataIdentity = sourceDataIdentity,
+            TargetDataIdentity = targetDataIdentity,
             QueryExpression = invocation.ToString(),
             ResolutionStatus = status,
             ResolutionEvidence = Array.AsReadOnly(new[] { resolutionEvidence }),

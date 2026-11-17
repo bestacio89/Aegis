@@ -203,6 +203,23 @@ internal static partial class UnifiedArchitectureGraphProjector
             });
         }
 
+        var representedRequestIndexes = matches
+            .Where(match => match.ClientRequestIndex >= 0 && match.ClientRequestIndex < requests.Count)
+            .Select(match => match.ClientRequestIndex)
+            .ToHashSet();
+
+        for (var requestIndex = 0; requestIndex < requests.Count; requestIndex++)
+        {
+            if (representedRequestIndexes.Contains(requestIndex))
+                continue;
+
+            AddUnprojectedApiRequest(
+                requestIndex,
+                requests[requestIndex],
+                ArchitectureGraphUnprojectedReason.UnresolvedEvidence,
+                "The authoritative match snapshot contains no result for this client-request occurrence.");
+        }
+
         void AddUnprojectedApiRequest(
             int requestIndex,
             ApiClientRequestEvidence request,

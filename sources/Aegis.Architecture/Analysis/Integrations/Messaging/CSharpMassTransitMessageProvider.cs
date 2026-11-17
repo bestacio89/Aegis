@@ -63,6 +63,7 @@ public sealed class CSharpMassTransitMessageProvider
 
             DiscoverConsumers(root, semanticModel, module, receiveEndpoints, evidence);
             DiscoverPublishCalls(root, semanticModel, module, evidence);
+            DiscoverSendCalls(root, semanticModel, module, evidence);
         }
 
         return Array.AsReadOnly(evidence.ToArray());
@@ -399,6 +400,66 @@ public sealed class CSharpMassTransitMessageProvider
         }
     }
 
+    private static void DiscoverSendCalls(
+        CompilationUnitSyntax root,
+        SemanticModel semanticModel,
+        string modulePath,
+        ICollection<MessageIntegrationEvidence> evidence)
+    {
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+                continue;
+
+            var methodName = memberAccess.Name switch
+            {
+                GenericNameSyntax generic => generic.Identifier.ValueText,
+                IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+                _ => string.Empty
+            };
+            if (!methodName.Equals("Send", StringComparison.Ordinal)
+                || !IsMassTransitSender(memberAccess.Expression, semanticModel))
+            {
+                continue;
+            }
+
+            var genericName = memberAccess.Name as GenericNameSyntax;
+            var messageTypeSyntax = genericName?.TypeArgumentList.Arguments.FirstOrDefault();
+            var messageExpression = messageTypeSyntax is null
+                ? invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression
+                : null;
+            var resolved = ResolveMessageType(messageTypeSyntax, messageExpression, semanticModel);
+            var handler = GetCallerIdentity(invocation, semanticModel);
+            var location = invocation.GetLocation().GetLineSpan().StartLinePosition;
+
+            evidence.Add(CreateEvidence(
+                modulePath,
+                invocation,
+                "send",
+                handler,
+                MessageIntegrationOperation.Send,
+                resolved,
+                location,
+                invocation.ToString(),
+                [
+                    "The Send call receiver is grounded as MassTransit ISendEndpoint.",
+                    resolved.Evidence
+                ]));
+        }
+    }
+
+    private static bool IsMassTransitSender(
+        ExpressionSyntax receiver,
+        SemanticModel semanticModel)
+    {
+        var type = GetReceiverType(receiver, semanticModel);
+        return type is not null
+            && type.TypeKind != TypeKind.Error
+            && type.Name == "ISendEndpoint"
+            && type.ContainingNamespace.ToDisplayString().Equals(
+                MassTransitNamespace,
+                StringComparison.Ordinal);
+    }
     private static bool IsMassTransitType(
         TypeSyntax typeSyntax,
         SemanticModel semanticModel)

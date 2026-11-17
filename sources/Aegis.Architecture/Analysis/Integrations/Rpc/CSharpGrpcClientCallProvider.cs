@@ -68,9 +68,10 @@ public sealed class CSharpGrpcClientCallProvider
                 if (string.IsNullOrWhiteSpace(methodName))
                     continue;
 
+                var serviceName = GetServiceName(clientType);
                 var matchingContracts = serviceContracts?
                     .Where(contract => contract.Operation == RpcIntegrationOperation.Endpoint
-                        && contract.ServiceIdentity?.EndsWith("." + (clientType.ContainingType?.Name ?? clientType.Name.Replace("Client", string.Empty, StringComparison.Ordinal)), StringComparison.Ordinal) == true
+                        && contract.ServiceIdentity?.Split('.').Last().Equals(serviceName, StringComparison.Ordinal) == true
                         && contract.MethodIdentity?.EndsWith("." + methodName, StringComparison.Ordinal) == true)
                     .ToArray() ?? Array.Empty<RpcIntegrationEvidence>();
                 var contractMatch = matchingContracts.Length == 1 ? matchingContracts[0] : null;
@@ -133,6 +134,17 @@ public sealed class CSharpGrpcClientCallProvider
         }
 
         return false;
+    }
+
+    private static string GetServiceName(INamedTypeSymbol clientType)
+    {
+        if (clientType.ContainingType is not null)
+            return clientType.ContainingType.Name;
+
+        const string clientSuffix = "Client";
+        return clientType.Name.EndsWith(clientSuffix, StringComparison.Ordinal)
+            ? clientType.Name[..^clientSuffix.Length]
+            : clientType.Name;
     }
 
     private static string GetServiceIdentity(INamedTypeSymbol clientType)

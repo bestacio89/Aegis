@@ -138,11 +138,25 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
     {
         evidence = null!;
         if (!WriteMethods.Contains(method.Name)
-            || !IsEntityFrameworkMethod(method)
-            || invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+            || !IsEntityFrameworkMethod(method))
             return false;
 
-        var receiverType = semanticModel.GetTypeInfo(memberAccess.Expression).Type;
+        var memberAccess = invocation.Expression as MemberAccessExpressionSyntax;
+        var receiverType = memberAccess is null
+            ? semanticModel.GetEnclosingSymbol(invocation.SpanStart)?.ContainingType
+            : semanticModel.GetTypeInfo(memberAccess.Expression).Type;
+        if (receiverType is null)
+            return false;
+
+        // DbContext exposes Add/Update/Attach/Remove as inherited instance methods.
+        // In derived contexts these are commonly invoked without an explicit "this."
+        // receiver, so Roslyn binds them correctly but the syntax has no member access.
+        var isImplicitDbContextMutation = memberAccess is null
+            && IsDbContext(receiverType)
+            && IsDbContext(method.ContainingType);
+        if (memberAccess is null && !isImplicitDbContextMutation)
+            return false;
+
         var queryEntityType = GetQueryableEntityType(receiverType);
         var isBulkQueryMutation = BulkWriteMethods.Contains(method.Name)
             && method.ContainingType.Name == "EntityFrameworkQueryableExtensions"
@@ -165,11 +179,13 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             method,
             module,
             DataIntegrationOperation.Write,
-            GetStoreIdentity(receiverType, memberAccess.Expression, semanticModel),
+            memberAccess is null
+                ? receiverType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                : GetStoreIdentity(receiverType, memberAccess.Expression, semanticModel),
             entityType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             isBulkQueryMutation
-                ? memberAccess.Expression.ToString()
-                : argument?.ToString() ?? memberAccess.Expression.ToString(),
+                ? memberAccess!.Expression.ToString()
+                : argument?.ToString() ?? memberAccess?.Expression.ToString() ?? "this",
             "Roslyn resolved an Entity Framework Core tracked-entity mutation method.",
             IntegrationEvidenceResolutionStatus.Resolved);
         return true;

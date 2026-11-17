@@ -87,14 +87,14 @@ public sealed class ApiGraphProjectionTests
     [Fact]
     public void Project_rejects_unresolved_request_or_endpoint_and_unresolved_candidate_kind()
     {
-        var partialRequest = CreateRequest("/repo/client", "partial-request") with
-        {
-            ResolutionStatus = ApiClientRequestResolutionStatus.PartiallyResolved
-        };
-        var dynamicEndpoint = CreateEndpoint("/repo/server", "dynamic-endpoint") with
-        {
-            ResolutionStatus = ApiEndpointResolutionStatus.Dynamic
-        };
+        var partialRequest = CreateRequest(
+            "/repo/client",
+            "partial-request",
+            ApiClientRequestResolutionStatus.PartiallyResolved);
+        var dynamicEndpoint = CreateEndpoint(
+            "/repo/server",
+            "dynamic-endpoint",
+            ApiEndpointResolutionStatus.Dynamic);
         var context = CreateContext(
             [
                 partialRequest,
@@ -224,22 +224,28 @@ public sealed class ApiGraphProjectionTests
             ApiClientRequestEndpointMatchRegistry = new ApiClientRequestEndpointMatchRegistry(matches)
         };
 
-    private static ApiClientRequestEvidence CreateRequest(string modulePath, string evidenceId) =>
+    private static ApiClientRequestEvidence CreateRequest(
+        string modulePath,
+        string evidenceId,
+        ApiClientRequestResolutionStatus resolutionStatus = ApiClientRequestResolutionStatus.Resolved) =>
         new()
         {
             EvidenceId = evidenceId,
             ProviderId = "client-provider",
             ModulePath = Path.GetFullPath(modulePath),
-            ResolutionStatus = ApiClientRequestResolutionStatus.Resolved
+            ResolutionStatus = resolutionStatus
         };
 
-    private static ApiEndpointEvidence CreateEndpoint(string modulePath, string evidenceId) =>
+    private static ApiEndpointEvidence CreateEndpoint(
+        string modulePath,
+        string evidenceId,
+        ApiEndpointResolutionStatus resolutionStatus = ApiEndpointResolutionStatus.Resolved) =>
         new()
         {
             EvidenceId = evidenceId,
             ProviderId = "server-provider",
             ModulePath = Path.GetFullPath(modulePath),
-            ResolutionStatus = ApiEndpointResolutionStatus.Resolved
+            ResolutionStatus = resolutionStatus
         };
 
     private static ProjectModuleContext CreateModule(string name, string path, bool isTest = false) =>

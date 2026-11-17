@@ -211,28 +211,76 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             return false;
 
         var entityType = builderType.TypeArguments.FirstOrDefault();
-        var tableArgument = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
-        if (entityType is null || tableArgument is null)
+        var nameArgument = GetArgumentForParameter(invocation, method, "name");
+        if (entityType is null || nameArgument is null)
             return false;
 
-        var tableIdentity = semanticModel.GetConstantValue(tableArgument);
-        var resolved = tableIdentity.HasValue && tableIdentity.Value is string tableName
-            && !string.IsNullOrWhiteSpace(tableName);
+        var nameIdentity = semanticModel.GetConstantValue(nameArgument);
+        var schemaArgument = GetArgumentForParameter(invocation, method, "schema");
+        var schemaIdentity = schemaArgument is null
+            ? default
+            : semanticModel.GetConstantValue(schemaArgument);
+        var resolved = nameIdentity.HasValue && nameIdentity.Value is string storeObjectName
+            && !string.IsNullOrWhiteSpace(storeObjectName);
+        var schema = schemaIdentity.HasValue && schemaIdentity.Value is string schemaName
+            && !string.IsNullOrWhiteSpace(schemaName)
+                ? schemaName
+                : null;
+        var targetIdentity = resolved
+            ? schema is null ? (string)nameIdentity.Value! : $"{schema}.{nameIdentity.Value}"
+            : null;
         var owner = semanticModel.GetEnclosingSymbol(invocation.SpanStart)?.ContainingType;
         var storeIdentity = owner?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         var entityIdentity = entityType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
         evidence = CreateEvidence(
             invocation, method, module, DataIntegrationOperation.Mapping, storeIdentity,
-            entityIdentity, tableArgument.ToString(),
+            entityIdentity, nameArgument.ToString(),
             resolved
                 ? "Roslyn resolved an Entity Framework Core relational entity mapping and its literal store-object identity."
                 : "Roslyn resolved an Entity Framework Core relational entity mapping; the store-object identity is dynamic or unavailable.",
             resolved ? IntegrationEvidenceResolutionStatus.Resolved : IntegrationEvidenceResolutionStatus.Dynamic,
             sourceDataIdentity: entityIdentity,
-            targetDataIdentity: resolved ? (string)tableIdentity.Value! : null);
+            targetDataIdentity: targetIdentity);
         return true;
     }
+    private static ExpressionSyntax? GetArgumentForParameter(
+        InvocationExpressionSyntax invocation,
+        IMethodSymbol method,
+        string parameterName)
+    {
+        var parameterIndex = -1;
+        for (var index = 0; index < method.Parameters.Length; index++)
+        {
+            if (method.Parameters[index].Name.Equals(parameterName, StringComparison.Ordinal))
+            {
+                parameterIndex = index;
+                break;
+            }
+        }
+
+        if (parameterIndex < 0)
+            return null;
+
+        foreach (var argument in invocation.ArgumentList.Arguments)
+        {
+            if (argument.NameColon is not null)
+            {
+                if (argument.NameColon.Name.Identifier.ValueText.Equals(parameterName, StringComparison.Ordinal))
+                    return argument.Expression;
+                continue;
+            }
+
+            var positionalIndex = invocation.ArgumentList.Arguments
+                .TakeWhile(candidate => candidate != argument)
+                .Count(candidate => candidate.NameColon is null);
+            if (positionalIndex == parameterIndex)
+                return argument.Expression;
+        }
+
+        return null;
+    }
+
     private static DataAccessEvidence CreateEvidence(
         InvocationExpressionSyntax invocation,
         IMethodSymbol method,

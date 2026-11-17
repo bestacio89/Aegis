@@ -2,6 +2,7 @@ using Aegis.Architecture.Analysis.Projection;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using FluentAssertions;
+using Xunit;
 
 namespace Aegis.Architecture.Tests;
 

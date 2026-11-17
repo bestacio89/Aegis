@@ -135,6 +135,48 @@ public sealed class ProjectArchitectureDataAccessIntegrationTests
         Assert.Equal(ArchitectureRelationshipKind.DataMapping, mapping.RelationshipKind);
     }
     [Fact]
+    public void Detects_Entity_Framework_Core_relational_entity_to_view_mappings()
+    {
+        using var directory = new TemporaryDirectory();
+        var sourceFile = Path.Combine(directory.Path, "ViewMappings.cs");
+        File.WriteAllText(sourceFile, """
+            namespace Microsoft.EntityFrameworkCore
+            {
+                public sealed class EntityTypeBuilder<T> { }
+                public sealed class ModelBuilder
+                {
+                    public EntityTypeBuilder<T> Entity<T>() => new();
+                }
+                public static class RelationalEntityTypeBuilderExtensions
+                {
+                    public static EntityTypeBuilder<T> ToView<T>(this EntityTypeBuilder<T> builder, string name) => builder;
+                }
+            }
+            namespace Persistence
+            {
+                using Microsoft.EntityFrameworkCore;
+                public sealed class OrderSummary { }
+                public sealed class ReportingDbContext
+                {
+                    protected void OnModelCreating(ModelBuilder modelBuilder) =>
+                        modelBuilder.Entity<OrderSummary>().ToView("order_summary");
+                }
+            }
+            """);
+
+        var evidence = new CSharpEntityFrameworkDataAccessProvider()
+            .Discover([sourceFile], directory.Path);
+
+        var mapping = Assert.Single(evidence);
+        Assert.Equal(DataIntegrationOperation.Mapping, mapping.Operation);
+        Assert.Equal("global::Persistence.OrderSummary", mapping.SourceDataIdentity);
+        Assert.Equal("order_summary", mapping.TargetDataIdentity);
+        Assert.Equal("global::Persistence.ReportingDbContext", mapping.StoreIdentity);
+        Assert.Equal(IntegrationEvidenceResolutionStatus.Resolved, mapping.ResolutionStatus);
+        Assert.Equal(ArchitectureRelationshipKind.DataMapping, mapping.RelationshipKind);
+    }
+
+    [Fact]
     public void Does_not_classify_query_composition_or_unrelated_methods_as_data_access()
     {
         using var directory = new TemporaryDirectory();

@@ -161,6 +161,51 @@ public sealed class CSharpMassTransitMessageProviderTests
         Assert.Empty(evidence);
     }
 
+
+    [Fact]
+    public void Ignores_unrelated_consumer_and_endpoint_methods_with_mass_transit_like_names()
+    {
+        using var fixture = new CSharpMessagingFixture(
+            """
+            using FakeMessaging;
+
+            namespace FakeMessaging
+            {
+                public interface IConsumer<T> { }
+            }
+
+            namespace Orders.Application
+            {
+                public sealed record OrderSubmitted;
+                public sealed class OrderConsumer : IConsumer<OrderSubmitted> { }
+
+                public sealed class EndpointConfiguration
+                {
+                    public void ReceiveEndpoint(string name, Action<EndpointConfiguration> configure) =>
+                        configure(this);
+
+                    public void ConfigureConsumer<T>(object context) { }
+                }
+
+                public sealed class Registration
+                {
+                    private readonly EndpointConfiguration _endpoints = new();
+
+                    public void Configure() =>
+                        _endpoints.ReceiveEndpoint(
+                            "orders",
+                            endpoint => endpoint.ConfigureConsumer<OrderConsumer>(this));
+                }
+            }
+            """);
+
+        var evidence = new CSharpMassTransitMessageProvider().Discover(
+            [fixture.SourcePath],
+            fixture.ModulePath);
+
+        Assert.Empty(evidence);
+    }
+
     private sealed class CSharpMessagingFixture : IDisposable
     {
         private const string MassTransitStubs = """

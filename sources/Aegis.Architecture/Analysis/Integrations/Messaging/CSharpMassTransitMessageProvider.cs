@@ -51,11 +51,10 @@ public sealed class CSharpMassTransitMessageProvider
         {
             var root = tree.GetCompilationUnitRoot();
             var semanticModel = compilation.GetSemanticModel(tree, ignoreAccessibility: true);
-            var hasMassTransitImport = HasMassTransitImport(root);
-            var receiveEndpoints = DiscoverReceiveEndpoints(root, semanticModel, hasMassTransitImport);
+            var receiveEndpoints = DiscoverReceiveEndpoints(root, semanticModel);
 
-            DiscoverConsumers(root, semanticModel, module, hasMassTransitImport, receiveEndpoints, evidence);
-            DiscoverPublishCalls(root, semanticModel, module, hasMassTransitImport, evidence);
+            DiscoverConsumers(root, semanticModel, module, receiveEndpoints, evidence);
+            DiscoverPublishCalls(root, semanticModel, module, evidence);
         }
 
         return Array.AsReadOnly(evidence.ToArray());
@@ -74,17 +73,10 @@ public sealed class CSharpMassTransitMessageProvider
             .ToArray();
     }
 
-    private static bool HasMassTransitImport(CompilationUnitSyntax root) =>
-        root.DescendantNodes().OfType<UsingDirectiveSyntax>().Any(usingDirective =>
-            usingDirective.Name?.ToString() is string name
-            && (name.Equals(MassTransitNamespace, StringComparison.Ordinal)
-                || name.StartsWith(MassTransitNamespace + ".", StringComparison.Ordinal)));
-
     private static void DiscoverConsumers(
         CompilationUnitSyntax root,
         SemanticModel semanticModel,
         string modulePath,
-        bool hasMassTransitImport,
         IReadOnlyDictionary<string, IReadOnlyList<ResolvedMessageDestination>> receiveEndpoints,
         ICollection<MessageIntegrationEvidence> evidence)
     {
@@ -166,11 +158,8 @@ public sealed class CSharpMassTransitMessageProvider
 
     private static IReadOnlyDictionary<string, IReadOnlyList<ResolvedMessageDestination>> DiscoverReceiveEndpoints(
         CompilationUnitSyntax root,
-        SemanticModel semanticModel,
-        bool hasMassTransitImport)
+        SemanticModel semanticModel)
     {
-        if (!hasMassTransitImport)
-            return new Dictionary<string, IReadOnlyList<ResolvedMessageDestination>>(StringComparer.Ordinal);
 
         var destinations = new Dictionary<string, List<ResolvedMessageDestination>>(StringComparer.Ordinal);
 
@@ -178,6 +167,7 @@ public sealed class CSharpMassTransitMessageProvider
         {
             if (receiveEndpoint.Expression is not MemberAccessExpressionSyntax memberAccess
                 || memberAccess.Name.Identifier.ValueText != "ReceiveEndpoint"
+                || !IsMassTransitMethod(receiveEndpoint, semanticModel)
                 || receiveEndpoint.ArgumentList.Arguments.FirstOrDefault()?.Expression is not ExpressionSyntax destinationExpression)
             {
                 continue;
@@ -195,6 +185,7 @@ public sealed class CSharpMassTransitMessageProvider
             {
                 if (configureConsumer.Expression is not MemberAccessExpressionSyntax configureAccess
                     || configureAccess.Name is not GenericNameSyntax genericName
+                    || !IsMassTransitMethod(configureConsumer, semanticModel)
                     || genericName.Identifier.ValueText != "ConfigureConsumer")
                 {
                     continue;
@@ -237,7 +228,6 @@ public sealed class CSharpMassTransitMessageProvider
         CompilationUnitSyntax root,
         SemanticModel semanticModel,
         string modulePath,
-        bool hasMassTransitImport,
         ICollection<MessageIntegrationEvidence> evidence)
     {
         foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
@@ -252,7 +242,7 @@ public sealed class CSharpMassTransitMessageProvider
                 _ => string.Empty
             };
             if (!methodName.Equals("Publish", StringComparison.Ordinal)
-                || !IsMassTransitPublisher(memberAccess.Expression, semanticModel, hasMassTransitImport))
+                || !IsMassTransitPublisher(memberAccess.Expression, semanticModel))
             {
                 continue;
             }
@@ -286,39 +276,38 @@ public sealed class CSharpMassTransitMessageProvider
     private static bool IsMassTransitType(
         TypeSyntax typeSyntax,
         SemanticModel semanticModel,
-        bool hasMassTransitImport)
+    )
     {
         var symbol = semanticModel.GetTypeInfo(typeSyntax).Type;
-        if (symbol is not null && symbol.TypeKind != TypeKind.Error)
-            return symbol.ContainingNamespace.ToDisplayString().Equals(
+        return symbol is not null
+            && symbol.TypeKind != TypeKind.Error
+            && symbol.ContainingNamespace.ToDisplayString().Equals(
                 MassTransitNamespace,
                 StringComparison.Ordinal);
-
-        var typeName = typeSyntax.ToString();
-        return hasMassTransitImport
-            || typeName.StartsWith(MassTransitNamespace + ".", StringComparison.Ordinal)
-            || typeName.StartsWith("global::" + MassTransitNamespace + ".", StringComparison.Ordinal);
     }
 
     private static bool IsMassTransitPublisher(
         ExpressionSyntax receiver,
-        SemanticModel semanticModel,
-        bool hasMassTransitImport)
+        SemanticModel semanticModel)
     {
         var type = GetReceiverType(receiver, semanticModel);
-        if (type is null || type.Name is not ("IPublishEndpoint" or "ConsumeContext"))
-            return false;
-
-        if (type.TypeKind != TypeKind.Error)
-        {
-            return type.ContainingNamespace.ToDisplayString().Equals(
+        return type is not null
+            && type.TypeKind != TypeKind.Error
+            && type.Name is "IPublishEndpoint" or "ConsumeContext"
+            && type.ContainingNamespace.ToDisplayString().Equals(
                 MassTransitNamespace,
                 StringComparison.Ordinal);
-        }
+    }
 
-        return hasMassTransitImport
-            || receiver.ToString().StartsWith(MassTransitNamespace + ".", StringComparison.Ordinal)
-            || receiver.ToString().StartsWith("global::" + MassTransitNamespace + ".", StringComparison.Ordinal);
+    private static bool IsMassTransitMethod(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel)
+    {
+        var method = semanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+        return method is not null
+            && method.ContainingNamespace.ToDisplayString().Equals(
+                MassTransitNamespace,
+                StringComparison.Ordinal);
     }
 
     private static ITypeSymbol? GetReceiverType(

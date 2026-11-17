@@ -269,7 +269,7 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
         if (propertyArgument is not LambdaExpressionSyntax lambda)
             return false;
 
-        var propertyExpression = lambda.Body switch
+        ExpressionSyntax? propertyExpression = lambda.Body switch
         {
             MemberAccessExpressionSyntax member => member,
             IdentifierNameSyntax identifier => identifier,

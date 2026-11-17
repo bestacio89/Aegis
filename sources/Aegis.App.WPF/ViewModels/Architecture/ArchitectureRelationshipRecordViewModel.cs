@@ -1,11 +1,15 @@
 namespace Aegis.Wpf.ViewModels.Architecture;
 
 /// <summary>
-/// A presentation-neutral row that preserves the origin and evidence level of
-/// either a build-module dependency or a semantic component dependency.
+/// A ledger row projected from one authoritative unified graph edge. It retains
+/// the graph domain, directed endpoints, and exact source evidence references.
 /// </summary>
 public sealed class ArchitectureRelationshipRecordViewModel
 {
+    public string GraphEdgeId { get; init; } = string.Empty;
+
+    public string GraphDomain { get; init; } = string.Empty;
+
     public string RelationshipLevel { get; init; } = string.Empty;
 
     public string Source { get; init; } = string.Empty;
@@ -20,13 +24,17 @@ public sealed class ArchitectureRelationshipRecordViewModel
 
     public string TargetProjectPath { get; init; } = string.Empty;
 
+    public string Direction { get; init; } = string.Empty;
+
     public string DependencyType { get; init; } = string.Empty;
+
+    public string ProviderRelationshipKind { get; init; } = string.Empty;
 
     public string Scope { get; init; } = "Production";
 
     public string File { get; init; } = string.Empty;
 
-    public int RelationshipCount { get; init; } = 1;
+    public int RelationshipCount { get; init; }
 
     public int ResolvedRelationshipCount { get; init; }
 

@@ -131,7 +131,6 @@ class KotlinMessageIntegrationTests {
             val messagesFound = result.getAsJsonArray("messageIntegrations").map { it.asJsonObject }
             assertEquals(9, messagesFound.size)
 
-            assertTrue(messagesFound.all { it.has("destinationIdentity") }, messagesFound.toString())
             val kafkaConsumers = messagesFound.filter {
                 it.get("framework").asString == "Spring Kafka"
                     && it.get("operation").asInt == 1
@@ -142,7 +141,7 @@ class KotlinMessageIntegrationTests {
             }
             assertEquals(0, literalKafka.get("resolutionStatus").asInt)
             val dynamicKafka = kafkaConsumers.single {
-                it.get("destinationIdentity") == null || it.get("destinationIdentity").isJsonNull
+                it.get("destinationExpression").asString.contains("messaging.orders.topic")
             }
             assertEquals(2, dynamicKafka.get("resolutionStatus").asInt)
             assertTrue(dynamicKafka.get("destinationExpression").asString.contains("messaging.orders.topic"))

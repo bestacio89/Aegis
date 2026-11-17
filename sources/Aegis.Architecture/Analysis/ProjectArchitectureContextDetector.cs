@@ -434,10 +434,11 @@ public static class ProjectArchitectureContextDetector
             });
 
             var ownedFiles = moduleFiles.ToArray();
-            evidence.AddRange(provider.Discover(
+            var moduleContracts = provider.Discover(
                 ownedFiles.Where(file =>
                     string.Equals(Path.GetExtension(file), ".proto", StringComparison.OrdinalIgnoreCase)),
-                modulePath));
+                modulePath);
+            evidence.AddRange(moduleContracts);
 
             if (module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase))
             {
@@ -445,7 +446,8 @@ public static class ProjectArchitectureContextDetector
                 evidence.AddRange(grpcClientProvider.Discover(
                     ownedFiles.Where(file =>
                         string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase)),
-                    modulePath));
+                    modulePath,
+                    moduleContracts));
             }
         }
 

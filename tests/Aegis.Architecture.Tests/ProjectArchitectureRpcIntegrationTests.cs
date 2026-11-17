@@ -84,7 +84,7 @@ public sealed class ProjectArchitectureRpcIntegrationTests
 
         var call = Assert.Single(registry.Evidence, item =>
             item.Operation == RpcIntegrationOperation.Call);
-        Assert.Equal("Commerce.Orders.GetOrder", call.MethodIdentity);
+        Assert.Equal("commerce.Orders.GetOrder", call.MethodIdentity);
         Assert.Equal("commerce.Orders", endpoint.ServiceIdentity);
         Assert.Equal("commerce.Orders.GetOrder", endpoint.TargetIdentity);
         Assert.Equal("_client", call.TargetExpression);

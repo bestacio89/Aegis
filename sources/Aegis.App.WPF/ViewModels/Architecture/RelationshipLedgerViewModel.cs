@@ -1,4 +1,5 @@
 using Aegis.Architecture.Analysis;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -27,6 +28,8 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
     }
 
     public ObservableCollection<ArchitectureRelationshipRecordViewModel> Dependencies { get; private set; } = new();
+
+    public ObservableCollection<ArchitectureGraphUnprojectedEvidence> UnprojectedEvidence { get; } = new();
 
     public ICollectionView DependenciesView => _dependenciesView;
 
@@ -61,6 +64,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
     [ObservableProperty] private ArchitectureRelationshipRecordViewModel? selectedDependency;
     [ObservableProperty] private int totalDependencies;
     [ObservableProperty] private int filteredDependencies;
+    [ObservableProperty] private int unprojectedEvidenceCount;
 
     partial void OnSearchTextChanged(string value) => RefreshFilter();
 
@@ -88,156 +92,41 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             ? "No architecture context available"
             : context.ProjectName;
 
-        var codeContainersById = context?.ArchitectureComponents
-            .Where(component => !string.IsNullOrWhiteSpace(component.Id))
-            .GroupBy(component => component.Id, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal)
-            ?? new Dictionary<string, ArchitectureComponentContext>(StringComparer.Ordinal);
+        var projection = context?.ArchitectureGraphProjection;
+        var nodesById = projection?.Nodes
+            .GroupBy(node => node.Id, StringComparer.Ordinal)
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal)
+            ?? new Dictionary<string, ArchitectureGraphNode>(StringComparer.Ordinal);
 
-        var logicalComponentsById = context?.ArchitecturalComponents
-            .Where(component => !string.IsNullOrWhiteSpace(component.Id))
-            .GroupBy(component => component.Id, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal)
-            ?? new Dictionary<string, ArchitecturalComponentContext>(StringComparer.Ordinal);
-
-        var buildRelationships = context?.Dependencies
-            .Where(dependency =>
-                !string.IsNullOrWhiteSpace(dependency.Source)
-                && !string.IsNullOrWhiteSpace(dependency.Target))
-            .Select(dependency => new ArchitectureRelationshipRecordViewModel
-            {
-                RelationshipLevel = "Build module",
-                Source = dependency.Source,
-                SourceLayer = dependency.SourceLayer,
-                SourceProjectPath = dependency.SourceProjectPath,
-                Target = dependency.Target,
-                TargetLayer = dependency.TargetLayer,
-                TargetProjectPath = dependency.TargetProjectPath,
-                DependencyType = dependency.DependencyType,
-                Scope = dependency.Scope,
-                File = dependency.File
-            }) ?? [];
-
-        var codeContainerRelationships = context?.ArchitectureComponentDependencies
-            .Where(dependency =>
-                !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
-                && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
-            .Select(dependency =>
-            {
-                codeContainersById.TryGetValue(dependency.SourceComponentId, out var source);
-                codeContainersById.TryGetValue(dependency.TargetComponentId, out var target);
-                var relationshipKinds = dependency.RelationshipKinds
-                    .Select(kind => kind.ToString())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(kind => kind, StringComparer.OrdinalIgnoreCase);
-
-                return new ArchitectureRelationshipRecordViewModel
-                {
-                    RelationshipLevel = "Code container",
-                    Source = dependency.SourceComponentName,
-                    SourceLayer = source?.ComponentKind ?? "Component",
-                    SourceProjectPath = source?.BuildModulePath ?? string.Empty,
-                    Target = dependency.TargetComponentName,
-                    TargetLayer = target?.ComponentKind ?? "Component",
-                    TargetProjectPath = target?.BuildModulePath ?? string.Empty,
-                    DependencyType = relationshipKinds.Any()
-                        ? string.Join(", ", relationshipKinds)
-                        : "Semantic dependency",
-                    Scope = dependency.Scope,
-                    File = string.Join(Environment.NewLine, dependency.EvidenceFiles),
-                    RelationshipCount = dependency.RelationshipCount,
-                    ResolvedRelationshipCount = dependency.ResolvedRelationshipCount,
-                    PartiallyResolvedRelationshipCount = dependency.PartiallyResolvedRelationshipCount,
-                    UnreferencedRelationshipCount = dependency.UnreferencedRelationshipCount,
-                    IsInternal = dependency.IsInternal,
-                    EvidenceReferences = FormatEvidenceReferences(dependency.ContributingRelationships)
-                };
-            }) ?? [];
-
-        var internalCodeContainerRelationships = context?.ArchitectureComponentInternalDependencies
-            .Where(dependency =>
-                !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
-                && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
-            .Select(dependency =>
-            {
-                codeContainersById.TryGetValue(dependency.SourceComponentId, out var source);
-                codeContainersById.TryGetValue(dependency.TargetComponentId, out var target);
-                return new ArchitectureRelationshipRecordViewModel
-                {
-                    RelationshipLevel = "Code container (internal)",
-                    Source = dependency.SourceComponentName,
-                    SourceLayer = source?.ComponentKind ?? "Unclassified",
-                    SourceProjectPath = source?.BuildModulePath ?? string.Empty,
-                    Target = dependency.TargetComponentName,
-                    TargetLayer = target?.ComponentKind ?? "Unclassified",
-                    TargetProjectPath = target?.BuildModulePath ?? string.Empty,
-                    DependencyType = dependency.DependencyType,
-                    Scope = dependency.Scope,
-                    File = string.Join(Environment.NewLine, dependency.EvidenceFiles),
-                    RelationshipCount = dependency.RelationshipCount,
-                    ResolvedRelationshipCount = dependency.ResolvedRelationshipCount,
-                    PartiallyResolvedRelationshipCount = dependency.PartiallyResolvedRelationshipCount,
-                    UnreferencedRelationshipCount = dependency.UnreferencedRelationshipCount,
-                    IsInternal = true,
-                    EvidenceReferences = FormatEvidenceReferences(dependency.ContributingRelationships)
-                };
-            }) ?? [];
-
-        var logicalRelationships = context?.ArchitecturalComponentDependencies
-            .Where(dependency =>
-                !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
-                && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
-            .Select(dependency =>
-            {
-                logicalComponentsById.TryGetValue(dependency.SourceComponentId, out var source);
-                logicalComponentsById.TryGetValue(dependency.TargetComponentId, out var target);
-                var relationshipKinds = dependency.RelationshipKinds
-                    .Select(kind => kind.ToString())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(kind => kind, StringComparer.OrdinalIgnoreCase);
-
-                return new ArchitectureRelationshipRecordViewModel
-                {
-                    RelationshipLevel = "Logical architecture",
-                    Source = dependency.SourceComponentName,
-                    SourceLayer = source?.Role ?? "Unclassified",
-                    Target = dependency.TargetComponentName,
-                    TargetLayer = target?.Role ?? "Unclassified",
-                    DependencyType = relationshipKinds.Any()
-                        ? string.Join(", ", relationshipKinds)
-                        : "Semantic dependency",
-                    Scope = dependency.Scope,
-                    File = string.Join(Environment.NewLine, dependency.EvidenceFiles),
-                    RelationshipCount = dependency.RelationshipCount,
-                    ResolvedRelationshipCount = dependency.ResolvedRelationshipCount,
-                    PartiallyResolvedRelationshipCount = dependency.PartiallyResolvedRelationshipCount,
-                    UnreferencedRelationshipCount = dependency.UnreferencedRelationshipCount,
-                    IsInternal = dependency.IsInternal,
-                    EvidenceReferences = FormatEvidenceReferences(dependency.ContributingRelationships),
-                    CodeContainerContributions = string.Join(
-                        Environment.NewLine,
-                        dependency.ContributingCodeContainerDependencies
-                            .OrderBy(edge => edge.SourceComponentName, StringComparer.OrdinalIgnoreCase)
-                            .ThenBy(edge => edge.TargetComponentName, StringComparer.OrdinalIgnoreCase)
-                            .Select(edge => $"{edge.SourceComponentName} -> {edge.TargetComponentName} ({edge.RelationshipCount})"))
-                };
-            }) ?? [];
-
-        var dependencies = buildRelationships
-            .Concat(codeContainerRelationships)
-            .Concat(internalCodeContainerRelationships)
-            .Concat(logicalRelationships)
-            .OrderBy(dependency => dependency.RelationshipLevel, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(dependency => dependency.Source, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(dependency => dependency.Target, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(dependency => dependency.DependencyType, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var dependencies = projection?.Edges
+            .Select(edge => CreateRelationshipRecord(edge, nodesById))
+            .Where(record => record is not null)
+            .Cast<ArchitectureRelationshipRecordViewModel>()
+            .OrderBy(record => record.GraphDomain, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(record => record.Source, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(record => record.Target, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(record => record.GraphEdgeId, StringComparer.Ordinal)
+            .ToArray() ?? [];
 
         SelectedDependency = null;
         Dependencies = new ObservableCollection<ArchitectureRelationshipRecordViewModel>(dependencies);
         _dependenciesView = CollectionViewSource.GetDefaultView(Dependencies);
         _dependenciesView.Filter = MatchesFilter;
 
+        UnprojectedEvidence.Clear();
+        if (projection is not null)
+        {
+            foreach (var evidence in projection.UnprojectedEvidence
+                         .OrderBy(item => item.Evidence.Domain)
+                         .ThenBy(item => item.Evidence.OccurrenceIndex)
+                         .ThenBy(item => item.Reason))
+            {
+                UnprojectedEvidence.Add(evidence);
+            }
+        }
+
+        UnprojectedEvidenceCount = UnprojectedEvidence.Count;
         LayerFilters = ["All", .. dependencies
             .SelectMany(dependency => new[] { dependency.SourceLayer, dependency.TargetLayer })
             .Where(layer => !string.IsNullOrWhiteSpace(layer))
@@ -274,6 +163,73 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
         RemoveApplicationIntegrationCommand.NotifyCanExecuteChanged();
         RefreshFilter();
     }
+
+    private static ArchitectureRelationshipRecordViewModel? CreateRelationshipRecord(
+        ArchitectureGraphEdge edge,
+        IReadOnlyDictionary<string, ArchitectureGraphNode> nodesById)
+    {
+        if (!nodesById.TryGetValue(edge.SourceNodeId, out var source)
+            || !nodesById.TryGetValue(edge.TargetNodeId, out var target))
+        {
+            return null;
+        }
+
+        var relationshipKinds = edge.RelationshipKinds
+            .Select(kind => kind.ToString())
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(kind => kind, StringComparer.Ordinal)
+            .ToArray();
+
+        var dependencyType = relationshipKinds.Length > 0
+            ? string.Join(", ", relationshipKinds)
+            : edge.ProviderRelationshipKind;
+
+        return new ArchitectureRelationshipRecordViewModel
+        {
+            GraphEdgeId = edge.Id,
+            GraphDomain = edge.Domain.ToString(),
+            RelationshipLevel = edge.Domain switch
+            {
+                ArchitectureGraphEdgeDomain.Build => "Build topology",
+                ArchitectureGraphEdgeDomain.NativeSemantic => "Native semantics",
+                ArchitectureGraphEdgeDomain.Messaging => "Messaging",
+                ArchitectureGraphEdgeDomain.Rpc => "RPC",
+                ArchitectureGraphEdgeDomain.DataAccess => "Data access",
+                ArchitectureGraphEdgeDomain.Api => "HTTP / API",
+                _ => "Unknown graph domain"
+            },
+            Source = source.Name,
+            SourceLayer = GetNodeClassification(source),
+            SourceProjectPath = source.ModulePath ?? string.Empty,
+            Target = target.Name,
+            TargetLayer = GetNodeClassification(target),
+            TargetProjectPath = target.ModulePath ?? string.Empty,
+            DependencyType = dependencyType,
+            ProviderRelationshipKind = edge.ProviderRelationshipKind,
+            Direction = $"{source.Name} → {target.Name}",
+            Scope = edge.Scope,
+            RelationshipCount = edge.Evidence.Count,
+            IsInternal = string.Equals(edge.SourceNodeId, edge.TargetNodeId, StringComparison.Ordinal),
+            EvidenceReferences = FormatGraphEvidenceReferences(edge.Evidence)
+        };
+    }
+
+    private static string GetNodeClassification(ArchitectureGraphNode node) =>
+        node.ResourceKind
+        ?? node.ComponentKind
+        ?? node.Kind.ToString();
+
+    private static string FormatGraphEvidenceReferences(
+        IEnumerable<ArchitectureGraphEvidenceReference> references) =>
+        string.Join(
+            Environment.NewLine,
+            references
+                .OrderBy(reference => reference.Domain)
+                .ThenBy(reference => reference.OccurrenceIndex)
+                .Select(reference =>
+                    $"{reference.Domain}[{reference.OccurrenceIndex}]"
+                    + (string.IsNullOrWhiteSpace(reference.EvidenceId) ? string.Empty : $":{reference.EvidenceId}")
+                    + (string.IsNullOrWhiteSpace(reference.ProviderId) ? string.Empty : $" ({reference.ProviderId})")));
 
     [RelayCommand(CanExecute = nameof(CanAddApplicationIntegration))]
     private void AddApplicationIntegration()
@@ -392,11 +348,15 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
 
         Clipboard.SetText($"""
             Relationship level: {dependency.RelationshipLevel}
+            Graph domain: {dependency.GraphDomain}
+            Graph edge: {dependency.GraphEdgeId}
+            Direction: {dependency.Direction}
             {dependency.Source} -> {dependency.Target}
-            Relationship count: {dependency.RelationshipCount}
+            Evidence occurrences: {dependency.RelationshipCount}
             Source layer: {dependency.SourceLayer}
             Target layer: {dependency.TargetLayer}
             Dependency type: {dependency.DependencyType}
+            Provider relationship kind: {dependency.ProviderRelationshipKind}
             Scope: {dependency.Scope}
             Source project: {dependency.SourceProjectPath}
             Target project: {dependency.TargetProjectPath}
@@ -456,18 +416,6 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
 
         FilteredDependencies = _dependenciesView.Cast<object>().Count();
     }
-
-    private static string FormatEvidenceReferences(
-        IEnumerable<SemanticRelationshipReference> references) =>
-        string.Join(
-            Environment.NewLine,
-            references
-                .Where(reference =>
-                    !string.IsNullOrWhiteSpace(reference.RunId)
-                    && !string.IsNullOrWhiteSpace(reference.RelationshipId))
-                .Select(reference => $"{reference.RunId}:{reference.RelationshipId}")
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(reference => reference, StringComparer.Ordinal));
 
     private static bool Contains(string? value, string query) =>
         value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;

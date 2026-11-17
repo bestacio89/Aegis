@@ -1,5 +1,6 @@
 using Aegis.Wpf.ViewModels.Architecture;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Aegis.Wpf.Tests;
@@ -136,8 +137,8 @@ public sealed class ArchitectureWorkspaceViewModelTests
             new DependencyGraphViewModel(),
             new RelationshipLedgerViewModel(),
             new SectionDashboardViewModel(),
-            new LayerDashboardViewModel(),
-            new RuleDashboardViewModel(),
+            new LayerDashboardViewModel(NullLogger<LayerDashboardViewModel>.Instance),
+            new RuleDashboardViewModel(NullLogger<RuleDashboardViewModel>.Instance),
             new FindingsLedgerViewModel(),
             new ReportVisualizationViewModel());
 }

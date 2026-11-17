@@ -608,6 +608,122 @@ final class JdtSemanticAnalysisEngineTests {
                 && item.get("destinationKind").getAsInt() == 1));
     }
 
+
+    @Test
+    void discovers_spring_jms_listeners_and_template_sends_from_resolved_bindings() throws Exception {
+        Path project = Files.createDirectories(workspace.resolve("spring-jms-project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("src/main/java"));
+        Path annotationRoot = Files.createDirectories(sourceRoot.resolve("org/springframework/jms/annotation"));
+        Path coreRoot = Files.createDirectories(sourceRoot.resolve("org/springframework/jms/core"));
+        Path appRoot = Files.createDirectories(sourceRoot.resolve("example"));
+        Files.writeString(annotationRoot.resolve("JmsListener.java"), """
+            package org.springframework.jms.annotation;
+            import java.lang.annotation.*;
+            @Target(ElementType.METHOD)
+            public @interface JmsListener {
+                String destination() default "";
+            }
+            """);
+        Files.writeString(coreRoot.resolve("MessagePostProcessor.java"), """
+            package org.springframework.jms.core;
+            public interface MessagePostProcessor {}
+            """);
+        Files.writeString(coreRoot.resolve("JmsTemplate.java"), """
+            package org.springframework.jms.core;
+            public class JmsTemplate {
+                public void convertAndSend(String destinationName, Object message) {}
+                public void convertAndSend(String destinationName, Object message, MessagePostProcessor processor) {}
+            }
+            """);
+        Path unrelatedAnnotation = appRoot.resolve("JmsListener.java");
+        Files.writeString(unrelatedAnnotation, """
+            package example;
+            import java.lang.annotation.*;
+            @Target(ElementType.METHOD)
+            public @interface JmsListener { String destination() default ""; }
+            """);
+        Path listener = appRoot.resolve("OrderJmsListener.java");
+        Files.writeString(listener, """
+            package example;
+            import org.springframework.jms.annotation.JmsListener;
+            public final class OrderJmsListener {
+                @JmsListener(destination = "orders.queue")
+                public void consume(String payload) {}
+                @JmsListener(destination = "${orders.destination}")
+                public void consumeDynamic(String payload) {}
+                @example.JmsListener(destination = "not-jms")
+                public void unrelated(String payload) {}
+            }
+            """);
+        Path sender = appRoot.resolve("OrderJmsSender.java");
+        Files.writeString(sender, """
+            package example;
+            import org.springframework.jms.core.JmsTemplate;
+            import org.springframework.jms.core.MessagePostProcessor;
+            public final class OrderJmsSender {
+                private final JmsTemplate jms = new JmsTemplate();
+                private final MessagePostProcessor processor = null;
+                public void send(String destination, String payload) {
+                    jms.convertAndSend("orders.queue", payload);
+                    jms.convertAndSend(destination, payload, processor);
+                    new UnrelatedSender().convertAndSend("not-jms", payload);
+                }
+                static final class UnrelatedSender {
+                    void convertAndSend(String destination, Object message) {}
+                }
+            }
+            """);
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("projectPath", project.toString());
+        payload.add("sourceRoots", paths(sourceRoot));
+        payload.add("sourceFiles", paths(
+            annotationRoot.resolve("JmsListener.java"),
+            coreRoot.resolve("MessagePostProcessor.java"),
+            coreRoot.resolve("JmsTemplate.java"),
+            unrelatedAnnotation,
+            listener,
+            sender));
+        payload.add("classpathEntries", new JsonArray());
+
+        JsonObject result = new JdtSemanticAnalysisEngine().analyze(payload);
+        JsonArray integrations = result.getAsJsonArray("messageIntegrations");
+        assertEquals(4, integrations.size());
+
+        List<JsonObject> values = integrations.asList().stream().map(item -> item.getAsJsonObject()).toList();
+        List<JsonObject> consumes = values.stream()
+            .filter(item -> item.get("operation").getAsInt() == 1).toList();
+        List<JsonObject> sends = values.stream()
+            .filter(item -> item.get("operation").getAsInt() == 2).toList();
+        assertEquals(2, consumes.size());
+        assertEquals(2, sends.size());
+
+        JsonObject literalListener = consumes.stream()
+            .filter(item -> item.has("destinationIdentity")).findFirst().orElseThrow();
+        assertEquals("orders.queue", literalListener.get("destinationIdentity").getAsString());
+        assertEquals("java.lang.String", literalListener.get("messageTypeIdentity").getAsString());
+        assertEquals(0, literalListener.get("resolutionStatus").getAsInt());
+        assertEquals(0, literalListener.get("destinationKind").getAsInt());
+
+        JsonObject dynamicListener = consumes.stream()
+            .filter(item -> !item.has("destinationIdentity")).findFirst().orElseThrow();
+        assertEquals(2, dynamicListener.get("resolutionStatus").getAsInt());
+
+        JsonObject literalSend = sends.stream()
+            .filter(item -> item.has("destinationIdentity")).findFirst().orElseThrow();
+        assertEquals("orders.queue", literalSend.get("destinationIdentity").getAsString());
+        assertEquals("java.lang.String", literalSend.get("messageTypeIdentity").getAsString());
+        assertEquals(0, literalSend.get("resolutionStatus").getAsInt());
+        assertEquals(0, literalSend.get("destinationKind").getAsInt());
+
+        JsonObject dynamicSend = sends.stream()
+            .filter(item -> !item.has("destinationIdentity")).findFirst().orElseThrow();
+        assertEquals(2, dynamicSend.get("resolutionStatus").getAsInt());
+        assertTrue(values.stream().allMatch(item ->
+            item.get("framework").getAsString().equals("Spring JMS")
+                && item.get("providerId").getAsString().equals("eclipse-jdt-spring-jms")));
+    }
+
     private static void deleteRecursively(Path directory) throws IOException {
         try (var paths = Files.walk(directory)) {
             paths.sorted(Comparator.reverseOrder()).forEach(path -> {

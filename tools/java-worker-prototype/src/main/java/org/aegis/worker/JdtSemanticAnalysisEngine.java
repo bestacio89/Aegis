@@ -313,6 +313,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                     addMethod(binding, node, file, test, generated);
                     discoverSpringEndpoint(node, file);
                     discoverSpringKafkaListener(node, file);
+                    discoverSpringJmsListener(node, file);
                     return true;
                 }
 
@@ -333,6 +334,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                     addCall(enclosingSymbol(node), binding, node.toString(), node, file, test, false);
                     discoverApiClientRequest(node, file);
                     discoverSpringKafkaSend(node, file);
+                    discoverSpringJmsSend(node, file);
                     return true;
                 }
 
@@ -416,6 +418,117 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         }
 
 
+
+
+        private void discoverSpringJmsListener(MethodDeclaration method, Path file) {
+            for (Object modifier : method.modifiers()) {
+                if (!(modifier instanceof Annotation listener)
+                    || !"org.springframework.jms.annotation.JmsListener".equals(annotationTypeName(listener))) {
+                    continue;
+                }
+
+                Expression destination = annotationMember(listener, "destination");
+                if (destination == null) continue;
+                IMethodBinding handler = method.resolveBinding();
+                String handlerIdentity = handler == null || handler.isRecovered()
+                    ? null : methodIdentity(handler.getMethodDeclaration());
+                String messageType = handler == null || handler.isRecovered()
+                    ? null : listenerPayloadType(handler);
+                Object constant = destination.resolveConstantExpressionValue();
+                String destinationIdentity = constant instanceof String value
+                    && !value.contains("${") && !value.contains("#{") ? value : null;
+                int resolutionStatus = handlerIdentity == null ? 3 : destinationIdentity == null ? 2 : 0;
+
+                JsonObject evidence = new JsonObject();
+                evidence.addProperty("evidenceId", file + "#jms-listener@" + listener.getStartPosition()
+                    + "#destination@" + destination.getStartPosition());
+                evidence.addProperty("language", "Java");
+                evidence.addProperty("framework", "Spring JMS");
+                evidence.addProperty("providerId", "eclipse-jdt-spring-jms");
+                evidence.addProperty("modulePath", projectRoot.toString());
+                evidence.addProperty("sourceFile", file.toString());
+                evidence.addProperty("startLine", line(method));
+                evidence.addProperty("startColumn", column(method));
+                evidence.addProperty("operation", 1);
+                if (messageType != null) evidence.addProperty("messageTypeIdentity", messageType);
+                evidence.addProperty("messageTypeExpression", method.parameters().isEmpty()
+                    ? "" : method.parameters().get(0).toString());
+                evidence.addProperty("destinationKind", 0);
+                if (destinationIdentity != null) evidence.addProperty("destinationIdentity", destinationIdentity);
+                evidence.addProperty("destinationExpression", destination.toString());
+                if (handlerIdentity != null) evidence.addProperty("handlerIdentity", handlerIdentity);
+                evidence.addProperty("resolutionStatus", resolutionStatus);
+                JsonArray resolutionEvidence = new JsonArray();
+                resolutionEvidence.add("Resolved annotation binding: org.springframework.jms.annotation.JmsListener");
+                resolutionEvidence.add(destinationIdentity != null
+                    ? "Destination expression resolved to a compile-time string constant."
+                    : "Destination expression is retained without runtime evaluation.");
+                resolutionEvidence.add("JMS destination kind remains unknown because listener configuration does not prove queue or topic semantics.");
+                if (handlerIdentity == null) resolutionEvidence.add("Listener handler method binding is unavailable or recovered.");
+                evidence.add("resolutionEvidence", resolutionEvidence);
+                evidence.addProperty("declarationEvidence", listener.toString() + " " + method.getName());
+                messageIntegrations.add(evidence);
+            }
+        }
+
+        private void discoverSpringJmsSend(MethodInvocation invocation, Path file) {
+            IMethodBinding binding = invocation.resolveMethodBinding();
+            if (binding == null || binding.isRecovered() || !"convertAndSend".equals(binding.getName())) return;
+            ITypeBinding declaringType = binding.getMethodDeclaration().getDeclaringClass();
+            if (declaringType == null || declaringType.isRecovered()
+                || !"org.springframework.jms.core.JmsTemplate".equals(
+                    declaringType.getTypeDeclaration().getQualifiedName())) return;
+
+            ITypeBinding[] parameterTypes = binding.getParameterTypes();
+            if ((parameterTypes.length != 2 && parameterTypes.length != 3)
+                || !"java.lang.String".equals(parameterTypes[0].getErasure().getQualifiedName())
+                || invocation.arguments().size() != parameterTypes.length) return;
+
+            Expression destination = argument(invocation, 0);
+            Expression payload = argument(invocation, 1);
+            if (destination == null || payload == null) return;
+
+            Object constant = destination.resolveConstantExpressionValue();
+            String destinationIdentity = constant instanceof String value
+                && !value.contains("${") && !value.contains("#{") ? value : null;
+            ITypeBinding payloadBinding = payload.resolveTypeBinding();
+            String messageType = payloadBinding == null || payloadBinding.isRecovered()
+                ? null : payloadBinding.getTypeDeclaration().getQualifiedName();
+            ASTNode callerNode = enclosingSymbolNode(invocation);
+            String callerIdentity = callerNode instanceof MethodDeclaration caller
+                && caller.resolveBinding() != null
+                ? methodIdentity(caller.resolveBinding().getMethodDeclaration())
+                : null;
+            int resolutionStatus = destinationIdentity != null && messageType != null ? 0 : 2;
+
+            JsonObject evidence = new JsonObject();
+            evidence.addProperty("evidenceId", file + "#jms-send@" + invocation.getStartPosition());
+            evidence.addProperty("language", "Java");
+            evidence.addProperty("framework", "Spring JMS");
+            evidence.addProperty("providerId", "eclipse-jdt-spring-jms");
+            evidence.addProperty("modulePath", projectRoot.toString());
+            evidence.addProperty("sourceFile", file.toString());
+            evidence.addProperty("startLine", line(invocation));
+            evidence.addProperty("startColumn", column(invocation));
+            evidence.addProperty("operation", 2);
+            if (messageType != null) evidence.addProperty("messageTypeIdentity", messageType);
+            evidence.addProperty("messageTypeExpression", payload.toString());
+            evidence.addProperty("destinationKind", 0);
+            if (destinationIdentity != null) evidence.addProperty("destinationIdentity", destinationIdentity);
+            evidence.addProperty("destinationExpression", destination.toString());
+            if (callerIdentity != null) evidence.addProperty("handlerIdentity", callerIdentity);
+            evidence.addProperty("resolutionStatus", resolutionStatus);
+            JsonArray resolutionEvidence = new JsonArray();
+            resolutionEvidence.add("Resolved invocation binding: org.springframework.jms.core.JmsTemplate#convertAndSend");
+            resolutionEvidence.add(destinationIdentity != null
+                ? "Destination expression resolved to a compile-time string constant."
+                : "Destination expression is retained without runtime evaluation.");
+            resolutionEvidence.add("JMS destination kind remains unknown because JmsTemplate configuration does not prove queue or topic semantics.");
+            if (messageType == null) resolutionEvidence.add("Payload expression type binding is unavailable or recovered.");
+            evidence.add("resolutionEvidence", resolutionEvidence);
+            evidence.addProperty("declarationEvidence", invocation.toString());
+            messageIntegrations.add(evidence);
+        }
 
         private void discoverSpringKafkaListener(MethodDeclaration method, Path file) {
             List<Annotation> listeners = new ArrayList<>();

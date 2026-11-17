@@ -325,6 +325,10 @@ public sealed class ProjectArchitectureContext
     [System.Text.Json.Serialization.JsonIgnore]
     public IntegrationEvidenceRegistry<DataAccessEvidence>? DataAccessEvidenceRegistry { get; set; }
 
+    /// <summary>Cross-domain occurrence index over native integration evidence; source registries remain authoritative.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IntegrationEvidenceCatalog? IntegrationEvidenceCatalog { get; set; }
+
 
     /// <summary>
     /// Production-to-production relationships used to describe the deployed

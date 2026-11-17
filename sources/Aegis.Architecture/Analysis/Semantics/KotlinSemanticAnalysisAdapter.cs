@@ -12,7 +12,7 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
     private const string DefaultApiVersion = "2.4";
     private const string DefaultJvmTarget = "1.8";
     private static readonly IReadOnlyCollection<string> Capabilities =
-        Array.AsReadOnly(new[] { "symbols", "relationships", "server-api-endpoints", "api-client-requests", "compiler-diagnostics", "jvm-interop", "multiplatform" });
+        Array.AsReadOnly(new[] { "symbols", "relationships", "server-api-endpoints", "api-client-requests", "message-integrations", "compiler-diagnostics", "jvm-interop", "multiplatform" });
 
     private readonly IKotlinWorkerClient _workerClient;
     private readonly ILogger<KotlinSemanticAnalysisAdapter> _logger;
@@ -252,6 +252,7 @@ public sealed class KotlinSemanticAnalysisAdapter : ISemanticAnalysisExecutionAd
             Relationships = run.Relationships,
             ServerApiEndpoints = run.ServerApiEndpoints,
             ApiClientRequests = run.ApiClientRequests,
+            MessageIntegrations = run.MessageIntegrations,
             Diagnostics = diagnostics
         };
     }

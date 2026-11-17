@@ -35,7 +35,7 @@ public sealed class ProjectArchitectureRpcIntegrationTests
 
             namespace Grpc.Core
             {
-                public abstract class ClientBase<T> { }
+                public abstract class ClientBase<T>\n                {\n                    public Task<TResult> WithCallCredentials<TResult>() => Task.FromResult(default(TResult)!);\n                }
             }
 
             namespace Commerce
@@ -59,6 +59,9 @@ public sealed class ProjectArchitectureRpcIntegrationTests
 
                     public Task<GetOrderResponse> ExecuteAsync(GetOrderRequest request) =>
                         _client.GetOrderAsync(request);
+
+                    public Task<GetOrderResponse> ConfigureAsync() =>
+                        _client.WithCallCredentials<GetOrderResponse>();
                 }
             }
 

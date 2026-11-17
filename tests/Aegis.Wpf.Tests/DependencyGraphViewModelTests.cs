@@ -9,7 +9,7 @@ namespace Aegis.Wpf.Tests;
 public sealed class DependencyGraphViewModelTests
 {
     [Fact]
-    public void Update_PrefersLogicalProjection_AndKeepsProjectionIdentitiesSeparate()
+    public void Update_PrefersCodeContainerProjection_AndKeepsProjectionIdentitiesSeparate()
     {
         var context = new ProjectArchitectureContext
         {
@@ -70,7 +70,14 @@ public sealed class DependencyGraphViewModelTests
         var viewModel = new DependencyGraphViewModel();
         viewModel.Update(context);
 
-        Assert.Equal("Architectural components", viewModel.GraphProjection);
+        Assert.Equal("Code containers", viewModel.GraphProjection);
+        Assert.Equal(
+            new[] { "container-api", "container-domain" },
+            viewModel.GraphNodes.Select(node => node.Id).OrderBy(id => id, StringComparer.Ordinal));
+        Assert.Empty(viewModel.GraphEdges);
+
+        viewModel.GraphProjection = "Architectural components";
+
         Assert.Equal(
             new[] { "logical-core", "logical-interface" },
             viewModel.GraphNodes.Select(node => node.Id).OrderBy(id => id, StringComparer.Ordinal));

@@ -35,8 +35,10 @@ public sealed class JavaSemanticAnalysisEndToEndTests
         var sourceRoot = Path.Combine(workspace, "src", "main", "java");
         var domainRoot = Path.Combine(sourceRoot, "sample", "domain");
         var applicationRoot = Path.Combine(sourceRoot, "sample", "application");
+        var isolatedPackageRoot = Path.Combine(applicationRoot, "internal");
         Directory.CreateDirectory(domainRoot);
         Directory.CreateDirectory(applicationRoot);
+        Directory.CreateDirectory(isolatedPackageRoot);
 
         await File.WriteAllTextAsync(
             Path.Combine(domainRoot, "Order.java"),
@@ -55,6 +57,10 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                 Order findById(String id);
             }
             """);
+        await File.WriteAllTextAsync(
+            Path.Combine(isolatedPackageRoot, "package-info.java"),
+            "package sample.application.internal;");
+
         await File.WriteAllTextAsync(
             Path.Combine(applicationRoot, "OrderService.java"),
             """
@@ -130,12 +136,16 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                 Assert.Equal("eclipse-jdt", run.EngineId);
                 Assert.Equal("3.47.0", run.EngineVersion);
                 Assert.Equal(SemanticAnalysisStatus.Completed, run.Status);
-                Assert.Equal(3, run.AnalyzedFileCount);
+                Assert.Equal(4, run.AnalyzedFileCount);
                 Assert.NotEmpty(run.Symbols);
                 Assert.NotEmpty(run.Relationships);
                 Assert.DoesNotContain(run.Diagnostics, diagnostic => diagnostic.AffectsCoverage);
 
-                Assert.Equal(2, context.ArchitectureComponents.Count);
+                Assert.Equal(3, context.ArchitectureComponents.Count);
+                Assert.Contains(context.ArchitectureComponents, component =>
+                    component.QualifiedName == "sample.application.internal"
+                    && component.ComponentKind == "Package"
+                    && component.ProductionSymbolCount == 1);
                 var packageDependency = Assert.Single(context.ProductionComponentDependencies);
                 Assert.Equal("sample.application", context.ArchitectureComponents
                     .Single(component => component.Id == packageDependency.SourceComponentId).QualifiedName);

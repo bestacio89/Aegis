@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
     public static final String ENGINE_ID = "eclipse-jdt";
     public static final String ENGINE_VERSION = "3.47.0";
+    private static final int PROTOCOL_SYMBOL_PACKAGE = 1;
     private static final int PROTOCOL_SYMBOL_CLASS = 4;
     private static final int PROTOCOL_SYMBOL_INTERFACE = 5;
     private static final int PROTOCOL_SYMBOL_RECORD = 6;
@@ -248,6 +249,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                 return;
             }
             analyzedFiles++;
+            addPackage(file, unit, test, generated);
             unit.accept(new ASTVisitor() {
                 @Override
                 public void preVisit(ASTNode node) {
@@ -957,6 +959,27 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         }
 
         private record RouteValue(String value, boolean dynamic) {}
+
+        private void addPackage(Path file, CompilationUnit unit, boolean test, boolean generated) {
+            PackageDeclaration declaration = unit.getPackage();
+            ASTNode declarationNode = declaration == null ? unit : declaration;
+            String packageName = declaration == null
+                ? "<default>"
+                : declaration.getName().getFullyQualifiedName();
+            String relativePath = projectRoot.relativize(file).toString().replace('\\', '/');
+            String id = "java-package:" + relativePath;
+            addSymbol(
+                id,
+                packageName,
+                packageName,
+                PROTOCOL_SYMBOL_PACKAGE,
+                false,
+                true,
+                file,
+                declarationNode,
+                test,
+                generated);
+        }
 
         private String addType(ITypeBinding binding, ASTNode node, Path file, boolean test, boolean generated, int kind) {
             String id = binding == null ? fallbackId(file, node, "type") : bindingId(binding);

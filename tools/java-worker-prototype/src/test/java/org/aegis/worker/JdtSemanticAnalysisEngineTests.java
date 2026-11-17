@@ -724,6 +724,48 @@ final class JdtSemanticAnalysisEngineTests {
                 && item.get("providerId").getAsString().equals("eclipse-jdt-spring-jms")));
     }
 
+    @Test
+    void emits_package_declaration_symbols_for_package_info_and_default_package() throws Exception {
+        Path project = Files.createDirectories(workspace.resolve("package-project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("src/main/java"));
+        Path nestedPackage = Files.createDirectories(sourceRoot.resolve("com/acme/internal"));
+        Path packageInfo = nestedPackage.resolve("package-info.java");
+        Path defaultPackageSource = sourceRoot.resolve("DefaultType.java");
+        Files.writeString(packageInfo, "package com.acme.internal;");
+        Files.writeString(defaultPackageSource, "final class DefaultType {}");
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("projectPath", project.toString());
+        payload.add("sourceRoots", paths(sourceRoot));
+        payload.add("sourceFiles", paths(packageInfo, defaultPackageSource));
+        payload.add("classpathEntries", new JsonArray());
+
+        JsonObject result = new JdtSemanticAnalysisEngine().analyze(payload);
+        List<JsonObject> packageSymbols = result.getAsJsonArray("symbols").asList().stream()
+            .map(item -> item.getAsJsonObject())
+            .filter(item -> item.get("kind").getAsInt() == 1)
+            .toList();
+
+        assertEquals(2, packageSymbols.size());
+        JsonObject declaredPackage = packageSymbols.stream()
+            .filter(item -> item.get("qualifiedName").getAsString().equals("com.acme.internal"))
+            .findFirst()
+            .orElseThrow();
+        assertEquals("com.acme.internal", declaredPackage.get("name").getAsString());
+        assertEquals("Package", declaredPackage.get("containerKind").getAsString());
+        assertEquals("com.acme.internal", declaredPackage.get("containerName").getAsString());
+        assertEquals(packageInfo.toString(), declaredPackage.get("filePath").getAsString());
+
+        JsonObject defaultPackage = packageSymbols.stream()
+            .filter(item -> item.get("qualifiedName").getAsString().equals("<default>"))
+            .findFirst()
+            .orElseThrow();
+        assertEquals("<default>", defaultPackage.get("name").getAsString());
+        assertEquals(defaultPackage.get("filePath").getAsString(), defaultPackage.get("provenance")
+            .getAsJsonArray().get(0).getAsJsonObject().get("filePath").getAsString());
+        assertEquals(0, result.getAsJsonArray("relationships").size());
+    }
+
     private static void deleteRecursively(Path directory) throws IOException {
         try (var paths = Files.walk(directory)) {
             paths.sorted(Comparator.reverseOrder()).forEach(path -> {

@@ -196,10 +196,10 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             // A single-module repository can still have meaningful code-container
             // and logical architecture graphs. Prefer the most informative
             // available semantic projection without conflating its identity model.
-            var preferredProjection = architecturalComponents.Length > 0
-                ? "Architectural components"
-                : codeContainers.Count > 0
-                    ? "Code containers"
+            var preferredProjection = codeContainers.Count > 0
+                ? "Code containers"
+                : architecturalComponents.Length > 0
+                    ? "Architectural components"
                     : "Build modules";
 
             if (!GraphProjectionOptions.Contains(GraphProjection, StringComparer.OrdinalIgnoreCase)

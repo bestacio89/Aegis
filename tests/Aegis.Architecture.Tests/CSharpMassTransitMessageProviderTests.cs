@@ -207,6 +207,61 @@ public sealed class CSharpMassTransitMessageProviderTests
         Assert.Empty(evidence);
     }
 
+
+    [Fact]
+    public void Associates_consumers_with_receive_endpoints_declared_in_other_source_files()
+    {
+        using var fixture = new CSharpMessagingFixture(
+            """
+            using System;
+            using MassTransit;
+
+            namespace Orders.Contracts
+            {
+                public sealed record OrderSubmitted;
+            }
+
+            namespace Orders.Application
+            {
+                public sealed class MessagingRegistration
+                {
+                    private readonly EndpointConfiguration _endpoints = new();
+
+                    public void Configure() =>
+                        _endpoints.ReceiveEndpoint(
+                            "orders",
+                            endpoint => endpoint.ConfigureConsumer<OrderConsumer>(this));
+                }
+            }
+            """);
+
+        var consumerFile = fixture.AddSource(
+            "OrderConsumer.cs",
+            """
+            using System.Threading.Tasks;
+            using MassTransit;
+            using Orders.Contracts;
+
+            namespace Orders.Application
+            {
+                public sealed class OrderConsumer : IConsumer<OrderSubmitted>
+                {
+                    public Task Consume(ConsumeContext<OrderSubmitted> context) =>
+                        Task.CompletedTask;
+                }
+            }
+            """);
+
+        var evidence = new CSharpMassTransitMessageProvider().Discover(
+            [fixture.SourcePath, consumerFile],
+            fixture.ModulePath);
+
+        var consume = Assert.Single(evidence, item =>
+            item.Operation == MessageIntegrationOperation.Consume);
+        Assert.Equal("orders", consume.DestinationIdentity);
+        Assert.Contains("ReceiveEndpoint", consume.DeclarationEvidence, StringComparison.Ordinal);
+    }
+
     private sealed class CSharpMessagingFixture : IDisposable
     {
         private const string MassTransitStubs = """
@@ -255,6 +310,13 @@ public sealed class CSharpMassTransitMessageProviderTests
 
         public string ModulePath { get; }
         public string SourcePath { get; }
+
+        public string AddSource(string fileName, string source)
+        {
+            var path = Path.Combine(_directory, fileName);
+            File.WriteAllText(path, source);
+            return path;
+        }
 
         public void Dispose()
         {

@@ -98,7 +98,6 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
     private static bool TryDiscoverRead(
         InvocationExpressionSyntax invocation,
         IMethodSymbol method,
-        SemanticModel semanticModel,
         string module,
         out DataAccessEvidence evidence)
     {
@@ -119,7 +118,6 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
         evidence = CreateEvidence(
             invocation,
             method,
-            semanticModel,
             module,
             DataIntegrationOperation.Read,
             GetStoreIdentity(receiverType, memberAccess.Expression, semanticModel),
@@ -291,19 +289,6 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
 
         return dbSetProperty?.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             ?? receiver.ToString();
-    }
-
-    private static string GetCallerIdentity(InvocationExpressionSyntax invocation)
-    {
-        var method = invocation.Ancestors().OfType<MethodDeclarationSyntax>().FirstOrDefault();
-        if (method is not null)
-        {
-            var type = method.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
-            return type is null ? method.Identifier.ValueText : $"{type.Identifier.ValueText}.{method.Identifier.ValueText}";
-        }
-
-        return invocation.Ancestors().OfType<LocalFunctionStatementSyntax>()
-            .FirstOrDefault()?.Identifier.ValueText ?? "<top-level>";
     }
 
     private static IReadOnlyList<MetadataReference> CreateMetadataReferences(string modulePath)

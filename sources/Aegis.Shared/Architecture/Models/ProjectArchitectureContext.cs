@@ -329,6 +329,10 @@ public sealed class ProjectArchitectureContext
     [System.Text.Json.Serialization.JsonIgnore]
     public IntegrationEvidenceCatalog? IntegrationEvidenceCatalog { get; set; }
 
+    /// <summary>Derived unified graph over existing architecture and integration evidence.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ArchitectureGraphProjection? ArchitectureGraphProjection { get; set; }
+
 
     /// <summary>
     /// Production-to-production relationships used to describe the deployed

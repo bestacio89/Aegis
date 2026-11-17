@@ -1,5 +1,6 @@
 using Aegis.Architecture.Analysis.Classification;
 using Aegis.Architecture.Analysis.Detectors;
+using Aegis.Architecture.Analysis.Projection;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Microsoft.Extensions.Logging;
@@ -196,5 +197,6 @@ public sealed class SemanticAnalysisPipeline
         ArchitecturalComponentClassifier.Classify(context, configuration);
         ArchitecturalComponentDependencyProjector.Project(context);
         ArchitectureDependencyCycleAnalyzer.Analyze(context);
+        context.ArchitectureGraphProjection = UnifiedArchitectureGraphProjector.Project(context);
     }
 }

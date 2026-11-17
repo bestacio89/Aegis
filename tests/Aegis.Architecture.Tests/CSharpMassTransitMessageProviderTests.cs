@@ -168,7 +168,6 @@ public sealed class CSharpMassTransitMessageProviderTests
         using var fixture = new CSharpMessagingFixture(
             """
             using System;
-            using FakeMessaging;
             using MassTransit;
 
             namespace FakeMessaging
@@ -179,7 +178,7 @@ public sealed class CSharpMassTransitMessageProviderTests
             namespace Orders.Application
             {
                 public sealed record OrderSubmitted;
-                public sealed class OrderConsumer : IConsumer<OrderSubmitted> { }
+                public sealed class OrderConsumer : FakeMessaging.IConsumer<OrderSubmitted> { }
 
                 public sealed class EndpointConfiguration
                 {

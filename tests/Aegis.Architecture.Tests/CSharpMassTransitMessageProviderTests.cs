@@ -200,7 +200,11 @@ public sealed class CSharpMassTransitMessageProviderTests
             Directory.CreateDirectory(_directory);
             ModulePath = _directory;
             SourcePath = Path.Combine(_directory, "OrderMessaging.cs");
-            File.WriteAllText(SourcePath, MassTransitStubs + Environment.NewLine + source);
+            var namespaceStart = source.IndexOf("namespace ", StringComparison.Ordinal);
+            var sourceWithStubs = namespaceStart < 0
+                ? source
+                : source.Insert(namespaceStart, MassTransitStubs + Environment.NewLine);
+            File.WriteAllText(SourcePath, sourceWithStubs);
         }
 
         public string ModulePath { get; }

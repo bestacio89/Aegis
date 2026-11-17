@@ -78,6 +78,10 @@ public sealed class ProjectArchitectureDataAccessIntegrationTests
         var registry = Assert.IsType<IntegrationEvidenceRegistry<DataAccessEvidence>>(
             context.DataAccessEvidenceRegistry);
         Assert.Equal(2, registry.Count);
+        var catalog = Assert.IsType<IntegrationEvidenceCatalog>(context.IntegrationEvidenceCatalog);
+        Assert.Equal(2, catalog.Count);
+        Assert.All(catalog.Evidence, occurrence =>
+            Assert.Equal(IntegrationEvidenceDomain.DataAccess, occurrence.Domain));
 
         var read = Assert.Single(registry.Evidence, item =>
             item.Operation == DataIntegrationOperation.Read);

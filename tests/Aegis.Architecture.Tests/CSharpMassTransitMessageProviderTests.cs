@@ -42,14 +42,6 @@ public sealed class CSharpMassTransitMessageProviderTests
                         Task.CompletedTask;
                 }
 
-                public sealed class EndpointConfiguration
-                {
-                    public void ReceiveEndpoint(string name, Action<EndpointConfiguration> configure) =>
-                        configure(this);
-
-                    public void ConfigureConsumer<T>(object context) { }
-                }
-
                 public sealed class MessagingRegistration
                 {
                     private readonly EndpointConfiguration _endpoints = new();
@@ -113,14 +105,6 @@ public sealed class CSharpMassTransitMessageProviderTests
                     public void Consume() { }
                 }
 
-                public sealed class EndpointConfiguration
-                {
-                    public void ReceiveEndpoint(string name, Action<EndpointConfiguration> configure) =>
-                        configure(this);
-
-                    public void ConfigureConsumer<T>(object context) { }
-                }
-
                 public sealed class MessagingRegistration
                 {
                     private readonly EndpointConfiguration _endpoints = new();
@@ -179,6 +163,33 @@ public sealed class CSharpMassTransitMessageProviderTests
 
     private sealed class CSharpMessagingFixture : IDisposable
     {
+        private const string MassTransitStubs = """
+            namespace MassTransit
+            {
+                using System;
+                using System.Threading.Tasks;
+
+                public interface IConsumer<T> { }
+                public interface IPublishEndpoint { Task Publish<T>(T message); }
+                public interface IReceiveEndpointConfigurator { }
+                public interface IBusFactoryConfigurator { }
+                public interface ConsumeContext<T> { }
+
+                public sealed class EndpointConfiguration : IBusFactoryConfigurator { }
+
+                public static class RegistrationExtensions
+                {
+                    public static void ReceiveEndpoint(
+                        this IBusFactoryConfigurator configurator,
+                        string name,
+                        Action<IReceiveEndpointConfigurator> configure) { }
+
+                    public static void ConfigureConsumer<T>(
+                        this IReceiveEndpointConfigurator configurator,
+                        object context) { }
+                }
+            }
+            """;
         private readonly string _directory = Path.Combine(
             Path.GetTempPath(),
             "aegis-csharp-messaging",
@@ -189,7 +200,7 @@ public sealed class CSharpMassTransitMessageProviderTests
             Directory.CreateDirectory(_directory);
             ModulePath = _directory;
             SourcePath = Path.Combine(_directory, "OrderMessaging.cs");
-            File.WriteAllText(SourcePath, source);
+            File.WriteAllText(SourcePath, MassTransitStubs + Environment.NewLine + source);
         }
 
         public string ModulePath { get; }

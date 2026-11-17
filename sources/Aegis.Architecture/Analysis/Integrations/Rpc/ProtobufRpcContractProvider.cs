@@ -149,7 +149,7 @@ public sealed class ProtobufRpcContractProvider
     {
         var index = start;
         if (index >= limit || tokens[index].Value != "(")
-            return RpcSignature.Incomplete(start);
+            return RpcSignature.Incomplete(start, tokens, limit);
 
         var requestStart = index;
         var requestEnd = FindMatchingParenthesis(tokens, index, limit);
@@ -264,7 +264,22 @@ public sealed class ProtobufRpcContractProvider
         int EndOffset,
         int LastTokenIndex)
     {
-        public static RpcSignature Incomplete(int tokenIndex) =>
-            new(false, string.Empty, 0, tokenIndex);
+        public static RpcSignature Incomplete(
+            int tokenIndex,
+            IReadOnlyList<Token> tokens,
+            int limit)
+        {
+            var endIndex = tokenIndex;
+            while (endIndex < limit
+                && tokens[endIndex].Value is not (";" or "}"))
+                endIndex++;
+            if (endIndex < limit && tokens[endIndex].Value == ";")
+                endIndex++;
+
+            var endOffset = endIndex > tokenIndex
+                ? tokens[endIndex - 1].Offset + tokens[endIndex - 1].Value.Length
+                : 0;
+            return new RpcSignature(false, string.Empty, endOffset, endIndex);
+        }
     }
 }

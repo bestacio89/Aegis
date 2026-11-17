@@ -201,7 +201,7 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
         out DataAccessEvidence evidence)
     {
         evidence = null!;
-        if (method.Name != "ToTable"
+        if (method.Name is not ("ToTable" or "ToView")
             || method.ContainingNamespace.ToDisplayString() != "Microsoft.EntityFrameworkCore"
             || invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
             return false;
@@ -226,8 +226,8 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             invocation, method, module, DataIntegrationOperation.Mapping, storeIdentity,
             entityIdentity, tableArgument.ToString(),
             resolved
-                ? "Roslyn resolved an Entity Framework Core relational ToTable mapping and its literal table identity."
-                : "Roslyn resolved an Entity Framework Core relational ToTable mapping; the table identity is dynamic or unavailable.",
+                ? "Roslyn resolved an Entity Framework Core relational entity mapping and its literal store-object identity."
+                : "Roslyn resolved an Entity Framework Core relational entity mapping; the store-object identity is dynamic or unavailable.",
             resolved ? IntegrationEvidenceResolutionStatus.Resolved : IntegrationEvidenceResolutionStatus.Dynamic,
             sourceDataIdentity: entityIdentity,
             targetDataIdentity: resolved ? (string)tableIdentity.Value! : null);

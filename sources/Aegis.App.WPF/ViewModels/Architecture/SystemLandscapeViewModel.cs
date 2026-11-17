@@ -169,11 +169,7 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
                 ProjectionDiagnostics.Add($"Graph edge '{edge.Id}' has a missing or ambiguous endpoint and is omitted from the interaction list.");
                 continue;
             }
-            Relationships.Add(new SystemLandscapeRelationshipViewModel(edge.Id, edge.Domain.ToString(),
-                source.Name, target.Name, edge.Scope,
-                string.IsNullOrWhiteSpace(edge.ProviderRelationshipKind)
-                    ? string.Join(", ", edge.RelationshipKinds) : edge.ProviderRelationshipKind,
-                edge.Evidence.Count, string.Equals(edge.SourceNodeId, edge.TargetNodeId, StringComparison.Ordinal)));
+            Relationships.Add(new SystemLandscapeRelationshipViewModel(edge, source.Name, target.Name));
         }
 
         foreach (var item in projection.UnprojectedEvidence.OrderBy(item => item.Evidence.Domain)

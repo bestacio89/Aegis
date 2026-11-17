@@ -81,10 +81,10 @@ public sealed class IntegrationEvidenceCatalogTests
         Assert.Same(javaRpc, catalog.Evidence[2].Evidence);
         Assert.Same(csharpData, catalog.Evidence[3].Evidence);
 
-        Assert.Equal(new[] { javaPublish, javaRpc }, catalog.ForLanguage("JAVA").Select(item => item.Evidence));
-        Assert.Equal(new[] { javaPublish, javaRpc, csharpData }, catalog.ForModule("/REPO/ORDERS").Select(item => item.Evidence));
-        Assert.Equal(new[] { javaPublish, kotlinConsume }, catalog.ForProvider("kotlin-k2-ir").Concat(catalog.ForProvider("java-jdt")).Where(item => item.Domain == IntegrationEvidenceDomain.Messaging).Select(item => item.Evidence).OrderBy(item => item.Language, StringComparer.Ordinal));
-        Assert.Equal(new[] { javaPublish, csharpData }, catalog.ForStatus(IntegrationEvidenceResolutionStatus.Resolved).Select(item => item.Evidence));
+        Assert.Equal(new IIntegrationEvidence[] { javaPublish, javaRpc }, catalog.ForLanguage("JAVA").Select(item => item.Evidence));
+        Assert.Equal(new IIntegrationEvidence[] { javaPublish, javaRpc, csharpData }, catalog.ForModule("/REPO/ORDERS").Select(item => item.Evidence));
+        Assert.Equal(new IIntegrationEvidence[] { javaPublish, kotlinConsume }, catalog.ForProvider("kotlin-k2-ir").Concat(catalog.ForProvider("java-jdt")).Where(item => item.Domain == IntegrationEvidenceDomain.Messaging).Select(item => item.Evidence).OrderBy(item => item.Language, StringComparer.Ordinal));
+        Assert.Equal(new IIntegrationEvidence[] { javaPublish, csharpData }, catalog.ForStatus(IntegrationEvidenceResolutionStatus.Resolved).Select(item => item.Evidence));
         Assert.Single(catalog.ForRelationship(ArchitectureRelationshipKind.DataRead));
     }
 

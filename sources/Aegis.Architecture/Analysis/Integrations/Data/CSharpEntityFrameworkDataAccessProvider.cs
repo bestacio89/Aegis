@@ -26,7 +26,7 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
         "ToList", "ToArray", "First", "FirstOrDefault", "Single", "SingleOrDefault",
         "Last", "LastOrDefault", "Any", "All", "Count", "LongCount", "Min", "Max",
         "Sum", "Average", "ToDictionary", "ToHashSet", "Find", "FindAsync",
-        "ToListAsync", "ToArrayAsync", "FirstAsync", "FirstOrDefaultAsync", "ExecuteUpdate", "ExecuteUpdateAsync", "ExecuteDelete", "ExecuteDeleteAsync",
+        "ToListAsync", "ToArrayAsync", "FirstAsync", "FirstOrDefaultAsync",
         "SingleAsync", "SingleOrDefaultAsync", "LastAsync", "LastOrDefaultAsync",
         "AnyAsync", "CountAsync", "LongCountAsync", "ToDictionaryAsync"
     };
@@ -167,7 +167,7 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             semanticModel,
             module,
             DataIntegrationOperation.Write,
-            GetStoreIdentity(receiverType, memberAccess.Expression),
+            GetStoreIdentity(receiverType, memberAccess.Expression, semanticModel),
             entityType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             isBulkQueryMutation
                 ? memberAccess.Expression.ToString()
@@ -191,7 +191,6 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
     {
         var location = invocation.GetLocation().GetLineSpan();
         var sourceFile = invocation.SyntaxTree.FilePath;
-        var caller = GetCallerIdentity(invocation);
         var identityInput = $"{sourceFile}|{invocation.SpanStart}|{invocation.Span.Length}|{method.ToDisplayString()}";
         var evidenceId = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identityInput)));
 

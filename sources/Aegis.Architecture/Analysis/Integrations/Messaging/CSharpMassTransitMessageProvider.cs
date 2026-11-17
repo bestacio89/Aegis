@@ -279,14 +279,18 @@ public sealed class CSharpMassTransitMessageProvider
     }
 
     private static IReadOnlyDictionary<string, IReadOnlyList<ResolvedMessageDestination>> DiscoverReceiveEndpoints(
-        CompilationUnitSyntax root,
-        SemanticModel semanticModel)
+        IEnumerable<CompilationUnitSyntax> roots,
+        Compilation compilation)
     {
-
         var destinations = new Dictionary<string, List<ResolvedMessageDestination>>(StringComparer.Ordinal);
 
-        foreach (var receiveEndpoint in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        foreach (var receiveEndpoint in roots.SelectMany(root =>
+                     root.DescendantNodes().OfType<InvocationExpressionSyntax>()))
         {
+            var semanticModel = compilation.GetSemanticModel(
+                receiveEndpoint.SyntaxTree,
+                ignoreAccessibility: true);
+
             if (receiveEndpoint.Expression is not MemberAccessExpressionSyntax memberAccess
                 || memberAccess.Name.Identifier.ValueText != "ReceiveEndpoint"
                 || !IsMassTransitMethod(receiveEndpoint, semanticModel)

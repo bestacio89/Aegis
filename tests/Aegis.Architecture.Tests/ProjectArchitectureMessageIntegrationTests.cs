@@ -51,7 +51,6 @@ public sealed class ProjectArchitectureMessageIntegrationTests
                         object context) { }
                 }
             }
-            using Orders.Contracts;
             namespace Orders.Contracts { public sealed record OrderSubmitted(Guid Id); }
             namespace Orders.Application
             {

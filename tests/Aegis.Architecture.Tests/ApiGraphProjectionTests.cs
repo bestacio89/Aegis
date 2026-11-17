@@ -211,6 +211,27 @@ public sealed class ApiGraphProjectionTests
             && item.Reason == ArchitectureGraphUnprojectedReason.UnresolvedEvidence);
     }
 
+
+    [Fact]
+    public void Project_retains_request_occurrences_missing_from_match_snapshot()
+    {
+        var context = CreateContext(
+            [
+                CreateRequest("/repo/client", "unmatched-request-0"),
+                CreateRequest("/repo/client", "unmatched-request-1")
+            ],
+            [CreateEndpoint("/repo/server", "endpoint")],
+            [],
+            [CreateModule("client", "/repo/client"), CreateModule("server", "/repo/server")]);
+
+        var projection = UnifiedArchitectureGraphProjector.Project(context);
+
+        projection.Edges.Should().BeEmpty();
+        projection.UnprojectedEvidence.Should().HaveCount(2);
+        projection.UnprojectedEvidence.Should().OnlyContain(item =>
+            item.Reason == ArchitectureGraphUnprojectedReason.UnresolvedEvidence);
+    }
+
     private static ProjectArchitectureContext CreateContext(
         IReadOnlyList<ApiClientRequestEvidence> requests,
         IReadOnlyList<ApiEndpointEvidence> endpoints,

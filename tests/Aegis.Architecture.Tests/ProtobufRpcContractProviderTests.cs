@@ -42,10 +42,10 @@ public sealed class ProtobufRpcContractProviderTests
 
         var unary = Assert.Single(evidence, item => item.MethodIdentity?.EndsWith(".GetOrder", StringComparison.Ordinal) == true);
         Assert.Equal("commerce.orders.v1.Orders.GetOrder", unary.TargetIdentity);
-        Assert.Equal("GetOrderRequest->GetOrderResponse", unary.TargetExpression);
+        Assert.Equal("GetOrderRequest -> GetOrderResponse", unary.TargetExpression);
 
         var streaming = Assert.Single(evidence, item => item.MethodIdentity?.EndsWith(".WatchOrders", StringComparison.Ordinal) == true);
-        Assert.Equal("WatchOrdersRequest->WatchOrdersResponse", streaming.TargetExpression);
+        Assert.Equal("WatchOrdersRequest -> WatchOrdersResponse", streaming.TargetExpression);
         Assert.True(streaming.StartLine > 0);
         Assert.True(streaming.StartColumn > 0);
     }

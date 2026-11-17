@@ -116,7 +116,7 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             semanticModel,
             module,
             DataIntegrationOperation.Read,
-            GetStoreIdentity(receiverType, memberAccess.Expression),
+            GetStoreIdentity(receiverType, memberAccess.Expression, semanticModel),
             entityType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             memberAccess.Expression.ToString(),
             "Roslyn resolved an Entity Framework Core query execution method over a typed query or DbSet.",
@@ -258,21 +258,24 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
         return false;
     }
 
-    private static string? GetStoreIdentity(ITypeSymbol? receiverType, ExpressionSyntax receiver)
+    private static string? GetStoreIdentity(
+        ITypeSymbol? receiverType,
+        ExpressionSyntax receiver,
+        SemanticModel semanticModel)
     {
         if (receiverType is null)
             return null;
 
-        var contextType = receiverType as INamedTypeSymbol;
-        while (contextType is not null && !IsDbContext(contextType))
-            contextType = contextType.BaseType;
-
-        if (contextType is not null)
+        if (IsDbContext(receiverType))
             return receiverType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-        var property = receiverType.GetMembers().OfType<IPropertySymbol>()
-            .FirstOrDefault(candidate => GetDbSetEntityType(candidate.Type) is not null);
-        return property?.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+        var dbSetProperty = receiver.DescendantNodesAndSelf()
+            .OfType<MemberAccessExpressionSyntax>()
+            .Select(member => semanticModel.GetSymbolInfo(member).Symbol as IPropertySymbol)
+            .FirstOrDefault(property => property is not null
+                && GetDbSetEntityType(property.Type) is not null);
+
+        return dbSetProperty?.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             ?? receiver.ToString();
     }
 

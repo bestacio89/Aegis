@@ -92,7 +92,7 @@ internal static partial class UnifiedArchitectureGraphProjector
                 AddUnprojectedApiRequest(
                     match.ClientRequestIndex,
                     request,
-                    ArchitectureGraphGraphUnprojectedReason.UnresolvedEvidence,
+                    ArchitectureGraphUnprojectedReason.UnresolvedEvidence,
                     "The sole candidate represents an unresolved endpoint rather than a supported path match.");
                 continue;
             }

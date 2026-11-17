@@ -154,22 +154,22 @@ public sealed class ProtobufRpcContractProvider
         var requestStart = index;
         var requestEnd = FindMatchingParenthesis(tokens, index, limit);
         if (requestEnd < 0)
-            return RpcSignature.Incomplete(start);
+            return RpcSignature.Incomplete(start, tokens, limit);
 
         index = requestEnd + 1;
         if (index >= limit || tokens[index].Value != "returns")
-            return RpcSignature.Incomplete(start);
+            return RpcSignature.Incomplete(start, tokens, limit);
         index++;
 
         if (index < limit && tokens[index].Value == "stream")
             index++;
 
         if (index >= limit || tokens[index].Value != "(")
-            return RpcSignature.Incomplete(start);
+            return RpcSignature.Incomplete(start, tokens, limit);
 
         var responseEnd = FindMatchingParenthesis(tokens, index, limit);
         if (responseEnd < 0)
-            return RpcSignature.Incomplete(start);
+            return RpcSignature.Incomplete(start, tokens, limit);
 
         var requestTypeStart = requestStart + 1;
         var responseTypeStart = index + 1;

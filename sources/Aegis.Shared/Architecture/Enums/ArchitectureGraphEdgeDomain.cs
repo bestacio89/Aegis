@@ -7,5 +7,6 @@ public enum ArchitectureGraphEdgeDomain
     NativeSemantic = 2,
     Messaging = 3,
     Rpc = 4,
-    DataAccess = 5
+    DataAccess = 5,
+    Api = 6
 }

@@ -77,7 +77,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
                 [new ArchitectureTab("Reports", "▤", _reports)])
         ];
 
-        Tabs = Array.AsReadOnly(Sections.SelectMany(section => section.Tabs).ToArray());
+        Tabs = new ObservableCollection<ArchitectureTab>(Sections.SelectMany(section => section.Tabs));
         SelectedSection = Sections[0];
     }
 
@@ -88,7 +88,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
     /// <summary>
     /// Flat compatibility view of all navigable tabs.
     /// </summary>
-    public IReadOnlyList<ArchitectureTab> Tabs { get; }
+    public ObservableCollection<ArchitectureTab> Tabs { get; }
 
     public ArchitectureWorkspaceSection? SelectedSection
     {

@@ -89,6 +89,8 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
                     evidence.Add(read);
                 else if (TryDiscoverWrite(invocation, method, semanticModel, module, out var write))
                     evidence.Add(write);
+                else if (TryDiscoverMapping(invocation, method, semanticModel, module, out var mapping))
+                    evidence.Add(mapping);
             }
         }
 
@@ -191,6 +193,49 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
         return true;
     }
 
+    private static bool TryDiscoverMapping(
+        InvocationExpressionSyntax invocation,
+        IMethodSymbol method,
+        SemanticModel semanticModel,
+        string module,
+        out DataAccessEvidence evidence)
+    {
+        evidence = null!;
+        if (method.Name != "ToTable"
+            || method.ContainingNamespace.ToDisplayString() != "Microsoft.EntityFrameworkCore"
+            || invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+            return false;
+
+        var builderType = semanticModel.GetTypeInfo(memberAccess.Expression).Type as INamedTypeSymbol;
+        if (builderType is null || !builderType.Name.Contains("EntityTypeBuilder", StringComparison.Ordinal))
+            return false;
+
+        var entityType = builderType.TypeArguments.FirstOrDefault();
+        var tableArgument = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
+        if (entityType is null || tableArgument is null)
+            return false;
+
+        var tableIdentity = semanticModel.GetConstantValue(tableArgument);
+        var resolved = tableIdentity.HasValue && tableIdentity.Value is string tableName
+            && !string.IsNullOrWhiteSpace(tableName);
+        var owner = semanticModel.GetEnclosingSymbol(invocation.SpanStart)?.ContainingType;
+        var storeIdentity = owner?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var entityIdentity = entityType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        evidence = CreateEvidence(
+            invocation, method, module, DataIntegrationOperation.Mapping, storeIdentity,
+            entityIdentity, tableArgument.ToString(),
+            resolved
+                ? "Roslyn resolved an Entity Framework Core relational ToTable mapping and its literal table identity."
+                : "Roslyn resolved an Entity Framework Core relational ToTable mapping; the table identity is dynamic or unavailable.",
+            resolved ? IntegrationEvidenceResolutionStatus.Resolved : IntegrationEvidenceResolutionStatus.Dynamic) with
+        {
+            SourceDataIdentity = entityIdentity,
+            TargetDataIdentity = resolved ? (string)tableIdentity.Value! : null,
+            DataObjectExpression = memberAccess.Expression.ToString()
+        };
+        return true;
+    }
     private static DataAccessEvidence CreateEvidence(
         InvocationExpressionSyntax invocation,
         IMethodSymbol method,

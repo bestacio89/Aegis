@@ -24,11 +24,13 @@ public sealed class ProjectArchitectureMessageIntegrationTests
         File.WriteAllText(
             sourceFile,
             """
+            using System;
+            using System.Threading.Tasks;
+            using MassTransit;
+            using Orders.Contracts;
+
             namespace MassTransit
             {
-                using System;
-                using System.Threading.Tasks;
-
                 public interface IConsumer<T> { }
                 public interface IPublishEndpoint { Task Publish<T>(T message); }
                 public interface IReceiveEndpointConfigurator { }
@@ -49,10 +51,6 @@ public sealed class ProjectArchitectureMessageIntegrationTests
                         object context) { }
                 }
             }
-
-            using System;
-            using System.Threading.Tasks;
-            using MassTransit;
             using Orders.Contracts;
             namespace Orders.Contracts { public sealed record OrderSubmitted(Guid Id); }
             namespace Orders.Application

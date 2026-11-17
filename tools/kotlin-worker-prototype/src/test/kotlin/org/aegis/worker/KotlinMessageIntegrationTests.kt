@@ -16,7 +16,7 @@ import java.nio.file.Path
 
 class KotlinMessageIntegrationTests {
     @Test
-    fun \`K2 discovers grounded Spring Kafka and JMS operations and preserves dynamic destinations\`() {
+    fun discoversSpringKafkaAndJmsOperationsAndPreservesDynamicDestinations() {
         val workspace = Files.createTempDirectory("aegis-kotlin-message-")
         val destination = workspace.resolve("classes")
         val evidence = workspace.resolve("semantic.json")

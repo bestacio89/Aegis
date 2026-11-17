@@ -402,8 +402,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             || Contains(dependency.Scope, query)
             || Contains(dependency.SourceProjectPath, query)
             || Contains(dependency.TargetProjectPath, query)
-            || Contains(dependency.EvidenceReferences, query)
-;
+            || Contains(dependency.EvidenceReferences, query);
     }
 
     private void RefreshFilter()

@@ -296,9 +296,13 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
         if (IsDbContext(receiverType))
             return receiverType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
+        // A DbSet property can be an implicit-this identifier inside a derived
+        // DbContext (for example, Orders.Where(...)), not a member-access node.
+        // Inspect all simple names in the receiver chain and retain only symbols
+        // whose declared type is an actual EF Core DbSet<T>.
         var dbSetProperty = receiver.DescendantNodesAndSelf()
-            .OfType<MemberAccessExpressionSyntax>()
-            .Select(member => semanticModel.GetSymbolInfo(member).Symbol as IPropertySymbol)
+            .OfType<SimpleNameSyntax>()
+            .Select(name => semanticModel.GetSymbolInfo(name).Symbol as IPropertySymbol)
             .FirstOrDefault(property => property is not null
                 && GetDbSetEntityType(property.Type) is not null);
 

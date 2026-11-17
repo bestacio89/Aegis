@@ -200,6 +200,9 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
         string module,
         out DataAccessEvidence evidence)
     {
+        if (TryDiscoverPropertyColumnMapping(invocation, method, semanticModel, module, out evidence))
+            return true;
+
         evidence = null!;
         if (method.Name is not ("ToTable" or "ToView")
             || method.ContainingNamespace.ToDisplayString() != "Microsoft.EntityFrameworkCore"
@@ -245,6 +248,73 @@ public sealed class CSharpEntityFrameworkDataAccessProvider
             targetDataIdentity: targetIdentity);
         return true;
     }
+    private static bool TryDiscoverPropertyColumnMapping(
+        InvocationExpressionSyntax invocation,
+        IMethodSymbol method,
+        SemanticModel semanticModel,
+        string module,
+        out DataAccessEvidence evidence)
+    {
+        evidence = null!;
+        if (method.Name != "HasColumnName"
+            || method.ContainingNamespace.ToDisplayString() != "Microsoft.EntityFrameworkCore"
+            || invocation.Expression is not MemberAccessExpressionSyntax memberAccess
+            || memberAccess.Expression is not InvocationExpressionSyntax propertyInvocation
+            || semanticModel.GetSymbolInfo(propertyInvocation).Symbol is not IMethodSymbol propertyMethod
+            || propertyMethod.Name != "Property"
+            || propertyInvocation.ArgumentList.Arguments.Count != 1)
+            return false;
+
+        var propertyArgument = propertyInvocation.ArgumentList.Arguments[0].Expression;
+        if (propertyArgument is not LambdaExpressionSyntax lambda)
+            return false;
+
+        var propertyExpression = lambda.Body switch
+        {
+            MemberAccessExpressionSyntax member => member,
+            IdentifierNameSyntax identifier => identifier,
+            _ => null
+        };
+        if (propertyExpression is null
+            || semanticModel.GetSymbolInfo(propertyExpression).Symbol is not IPropertySymbol property)
+            return false;
+
+        var receiverType = semanticModel.GetTypeInfo(memberAccess.Expression).Type as INamedTypeSymbol;
+        if (receiverType is null
+            || !receiverType.Name.StartsWith("PropertyBuilder", StringComparison.Ordinal))
+            return false;
+
+        var columnArgument = GetArgumentForParameter(invocation, method, "name")
+            ?? invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
+        if (columnArgument is null)
+            return false;
+
+        var columnIdentity = semanticModel.GetConstantValue(columnArgument);
+        var resolved = columnIdentity.HasValue
+            && columnIdentity.Value is string columnName
+            && !string.IsNullOrWhiteSpace(columnName);
+        var entityIdentity = property.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var propertyIdentity = $"{entityIdentity}.{property.Name}";
+        var owner = semanticModel.GetEnclosingSymbol(invocation.SpanStart)?.ContainingType;
+        var storeIdentity = owner?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        evidence = CreateEvidence(
+            invocation,
+            method,
+            module,
+            DataIntegrationOperation.Mapping,
+            storeIdentity,
+            propertyIdentity,
+            columnArgument.ToString(),
+            resolved
+                ? "Roslyn resolved an Entity Framework Core property-to-column mapping and its literal column identity."
+                : "Roslyn resolved the mapped entity property; the relational column identity is dynamic or unavailable.",
+            resolved ? IntegrationEvidenceResolutionStatus.Resolved : IntegrationEvidenceResolutionStatus.Dynamic,
+            sourceDataIdentity: propertyIdentity,
+            targetDataIdentity: resolved ? (string)columnIdentity.Value! : null);
+        return true;
+    }
+
     private static ExpressionSyntax? GetArgumentForParameter(
         InvocationExpressionSyntax invocation,
         IMethodSymbol method,

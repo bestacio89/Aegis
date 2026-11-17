@@ -68,16 +68,31 @@ internal static class UnifiedArchitectureGraphProjector
         ProjectBuildDependencies(context, context.Modules, nodes, edges, unprojected);
         ProjectSemanticDependencies(
             context,
-            context.ArchitectureComponentDependencies.Concat(context.ArchitectureComponentInternalDependencies),
-            codeComponents,
+            context.ArchitectureComponentDependencies
+                .Concat(context.ArchitectureComponentInternalDependencies)
+                .Select(item => new SemanticDependencyProjection(
+                    item.SourceComponentId,
+                    item.TargetComponentId,
+                    item.Scope,
+                    item.DependencyType,
+                    item.AndroidVariants,
+                    item.ContributingRelationships)),
+            codeComponents.Keys.ToHashSet(StringComparer.Ordinal),
             "code",
             nodes,
             edges,
             unprojected);
         ProjectSemanticDependencies(
             context,
-            context.ArchitecturalComponentDependencies,
-            logicalComponents,
+            context.ArchitecturalComponentDependencies
+                .Select(item => new SemanticDependencyProjection(
+                    item.SourceComponentId,
+                    item.TargetComponentId,
+                    item.Scope,
+                    "LogicalArchitecturalDependency",
+                    item.AndroidVariants,
+                    item.ContributingRelationships)),
+            logicalComponents.Keys.ToHashSet(StringComparer.Ordinal),
             "logical",
             nodes,
             edges,
@@ -160,23 +175,22 @@ internal static class UnifiedArchitectureGraphProjector
         }
     }
 
-    private static void ProjectSemanticDependencies<TComponent>(
+    private static void ProjectSemanticDependencies(
         ProjectArchitectureContext context,
-        IEnumerable<ArchitectureComponentDependencyContext> dependencies,
-        IReadOnlyDictionary<string, TComponent> components,
+        IEnumerable<SemanticDependencyProjection> dependencies,
+        IReadOnlySet<string> componentIds,
         string nodePrefix,
         IDictionary<string, ArchitectureGraphNode> nodes,
         ICollection<ArchitectureGraphEdge> edges,
         ICollection<ArchitectureGraphUnprojectedEvidence> unprojected)
-        where TComponent : class
     {
         foreach (var dependency in dependencies
                      .OrderBy(item => item.SourceComponentId, StringComparer.Ordinal)
                      .ThenBy(item => item.TargetComponentId, StringComparer.Ordinal)
                      .ThenBy(item => item.Scope, StringComparer.Ordinal))
         {
-            if (!components.ContainsKey(dependency.SourceComponentId)
-                || !components.ContainsKey(dependency.TargetComponentId))
+            if (!componentIds.Contains(dependency.SourceComponentId)
+                || !componentIds.Contains(dependency.TargetComponentId))
                 continue;
 
             var sourceId = CreateNodeId(nodePrefix, dependency.SourceComponentId);
@@ -518,6 +532,14 @@ internal static class UnifiedArchitectureGraphProjector
 
     private static StringComparer PathComparer =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private sealed record SemanticDependencyProjection(
+        string SourceComponentId,
+        string TargetComponentId,
+        string Scope,
+        string DependencyType,
+        IReadOnlyList<string> AndroidVariants,
+        IReadOnlyList<SemanticRelationshipReference> ContributingRelationships);
 
     private enum ResourceDirection
     {

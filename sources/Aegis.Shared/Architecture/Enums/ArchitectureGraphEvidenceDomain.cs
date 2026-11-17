@@ -7,5 +7,7 @@ public enum ArchitectureGraphEvidenceDomain
     BuildDependency = 2,
     Messaging = 3,
     Rpc = 4,
-    DataAccess = 5
+    DataAccess = 5,
+    ApiClientRequest = 6,
+    ApiEndpoint = 7
 }

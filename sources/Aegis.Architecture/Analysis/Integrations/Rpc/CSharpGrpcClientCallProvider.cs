@@ -125,7 +125,7 @@ public sealed class CSharpGrpcClientCallProvider
 
     private static bool IsGeneratedGrpcClient(INamedTypeSymbol? type)
     {
-        for (var current = type; current is not null; current = current.BaseType)
+        for (var current = type?.BaseType; current is not null; current = current.BaseType)
         {
             var definition = current.OriginalDefinition;
             if (definition.MetadataName == "ClientBase`1"

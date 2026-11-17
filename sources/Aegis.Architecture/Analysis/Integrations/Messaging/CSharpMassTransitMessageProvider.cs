@@ -51,12 +51,15 @@ public sealed class CSharpMassTransitMessageProvider
             metadataReferences,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
+        var roots = trees.Select(tree => tree.GetCompilationUnitRoot()).ToArray();
+        var receiveEndpoints = DiscoverReceiveEndpoints(roots, compilation);
         var evidence = new List<MessageIntegrationEvidence>();
-        foreach (var tree in trees)
+
+        foreach (var root in roots)
         {
-            var root = tree.GetCompilationUnitRoot();
-            var semanticModel = compilation.GetSemanticModel(tree, ignoreAccessibility: true);
-            var receiveEndpoints = DiscoverReceiveEndpoints(root, semanticModel);
+            var semanticModel = compilation.GetSemanticModel(
+                root.SyntaxTree,
+                ignoreAccessibility: true);
 
             DiscoverConsumers(root, semanticModel, module, receiveEndpoints, evidence);
             DiscoverPublishCalls(root, semanticModel, module, evidence);

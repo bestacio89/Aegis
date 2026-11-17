@@ -80,7 +80,113 @@ class KotlinMessageIntegrationTests {
                 @KafkaListener(topics = ["orders"])
                 fun consumeKafka(order: OrderSubmitted) {}
 
-                @KafkaListener(topics = ["${'$'}{messaging.orders.topic}"])
+                @KafkaListener(topics = ["\${'
+                fun consumeDynamicKafka(order: OrderSubmitted) {}
+
+                @KafkaListener(topicPattern = "orders.*")
+                fun consumePatternKafka(order: OrderSubmitted) {}
+
+                @JmsListener(destination = "orders.queue")
+                fun consumeJms(order: OrderSubmitted) {}
+            }
+
+            class OtherTemplate {
+                fun send(topic: String, message: Any) {}
+            }
+        """.trimIndent())
+
+        val pluginPath = Path.of(
+            KotlinWorkerPluginRegistrar::class.java.protectionDomain.codeSource.location.toURI()
+        ).toString()
+        val stdlibPath = Path.of(
+            Unit::class.java.protectionDomain.codeSource.location.toURI()
+        ).toString()
+        val arguments = K2JVMCompilerArguments().apply {
+            this.destination = destination.toString()
+            this.classpath = stdlibPath
+            this.noStdlib = true
+            this.noReflect = true
+            this.jvmTarget = "21"
+            this.languageVersion = "2.4"
+            this.apiVersion = "2.4"
+            this.moduleName = "message-integration-fixture"
+            this.pluginClasspaths = arrayOf(pluginPath)
+            this.freeArgs = sources.map(Path::toString)
+        }
+
+        val previousOutput = System.getProperty("aegis.kotlin.semantic.output")
+        val previousProject = System.getProperty("aegis.kotlin.semantic.project")
+        try {
+            System.setProperty("aegis.kotlin.semantic.output", evidence.toString())
+            System.setProperty("aegis.kotlin.semantic.project", workspace.toString())
+            val messages = PrintingMessageCollector(
+                System.err,
+                MessageRenderer.PLAIN_RELATIVE_PATHS,
+                false
+            )
+            val exitCode = K2JVMCompiler().exec(messages, Services.EMPTY, arguments)
+            assertEquals(ExitCode.OK, exitCode)
+
+            val result = JsonParser.parseString(Files.readString(evidence)).asJsonObject
+            val messagesFound = result.getAsJsonArray("messageIntegrations").map { it.asJsonObject }
+            assertEquals(9, messagesFound.size)
+
+            val kafkaConsumers = messagesFound.filter {
+                it.get("framework").asString == "Spring Kafka"
+                    && it.get("operation").asInt == 1
+            }
+            assertEquals(3, kafkaConsumers.size)
+            val literalKafka = kafkaConsumers.single {
+                it.get("destinationIdentity").asString == "orders"
+            }
+            assertEquals(0, literalKafka.get("resolutionStatus").asInt)
+            val dynamicKafka = kafkaConsumers.single {
+                it.get("destinationIdentity").isJsonNull
+            }
+            assertEquals(2, dynamicKafka.get("resolutionStatus").asInt)
+            assertTrue(dynamicKafka.get("destinationExpression").asString.contains("messaging.orders.topic"))
+            val patternKafka = kafkaConsumers.single {
+                it.get("destinationExpression").asString.contains("orders.*")
+            }
+            assertTrue(patternKafka.get("destinationIdentity").isJsonNull)
+            assertEquals(2, patternKafka.get("resolutionStatus").asInt)
+
+            val jmsConsumer = messagesFound.single {
+                it.get("framework").asString == "Spring JMS"
+                    && it.get("operation").asInt == 1
+            }
+            assertEquals("orders.queue", jmsConsumer.get("destinationIdentity").asString)
+            assertEquals("sample.OrderSubmitted", jmsConsumer.get("messageTypeIdentity").asString)
+
+            val kafkaPublishers = messagesFound.filter {
+                it.get("framework").asString == "Spring Kafka"
+                    && it.get("operation").asInt == 0
+            }
+            assertEquals(3, kafkaPublishers.size)
+            assertTrue(kafkaPublishers.any { it.get("destinationIdentity").asString == "orders.keyed" })
+            val defaultPublisher = kafkaPublishers.single { it.get("destinationIdentity").isJsonNull }
+            assertEquals(2, defaultPublisher.get("resolutionStatus").asInt)
+
+            val jmsPublishers = messagesFound.filter {
+                it.get("framework").asString == "Spring JMS"
+                    && it.get("operation").asInt == 0
+            }
+            assertEquals(2, jmsPublishers.size)
+            assertTrue(jmsPublishers.any { it.get("destinationIdentity").asString == "orders.post" })
+            assertTrue(messagesFound.all { it.get("language").asString == "Kotlin" })
+            assertTrue(messagesFound.all { it.get("modulePath").asString == workspace.toString() })
+            assertTrue(messagesFound.all { it.get("destinationKind").asInt == 0 })
+            assertFalse(messagesFound.any { it.get("declarationEvidence").asString.contains("not-a-topic") })
+        } finally {
+            if (previousOutput == null) System.clearProperty("aegis.kotlin.semantic.output")
+            else System.setProperty("aegis.kotlin.semantic.output", previousOutput)
+            if (previousProject == null) System.clearProperty("aegis.kotlin.semantic.project")
+            else System.setProperty("aegis.kotlin.semantic.project", previousProject)
+            workspace.toFile().deleteRecursively()
+        }
+    }
+}
+}{messaging.orders.topic}"])
                 fun consumeDynamicKafka(order: OrderSubmitted) {}
 
                 @KafkaListener(topicPattern = "orders.*")

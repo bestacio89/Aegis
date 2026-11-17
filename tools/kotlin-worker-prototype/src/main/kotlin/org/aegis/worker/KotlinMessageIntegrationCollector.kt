@@ -16,12 +16,14 @@ import org.jetbrains.kotlin.ir.expressions.IrSpreadElement
 import org.jetbrains.kotlin.ir.expressions.IrVararg
 import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
+import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
 
+@OptIn(UnsafeDuringIrConstructionAPI::class)
 internal class KotlinMessageIntegrationCollector(
     private val modulePath: String
 ) {

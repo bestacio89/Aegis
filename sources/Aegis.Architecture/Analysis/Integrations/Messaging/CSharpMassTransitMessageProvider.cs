@@ -275,8 +275,7 @@ public sealed class CSharpMassTransitMessageProvider
 
     private static bool IsMassTransitType(
         TypeSyntax typeSyntax,
-        SemanticModel semanticModel,
-    )
+        SemanticModel semanticModel)
     {
         var symbol = semanticModel.GetTypeInfo(typeSyntax).Type;
         return symbol is not null
@@ -293,7 +292,7 @@ public sealed class CSharpMassTransitMessageProvider
         var type = GetReceiverType(receiver, semanticModel);
         return type is not null
             && type.TypeKind != TypeKind.Error
-            && type.Name is "IPublishEndpoint" or "ConsumeContext"
+            && (type.Name is "IPublishEndpoint" or "ConsumeContext")
             && type.ContainingNamespace.ToDisplayString().Equals(
                 MassTransitNamespace,
                 StringComparison.Ordinal);

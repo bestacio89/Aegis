@@ -146,6 +146,22 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                     component.QualifiedName == "sample.application.internal"
                     && component.ComponentKind == "Package"
                     && component.ProductionSymbolCount == 1);
+
+                var applicationMembership = context.ArchitecturalComponentMemberships
+                    .Single(membership => membership.CodeComponentId == context.ArchitectureComponents
+                        .Single(component => component.QualifiedName == "sample.application").Id);
+                var domainMembership = context.ArchitecturalComponentMemberships
+                    .Single(membership => membership.CodeComponentId == context.ArchitectureComponents
+                        .Single(component => component.QualifiedName == "sample.domain").Id);
+                Assert.Equal("Business", context.ArchitecturalComponents
+                    .Single(component => component.Id == applicationMembership.ArchitecturalComponentId).Role);
+                Assert.Equal("Domain", context.ArchitecturalComponents
+                    .Single(component => component.Id == domainMembership.ArchitecturalComponentId).Role);
+                Assert.NotEqual(applicationMembership.ArchitecturalComponentId, domainMembership.ArchitecturalComponentId);
+                Assert.Null(context.ArchitecturalComponentMemberships
+                    .Single(membership => membership.CodeComponentId == context.ArchitectureComponents
+                        .Single(component => component.QualifiedName == "sample.application.internal").Id)
+                    .ArchitecturalComponentId);
                 var packageDependency = Assert.Single(context.ProductionComponentDependencies);
                 Assert.Equal("sample.application", context.ArchitectureComponents
                     .Single(component => component.Id == packageDependency.SourceComponentId).QualifiedName);

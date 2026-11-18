@@ -145,12 +145,20 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     && !string.IsNullOrWhiteSpace(dependency.Target))
                 .ToArray() ?? [];
 
+            var codeContainers = _context?.ProductionComponents ?? [];
+            var packageContainerIds = codeContainers
+                .Where(component => string.Equals(component.ComponentKind, "Package", StringComparison.OrdinalIgnoreCase))
+                .Select(component => component.Id)
+                .ToHashSet(StringComparer.Ordinal);
             var codeContainerDependencies = (_context?.ProductionComponentDependencies ?? [])
                 .Concat((_context?.ArchitectureComponentInternalDependencies ?? [])
                     .Where(dependency => string.Equals(dependency.Scope, "Production", StringComparison.OrdinalIgnoreCase)))
                 .Where(dependency =>
                     !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
-                    && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
+                    && !string.IsNullOrWhiteSpace(dependency.TargetComponentId)
+                    && !(dependency.IsInternal
+                        && packageContainerIds.Contains(dependency.SourceComponentId)
+                        && packageContainerIds.Contains(dependency.TargetComponentId)))
                 .ToArray();
 
             var architecturalDependencies = _context?.ProductionArchitecturalComponentDependencies
@@ -160,7 +168,6 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                 .ToArray() ?? [];
 
             var buildModules = _context?.ProductionModules ?? [];
-            var codeContainers = _context?.ProductionComponents ?? [];
             var classifiedCodeContainerIds = (_context?.ArchitecturalComponentMemberships ?? [])
                 .Where(membership =>
                     !string.IsNullOrWhiteSpace(membership.ArchitecturalComponentId)

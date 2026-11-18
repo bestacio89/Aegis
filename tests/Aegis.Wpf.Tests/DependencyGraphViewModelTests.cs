@@ -184,6 +184,19 @@ public sealed class DependencyGraphViewModelTests
                     TargetComponentName = "Frontend",
                     RelationshipCount = 1
                 }
+            ],
+            ArchitectureComponentInternalDependencies =
+            [
+                new ArchitectureComponentDependencyContext
+                {
+                    SourceComponentId = "java-package:worker",
+                    SourceComponentName = "com.sample.worker",
+                    TargetComponentId = "java-package:worker",
+                    TargetComponentName = "com.sample.worker",
+                    IsInternal = true,
+                    Scope = "Production",
+                    RelationshipCount = 7
+                }
             ]
         };
 
@@ -193,6 +206,8 @@ public sealed class DependencyGraphViewModelTests
         Assert.Equal("Code containers", viewModel.GraphProjection);
         Assert.Equal(3, viewModel.GraphNodes.Count);
         Assert.Equal(1, viewModel.GraphEdges.Count);
+        Assert.DoesNotContain(viewModel.GraphEdges, edge =>
+            edge.SourceId == "java-package:worker" && edge.TargetId == "java-package:worker");
         Assert.Contains(viewModel.GraphNodes, node => node.Id == "csharp-project:api");
         Assert.Contains(viewModel.GraphNodes, node => node.Id == "typescript-module:frontend");
         Assert.Contains(viewModel.GraphNodes, node => node.Id == "java-package:worker");

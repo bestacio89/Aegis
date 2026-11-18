@@ -60,8 +60,8 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
             return;
         }
 
-        var rollup = ArchitectureGraphRollup.Apply(projection, _context is null ? null : ArchitecturePackageBaseResolver.Resolve(_context), _graphOptions.Depth);
-        BasePackageLabel = string.IsNullOrWhiteSpace(rollup.BasePackage) ? "Base package: package root" : $"Base package: {rollup.BasePackage}";
+        var rollup = ArchitectureGraphRollup.Apply(context, null, _graphOptions.Depth);
+        BasePackageLabel = rollup.BasePackageLabel;
         OnPropertyChanged(nameof(BasePackageLabel));
 
         var nodeGroups = projection.Nodes.Where(node => !string.IsNullOrWhiteSpace(node.Id))

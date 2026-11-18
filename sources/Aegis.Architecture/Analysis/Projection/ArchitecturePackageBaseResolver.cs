@@ -1,3 +1,4 @@
+using System.IO;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 
@@ -60,6 +61,41 @@ public static class ArchitecturePackageBaseResolver
         }
 
         return string.Join(".", packages[0].Take(prefixLength));
+    }
+
+    public static string? FindSpringBootApplicationPackage(
+        IEnumerable<SemanticAnalysisRun> runs,
+        string language,
+        string modulePath)
+    {
+        ArgumentNullException.ThrowIfNull(runs);
+        if (string.IsNullOrWhiteSpace(language) || string.IsNullOrWhiteSpace(modulePath))
+            return null;
+
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        var matchingRuns = runs.Where(run =>
+        {
+            if (!string.Equals(run.Language, language, StringComparison.OrdinalIgnoreCase)
+                || string.IsNullOrWhiteSpace(run.ProjectPath))
+                return false;
+
+            try
+            {
+                return string.Equals(
+                    Path.GetFullPath(run.ProjectPath),
+                    Path.GetFullPath(modulePath),
+                    comparison);
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException or NotSupportedException or IOException)
+            {
+                return false;
+            }
+        });
+
+        return FindSpringBootApplicationPackage(matchingRuns);
     }
 
     private static string? FindSpringBootApplicationPackage(IEnumerable<SemanticAnalysisRun> runs)

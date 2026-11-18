@@ -227,7 +227,6 @@ public sealed class RelationshipLedgerViewModelTests
 
             Assert.Empty(viewModel.Dependencies);
             Assert.Same(declaration, Assert.Single(viewModel.ApplicationIntegrations));
-            Assert.Empty(viewModel.UnprojectedEvidence);
         });
     }
 

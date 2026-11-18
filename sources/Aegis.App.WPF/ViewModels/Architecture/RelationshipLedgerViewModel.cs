@@ -103,8 +103,10 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             : context.ProjectName;
 
         var projection = context?.ArchitectureGraphProjection ?? new ArchitectureGraphProjection([], [], []);
-        var rollup = ArchitectureGraphRollup.Apply(projection, _context is null ? null : ArchitecturePackageBaseResolver.Resolve(_context), _graphOptions.Depth);
-        BasePackageLabel = string.IsNullOrWhiteSpace(rollup.BasePackage) ? "Base package: package root" : $"Base package: {rollup.BasePackage}";
+        var rollup = context is null
+            ? ArchitectureGraphRollup.Apply(projection, null, _graphOptions.Depth)
+            : ArchitectureGraphRollup.Apply(context, null, _graphOptions.Depth);
+        BasePackageLabel = rollup.BasePackageLabel;
         OnPropertyChanged(nameof(BasePackageLabel));
         var nodesById = rollup.Nodes.ToDictionary(node => node.GroupKey, node => new ArchitectureGraphNode
         {

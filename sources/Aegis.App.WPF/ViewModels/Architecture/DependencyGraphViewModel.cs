@@ -146,8 +146,10 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
         try
         {
             var projection = _context?.ArchitectureGraphProjection ?? new ArchitectureGraphProjection([], [], []);
-            var rollup = ArchitectureGraphRollup.Apply(projection, _context is null ? null : ArchitecturePackageBaseResolver.Resolve(_context), _graphOptions.Depth);
-            BasePackageLabel = string.IsNullOrWhiteSpace(rollup.BasePackage) ? "Base package: package root" : $"Base package: {rollup.BasePackage}";
+            var rollup = _context is null
+                ? ArchitectureGraphRollup.Apply(projection, null, _graphOptions.Depth)
+                : ArchitectureGraphRollup.Apply(_context, null, _graphOptions.Depth);
+            BasePackageLabel = rollup.BasePackageLabel;
             OnPropertyChanged(nameof(BasePackageLabel));
 
             var logicalNodes = rollup.Nodes.Where(node => node.Kind == Aegis.Shared.Architecture.Enums.ArchitectureGraphNodeKind.LogicalComponent).ToArray();

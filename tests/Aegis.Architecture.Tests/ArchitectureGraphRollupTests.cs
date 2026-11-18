@@ -53,6 +53,71 @@ public sealed class ArchitectureGraphRollupTests
     }
 
     [Fact]
+    public void Apply_context_resolves_spring_boot_package_base_per_module_and_labels_distinct_partitions()
+    {
+        var projection = CreateProjection(
+            [
+                Package("orders-web", "com.acme.orders.web", "/repo/orders"),
+                Package("orders-persistence", "com.acme.orders.persistence", "/repo/orders"),
+                Package("orders-billing", "com.vendor.billing.api", "/repo/orders"),
+                Package("sales-web", "com.other.sales.web", "/repo/sales"),
+                Package("sales-persistence", "com.other.sales.persistence", "/repo/sales"),
+                Package("sales-billing", "com.vendor.billing.api", "/repo/sales")
+            ],
+            [
+                Edge("orders-internal", "orders-web", "orders-persistence", "Production", 1, ArchitectureRelationshipKind.Calls, 0),
+                Edge("orders-external", "orders-web", "orders-billing", "Production", 2, ArchitectureRelationshipKind.Calls, 1),
+                Edge("sales-internal", "sales-web", "sales-persistence", "Production", 1, ArchitectureRelationshipKind.Calls, 2),
+                Edge("sales-external", "sales-web", "sales-billing", "Production", 3, ArchitectureRelationshipKind.Calls, 3)
+            ]);
+        var context = new ProjectArchitectureContext
+        {
+            ArchitectureGraphProjection = projection,
+            ArchitectureComponents =
+            [
+                Component("orders-web", "com.acme.orders.web"),
+                Component("orders-persistence", "com.acme.orders.persistence"),
+                Component("orders-billing", "com.vendor.billing.api"),
+                Component("sales-web", "com.other.sales.web"),
+                Component("sales-persistence", "com.other.sales.persistence"),
+                Component("sales-billing", "com.vendor.billing.api")
+            ],
+            SemanticAnalysisRuns =
+            [
+                SpringBootRun("orders-run", "/repo/orders", "com.acme"),
+                SpringBootRun("sales-run", "/repo/sales", "com.other")
+            ]
+        };
+
+        var result = ArchitectureGraphRollup.Apply(context, null, 1);
+
+        result.BasePackage.Should().BeEmpty();
+        result.BasePackageLabel.Should().Be("Base package: resolved per module/language partition (2)");
+        result.Nodes.Should().ContainSingle(node =>
+            node.Name == "orders"
+            && node.ModulePath == "/repo/orders"
+            && node.LeafComponentIds.Contains("orders-web")
+            && node.LeafComponentIds.Contains("orders-persistence"));
+        result.Nodes.Should().ContainSingle(node =>
+            node.Name == "sales"
+            && node.ModulePath == "/repo/sales"
+            && node.LeafComponentIds.Contains("sales-web")
+            && node.LeafComponentIds.Contains("sales-persistence"));
+        result.Nodes.Should().ContainSingle(node =>
+            node.Name == "com.vendor.billing.api"
+            && node.ModulePath == "/repo/orders"
+            && node.LeafComponentIds.Contains("orders-billing"));
+        result.Nodes.Should().ContainSingle(node =>
+            node.Name == "com.vendor.billing.api"
+            && node.ModulePath == "/repo/sales"
+            && node.LeafComponentIds.Contains("sales-billing"));
+        result.Nodes.Single(node => node.Name == "orders").InternalRelationshipCounts["Production"].Should().Be(1);
+        result.Nodes.Single(node => node.Name == "sales").InternalRelationshipCounts["Production"].Should().Be(1);
+        result.Edges.Should().HaveCount(2);
+        result.Edges.Select(edge => edge.RelationshipCount).Should().BeEquivalentTo([2, 3]);
+    }
+
+    [Fact]
     public void Apply_resolves_package_roots_independently_by_language_and_module()
     {
         var projection = CreateProjection(
@@ -249,6 +314,43 @@ public sealed class ArchitectureGraphRollupTests
         result.Nodes.Should().ContainSingle(node => node.Name == "billing");
         result.Nodes.Single(node => node.Name == "orders").InternalRelationshipCounts["Production"].Should().Be(1);
     }
+
+    private static SemanticAnalysisRun SpringBootRun(
+        string runId,
+        string projectPath,
+        string applicationPackage) =>
+        new()
+        {
+            RunId = runId,
+            Language = "Java",
+            ProjectPath = projectPath,
+            Symbols =
+            [
+                new SemanticSymbol
+                {
+                    Id = "application",
+                    Name = "Application",
+                    QualifiedName = applicationPackage + ".Application",
+                    ContainerName = applicationPackage
+                },
+                new SemanticSymbol
+                {
+                    Id = "spring-annotation",
+                    Name = "SpringBootApplication",
+                    QualifiedName = "org.springframework.boot.autoconfigure.SpringBootApplication"
+                }
+            ],
+            Relationships =
+            [
+                new SemanticRelationship
+                {
+                    Id = "application-annotation",
+                    SourceSymbolId = "application",
+                    TargetSymbolId = "spring-annotation",
+                    Kind = SemanticRelationshipKind.UsesAnnotation
+                }
+            ]
+        };
 
     private static ArchitectureComponentContext Component(string id, string qualifiedName) =>
         new()

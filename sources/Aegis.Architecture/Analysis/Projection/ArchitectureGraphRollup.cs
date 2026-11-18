@@ -10,9 +10,44 @@ namespace Aegis.Architecture.Analysis.Projection;
 public static class ArchitectureGraphRollup
 {
     public static ArchitectureGraphRollupResult Apply(
+        ProjectArchitectureContext context,
+        string? policyOverride,
+        int depth)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var projection = context.ArchitectureGraphProjection ?? new ArchitectureGraphProjection([], [], []);
+        var partitionBasePackages = projection.Nodes
+            .Where(IsPackageNode)
+            .GroupBy(node => new PackagePartition(node.Language ?? string.Empty, node.ModulePath ?? string.Empty))
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                {
+                    var applicationPackage = ArchitecturePackageBaseResolver.FindSpringBootApplicationPackage(
+                        context.SemanticAnalysisRuns,
+                        group.Key.Language,
+                        group.Key.ModulePath);
+                    return ArchitecturePackageBaseResolver.Resolve(
+                        group.Select(node => node.Name),
+                        policyOverride,
+                        applicationPackage);
+                });
+
+        return Apply(projection, policyOverride, depth, partitionBasePackages);
+    }
+
+    public static ArchitectureGraphRollupResult Apply(
         ArchitectureGraphProjection projection,
         string? basePackage,
-        int depth)
+        int depth) =>
+        Apply(projection, basePackage, depth, null);
+
+    private static ArchitectureGraphRollupResult Apply(
+        ArchitectureGraphProjection projection,
+        string? basePackage,
+        int depth,
+        IReadOnlyDictionary<PackagePartition, string>? partitionBasePackages)
     {
         ArgumentNullException.ThrowIfNull(projection);
         ArgumentOutOfRangeException.ThrowIfLessThan(depth, 1);
@@ -20,16 +55,31 @@ public static class ArchitectureGraphRollup
         var packageNodes = projection.Nodes
             .Where(IsPackageNode)
             .ToArray();
-        var resolvedBasePackage = string.IsNullOrWhiteSpace(basePackage)
-            ? ArchitecturePackageBaseResolver.Resolve(packageNodes.Select(node => node.Name))
-            : ArchitecturePackageBaseResolver.Resolve([], policyOverride: basePackage);
         var resolvedBasePackagesByPartition = packageNodes
             .GroupBy(node => new PackagePartition(node.Language ?? string.Empty, node.ModulePath ?? string.Empty))
             .ToDictionary(
                 group => group.Key,
-                group => string.IsNullOrWhiteSpace(basePackage)
-                    ? ArchitecturePackageBaseResolver.Resolve(group.Select(node => node.Name))
-                    : ArchitecturePackageBaseResolver.Resolve([], policyOverride: basePackage));
+                group =>
+                {
+                    if (!string.IsNullOrWhiteSpace(basePackage))
+                        return ArchitecturePackageBaseResolver.Resolve([], policyOverride: basePackage);
+
+                    if (partitionBasePackages is not null
+                        && partitionBasePackages.TryGetValue(group.Key, out var resolvedBasePackage))
+                        return resolvedBasePackage;
+
+                    return ArchitecturePackageBaseResolver.Resolve(group.Select(node => node.Name));
+                });
+
+        var distinctBasePackages = resolvedBasePackagesByPartition.Values
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var resolvedBasePackage = distinctBasePackages.Length == 1
+            ? distinctBasePackages[0]
+            : string.Empty;
+        var basePackageLabel = distinctBasePackages.Length > 1
+            ? $"Base package: resolved per module/language partition ({resolvedBasePackagesByPartition.Count})"
+            : $"Base package: {(string.IsNullOrWhiteSpace(resolvedBasePackage) ? "package root" : resolvedBasePackage)}";
 
         var groupedNodes = new Dictionary<string, NodeBuilder>(StringComparer.Ordinal);
         var nodeGroupByLeafId = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -127,7 +177,8 @@ public static class ArchitectureGraphRollup
             nodes,
             edges,
             unresolvedEdges,
-            projection.UnprojectedEvidence);
+            projection.UnprojectedEvidence,
+            basePackageLabel);
     }
 
     private static bool IsPackageNode(ArchitectureGraphNode node) =>

@@ -142,6 +142,75 @@ public sealed class DependencyGraphViewModelTests
     }
 
     [Fact]
+    public void Context_resolves_module_package_bases_identically_in_graph_ledger_and_landscape()
+    {
+        RunOnStaThread(() =>
+        {
+            var projection = new ArchitectureGraphProjection(
+                [
+                    Code("orders-web", "com.acme.orders.web", "Package", "Java", "/repo/orders"),
+                    Code("orders-persistence", "com.acme.orders.persistence", "Package", "Java", "/repo/orders"),
+                    Code("orders-billing", "com.vendor.billing.api", "Package", "Java", "/repo/orders"),
+                    Code("sales-web", "com.other.sales.web", "Package", "Java", "/repo/sales"),
+                    Code("sales-persistence", "com.other.sales.persistence", "Package", "Java", "/repo/sales"),
+                    Code("sales-billing", "com.vendor.billing.api", "Package", "Java", "/repo/sales")
+                ],
+                [
+                    Edge("orders-internal", "orders-web", "orders-persistence"),
+                    Edge("orders-external", "orders-web", "orders-billing"),
+                    Edge("sales-internal", "sales-web", "sales-persistence"),
+                    Edge("sales-external", "sales-web", "sales-billing")
+                ],
+                []);
+            var context = new ProjectArchitectureContext
+            {
+                ArchitectureGraphProjection = projection,
+                ArchitectureComponents =
+                [
+                    Component("orders-web", "com.acme.orders.web"),
+                    Component("orders-persistence", "com.acme.orders.persistence"),
+                    Component("orders-billing", "com.vendor.billing.api"),
+                    Component("sales-web", "com.other.sales.web"),
+                    Component("sales-persistence", "com.other.sales.persistence"),
+                    Component("sales-billing", "com.vendor.billing.api")
+                ],
+                SemanticAnalysisRuns =
+                [
+                    SpringBootRun("orders-run", "/repo/orders", "com.acme"),
+                    SpringBootRun("sales-run", "/repo/sales", "com.other")
+                ]
+            };
+            var options = new ArchitectureGraphViewOptions();
+            var graph = new DependencyGraphViewModel(options);
+            var ledger = new RelationshipLedgerViewModel(options);
+            var landscape = new SystemLandscapeViewModel(options);
+
+            graph.Update(context);
+            ledger.Update(context);
+            landscape.Update(context);
+
+            const string expectedLabel = "Base package: resolved per module/language partition (2)";
+            Assert.Equal(expectedLabel, graph.BasePackageLabel);
+            Assert.Equal(expectedLabel, ledger.BasePackageLabel);
+            Assert.Equal(expectedLabel, landscape.BasePackageLabel);
+
+            var expectedRelationships = new[] { "orders->com.vendor.billing.api", "sales->com.vendor.billing.api" };
+            Assert.Equal(
+                expectedRelationships,
+                graph.GraphEdges.Select(edge => $"{edge.Source}->{edge.Target}").OrderBy(value => value, StringComparer.Ordinal));
+            Assert.Equal(
+                expectedRelationships,
+                ledger.Dependencies.Select(edge => $"{edge.Source}->{edge.Target}").OrderBy(value => value, StringComparer.Ordinal));
+            Assert.Equal(
+                expectedRelationships,
+                landscape.Relationships.Select(edge => $"{edge.Source}->{edge.Target}").OrderBy(value => value, StringComparer.Ordinal));
+            Assert.Equal(
+                new[] { "com.vendor.billing.api", "com.vendor.billing.api", "orders", "sales" },
+                graph.GraphNodes.Select(node => node.Name).OrderBy(value => value, StringComparer.Ordinal));
+        });
+    }
+
+    [Fact]
     public void Shared_depth_produces_identical_relationship_sets_in_graph_ledger_and_landscape()
     {
         RunOnStaThread(() =>
@@ -214,6 +283,53 @@ public sealed class DependencyGraphViewModelTests
             Assert.Equal(landscapeIds, graphIds);
         });
     }
+
+    private static ArchitectureComponentContext Component(string id, string qualifiedName) =>
+        new()
+        {
+            Id = id,
+            Name = qualifiedName.Split('.').Last(),
+            QualifiedName = qualifiedName,
+            Language = "Java",
+            ComponentKind = "Package"
+        };
+
+    private static SemanticAnalysisRun SpringBootRun(
+        string runId,
+        string projectPath,
+        string applicationPackage) =>
+        new()
+        {
+            RunId = runId,
+            Language = "Java",
+            ProjectPath = projectPath,
+            Symbols =
+            [
+                new SemanticSymbol
+                {
+                    Id = "application",
+                    Name = "Application",
+                    QualifiedName = applicationPackage + ".Application",
+                    ContainerName = applicationPackage
+                },
+                new SemanticSymbol
+                {
+                    Id = "spring-annotation",
+                    Name = "SpringBootApplication",
+                    QualifiedName = "org.springframework.boot.autoconfigure.SpringBootApplication"
+                }
+            ],
+            Relationships =
+            [
+                new SemanticRelationship
+                {
+                    Id = "application-annotation",
+                    SourceSymbolId = "application",
+                    TargetSymbolId = "spring-annotation",
+                    Kind = SemanticRelationshipKind.UsesAnnotation
+                }
+            ]
+        };
 
     private static void RunOnStaThread(Action action)
     {

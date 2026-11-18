@@ -265,6 +265,43 @@ public sealed class ArchitecturalComponentClassificationTests
     }
 
     [Fact]
+    public void Java_package_classification_resolves_api_contracts_and_directional_adapters()
+    {
+        var context = CreateContext(
+            CodeComponent("api-contracts", "com.acme.api.contracts", "Java"),
+            CodeComponent("api-clients", "com.acme.api.clients", "Java"),
+            CodeComponent("api-controllers", "com.acme.api.controllers", "Java"),
+            CodeComponent("database-adapters", "com.acme.database.adapters", "Java"),
+            CodeComponent("presentation-adapters", "com.acme.presentation.adapters", "Java"),
+            CodeComponent("unqualified-adapters", "com.acme.adapters", "Java"));
+
+        ArchitecturalComponentClassifier.Classify(context);
+
+        Assert.Equal("Contracts", GetRole(context, "api-contracts"));
+        Assert.Equal("Infrastructure", GetRole(context, "api-clients"));
+        Assert.Equal("Presentation", GetRole(context, "api-controllers"));
+        Assert.Equal("Infrastructure", GetRole(context, "database-adapters"));
+        Assert.Equal("Presentation", GetRole(context, "presentation-adapters"));
+        Assert.Null(GetMembership(context, "unqualified-adapters").ArchitecturalComponentId);
+    }
+
+    [Fact]
+    public void Java_package_identity_remains_case_sensitive_when_classifying_same_role()
+    {
+        var context = CreateContext(
+            CodeComponent("lower", "com.acme.domain", "Java"),
+            CodeComponent("upper", "com.acme.Domain", "Java"));
+
+        ArchitecturalComponentClassifier.Classify(context);
+
+        Assert.Equal("Domain", GetRole(context, "lower"));
+        Assert.Equal("Domain", GetRole(context, "upper"));
+        Assert.NotEqual(
+            GetMembership(context, "lower").ArchitecturalComponentId,
+            GetMembership(context, "upper").ArchitecturalComponentId);
+    }
+
+    [Fact]
     public void Java_package_classification_ignores_build_module_names_and_scopes_identity_to_module()
     {
         var first = new ArchitectureComponentContext

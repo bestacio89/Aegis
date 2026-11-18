@@ -265,7 +265,13 @@ internal static partial class UnifiedArchitectureGraphProjector
                     Domain = ArchitectureGraphEvidenceDomain.SemanticRelationship,
                     OccurrenceIndex = context.RelationshipEvidenceRegistry!.Evidence.ToList().FindIndex(item => ReferenceEquals(item, match)),
                     EvidenceId = match.EvidenceId,
-                    ProviderId = match.Relationship.Id
+                    ProviderId = match.Relationship.Id,
+                    FilePaths = Array.AsReadOnly(match.Relationship.Provenance
+                        .Where(item => !string.IsNullOrWhiteSpace(item.FilePath))
+                        .Select(item => item.FilePath!)
+                        .Distinct(StringComparer.Ordinal)
+                        .OrderBy(path => path, StringComparer.Ordinal)
+                        .ToArray())
                 });
 
                 var normalized = context.SemanticRelationshipNormalizationRegistry?.Evidence

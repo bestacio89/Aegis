@@ -89,6 +89,7 @@ public static class ArchitectureGraphRollup
             {
                 if (aggregate.TryAddEvidence(evidence))
                     aggregate.Evidence.Add(evidence);
+                aggregate.EvidenceFiles.UnionWith(evidence.FilePaths.Where(path => !string.IsNullOrWhiteSpace(path)));
             }
             aggregate.LeafEdgeIds.Add(edge.Id);
         }
@@ -233,6 +234,7 @@ public static class ArchitectureGraphRollup
         public HashSet<ArchitectureRelationshipKind> RelationshipKinds { get; } = [];
         public HashSet<string> ProviderRelationshipKinds { get; } = new(StringComparer.Ordinal);
         public List<ArchitectureGraphEvidenceReference> Evidence { get; } = [];
+        public HashSet<string> EvidenceFiles { get; } = new(StringComparer.Ordinal);
         private readonly HashSet<(ArchitectureGraphEvidenceDomain Domain, int OccurrenceIndex)> _evidenceOccurrences = [];
         public HashSet<string> LeafEdgeIds { get; } = new(StringComparer.Ordinal);
 
@@ -250,6 +252,7 @@ public static class ArchitectureGraphRollup
             RelationshipKinds = Array.AsReadOnly(RelationshipKinds.OrderBy(kind => kind).ToArray()),
             ProviderRelationshipKinds = Array.AsReadOnly(ProviderRelationshipKinds.OrderBy(kind => kind, StringComparer.Ordinal).ToArray()),
             Evidence = Array.AsReadOnly(Evidence.OrderBy(item => item.Domain).ThenBy(item => item.OccurrenceIndex).ToArray()),
+            EvidenceFiles = Array.AsReadOnly(EvidenceFiles.OrderBy(path => path, StringComparer.Ordinal).ToArray()),
             LeafEdgeIds = Array.AsReadOnly(LeafEdgeIds.OrderBy(id => id, StringComparer.Ordinal).ToArray())
         };
     }

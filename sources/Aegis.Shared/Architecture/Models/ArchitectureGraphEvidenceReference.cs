@@ -12,4 +12,5 @@ public sealed record ArchitectureGraphEvidenceReference
     public int OccurrenceIndex { get; init; }
     public string EvidenceId { get; init; } = string.Empty;
     public string ProviderId { get; init; } = string.Empty;
+    public IReadOnlyList<string> FilePaths { get; init; } = Array.Empty<string>();
 }

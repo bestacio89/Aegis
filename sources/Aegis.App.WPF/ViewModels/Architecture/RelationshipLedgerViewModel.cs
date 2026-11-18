@@ -210,7 +210,8 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             Scope = edge.Scope, RelationshipCount = edge.RelationshipCount, GroupDepth = edge.GroupDepth,
             EvidenceOccurrenceCount = edge.Evidence.Count,
             IsInternal = string.Equals(edge.SourceGroupKey, edge.TargetGroupKey, StringComparison.Ordinal),
-            EvidenceReferences = FormatGraphEvidenceReferences(edge.Evidence), ContributingLeafEdgeIds = edge.LeafEdgeIds
+            EvidenceReferences = FormatGraphEvidenceReferences(edge.Evidence), ContributingLeafEdgeIds = edge.LeafEdgeIds,
+            EvidenceFiles = edge.EvidenceFiles
         };
     }
 

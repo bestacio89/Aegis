@@ -15,5 +15,6 @@ public sealed record ArchitectureGraphRollupEdge
     public IReadOnlyList<ArchitectureRelationshipKind> RelationshipKinds { get; init; } = Array.Empty<ArchitectureRelationshipKind>();
     public IReadOnlyList<string> ProviderRelationshipKinds { get; init; } = Array.Empty<string>();
     public IReadOnlyList<ArchitectureGraphEvidenceReference> Evidence { get; init; } = Array.Empty<ArchitectureGraphEvidenceReference>();
+    public IReadOnlyList<string> EvidenceFiles { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> LeafEdgeIds { get; init; } = Array.Empty<string>();
 }

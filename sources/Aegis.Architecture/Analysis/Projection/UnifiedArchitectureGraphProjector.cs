@@ -306,6 +306,7 @@ internal static partial class UnifiedArchitectureGraphProjector
                 ProviderRelationshipKind = providerKinds.Count == 0
                     ? dependency.DependencyType
                     : string.Join(", ", providerKinds.OrderBy(kind => kind, StringComparer.Ordinal)),
+                RelationshipCount = references.Count,
                 RelationshipKinds = Array.AsReadOnly(kinds.OrderBy(kind => kind).ToArray()),
                 AndroidVariants = Array.AsReadOnly(dependency.AndroidVariants
                     .Where(value => !string.IsNullOrWhiteSpace(value))

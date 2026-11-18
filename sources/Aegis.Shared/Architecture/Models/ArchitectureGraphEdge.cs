@@ -10,6 +10,7 @@ public sealed record ArchitectureGraphEdge
     public string TargetNodeId { get; init; } = string.Empty;
     public ArchitectureGraphEdgeDomain Domain { get; init; }
     public string Scope { get; init; } = "Production";
+    public int RelationshipCount { get; init; } = 1;
     public string ProviderRelationshipKind { get; init; } = string.Empty;
     public IReadOnlyList<ArchitectureRelationshipKind> RelationshipKinds { get; init; } = Array.Empty<ArchitectureRelationshipKind>();
     public IReadOnlyList<string> AndroidVariants { get; init; } = Array.Empty<string>();

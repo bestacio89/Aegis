@@ -45,8 +45,10 @@ public sealed class UnifiedArchitectureGraphProjectorTests
                     TargetComponentId = "domain-code",
                     Scope = "Production",
                     DependencyType = "SemanticComponentDependency",
-                    RelationshipCount = 1,
+                    RelationshipCount = 3,
                     ResolvedRelationshipCount = 1,
+                    UnreferencedRelationshipCount = 2,
+                    EvidenceFiles = ["/repo/src/Api.cs", "/repo/src/Generated.cs"],
                     RelationshipKinds = [SemanticRelationshipKind.Calls],
                     ContributingRelationships =
                     [
@@ -76,6 +78,8 @@ public sealed class UnifiedArchitectureGraphProjectorTests
         semanticEdge.Evidence.Should().ContainSingle();
         semanticEdge.Evidence[0].OccurrenceIndex.Should().Be(1);
         semanticEdge.Evidence[0].EvidenceId.Should().Be("1:0");
+        semanticEdge.RelationshipCount.Should().Be(3);
+        semanticEdge.EvidenceFiles.Should().BeEquivalentTo(["/repo/src/Api.cs", "/repo/src/Generated.cs"]);
         projection.Nodes.Should().Contain(node => node.Id.StartsWith("code:", StringComparison.Ordinal));
         projection.UnprojectedEvidence.Should().BeEmpty();
     }

@@ -90,6 +90,9 @@ internal static partial class UnifiedArchitectureGraphProjector
                     item.TargetComponentId,
                     item.Scope,
                     item.DependencyType,
+                    item.RelationshipCount,
+                    item.UnreferencedRelationshipCount,
+                    item.EvidenceFiles,
                     item.AndroidVariants,
                     item.ContributingRelationships)),
             codeComponents.Keys.ToHashSet(StringComparer.Ordinal),
@@ -105,6 +108,9 @@ internal static partial class UnifiedArchitectureGraphProjector
                     item.TargetComponentId,
                     item.Scope,
                     "LogicalArchitecturalDependency",
+                    item.RelationshipCount,
+                    item.UnreferencedRelationshipCount,
+                    item.EvidenceFiles,
                     item.AndroidVariants,
                     item.ContributingRelationships)),
             logicalComponents.Keys.ToHashSet(StringComparer.Ordinal),
@@ -312,7 +318,14 @@ internal static partial class UnifiedArchitectureGraphProjector
                 ProviderRelationshipKind = providerKinds.Count == 0
                     ? dependency.DependencyType
                     : string.Join(", ", providerKinds.OrderBy(kind => kind, StringComparer.Ordinal)),
-                RelationshipCount = references.Count,
+                RelationshipCount = dependency.RelationshipCount > 0
+                    ? dependency.RelationshipCount
+                    : references.Count + dependency.UnreferencedRelationshipCount,
+                EvidenceFiles = Array.AsReadOnly(dependency.EvidenceFiles
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(path => path, StringComparer.Ordinal)
+                    .ToArray()),
                 RelationshipKinds = Array.AsReadOnly(kinds.OrderBy(kind => kind).ToArray()),
                 AndroidVariants = Array.AsReadOnly(dependency.AndroidVariants
                     .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -578,6 +591,9 @@ internal static partial class UnifiedArchitectureGraphProjector
         string TargetComponentId,
         string Scope,
         string DependencyType,
+        int RelationshipCount,
+        int UnreferencedRelationshipCount,
+        IReadOnlyList<string> EvidenceFiles,
         IReadOnlyList<string> AndroidVariants,
         IReadOnlyList<SemanticRelationshipReference> ContributingRelationships);
 

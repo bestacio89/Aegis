@@ -89,7 +89,8 @@ public static class ArchitectureGraphRollup
             {
                 if (aggregate.TryAddEvidence(evidence))
                     aggregate.Evidence.Add(evidence);
-                aggregate.EvidenceFiles.UnionWith(evidence.FilePaths.Where(path => !string.IsNullOrWhiteSpace(path)));
+                aggregate.EvidenceFiles.UnionWith(edge.EvidenceFiles.Where(path => !string.IsNullOrWhiteSpace(path)));
+            aggregate.EvidenceFiles.UnionWith(evidence.FilePaths.Where(path => !string.IsNullOrWhiteSpace(path)));
             }
             aggregate.LeafEdgeIds.Add(edge.Id);
         }

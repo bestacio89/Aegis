@@ -173,7 +173,7 @@
                     SelectedItem="{Binding SelectedDependency, Mode=TwoWay}"
                     AutoGenerateColumns="False" IsReadOnly="True"
                     CanUserAddRows="False" CanUserDeleteRows="False"
-                    CanUserReorderColumns="False" CanUserResizeRows="False"
+                    CanUserResizeRows="False"
                     CanUserSortColumns="True" CanUserResizeColumns="True"
                     CanUserReorderColumns="True" SelectionMode="Single"
                     SelectionUnit="FullRow" HeadersVisibility="Column"

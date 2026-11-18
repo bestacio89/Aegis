@@ -119,7 +119,8 @@ public static class ArchitectureGraphRollup
 
     private static bool IsPackageNode(ArchitectureGraphNode node) =>
         node.Kind == ArchitectureGraphNodeKind.CodeComponent
-        && string.Equals(node.ComponentKind, "Package", StringComparison.OrdinalIgnoreCase);
+        && (string.Equals(node.ComponentKind, "Package", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(node.ComponentKind, "Module", StringComparison.OrdinalIgnoreCase));
 
     private static NodeGrouping CreateNodeGroup(ArchitectureGraphNode node, string basePackage, int depth)
     {

@@ -179,6 +179,42 @@ public sealed class DependencyGraphViewModelTests
         });
     }
 
+    [Fact]
+    public void Graph_ledger_and_landscape_preserve_distinct_scope_edges_with_identical_edge_ids()
+    {
+        RunOnStaThread(() =>
+        {
+            var projection = new ArchitectureGraphProjection(
+                [Module("module:a", "A", "/repo/a", "Service"), Module("module:b", "B", "/repo/b", "Service")],
+                [
+                    Edge("production-edge", "module:a", "module:b", ArchitectureGraphEdgeDomain.Build, ArchitectureRelationshipKind.BuildProjectReference),
+                    new ArchitectureGraphEdge
+                    {
+                        Id = "test-edge", SourceNodeId = "module:a", TargetNodeId = "module:b",
+                        Domain = ArchitectureGraphEdgeDomain.Build, Scope = "Test", RelationshipCount = 2,
+                        RelationshipKinds = [ArchitectureRelationshipKind.BuildModuleDependency]
+                    }
+                ],
+                []);
+            var context = new ProjectArchitectureContext { ArchitectureGraphProjection = projection };
+            var options = new ArchitectureGraphViewOptions();
+            var graph = new DependencyGraphViewModel(options);
+            var ledger = new RelationshipLedgerViewModel(options);
+            var landscape = new SystemLandscapeViewModel(options);
+
+            graph.Update(context);
+            ledger.Update(context);
+            landscape.Update(context);
+
+            var graphIds = graph.GraphEdges.Select(edge => edge.GraphEdgeId).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+            var ledgerIds = ledger.Dependencies.Select(edge => edge.GraphEdgeId).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+            var landscapeIds = landscape.Relationships.Select(edge => edge.EdgeId).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+            Assert.Equal(2, graphIds.Length);
+            Assert.Equal(ledgerIds, graphIds);
+            Assert.Equal(landscapeIds, graphIds);
+        });
+    }
+
     private static void RunOnStaThread(Action action)
     {
         Exception? failure = null;

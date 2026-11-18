@@ -16,7 +16,9 @@ public static class ArchitecturePackageBaseResolver
         ArgumentNullException.ThrowIfNull(context);
 
         var packageNames = context.ArchitectureComponents
-            .Where(component => string.Equals(component.ComponentKind, "Package", StringComparison.OrdinalIgnoreCase))
+            .Where(component =>
+                string.Equals(component.ComponentKind, "Package", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(component.ComponentKind, "Module", StringComparison.OrdinalIgnoreCase))
             .Select(component => component.QualifiedName);
 
         var applicationPackage = FindSpringBootApplicationPackage(context.SemanticAnalysisRuns);

@@ -186,10 +186,19 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                 var knownKinds = edge.RelationshipKinds.Where(kind => kind != Aegis.Shared.Architecture.Enums.ArchitectureRelationshipKind.Unknown).Select(kind => kind.ToString()).ToArray();
                 var type = knownKinds.Length > 0 ? string.Join(", ", knownKinds) : string.Join(", ", edge.ProviderRelationshipKinds);
                 var evidence = string.Join(", ", edge.Evidence.Select(item => $"{item.Domain}[{item.OccurrenceIndex}]"));
-                return new GraphRelation(edge.SourceGroupKey, edge.TargetGroupKey, source.Name, target.Name,
+                return new GraphRelation(
+                    $"{edge.SourceGroupKey}->{edge.TargetGroupKey}:{edge.Domain}:{edge.Scope}",
+                    edge.Domain.ToString(),
+                    edge.Scope,
+                    edge.SourceGroupKey,
+                    edge.TargetGroupKey,
+                    source.Name,
+                    target.Name,
                     source.ArchitecturalRole ?? source.ComponentKind ?? source.ResourceKind ?? source.Kind.ToString(),
                     target.ArchitecturalRole ?? target.ComponentKind ?? target.ResourceKind ?? target.Kind.ToString(),
-                    string.IsNullOrWhiteSpace(type) ? "Unclassified" : type, evidence, edge.RelationshipCount);
+                    string.IsNullOrWhiteSpace(type) ? "Unclassified" : type,
+                    evidence,
+                    edge.RelationshipCount);
             }).ToArray();
 
             TestRelationshipCount = rollup.Edges.Where(edge => string.Equals(edge.Scope, "Test", StringComparison.OrdinalIgnoreCase)).Sum(edge => edge.RelationshipCount);
@@ -369,23 +378,36 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             }
         }
 
-        foreach (var group in dependencies.GroupBy(
-            dependency => (Source: dependency.SourceId, Target: dependency.TargetId),
-            DependencyPairComparer.Instance)
-            .OrderBy(group => group.Key.Source, StringComparer.Ordinal)
-            .ThenBy(group => group.Key.Target, StringComparer.Ordinal))
-        {
-            if (!nodeById.TryGetValue(group.Key.Source, out var source)
-                || !nodeById.TryGetValue(group.Key.Target, out var target))
-            {
-                continue;
-            }
+        var pairCounts = dependencies
+            .GroupBy(dependency => (Source: dependency.SourceId, Target: dependency.TargetId), DependencyPairComparer.Instance)
+            .ToDictionary(group => group.Key, group => group.Count(), DependencyPairComparer.Instance);
+        var pairIndexes = new Dictionary<(string Source, string Target), int>(DependencyPairComparer.Instance);
 
-            var (left, top, lineGeometry, arrowGeometry) = CreateEdgeGeometry(source, target);
+        foreach (var dependency in dependencies
+            .OrderBy(item => item.SourceId, StringComparer.Ordinal)
+            .ThenBy(item => item.TargetId, StringComparer.Ordinal)
+            .ThenBy(item => item.Domain, StringComparer.Ordinal)
+            .ThenBy(item => item.Scope, StringComparer.Ordinal)
+            .ThenBy(item => item.GraphEdgeId, StringComparer.Ordinal))
+        {
+            if (!nodeById.TryGetValue(dependency.SourceId, out var source)
+                || !nodeById.TryGetValue(dependency.TargetId, out var target))
+                continue;
+
+            var pair = (Source: dependency.SourceId, Target: dependency.TargetId);
+            var laneIndex = pairIndexes.GetValueOrDefault(pair);
+            pairIndexes[pair] = laneIndex + 1;
+            var laneCount = pairCounts[pair];
+            var laneOffset = (laneIndex - (laneCount - 1) / 2d) * 14;
+            var (left, top, lineGeometry, arrowGeometry) = CreateEdgeGeometry(source, target, laneOffset);
             GraphEdges.Add(new ArchitectureGraphEdgeViewModel(
+                dependency.GraphEdgeId,
+                dependency.Domain,
+                dependency.Scope,
+                dependency.DependencyType,
                 source.Name,
                 target.Name,
-                group.Sum(dependency => dependency.RelationshipCount),
+                dependency.RelationshipCount,
                 left,
                 top,
                 lineGeometry,
@@ -451,15 +473,16 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
     private static (double Left, double Top, Geometry Line, Geometry Arrow) CreateEdgeGeometry(
         ArchitectureGraphNodeViewModel source,
-        ArchitectureGraphNodeViewModel target)
+        ArchitectureGraphNodeViewModel target,
+        double laneOffset)
     {
         var start = new Point(
             source.Left + ArchitectureGraphNodeViewModel.NodeWidth,
-            source.Top + ArchitectureGraphNodeViewModel.NodeHeight / 2);
+            source.Top + ArchitectureGraphNodeViewModel.NodeHeight / 2 + laneOffset);
 
         var end = new Point(
             target.Left,
-            target.Top + ArchitectureGraphNodeViewModel.NodeHeight / 2);
+            target.Top + ArchitectureGraphNodeViewModel.NodeHeight / 2 + laneOffset);
 
         Point controlOne;
         Point controlTwo;
@@ -519,6 +542,9 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
     private sealed record GraphNode(string Id, string Name, string Group);
 
     private sealed record GraphRelation(
+        string GraphEdgeId,
+        string Domain,
+        string Scope,
         string SourceId,
         string TargetId,
         string Source,

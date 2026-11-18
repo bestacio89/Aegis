@@ -181,6 +181,25 @@ public sealed class ArchitectureGraphRollupTests
         ArchitecturePackageBaseResolver.Resolve(context).Should().Be("com.example.app");
     }
 
+    [Fact]
+    public void Apply_rolls_up_python_modules_using_the_same_qualified_name_segments()
+    {
+        var projection = CreateProjection(
+            [
+                new ArchitectureGraphNode { Id = "web", Name = "shop.orders.web", Kind = ArchitectureGraphNodeKind.CodeComponent, ComponentKind = "Module", Language = "Python", ModulePath = "/repo" },
+                new ArchitectureGraphNode { Id = "persistence", Name = "shop.orders.persistence", Kind = ArchitectureGraphNodeKind.CodeComponent, ComponentKind = "Module", Language = "Python", ModulePath = "/repo" },
+                new ArchitectureGraphNode { Id = "billing", Name = "shop.billing.api", Kind = ArchitectureGraphNodeKind.CodeComponent, ComponentKind = "Module", Language = "Python", ModulePath = "/repo" }
+            ],
+            [Edge("internal", "web", "persistence", "Production", 1, ArchitectureRelationshipKind.MethodCall, 0)]);
+
+        var result = ArchitectureGraphRollup.Apply(projection, "shop", 1);
+
+        result.Nodes.Should().ContainSingle(node => node.Name == "orders")
+            .Which.LeafComponentIds.Should().BeEquivalentTo(["web", "persistence"]);
+        result.Nodes.Should().ContainSingle(node => node.Name == "billing");
+        result.Nodes.Single(node => node.Name == "orders").InternalRelationshipCounts["Production"].Should().Be(1);
+    }
+
     private static ArchitectureGraphProjection CreateProjection(
         IEnumerable<ArchitectureGraphNode> nodes,
         IEnumerable<ArchitectureGraphEdge> edges) =>

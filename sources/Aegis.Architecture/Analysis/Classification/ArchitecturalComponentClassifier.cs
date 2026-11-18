@@ -483,12 +483,14 @@ public static class ArchitecturalComponentClassifier
         var hasInfrastructureContext = ContainsAny(
             segments, "infrastructure", "persistence", "database", "repositories",
             "repository", "orm", "messaging", "clients", "client", "integrations", "integration");
-        var hasPresentationContext = ContainsAny(
-            segments, "presentation", "api", "rest", "graphql", "controllers",
-            "controller", "frontend", "ui", "views", "view", "endpoints", "endpoint");
         var hasContractsSignal = ContainsAny(
             segments, "contracts", "contract", "dto", "dtos", "requests", "request",
             "responses", "response", "commands", "command", "queries", "query");
+        var hasApiClientContext = ContainsAny(segments, "clients", "client");
+        var hasPresentationContext = ContainsAny(
+            segments, "presentation", "rest", "graphql", "controllers",
+            "controller", "frontend", "ui", "views", "view", "endpoints", "endpoint")
+            || (segments.Contains("api") && !hasContractsSignal && !hasApiClientContext);
         var hasBusinessSignal = ContainsAny(
             segments, "business", "application", "usecases", "usecase",
             "handlers", "handler", "workflows", "workflow");
@@ -533,9 +535,12 @@ public static class ArchitecturalComponentClassifier
         string projectRoot)
     {
         var moduleIdentity = ResolveModuleIdentity(component, projectRoot);
+        var normalizedModulePath = moduleIdentity.Replace('\\', '/');
         var normalizedModuleIdentity = Uri.EscapeDataString(
-            moduleIdentity.Replace('\\', '/').ToLowerInvariant());
-        var packageIdentity = Uri.EscapeDataString(component.QualifiedName.ToLowerInvariant());
+            OperatingSystem.IsWindows()
+                ? normalizedModulePath.ToLowerInvariant()
+                : normalizedModulePath);
+        var packageIdentity = Uri.EscapeDataString(component.QualifiedName);
 
         return $"convention:{normalizedModuleIdentity}:java-package:{packageIdentity}";
     }

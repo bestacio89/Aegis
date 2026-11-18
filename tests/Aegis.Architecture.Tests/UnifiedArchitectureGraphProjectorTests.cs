@@ -291,9 +291,9 @@ public sealed class UnifiedArchitectureGraphProjectorTests
         };
 
         var projection = UnifiedArchitectureGraphProjector.Project(context);
-        var domainNode = projection.Nodes.Should().ContainSingle(node => node.Id == "code:java-package:domain").Subject;
-        var businessNode = projection.Nodes.Should().ContainSingle(node => node.Id == "code:java-package:application").Subject;
-        var ambiguousNode = projection.Nodes.Should().ContainSingle(node => node.Id == "code:java-package:ambiguous").Subject;
+        var domainNode = projection.Nodes.Should().ContainSingle(node => node.Id == "code:java-package%3Adomain").Subject;
+        var businessNode = projection.Nodes.Should().ContainSingle(node => node.Id == "code:java-package%3Aapplication").Subject;
+        var ambiguousNode = projection.Nodes.Should().ContainSingle(node => node.Id == "code:java-package%3Aambiguous").Subject;
 
         domainNode.Name.Should().Be("sample.domain");
         domainNode.ComponentKind.Should().Be("Package");

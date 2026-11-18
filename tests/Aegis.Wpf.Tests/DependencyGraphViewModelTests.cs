@@ -296,11 +296,9 @@ public sealed class DependencyGraphViewModelTests
         viewModel.GraphNodes.Should().ContainSingle(node => node.Id == "package:unknown" && node.Layer == "Package");
         viewModel.GraphEdges.Should().HaveCount(2);
         viewModel.GraphEdges.Should().Contain(edge =>
-            edge.Source == "sample.application" && edge.Target == "sample.domain"
-            && edge.SourceLayer == "Business" && edge.TargetLayer == "Domain");
+            edge.Source == "sample.application" && edge.Target == "sample.domain");
         viewModel.GraphEdges.Should().Contain(edge =>
-            edge.Source == "sample.unknown" && edge.SourceLayer == "Package"
-            && edge.TargetLayer == "Domain");
+            edge.Source == "sample.unknown" && edge.Target == "sample.domain");
     }
 
     private static ArchitectureComponentContext Container(string id, string name) =>

@@ -205,7 +205,7 @@ internal static partial class UnifiedArchitectureGraphProjector
             if (string.Equals(sourceId, targetId, StringComparison.Ordinal)
                 && (string.Equals(nodePrefix, "logical", StringComparison.Ordinal)
                     || (string.Equals(nodePrefix, "code", StringComparison.Ordinal)
-                        && nodes[sourceId].ComponentKind.Equals("Package", StringComparison.OrdinalIgnoreCase))))
+                        && string.Equals(nodes[sourceId].ComponentKind, "Package", StringComparison.OrdinalIgnoreCase))))
             {
                 continue;
             }

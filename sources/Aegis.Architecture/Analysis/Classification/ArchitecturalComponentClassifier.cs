@@ -495,8 +495,11 @@ public static class ArchitecturalComponentClassifier
         var hasServiceSignal = ContainsAny(
             segments, "services", "service", "processors", "processor",
             "workers", "worker", "jobs", "job");
-        if (hasDomainContext && (hasInfrastructureContext || hasPresentationContext))
+        if (hasDomainContext
+            && (hasInfrastructureContext || hasPresentationContext || hasBusinessSignal))
+        {
             return JavaPackageInference.Ambiguous;
+        }
 
         if (hasInfrastructureContext && hasPresentationContext)
             return JavaPackageInference.Ambiguous;

@@ -127,7 +127,7 @@ public sealed class ArchitecturalComponentClassificationTests
     }
 
     [Fact]
-    public void Convention_inference_is_conservative_and_preserves_unclassified_containers()
+    public void Java_package_convention_inference_classifies_known_roles_and_preserves_ambiguous_containers()
     {
         var context = CreateContext(
             CodeComponent("domain", "sample.domain", "Java"),
@@ -141,8 +141,9 @@ public sealed class ArchitecturalComponentClassificationTests
         Assert.Equal("Domain", context.ArchitecturalComponents
             .Single(component => component.Id == domainMembership.ArchitecturalComponentId).Role);
         Assert.StartsWith("convention:sample:java-package:", domainMembership.ArchitecturalComponentId);
-        Assert.Null(context.ArchitecturalComponentMemberships.Single(item => item.CodeComponentId == "ordinary")
-            .ArchitecturalComponentId);
+        Assert.Equal("Services", context.ArchitecturalComponents
+            .Single(component => component.Id == context.ArchitecturalComponentMemberships
+                .Single(item => item.CodeComponentId == "ordinary").ArchitecturalComponentId).Role);
         Assert.Null(context.ArchitecturalComponentMemberships.Single(item => item.CodeComponentId == "conflict")
             .ArchitecturalComponentId);
         Assert.Contains(context.ArchitectureClassificationDiagnostics,

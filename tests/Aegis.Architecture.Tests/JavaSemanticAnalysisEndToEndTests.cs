@@ -153,6 +153,11 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                     .Single(component => component.Id == packageDependency.TargetComponentId).QualifiedName);
                 Assert.True(packageDependency.RelationshipCount > 0);
                 Assert.Empty(context.TestComponentDependencies);
+                Assert.DoesNotContain(context.ArchitectureComponentInternalDependencies, dependency =>
+                    dependency.IsInternal
+                    && context.ArchitectureComponents.Any(component =>
+                        component.Id == dependency.SourceComponentId
+                        && component.ComponentKind == "Package"));
 
                 var graphNodes = context.ArchitectureGraphProjection!.Nodes
                     .ToDictionary(node => node.Id, StringComparer.Ordinal);
@@ -178,6 +183,12 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                 Assert.NotEmpty(semanticGraphEdge.Evidence);
                 Assert.False(string.IsNullOrWhiteSpace(semanticGraphEdge.ProviderRelationshipKind));
                 Assert.NotEqual("SemanticComponentDependency", semanticGraphEdge.ProviderRelationshipKind);
+                Assert.DoesNotContain(
+                    context.ArchitectureGraphProjection.Edges,
+                    edge => edge.Domain == ArchitectureGraphEdgeDomain.NativeSemantic
+                        && edge.SourceNodeId == edge.TargetNodeId
+                        && graphNodes[edge.SourceNodeId].Kind == ArchitectureGraphNodeKind.CodeComponent
+                        && graphNodes[edge.SourceNodeId].ComponentKind == "Package");
             }
         }
         finally

@@ -199,6 +199,15 @@ internal static partial class UnifiedArchitectureGraphProjector
             if (!nodes.ContainsKey(sourceId) || !nodes.ContainsKey(targetId))
                 continue;
 
+            // Package nodes are atomic. A self-edge would expose implementation
+            // interactions below the package boundary in the unified graph/ledger.
+            if (string.Equals(nodePrefix, "code", StringComparison.Ordinal)
+                && string.Equals(sourceId, targetId, StringComparison.Ordinal)
+                && string.Equals(nodes[sourceId].ComponentKind, "Package", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var references = new List<ArchitectureGraphEvidenceReference>();
             var kinds = new HashSet<ArchitectureRelationshipKind>();
             var providerKinds = new HashSet<string>(StringComparer.Ordinal);

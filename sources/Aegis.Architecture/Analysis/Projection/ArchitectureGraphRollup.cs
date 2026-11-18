@@ -40,7 +40,11 @@ public static class ArchitectureGraphRollup
                     node.Language,
                     node.ComponentKind,
                     node.ArchitecturalRole,
-                    node.ModulePath);
+                    node.ModulePath,
+                    node.ResourceProvider,
+                    node.ResourceIdentity,
+                    node.ResourceKind,
+                    node.IsTestScoped);
                 groupedNodes.Add(grouping.GroupKey, builder);
             }
 
@@ -175,7 +179,11 @@ public static class ArchitectureGraphRollup
         string? language,
         string? componentKind,
         string? architecturalRole,
-        string? modulePath)
+        string? modulePath,
+        string? resourceProvider,
+        string? resourceIdentity,
+        string? resourceKind,
+        bool isTestScoped)
     {
         public string GroupKey { get; } = groupKey;
         public string Name { get; } = name;
@@ -185,6 +193,10 @@ public static class ArchitectureGraphRollup
         public string? ComponentKind { get; } = componentKind;
         public string? ArchitecturalRole { get; } = architecturalRole;
         public string? ModulePath { get; } = modulePath;
+        public string? ResourceProvider { get; } = resourceProvider;
+        public string? ResourceIdentity { get; } = resourceIdentity;
+        public string? ResourceKind { get; } = resourceKind;
+        public bool IsTestScoped { get; } = isTestScoped;
         public List<string> LeafComponentIds { get; } = [];
         private readonly Dictionary<string, int> _internalRelationshipCounts = new(StringComparer.Ordinal);
 
@@ -203,6 +215,10 @@ public static class ArchitectureGraphRollup
             ComponentKind = ComponentKind,
             ArchitecturalRole = ArchitecturalRole,
             ModulePath = ModulePath,
+            ResourceProvider = ResourceProvider,
+            ResourceIdentity = ResourceIdentity,
+            ResourceKind = ResourceKind,
+            IsTestScoped = IsTestScoped,
             LeafComponentIds = Array.AsReadOnly(LeafComponentIds.OrderBy(id => id, StringComparer.Ordinal).ToArray()),
             InternalRelationshipCounts = new System.Collections.ObjectModel.ReadOnlyDictionary<string, int>(
                 new Dictionary<string, int>(_internalRelationshipCounts, StringComparer.Ordinal))

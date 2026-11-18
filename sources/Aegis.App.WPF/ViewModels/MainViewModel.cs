@@ -20,9 +20,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly AegisArchitectureAnalysisRunner _runner;
 
     private readonly ArchitectureOverviewViewModel _architectureOverview;
-    private readonly DependencyGraphViewModel _dependencyGraph = new();
-    private readonly SystemLandscapeViewModel _systemLandscape = new();
-    private readonly RelationshipLedgerViewModel _relationshipLedger = new();
+    private readonly ArchitectureGraphViewOptions _architectureGraphOptions = new();
+    private readonly DependencyGraphViewModel _dependencyGraph;
+    private readonly SystemLandscapeViewModel _systemLandscape;
+    private readonly RelationshipLedgerViewModel _relationshipLedger;
     private readonly SectionDashboardViewModel _sectionDashboard;
     private readonly LayerDashboardViewModel _layerDashboard;
     private readonly RuleDashboardViewModel _ruleDashboard;
@@ -54,6 +55,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         _runner = runner;
 
+        _dependencyGraph = new DependencyGraphViewModel(_architectureGraphOptions);
+        _systemLandscape = new SystemLandscapeViewModel(_architectureGraphOptions);
+        _relationshipLedger = new RelationshipLedgerViewModel(_architectureGraphOptions);
         _architectureOverview = architectureOverview;
         _sectionDashboard = sectionDashboard;
         _layerDashboard = layerDashboard;

@@ -10,6 +10,7 @@ public sealed record ArchitectureGraphRollupEdge
     public string TargetGroupKey { get; init; } = string.Empty;
     public ArchitectureGraphEdgeDomain Domain { get; init; }
     public string Scope { get; init; } = "Production";
+    public int GroupDepth { get; init; }
     public int RelationshipCount { get; init; }
     public IReadOnlyList<ArchitectureRelationshipKind> RelationshipKinds { get; init; } = Array.Empty<ArchitectureRelationshipKind>();
     public IReadOnlyList<string> ProviderRelationshipKinds { get; init; } = Array.Empty<string>();

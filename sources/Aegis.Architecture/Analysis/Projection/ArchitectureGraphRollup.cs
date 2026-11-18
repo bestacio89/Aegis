@@ -77,7 +77,7 @@ public static class ArchitectureGraphRollup
             var key = new EdgeGroupKey(sourceGroup, targetGroup, edge.Domain, edge.Scope);
             if (!edgeGroups.TryGetValue(key, out var aggregate))
             {
-                aggregate = new EdgeBuilder(key);
+                aggregate = new EdgeBuilder(key, depth);
                 edgeGroups.Add(key, aggregate);
             }
 
@@ -225,9 +225,10 @@ public static class ArchitectureGraphRollup
         };
     }
 
-    private sealed class EdgeBuilder(EdgeGroupKey key)
+    private sealed class EdgeBuilder(EdgeGroupKey key, int groupDepth)
     {
         public EdgeGroupKey Key { get; } = key;
+        public int GroupDepth { get; } = groupDepth;
         public int RelationshipCount { get; set; }
         public HashSet<ArchitectureRelationshipKind> RelationshipKinds { get; } = [];
         public HashSet<string> ProviderRelationshipKinds { get; } = new(StringComparer.Ordinal);
@@ -244,6 +245,7 @@ public static class ArchitectureGraphRollup
             TargetGroupKey = Key.TargetGroupKey,
             Domain = Key.Domain,
             Scope = Key.Scope,
+            GroupDepth = GroupDepth,
             RelationshipCount = RelationshipCount,
             RelationshipKinds = Array.AsReadOnly(RelationshipKinds.OrderBy(kind => kind).ToArray()),
             ProviderRelationshipKinds = Array.AsReadOnly(ProviderRelationshipKinds.OrderBy(kind => kind, StringComparer.Ordinal).ToArray()),

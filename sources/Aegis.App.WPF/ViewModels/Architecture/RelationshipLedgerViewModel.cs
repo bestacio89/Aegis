@@ -207,7 +207,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             Source = source.Name, SourceLayer = GetNodeClassification(source), SourceProjectPath = source.ModulePath ?? string.Empty,
             Target = target.Name, TargetLayer = GetNodeClassification(target), TargetProjectPath = target.ModulePath ?? string.Empty,
             DependencyType = type, ProviderRelationshipKind = providerKind, Direction = $"{source.Name} → {target.Name}",
-            Scope = edge.Scope, RelationshipCount = edge.RelationshipCount, GroupDepth = 1,
+            Scope = edge.Scope, RelationshipCount = edge.RelationshipCount, GroupDepth = edge.GroupDepth,
             EvidenceOccurrenceCount = edge.Evidence.Count,
             IsInternal = string.Equals(edge.SourceGroupKey, edge.TargetGroupKey, StringComparison.Ordinal),
             EvidenceReferences = FormatGraphEvidenceReferences(edge.Evidence), ContributingLeafEdgeIds = edge.LeafEdgeIds

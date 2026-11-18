@@ -1,3 +1,4 @@
+using System.Threading;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Wpf.ViewModels.Architecture;
@@ -126,50 +127,71 @@ public sealed class DependencyGraphViewModelTests
     [Fact]
     public void Depth_selector_updates_shared_rollup_state()
     {
-        var options = new ArchitectureGraphViewOptions();
-        var graph = new DependencyGraphViewModel(options);
-        var ledger = new RelationshipLedgerViewModel(options);
-        var landscape = new SystemLandscapeViewModel(options);
+        RunOnStaThread(() =>
+        {
+            var options = new ArchitectureGraphViewOptions();
+            var graph = new DependencyGraphViewModel(options);
+            var ledger = new RelationshipLedgerViewModel(options);
+            var landscape = new SystemLandscapeViewModel(options);
 
-        graph.RollupDepth = 2;
+            graph.RollupDepth = 2;
 
-        Assert.Equal(2, ledger.RollupDepth);
-        Assert.Equal(2, landscape.RollupDepth);
+            Assert.Equal(2, ledger.RollupDepth);
+            Assert.Equal(2, landscape.RollupDepth);
+        });
     }
 
     [Fact]
     public void Shared_depth_produces_identical_relationship_sets_in_graph_ledger_and_landscape()
     {
-        var projection = new ArchitectureGraphProjection(
-            [
-                Code("web", "shop.orders.web", "Package", "Java", "/repo"),
-                Code("persistence", "shop.orders.persistence", "Package", "Java", "/repo"),
-                Code("billing", "shop.billing.api", "Package", "Java", "/repo")
-            ],
-            [
-                Edge("internal", "web", "persistence"),
-                Edge("external", "web", "billing")
-            ],
-            []);
-        var context = new ProjectArchitectureContext { ArchitectureGraphProjection = projection };
-        var options = new ArchitectureGraphViewOptions();
-        var graph = new DependencyGraphViewModel(options);
-        var ledger = new RelationshipLedgerViewModel(options);
-        var landscape = new SystemLandscapeViewModel(options);
+        RunOnStaThread(() =>
+        {
+            var projection = new ArchitectureGraphProjection(
+                [
+                    Code("web", "shop.orders.web", "Package", "Java", "/repo"),
+                    Code("persistence", "shop.orders.persistence", "Package", "Java", "/repo"),
+                    Code("billing", "shop.billing.api", "Package", "Java", "/repo")
+                ],
+                [
+                    Edge("internal", "web", "persistence"),
+                    Edge("external", "web", "billing")
+                ],
+                []);
+            var context = new ProjectArchitectureContext { ArchitectureGraphProjection = projection };
+            var options = new ArchitectureGraphViewOptions();
+            var graph = new DependencyGraphViewModel(options);
+            var ledger = new RelationshipLedgerViewModel(options);
+            var landscape = new SystemLandscapeViewModel(options);
 
-        graph.Update(context);
-        ledger.Update(context);
-        landscape.Update(context);
+            graph.Update(context);
+            ledger.Update(context);
+            landscape.Update(context);
 
-        Assert.Single(graph.GraphEdges);
-        Assert.Single(ledger.Dependencies);
-        Assert.Single(landscape.Relationships);
+            Assert.Single(graph.GraphEdges);
+            Assert.Single(ledger.Dependencies);
+            Assert.Single(landscape.Relationships);
 
-        options.Depth = 2;
+            options.Depth = 2;
 
-        Assert.Equal(2, graph.GraphEdges.Count);
-        Assert.Equal(2, ledger.Dependencies.Count);
-        Assert.Equal(2, landscape.Relationships.Count);
+            Assert.Equal(2, graph.GraphEdges.Count);
+            Assert.Equal(2, ledger.Dependencies.Count);
+            Assert.Equal(2, landscape.Relationships.Count);
+        });
+    }
+
+    private static void RunOnStaThread(Action action)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try { action(); }
+            catch (Exception exception) { failure = exception; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null)
+            throw new AggregateException("The dependency graph ViewModel test failed on its STA thread.", failure);
     }
 
     private static ArchitectureGraphNode Code(

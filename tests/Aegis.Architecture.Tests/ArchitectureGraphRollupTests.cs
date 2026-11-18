@@ -31,7 +31,7 @@ public sealed class ArchitectureGraphRollupTests
         var edge = result.Edges.Should().ContainSingle().Subject;
         edge.SourceGroupKey.Should().Be(result.Nodes.Single(node => node.Name == "orders").GroupKey);
         edge.TargetGroupKey.Should().Be(result.Nodes.Single(node => node.Name == "billing").GroupKey);
-        edge.RelationshipCount.Should().Be(2);
+        edge.RelationshipCount.Should().Be(5);
         edge.RelationshipKinds.Should().BeEquivalentTo(
             [ArchitectureRelationshipKind.MethodCall, ArchitectureRelationshipKind.TypeReference]);
         edge.Evidence.Should().HaveCount(2);
@@ -108,7 +108,10 @@ public sealed class ArchitectureGraphRollupTests
 
         result.Nodes.Should().ContainSingle(node => node.Name == "orders" && node.LeafComponentIds.Contains("a1"))
             .Which.LeafComponentIds.Should().Contain("a2");
-        result.Nodes.Should().ContainSingle(node => node.Name == "shop.orders.api" && node.LeafComponentIds.Contains("b1"));
+        result.Nodes.Should().ContainSingle(node =>
+            node.Name == "orders"
+            && node.ModulePath == "/repo/module-b"
+            && node.LeafComponentIds.Contains("b1"));
         result.UnprojectedEvidence.Should().BeEquivalentTo(projection.UnprojectedEvidence);
     }
 

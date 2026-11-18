@@ -18,9 +18,9 @@ public sealed class ArchitectureGraphRollupTests
                 Package("billing", "shop.billing.api")
             ],
             [
-                Edge("orders-internal", "web", "persistence", "Production", 1, ArchitectureRelationshipKind.MethodCall, 0),
-                Edge("orders-billing-a", "web", "billing", "Production", 2, ArchitectureRelationshipKind.MethodCall, 1),
-                Edge("orders-billing-b", "persistence", "billing", "Production", 3, ArchitectureRelationshipKind.TypeReference, 2)
+                Edge("orders-internal", "web", "persistence", "Production", 1, ArchitectureRelationshipKind.Calls, 0),
+                Edge("orders-billing-a", "web", "billing", "Production", 2, ArchitectureRelationshipKind.Calls, 1),
+                Edge("orders-billing-b", "persistence", "billing", "Production", 3, ArchitectureRelationshipKind.References, 2)
             ]);
 
         var result = ArchitectureGraphRollup.Apply(projection, "shop", 1);
@@ -33,7 +33,7 @@ public sealed class ArchitectureGraphRollupTests
         edge.TargetGroupKey.Should().Be(result.Nodes.Single(node => node.Name == "billing").GroupKey);
         edge.RelationshipCount.Should().Be(5);
         edge.RelationshipKinds.Should().BeEquivalentTo(
-            [ArchitectureRelationshipKind.MethodCall, ArchitectureRelationshipKind.TypeReference]);
+            [ArchitectureRelationshipKind.Calls, ArchitectureRelationshipKind.References]);
         edge.Evidence.Should().HaveCount(2);
         edge.EvidenceFiles.Should().BeEquivalentTo(["/repo/src/File1.java", "/repo/src/File2.java"]);
         edge.LeafEdgeIds.Should().BeEquivalentTo(["orders-billing-a", "orders-billing-b"]);
@@ -44,7 +44,7 @@ public sealed class ArchitectureGraphRollupTests
     {
         var projection = CreateProjection(
             [Package("controller", "controller.admin"), Package("service", "service.impl")],
-            [Edge("controller-service", "controller", "service", "Production", 1, ArchitectureRelationshipKind.MethodCall, 0)]);
+            [Edge("controller-service", "controller", "service", "Production", 1, ArchitectureRelationshipKind.Calls, 0)]);
 
         var result = ArchitectureGraphRollup.Apply(projection, null, 1);
 
@@ -58,8 +58,8 @@ public sealed class ArchitectureGraphRollupTests
         var projection = CreateProjection(
             [Package("a", "shop.orders.web"), Package("b", "shop.billing.api")],
             [
-                Edge("production", "a", "b", "Production", 2, ArchitectureRelationshipKind.MethodCall, 0),
-                Edge("test", "a", "b", "Test", 3, ArchitectureRelationshipKind.TypeReference, 1)
+                Edge("production", "a", "b", "Production", 2, ArchitectureRelationshipKind.Calls, 0),
+                Edge("test", "a", "b", "Test", 3, ArchitectureRelationshipKind.References, 1)
             ]);
 
         var result = ArchitectureGraphRollup.Apply(projection, "shop", 1);
@@ -75,7 +75,7 @@ public sealed class ArchitectureGraphRollupTests
     {
         var projection = CreateProjection(
             [Package("inside", "shop.orders.web"), Package("outside", "com.vendor.adapter")],
-            [Edge("outside-edge", "inside", "outside", "Production", 1, ArchitectureRelationshipKind.MethodCall, 0)]);
+            [Edge("outside-edge", "inside", "outside", "Production", 1, ArchitectureRelationshipKind.Calls, 0)]);
 
         var result = ArchitectureGraphRollup.Apply(projection, "shop", 1);
 
@@ -94,7 +94,7 @@ public sealed class ArchitectureGraphRollupTests
                 Package("b1", "shop.orders.api", "/repo/module-b")
             ],
             [
-                Edge("module-a", "a1", "a2", "Production", 1, ArchitectureRelationshipKind.MethodCall, 0)
+                Edge("module-a", "a1", "a2", "Production", 1, ArchitectureRelationshipKind.Calls, 0)
             ],
             [
                 new ArchitectureGraphUnprojectedEvidence
@@ -121,7 +121,7 @@ public sealed class ArchitectureGraphRollupTests
     {
         var projection = CreateProjection(
             [Package("known", "shop.orders.web")],
-            [Edge("missing-endpoint", "known", "missing", "Production", 4, ArchitectureRelationshipKind.MethodCall, 0)]);
+            [Edge("missing-endpoint", "known", "missing", "Production", 4, ArchitectureRelationshipKind.Calls, 0)]);
 
         var result = ArchitectureGraphRollup.Apply(projection, "shop", 1);
 
@@ -150,8 +150,8 @@ public sealed class ArchitectureGraphRollupTests
         {
             ArchitectureComponents =
             [
-                Package("orders", "com.example.orders.web"),
-                Package("billing", "com.example.billing.api")
+                Component("orders", "com.example.orders.web"),
+                Component("billing", "com.example.billing.api")
             ],
             SemanticAnalysisRuns =
             [
@@ -190,7 +190,7 @@ public sealed class ArchitectureGraphRollupTests
                 new ArchitectureGraphNode { Id = "persistence", Name = "shop.orders.persistence", Kind = ArchitectureGraphNodeKind.CodeComponent, ComponentKind = "Module", Language = "Python", ModulePath = "/repo" },
                 new ArchitectureGraphNode { Id = "billing", Name = "shop.billing.api", Kind = ArchitectureGraphNodeKind.CodeComponent, ComponentKind = "Module", Language = "Python", ModulePath = "/repo" }
             ],
-            [Edge("internal", "web", "persistence", "Production", 1, ArchitectureRelationshipKind.MethodCall, 0)]);
+            [Edge("internal", "web", "persistence", "Production", 1, ArchitectureRelationshipKind.Calls, 0)]);
 
         var result = ArchitectureGraphRollup.Apply(projection, "shop", 1);
 
@@ -199,6 +199,16 @@ public sealed class ArchitectureGraphRollupTests
         result.Nodes.Should().ContainSingle(node => node.Name == "billing");
         result.Nodes.Single(node => node.Name == "orders").InternalRelationshipCounts["Production"].Should().Be(1);
     }
+
+    private static ArchitectureComponentContext Component(string id, string qualifiedName) =>
+        new()
+        {
+            Id = id,
+            Name = qualifiedName.Split('.').Last(),
+            QualifiedName = qualifiedName,
+            Language = "Java",
+            ComponentKind = "Package"
+        };
 
     private static ArchitectureGraphProjection CreateProjection(
         IEnumerable<ArchitectureGraphNode> nodes,

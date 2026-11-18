@@ -11,8 +11,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="2*" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" Style="{StaticResource Card.Structural}" Margin="0,0,0,10">
@@ -27,7 +26,7 @@
                     <TextBlock Text="{Binding ProjectName}" Style="{StaticResource Text.Title}"
                                Margin="0,5,0,0" TextWrapping="Wrap" />
                     <TextBlock
-                        Text="Inspect detected relationships projected from the unified architecture graph. Unprojected observations and user declarations remain separate from graph edges."
+                        Text="Inspect detected relationships projected from the unified architecture graph. Unprojected observations are available in the dedicated diagnostic view."
                         Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
                         Margin="0,6,12,0" TextWrapping="Wrap" MaxWidth="900" />
                 </StackPanel>
@@ -84,7 +83,13 @@
                           SelectedItem="{Binding SelectedApplicationIntegration, Mode=TwoWay}"
                           AutoGenerateColumns="False" IsReadOnly="True"
                           CanUserAddRows="False" CanUserDeleteRows="False"
-                          HeadersVisibility="Column" Height="112" Margin="0,10,0,0"
+                          HeadersVisibility="Column" MinHeight="72" MaxHeight="180"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                          ScrollViewer.CanContentScroll="True"
+                          EnableRowVirtualization="True"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          Margin="0,10,0,0"
                           Style="{StaticResource Grid.Ledger}"
                           ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}"
                           RowStyle="{StaticResource Grid.LedgerRow}">
@@ -171,9 +176,12 @@
                     CanUserReorderColumns="False" CanUserResizeRows="False"
                     CanUserSortColumns="True" SelectionMode="Single"
                     SelectionUnit="FullRow" HeadersVisibility="Column"
+                    MinHeight="180"
                     EnableRowVirtualization="True" EnableColumnVirtualization="True"
                     VirtualizingPanel.IsVirtualizing="True"
                     VirtualizingPanel.VirtualizationMode="Recycling"
+                    ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                    ScrollViewer.VerticalScrollBarVisibility="Auto"
                     ScrollViewer.CanContentScroll="True"
                     Style="{StaticResource Grid.Ledger}"
                     ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}"
@@ -298,46 +306,5 @@
                 </Grid>
             </Border>
         </Grid>
-        <Border Grid.Row="4" Background="{StaticResource Brush.Panel}"
-                BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
-                CornerRadius="4" Padding="10" MinHeight="130" Margin="0,10,0,0">
-            <Border.Style>
-                <Style TargetType="Border">
-                    <Setter Property="Visibility" Value="Visible" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding UnprojectedEvidenceCount}" Value="0">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <DockPanel Grid.Row="0" Margin="2,0,2,8">
-                    <TextBlock Text="UNPROJECTED EVIDENCE" Style="{StaticResource Text.Eyebrow}"
-                               Foreground="{StaticResource Brush.AccentStructural}" />
-                    <TextBlock DockPanel.Dock="Right"
-                               Text="{Binding UnprojectedEvidenceCount, StringFormat={}{0:N0} observations}"
-                               Foreground="{StaticResource Brush.TextMuted}" FontSize="11" />
-                </DockPanel>
-                <DataGrid Grid.Row="1" ItemsSource="{Binding UnprojectedEvidence}" Height="90"
-                          AutoGenerateColumns="False" IsReadOnly="True"
-                          CanUserAddRows="False" CanUserDeleteRows="False"
-                          CanUserReorderColumns="False" CanUserResizeRows="False"
-                          HeadersVisibility="Column" Style="{StaticResource Grid.Ledger}"
-                          ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}"
-                          RowStyle="{StaticResource Grid.LedgerRow}">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Evidence domain" Binding="{Binding Evidence.Domain}" Width="145" />
-                        <DataGridTextColumn Header="Occurrence" Binding="{Binding Evidence.OccurrenceIndex}" Width="85" />
-                        <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="180" />
-                        <DataGridTextColumn Header="Explanation" Binding="{Binding Explanation}" Width="*" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </Grid>
-        </Border>
     </Grid>
 </UserControl>

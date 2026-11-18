@@ -12,7 +12,7 @@ public partial class UnprojectedEvidenceView : UserControl
 
     private void ClearFilters_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is not ViewModels.Architecture.UnprojectedEvidenceViewModel viewModel)
+        if (DataContext is not Aegis.Wpf.ViewModels.Architecture.UnprojectedEvidenceViewModel viewModel)
             return;
 
         viewModel.SearchText = string.Empty;

@@ -10,6 +10,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
     private readonly ArchitectureOverviewViewModel _overview;
     private readonly DependencyGraphViewModel _dependencyGraph;
     private readonly RelationshipLedgerViewModel _relationshipLedger;
+    private readonly UnprojectedEvidenceViewModel _unprojectedEvidence;
     private readonly SectionDashboardViewModel _sections;
     private readonly LayerDashboardViewModel _layers;
     private readonly RuleDashboardViewModel _rules;
@@ -24,6 +25,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         ArchitectureOverviewViewModel overview,
         DependencyGraphViewModel dependencyGraph,
         RelationshipLedgerViewModel relationshipLedger,
+        UnprojectedEvidenceViewModel unprojectedEvidence,
         SectionDashboardViewModel sections,
         LayerDashboardViewModel layers,
         RuleDashboardViewModel rules,
@@ -34,6 +36,7 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
         _overview = overview ?? throw new ArgumentNullException(nameof(overview));
         _dependencyGraph = dependencyGraph ?? throw new ArgumentNullException(nameof(dependencyGraph));
         _relationshipLedger = relationshipLedger ?? throw new ArgumentNullException(nameof(relationshipLedger));
+        _unprojectedEvidence = unprojectedEvidence ?? throw new ArgumentNullException(nameof(unprojectedEvidence));
         _sections = sections ?? throw new ArgumentNullException(nameof(sections));
         _layers = layers ?? throw new ArgumentNullException(nameof(layers));
         _rules = rules ?? throw new ArgumentNullException(nameof(rules));
@@ -58,7 +61,8 @@ public sealed class ArchitectureWorkspaceViewModel : INotifyPropertyChanged
                 "Investigate directed dependencies and inspect the evidence behind each discovered relationship.",
                 [
                     new ArchitectureTab("Dependency Graph", "⌘", _dependencyGraph),
-                    new ArchitectureTab("Relationship Ledger", "▤", _relationshipLedger)
+                    new ArchitectureTab("Relationship Ledger", "▤", _relationshipLedger),
+                    new ArchitectureTab("Unprojected Evidence", "⌕", _unprojectedEvidence)
                 ]),
             new ArchitectureWorkspaceSection(
                 "Governance",

@@ -73,7 +73,6 @@
                       Foreground="{StaticResource Brush.TextPrimary}"
                       BorderBrush="{StaticResource Brush.Line}" />
             <Button Grid.Column="3" Content="Clear filters"
-                    Command="{x:Static NavigationCommands.Refresh}"
                     Click="ClearFilters_Click" Padding="14,8" MinHeight="38"
                     Background="{StaticResource Brush.PanelElevated}"
                     Foreground="{StaticResource Brush.TextPrimary}"

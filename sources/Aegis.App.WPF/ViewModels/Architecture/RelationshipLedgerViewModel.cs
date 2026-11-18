@@ -14,7 +14,7 @@ namespace Aegis.Wpf.ViewModels.Architecture;
 
 /// <summary>
 /// Presents the authoritative unified graph projection as a filterable relationship
-/// ledger. Unprojected observations and user declarations remain separate.
+/// ledger. Unprojected observations are inspected in their dedicated workspace.
 /// </summary>
 public sealed partial class RelationshipLedgerViewModel : ObservableObject
 {
@@ -39,8 +39,6 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
     }
 
     public ObservableCollection<ArchitectureRelationshipRecordViewModel> Dependencies { get; private set; } = new();
-
-    public ObservableCollection<ArchitectureGraphUnprojectedEvidence> UnprojectedEvidence { get; } = new();
 
     public ICollectionView DependenciesView => _dependenciesView;
 
@@ -77,7 +75,6 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
     [ObservableProperty] private ArchitectureRelationshipRecordViewModel? selectedDependency;
     [ObservableProperty] private int totalDependencies;
     [ObservableProperty] private int filteredDependencies;
-    [ObservableProperty] private int unprojectedEvidenceCount;
 
     partial void OnSearchTextChanged(string value) => RefreshFilter();
 
@@ -129,19 +126,6 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
         _dependenciesView = CollectionViewSource.GetDefaultView(Dependencies);
         _dependenciesView.Filter = MatchesFilter;
 
-        UnprojectedEvidence.Clear();
-        if (projection is not null)
-        {
-            foreach (var evidence in projection.UnprojectedEvidence
-                         .OrderBy(item => item.Evidence.Domain)
-                         .ThenBy(item => item.Evidence.OccurrenceIndex)
-                         .ThenBy(item => item.Reason))
-            {
-                UnprojectedEvidence.Add(evidence);
-            }
-        }
-
-        UnprojectedEvidenceCount = UnprojectedEvidence.Count;
         LayerFilters = ["All", .. dependencies
             .SelectMany(dependency => new[] { dependency.SourceLayer, dependency.TargetLayer })
             .Where(layer => !string.IsNullOrWhiteSpace(layer))

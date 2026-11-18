@@ -22,6 +22,7 @@ public sealed class ArchitectureWorkspaceViewModelTests
                 "Overview",
                 "Dependency Graph",
                 "Relationship Ledger",
+                "Unprojected Evidence",
                 "Sections",
                 "Layers",
                 "Rules & Metrics",
@@ -53,7 +54,19 @@ public sealed class ArchitectureWorkspaceViewModelTests
         workspace.SelectedSection!.Name.Should().Be("Dependencies");
         workspace.SelectedTab!.Name.Should().Be("Relationship Ledger");
         workspace.ActiveContent.Should().BeSameAs(workspace.SelectedTab.ViewModel);
-        workspace.SectionViewCount.Should().Be(2);
+        workspace.SectionViewCount.Should().Be(3);
+    }
+
+    [Fact]
+    public void SelectTab_OpensDedicatedUnprojectedEvidenceView()
+    {
+        var workspace = CreateWorkspace();
+
+        workspace.SelectTab("Unprojected Evidence");
+
+        workspace.SelectedSection!.Name.Should().Be("Dependencies");
+        workspace.SelectedTab!.ViewModel.Should().BeOfType<UnprojectedEvidenceViewModel>();
+        workspace.ActiveContent.Should().BeSameAs(workspace.SelectedTab.ViewModel);
     }
 
     [Fact]
@@ -136,6 +149,7 @@ public sealed class ArchitectureWorkspaceViewModelTests
             new ArchitectureOverviewViewModel(),
             new DependencyGraphViewModel(),
             new RelationshipLedgerViewModel(),
+            new UnprojectedEvidenceViewModel(),
             new SectionDashboardViewModel(),
             new LayerDashboardViewModel(NullLogger<LayerDashboardViewModel>.Instance),
             new RuleDashboardViewModel(NullLogger<RuleDashboardViewModel>.Instance),

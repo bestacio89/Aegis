@@ -24,6 +24,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly DependencyGraphViewModel _dependencyGraph;
     private readonly SystemLandscapeViewModel _systemLandscape;
     private readonly RelationshipLedgerViewModel _relationshipLedger;
+    private readonly UnprojectedEvidenceViewModel _unprojectedEvidence;
     private readonly SectionDashboardViewModel _sectionDashboard;
     private readonly LayerDashboardViewModel _layerDashboard;
     private readonly RuleDashboardViewModel _ruleDashboard;
@@ -58,6 +59,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _dependencyGraph = new DependencyGraphViewModel(_architectureGraphOptions);
         _systemLandscape = new SystemLandscapeViewModel(_architectureGraphOptions);
         _relationshipLedger = new RelationshipLedgerViewModel(_architectureGraphOptions);
+        _unprojectedEvidence = new UnprojectedEvidenceViewModel();
         _architectureOverview = architectureOverview;
         _sectionDashboard = sectionDashboard;
         _layerDashboard = layerDashboard;
@@ -72,6 +74,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             _architectureOverview,
             _dependencyGraph,
             _relationshipLedger,
+            _unprojectedEvidence,
             _sectionDashboard,
             _layerDashboard,
             _ruleDashboard,
@@ -304,6 +307,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _systemLandscape.Update(context);
         _dependencyGraph.Update(context);
         _relationshipLedger.Update(context);
+        _unprojectedEvidence.Update(context);
         _layerDashboard.Update(report);
         _sectionDashboard.Update(report);
         _ruleDashboard.Update(report);

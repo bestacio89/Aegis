@@ -88,6 +88,68 @@ public sealed class RelationshipLedgerViewModelTests
     }
 
     [Fact]
+    public void Update_PresentsProviderKindWhenNormalizedRelationshipKindIsUnknown()
+    {
+        RunOnStaThread(() =>
+        {
+            var context = new ProjectArchitectureContext
+            {
+                ArchitectureGraphProjection = new ArchitectureGraphProjection(
+                    [
+                        new ArchitectureGraphNode
+                        {
+                            Id = "code:java-package:client",
+                            Name = "sample.application",
+                            Kind = ArchitectureGraphNodeKind.CodeComponent,
+                            Language = "Java",
+                            ComponentKind = "Package"
+                        },
+                        new ArchitectureGraphNode
+                        {
+                            Id = "code:java-package:domain",
+                            Name = "sample.domain",
+                            Kind = ArchitectureGraphNodeKind.CodeComponent,
+                            Language = "Java",
+                            ComponentKind = "Package"
+                        }
+                    ],
+                    [
+                        new ArchitectureGraphEdge
+                        {
+                            Id = "java-package-dependency",
+                            SourceNodeId = "code:java-package:client",
+                            TargetNodeId = "code:java-package:domain",
+                            Domain = ArchitectureGraphEdgeDomain.NativeSemantic,
+                            Scope = "Production",
+                            ProviderRelationshipKind = "DependsOn",
+                            RelationshipKinds = [ArchitectureRelationshipKind.Unknown],
+                            Evidence =
+                            [
+                                new ArchitectureGraphEvidenceReference
+                                {
+                                    Domain = ArchitectureGraphEvidenceDomain.SemanticRelationship,
+                                    OccurrenceIndex = 0,
+                                    EvidenceId = "run-1:relationship-1",
+                                    ProviderId = "relationship-1"
+                                }
+                            ]
+                        }
+                    ],
+                    [])
+            };
+
+            var viewModel = new RelationshipLedgerViewModel();
+            viewModel.Update(context);
+
+            var relationship = Assert.Single(viewModel.Dependencies);
+            Assert.Equal("DependsOn", relationship.DependencyType);
+            Assert.Equal("DependsOn", relationship.ProviderRelationshipKind);
+            Assert.Equal("Package", relationship.SourceLayer);
+            Assert.Equal("Package", relationship.TargetLayer);
+        });
+    }
+
+    [Fact]
     public void Update_KeepsUnprojectedEvidenceOutsideResolvedRelationshipRows()
     {
         RunOnStaThread(() =>

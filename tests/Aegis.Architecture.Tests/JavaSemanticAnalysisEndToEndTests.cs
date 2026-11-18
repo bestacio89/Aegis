@@ -153,6 +153,20 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                     .Single(component => component.Id == packageDependency.TargetComponentId).QualifiedName);
                 Assert.True(packageDependency.RelationshipCount > 0);
                 Assert.Empty(context.TestComponentDependencies);
+
+                var semanticGraphEdge = Assert.Single(
+                    context.ArchitectureGraphProjection!.Edges.Where(edge =>
+                        edge.Domain == ArchitectureGraphEdgeDomain.NativeSemantic));
+                var graphNodes = context.ArchitectureGraphProjection.Nodes
+                    .ToDictionary(node => node.Id, StringComparer.Ordinal);
+                Assert.Equal("sample.application", graphNodes[semanticGraphEdge.SourceNodeId].Name);
+                Assert.Equal("sample.domain", graphNodes[semanticGraphEdge.TargetNodeId].Name);
+                Assert.Equal("Package", graphNodes[semanticGraphEdge.SourceNodeId].ComponentKind);
+                Assert.Equal("Package", graphNodes[semanticGraphEdge.TargetNodeId].ComponentKind);
+                Assert.NotEmpty(semanticGraphEdge.Evidence);
+                Assert.DoesNotContain(
+                    semanticGraphEdge.ProviderRelationshipKind,
+                    ["", "SemanticComponentDependency"]);
             }
         }
         finally

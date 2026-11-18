@@ -180,9 +180,16 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             .OrderBy(kind => kind, StringComparer.Ordinal)
             .ToArray();
 
-        var dependencyType = relationshipKinds.Length > 0
-            ? string.Join(", ", relationshipKinds)
-            : edge.ProviderRelationshipKind;
+        var classifiedRelationshipKinds = relationshipKinds
+            .Where(kind => !kind.Equals(nameof(ArchitectureRelationshipKind.Unknown), StringComparison.Ordinal))
+            .ToArray();
+        var dependencyType = classifiedRelationshipKinds.Length > 0
+            ? string.Join(", ", classifiedRelationshipKinds)
+            : !string.IsNullOrWhiteSpace(edge.ProviderRelationshipKind)
+                ? edge.ProviderRelationshipKind
+                : relationshipKinds.Length > 0
+                    ? string.Join(", ", relationshipKinds)
+                    : "Unclassified";
 
         return new ArchitectureRelationshipRecordViewModel
         {

@@ -201,6 +201,7 @@ internal static partial class UnifiedArchitectureGraphProjector
 
             var references = new List<ArchitectureGraphEvidenceReference>();
             var kinds = new HashSet<ArchitectureRelationshipKind>();
+            var providerKinds = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var relationshipReference in dependency.ContributingRelationships)
             {
@@ -230,6 +231,9 @@ internal static partial class UnifiedArchitectureGraphProjector
                 }
 
                 var match = matches[0];
+                if (!string.IsNullOrWhiteSpace(match.Relationship.Kind.ToString()))
+                    providerKinds.Add(match.Relationship.Kind.ToString());
+
                 references.Add(new ArchitectureGraphEvidenceReference
                 {
                     Domain = ArchitectureGraphEvidenceDomain.SemanticRelationship,
@@ -273,7 +277,9 @@ internal static partial class UnifiedArchitectureGraphProjector
                 TargetNodeId = targetId,
                 Domain = ArchitectureGraphEdgeDomain.NativeSemantic,
                 Scope = dependency.Scope,
-                ProviderRelationshipKind = dependency.DependencyType,
+                ProviderRelationshipKind = providerKinds.Count == 0
+                    ? dependency.DependencyType
+                    : string.Join(", ", providerKinds.OrderBy(kind => kind, StringComparer.Ordinal)),
                 RelationshipKinds = Array.AsReadOnly(kinds.OrderBy(kind => kind).ToArray()),
                 AndroidVariants = Array.AsReadOnly(dependency.AndroidVariants
                     .Where(value => !string.IsNullOrWhiteSpace(value))

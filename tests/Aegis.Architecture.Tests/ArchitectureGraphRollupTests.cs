@@ -115,6 +115,33 @@ public sealed class ArchitectureGraphRollupTests
         result.UnprojectedEvidence.Should().BeEquivalentTo(projection.UnprojectedEvidence);
     }
 
+    [Fact]
+    public void Apply_keeps_unresolved_edges_separate_from_projected_edges()
+    {
+        var projection = CreateProjection(
+            [Package("known", "shop.orders.web")],
+            [Edge("missing-endpoint", "known", "missing", "Production", 4, ArchitectureRelationshipKind.MethodCall, 0)]);
+
+        var result = ArchitectureGraphRollup.Apply(projection, "shop", 1);
+
+        result.Edges.Should().BeEmpty();
+        result.UnresolvedEdges.Should().ContainSingle()
+            .Which.RelationshipCount.Should().Be(4);
+    }
+
+    [Fact]
+    public void Resolve_prefers_policy_override_then_application_entry_package_then_branch_fallback()
+    {
+        var names = new[] { "com.example.orders.web", "com.example.orders.persistence", "com.example.billing.api" };
+
+        ArchitecturePackageBaseResolver.Resolve(names, "org.override", "com.example")
+            .Should().Be("org.override");
+        ArchitecturePackageBaseResolver.Resolve(names, null, "com.example")
+            .Should().Be("com.example");
+        ArchitecturePackageBaseResolver.Resolve(names)
+            .Should().Be("com.example");
+    }
+
     private static ArchitectureGraphProjection CreateProjection(
         IEnumerable<ArchitectureGraphNode> nodes,
         IEnumerable<ArchitectureGraphEdge> edges) =>

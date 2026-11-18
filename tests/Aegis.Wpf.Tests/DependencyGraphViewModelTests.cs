@@ -67,7 +67,8 @@ public sealed class DependencyGraphViewModelTests
                 Code("csharp", "Api", "Project", "C#"),
                 Code("typescript", "src", "Module", "TypeScript"),
                 Code("java-web", "com.sample.orders.web", "Package", "Java", "/repo/java"),
-                Code("java-persistence", "com.sample.orders.persistence", "Package", "Java", "/repo/java")
+                Code("java-persistence", "com.sample.orders.persistence", "Package", "Java", "/repo/java"),
+                Code("java-billing", "com.sample.billing.api", "Package", "Java", "/repo/java")
             ],
             [
                 Edge("cross-language", "csharp", "typescript"),
@@ -134,6 +135,41 @@ public sealed class DependencyGraphViewModelTests
 
         Assert.Equal(2, ledger.RollupDepth);
         Assert.Equal(2, landscape.RollupDepth);
+    }
+
+    [Fact]
+    public void Shared_depth_produces_identical_relationship_sets_in_graph_ledger_and_landscape()
+    {
+        var projection = new ArchitectureGraphProjection(
+            [
+                Code("web", "shop.orders.web", "Package", "Java", "/repo"),
+                Code("persistence", "shop.orders.persistence", "Package", "Java", "/repo"),
+                Code("billing", "shop.billing.api", "Package", "Java", "/repo")
+            ],
+            [
+                Edge("internal", "web", "persistence"),
+                Edge("external", "web", "billing")
+            ],
+            []);
+        var context = new ProjectArchitectureContext { ArchitectureGraphProjection = projection };
+        var options = new ArchitectureGraphViewOptions();
+        var graph = new DependencyGraphViewModel(options);
+        var ledger = new RelationshipLedgerViewModel(options);
+        var landscape = new SystemLandscapeViewModel(options);
+
+        graph.Update(context);
+        ledger.Update(context);
+        landscape.Update(context);
+
+        Assert.Single(graph.GraphEdges);
+        Assert.Single(ledger.Dependencies);
+        Assert.Single(landscape.Relationships);
+
+        options.Depth = 2;
+
+        Assert.Equal(2, graph.GraphEdges.Count);
+        Assert.Equal(2, ledger.Dependencies.Count);
+        Assert.Equal(2, landscape.Relationships.Count);
     }
 
     private static ArchitectureGraphNode Code(

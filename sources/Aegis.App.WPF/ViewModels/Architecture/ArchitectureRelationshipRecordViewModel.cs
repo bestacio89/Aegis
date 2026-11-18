@@ -35,6 +35,8 @@ public sealed class ArchitectureRelationshipRecordViewModel
     public int RelationshipCount { get; init; }
     public int GroupDepth { get; init; }
     public IReadOnlyList<string> ContributingLeafEdgeIds { get; init; } = Array.Empty<string>();
+
+    public string ContributingLeafEdgeIdsSummary => string.Join(Environment.NewLine, ContributingLeafEdgeIds);
     public int EvidenceOccurrenceCount { get; init; }
 
     public bool IsInternal { get; init; }

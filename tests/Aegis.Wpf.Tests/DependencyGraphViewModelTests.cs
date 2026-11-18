@@ -248,7 +248,7 @@ public sealed class DependencyGraphViewModelTests
     private static ArchitectureGraphEdge Edge(
         string id, string source, string target,
         ArchitectureGraphEdgeDomain domain = ArchitectureGraphEdgeDomain.NativeSemantic,
-        ArchitectureRelationshipKind kind = ArchitectureRelationshipKind.MethodCall) =>
+        ArchitectureRelationshipKind kind = ArchitectureRelationshipKind.Calls) =>
         new()
         {
             Id = id, SourceNodeId = source, TargetNodeId = target, Domain = domain,

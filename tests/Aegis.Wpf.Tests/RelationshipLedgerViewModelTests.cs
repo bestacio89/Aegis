@@ -75,7 +75,7 @@ public sealed class RelationshipLedgerViewModelTests
             viewModel.Update(context);
 
             var relationship = Assert.Single(viewModel.Dependencies);
-            Assert.Equal("graph-edge-1", relationship.GraphEdgeId);
+            Assert.Contains("graph-edge-1", relationship.ContributingLeafEdgeIds);
             Assert.Equal("Build", relationship.GraphDomain);
             Assert.Equal("Api", relationship.Source);
             Assert.Equal("Orders", relationship.Target);

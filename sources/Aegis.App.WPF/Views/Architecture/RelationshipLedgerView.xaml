@@ -180,9 +180,11 @@
                     RowStyle="{StaticResource Grid.LedgerRow}">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Domain" Binding="{Binding GraphDomain}" Width="105" />
+                        <DataGridTextColumn Header="Level" Binding="{Binding GroupDepth}" Width="60" />
                         <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
                         <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="110" />
                         <DataGridTextColumn Header="Direction / type" Binding="{Binding DependencyType}" Width="155" />
+                        <DataGridTextColumn Header="Relationships" Binding="{Binding RelationshipCount}" Width="90" />
                         <DataGridTextColumn Header="Evidence" Binding="{Binding EvidenceOccurrenceCount}" Width="75" />
                         <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" Width="90" />
                         <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="110" />
@@ -272,6 +274,8 @@
                             <TextBlock Text="PROVIDER RELATIONSHIP KIND" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.ProviderRelationshipKind, TargetNullValue='Not supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" TextWrapping="Wrap" />
+                            <TextBlock Text="CONTRIBUTING LEAF EDGES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.ContributingLeafEdgeIds}" Foreground="{StaticResource Brush.TextPrimary}" FontSize="10" TextWrapping="Wrap" />
                             <TextBlock Text="SOURCE EVIDENCE REFERENCES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.EvidenceReferences, TargetNullValue='No exact provider references supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"

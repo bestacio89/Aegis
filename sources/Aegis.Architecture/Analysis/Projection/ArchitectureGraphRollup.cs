@@ -23,13 +23,26 @@ public static class ArchitectureGraphRollup
         var resolvedBasePackage = string.IsNullOrWhiteSpace(basePackage)
             ? ArchitecturePackageBaseResolver.Resolve(packageNodes.Select(node => node.Name))
             : ArchitecturePackageBaseResolver.Resolve([], policyOverride: basePackage);
+        var resolvedBasePackagesByPartition = packageNodes
+            .GroupBy(node => new PackagePartition(node.Language ?? string.Empty, node.ModulePath ?? string.Empty))
+            .ToDictionary(
+                group => group.Key,
+                group => string.IsNullOrWhiteSpace(basePackage)
+                    ? ArchitecturePackageBaseResolver.Resolve(group.Select(node => node.Name))
+                    : ArchitecturePackageBaseResolver.Resolve([], policyOverride: basePackage));
 
         var groupedNodes = new Dictionary<string, NodeBuilder>(StringComparer.Ordinal);
         var nodeGroupByLeafId = new Dictionary<string, string>(StringComparer.Ordinal);
 
         foreach (var node in projection.Nodes.OrderBy(node => node.Id, StringComparer.Ordinal))
         {
-            var grouping = CreateNodeGroup(node, resolvedBasePackage, depth);
+            var nodeBasePackage = IsPackageNode(node)
+                && resolvedBasePackagesByPartition.TryGetValue(
+                    new PackagePartition(node.Language ?? string.Empty, node.ModulePath ?? string.Empty),
+                    out var partitionBasePackage)
+                    ? partitionBasePackage
+                    : string.Empty;
+            var grouping = CreateNodeGroup(node, nodeBasePackage, depth);
             if (!groupedNodes.TryGetValue(grouping.GroupKey, out var builder))
             {
                 builder = new NodeBuilder(
@@ -165,6 +178,8 @@ public static class ArchitectureGraphRollup
         string.Join(".", name.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
     private static string Escape(string value) => Uri.EscapeDataString(value);
+
+    private readonly record struct PackagePartition(string Language, string ModulePath);
 
     private readonly record struct NodeGrouping(string GroupKey, string Name, int Depth);
 

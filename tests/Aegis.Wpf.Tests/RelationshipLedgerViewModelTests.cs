@@ -185,7 +185,7 @@ public sealed class RelationshipLedgerViewModelTests
                             Domain = ArchitectureGraphEdgeDomain.NativeSemantic,
                             Scope = "Production",
                             ProviderRelationshipKind = "Calls",
-                            RelationshipKinds = [ArchitectureRelationshipKind.MethodCall]
+                            RelationshipKinds = [ArchitectureRelationshipKind.Calls]
                         }
                     ],
                     [])

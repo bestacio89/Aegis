@@ -89,6 +89,7 @@ public sealed class UnprojectedEvidenceViewModelTests
 
             viewModel.SelectedEvidenceGuidance.Should().Contain(expectedGuidance);
             viewModel.SelectedEvidenceReference.Should().Contain("[0]");
+            viewModel.SelectedEvidenceFiles.Should().Contain("/src/File0.java");
         });
     }
 
@@ -126,7 +127,8 @@ public sealed class UnprojectedEvidenceViewModelTests
                 Domain = domain,
                 OccurrenceIndex = occurrence,
                 EvidenceId = $"evidence-{occurrence}",
-                ProviderId = "test-provider"
+                ProviderId = "test-provider",
+                FilePaths = [$"/src/File{occurrence}.java"]
             },
             Reason = reason,
             Explanation = explanation

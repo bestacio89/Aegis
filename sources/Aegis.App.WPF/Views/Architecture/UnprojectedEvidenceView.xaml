@@ -140,6 +140,10 @@
                     </Border>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="16,8,16,16">
+                            <TextBlock Text="SOURCE FILES" Style="{StaticResource Text.Eyebrow}" Margin="0,8,0,4" />
+                            <TextBlock Text="{Binding SelectedEvidenceFiles}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="10"
+                                       TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
                             <TextBlock Text="EXPLANATION" Style="{StaticResource Text.Eyebrow}" Margin="0,8,0,4" />
                             <TextBlock Text="{Binding SelectedEvidence.Explanation, TargetNullValue='No observation selected'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12"

@@ -58,6 +58,11 @@ public sealed partial class UnprojectedEvidenceViewModel : ObservableObject
                   ? string.Empty
                   : $" ({SelectedEvidence.Evidence.ProviderId})");
 
+    public string SelectedEvidenceFiles =>
+        SelectedEvidence is null || SelectedEvidence.Evidence.FilePaths.Count == 0
+            ? "No source file paths supplied."
+            : string.Join(Environment.NewLine, SelectedEvidence.Evidence.FilePaths);
+
     partial void OnSearchTextChanged(string value) => RefreshFilter();
 
     partial void OnSelectedReasonChanged(string value) => RefreshFilter();
@@ -68,6 +73,7 @@ public sealed partial class UnprojectedEvidenceViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(SelectedEvidenceGuidance));
         OnPropertyChanged(nameof(SelectedEvidenceReference));
+        OnPropertyChanged(nameof(SelectedEvidenceFiles));
     }
 
     public void Update(ProjectArchitectureContext? context)
@@ -116,6 +122,7 @@ public sealed partial class UnprojectedEvidenceViewModel : ObservableObject
         OnPropertyChanged(nameof(DomainFilters));
         OnPropertyChanged(nameof(SelectedEvidenceGuidance));
         OnPropertyChanged(nameof(SelectedEvidenceReference));
+        OnPropertyChanged(nameof(SelectedEvidenceFiles));
         RefreshFilter();
     }
 
@@ -149,6 +156,7 @@ public sealed partial class UnprojectedEvidenceViewModel : ObservableObject
             || Contains(evidence.Evidence.ProviderId, query)
             || Contains(evidence.Evidence.Domain.ToString(), query)
             || Contains(evidence.Evidence.OccurrenceIndex.ToString(), query)
+            || evidence.Evidence.FilePaths.Any(path => Contains(path, query))
             || Contains(evidence.Reason.ToString(), query)
             || Contains(evidence.Explanation, query);
     }

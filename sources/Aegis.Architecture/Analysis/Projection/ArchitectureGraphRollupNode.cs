@@ -20,4 +20,4 @@ public sealed record ArchitectureGraphRollupNode
     public string? ResourceIdentity { get; init; }
     public string? ResourceKind { get; init; }
     public bool IsTestScoped { get; init; }
-
+}

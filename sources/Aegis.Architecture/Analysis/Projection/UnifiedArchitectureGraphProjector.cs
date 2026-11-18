@@ -199,6 +199,17 @@ internal static partial class UnifiedArchitectureGraphProjector
             if (!nodes.ContainsKey(sourceId) || !nodes.ContainsKey(targetId))
                 continue;
 
+            // Aggregating package dependencies into one logical component must not
+            // manufacture a logical self-edge. The underlying package evidence remains
+            // available through the code-container projection and relationship ledger.
+            if (string.Equals(sourceId, targetId, StringComparison.Ordinal)
+                && (string.Equals(nodePrefix, "logical", StringComparison.Ordinal)
+                    || (string.Equals(nodePrefix, "code", StringComparison.Ordinal)
+                        && nodes[sourceId].ComponentKind.Equals("Package", StringComparison.OrdinalIgnoreCase))))
+            {
+                continue;
+            }
+
             var references = new List<ArchitectureGraphEvidenceReference>();
             var kinds = new HashSet<ArchitectureRelationshipKind>();
             var providerKinds = new HashSet<string>(StringComparer.Ordinal);

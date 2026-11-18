@@ -207,7 +207,7 @@ public sealed class DependencyGraphViewModelTests
         Assert.Equal(3, viewModel.GraphNodes.Count);
         Assert.Equal(1, viewModel.GraphEdges.Count);
         Assert.DoesNotContain(viewModel.GraphEdges, edge =>
-            edge.SourceId == "java-package:worker" && edge.TargetId == "java-package:worker");
+            edge.Source == "com.sample.worker" && edge.Target == "com.sample.worker");
         Assert.Contains(viewModel.GraphNodes, node => node.Id == "csharp-project:api");
         Assert.Contains(viewModel.GraphNodes, node => node.Id == "typescript-module:frontend");
         Assert.Contains(viewModel.GraphNodes, node => node.Id == "java-package:worker");

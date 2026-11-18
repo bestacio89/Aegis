@@ -155,8 +155,8 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                 Assert.Empty(context.TestComponentDependencies);
 
                 var semanticGraphEdge = Assert.Single(
-                    context.ArchitectureGraphProjection!.Edges.Where(edge =>
-                        edge.Domain == ArchitectureGraphEdgeDomain.NativeSemantic));
+                    context.ArchitectureGraphProjection!.Edges,
+                    edge => edge.Domain == ArchitectureGraphEdgeDomain.NativeSemantic);
                 var graphNodes = context.ArchitectureGraphProjection.Nodes
                     .ToDictionary(node => node.Id, StringComparer.Ordinal);
                 Assert.Equal("sample.application", graphNodes[semanticGraphEdge.SourceNodeId].Name);
@@ -164,9 +164,8 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                 Assert.Equal("Package", graphNodes[semanticGraphEdge.SourceNodeId].ComponentKind);
                 Assert.Equal("Package", graphNodes[semanticGraphEdge.TargetNodeId].ComponentKind);
                 Assert.NotEmpty(semanticGraphEdge.Evidence);
-                Assert.DoesNotContain(
-                    semanticGraphEdge.ProviderRelationshipKind,
-                    ["", "SemanticComponentDependency"]);
+                Assert.False(string.IsNullOrWhiteSpace(semanticGraphEdge.ProviderRelationshipKind));
+                Assert.NotEqual("SemanticComponentDependency", semanticGraphEdge.ProviderRelationshipKind);
             }
         }
         finally

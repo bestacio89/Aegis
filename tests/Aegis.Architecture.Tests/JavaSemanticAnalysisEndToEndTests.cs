@@ -154,11 +154,23 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                 Assert.True(packageDependency.RelationshipCount > 0);
                 Assert.Empty(context.TestComponentDependencies);
 
-                var semanticGraphEdge = Assert.Single(
-                    context.ArchitectureGraphProjection!.Edges,
-                    edge => edge.Domain == ArchitectureGraphEdgeDomain.NativeSemantic);
-                var graphNodes = context.ArchitectureGraphProjection.Nodes
+                var graphNodes = context.ArchitectureGraphProjection!.Nodes
                     .ToDictionary(node => node.Id, StringComparer.Ordinal);
+                var applicationPackageNode = Assert.Single(
+                    graphNodes.Values,
+                    node => node.Kind == ArchitectureGraphNodeKind.CodeComponent
+                        && node.Name == "sample.application"
+                        && node.ComponentKind == "Package");
+                var domainPackageNode = Assert.Single(
+                    graphNodes.Values,
+                    node => node.Kind == ArchitectureGraphNodeKind.CodeComponent
+                        && node.Name == "sample.domain"
+                        && node.ComponentKind == "Package");
+                var semanticGraphEdge = Assert.Single(
+                    context.ArchitectureGraphProjection.Edges,
+                    edge => edge.Domain == ArchitectureGraphEdgeDomain.NativeSemantic
+                        && edge.SourceNodeId == applicationPackageNode.Id
+                        && edge.TargetNodeId == domainPackageNode.Id);
                 Assert.Equal("sample.application", graphNodes[semanticGraphEdge.SourceNodeId].Name);
                 Assert.Equal("sample.domain", graphNodes[semanticGraphEdge.TargetNodeId].Name);
                 Assert.Equal("Package", graphNodes[semanticGraphEdge.SourceNodeId].ComponentKind);

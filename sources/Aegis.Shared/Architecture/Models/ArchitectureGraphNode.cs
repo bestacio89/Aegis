@@ -10,6 +10,7 @@ public sealed record ArchitectureGraphNode
     public ArchitectureGraphNodeKind Kind { get; init; }
     public string? Language { get; init; }
     public string? ComponentKind { get; init; }
+    public string? ArchitecturalRole { get; init; }
     public string? ModulePath { get; init; }
     public string? ResourceProvider { get; init; }
     public string? ResourceIdentity { get; init; }

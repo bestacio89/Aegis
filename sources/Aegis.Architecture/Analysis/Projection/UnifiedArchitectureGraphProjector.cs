@@ -24,6 +24,20 @@ internal static partial class UnifiedArchitectureGraphProjector
             context.ArchitecturalComponents,
             component => component.Id);
         var modules = CreateModuleIndex(context.Modules);
+        var membershipsByCodeComponent = context.ArchitecturalComponentMemberships
+            .GroupBy(membership => membership.CodeComponentId, StringComparer.Ordinal)
+            .Where(group => group.Count() == 1)
+            .Select(group => group.Single())
+            .Where(membership =>
+                membership.ClassificationSource != ArchitectureClassificationSource.Unclassified
+                && !string.IsNullOrWhiteSpace(membership.ArchitecturalComponentId))
+            .ToDictionary(
+                membership => membership.CodeComponentId,
+                membership => logicalComponents.TryGetValue(membership.ArchitecturalComponentId!, out var logicalComponent)
+                    && !string.IsNullOrWhiteSpace(logicalComponent.Role)
+                        ? logicalComponent.Role
+                        : null,
+                StringComparer.Ordinal);
 
         foreach (var component in codeComponents.Values.OrderBy(item => item.Id, StringComparer.Ordinal))
         {
@@ -35,6 +49,7 @@ internal static partial class UnifiedArchitectureGraphProjector
                 Kind = ArchitectureGraphNodeKind.CodeComponent,
                 Language = component.Language,
                 ComponentKind = component.ComponentKind,
+                ArchitecturalRole = membershipsByCodeComponent.GetValueOrDefault(component.Id),
                 ModulePath = component.BuildModulePath,
                 IsTestScoped = component.TestSymbolCount > 0 && component.ProductionSymbolCount == 0
             });

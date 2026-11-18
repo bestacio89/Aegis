@@ -149,6 +149,57 @@ public sealed class RelationshipLedgerViewModelTests
         });
     }
 
+
+    [Fact]
+    public void Update_prefers_architectural_role_for_code_container_relationship_classification()
+    {
+        RunOnStaThread(() =>
+        {
+            var context = new ProjectArchitectureContext
+            {
+                ArchitectureGraphProjection = new ArchitectureGraphProjection(
+                    [
+                        new ArchitectureGraphNode
+                        {
+                            Id = "package:application",
+                            Name = "sample.application",
+                            Kind = ArchitectureGraphNodeKind.CodeComponent,
+                            ComponentKind = "Package",
+                            ArchitecturalRole = "Business"
+                        },
+                        new ArchitectureGraphNode
+                        {
+                            Id = "package:domain",
+                            Name = "sample.domain",
+                            Kind = ArchitectureGraphNodeKind.CodeComponent,
+                            ComponentKind = "Package",
+                            ArchitecturalRole = "Domain"
+                        }
+                    ],
+                    [
+                        new ArchitectureGraphEdge
+                        {
+                            Id = "package-edge",
+                            SourceNodeId = "package:application",
+                            TargetNodeId = "package:domain",
+                            Domain = ArchitectureGraphEdgeDomain.NativeSemantic,
+                            Scope = "Production",
+                            ProviderRelationshipKind = "Calls",
+                            RelationshipKinds = [ArchitectureRelationshipKind.MethodCall]
+                        }
+                    ],
+                    [])
+            };
+
+            var viewModel = new RelationshipLedgerViewModel();
+            viewModel.Update(context);
+
+            var relationship = Assert.Single(viewModel.Dependencies);
+            Assert.Equal("Business", relationship.SourceLayer);
+            Assert.Equal("Domain", relationship.TargetLayer);
+        });
+    }
+
     [Fact]
     public void Update_KeepsUnprojectedEvidenceOutsideResolvedRelationshipRows()
     {

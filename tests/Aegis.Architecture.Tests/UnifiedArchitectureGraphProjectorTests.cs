@@ -216,6 +216,90 @@ public sealed class UnifiedArchitectureGraphProjectorTests
         projection.Nodes.Should().NotContain(node => node.Name == "duplicate-a" || node.Name == "duplicate-b");
     }
 
+
+    [Fact]
+    public void Project_attaches_unique_architectural_role_to_code_container_nodes()
+    {
+        var context = new ProjectArchitectureContext
+        {
+            ArchitectureComponents =
+            [
+                new ArchitectureComponentContext
+                {
+                    Id = "java-package:domain",
+                    Name = "domain",
+                    QualifiedName = "sample.domain",
+                    Language = "Java",
+                    ComponentKind = "Package",
+                    ProductionSymbolCount = 2
+                },
+                new ArchitectureComponentContext
+                {
+                    Id = "java-package:application",
+                    Name = "application",
+                    QualifiedName = "sample.application",
+                    Language = "Java",
+                    ComponentKind = "Package",
+                    ProductionSymbolCount = 2
+                },
+                new ArchitectureComponentContext
+                {
+                    Id = "java-package:ambiguous",
+                    Name = "ambiguous",
+                    QualifiedName = "sample.ambiguous",
+                    Language = "Java",
+                    ComponentKind = "Package",
+                    ProductionSymbolCount = 1
+                }
+            ],
+            ArchitecturalComponents =
+            [
+                new ArchitecturalComponentContext { Id = "logical-domain", Name = "Domain", Role = "Domain", ProductionSymbolCount = 2 },
+                new ArchitecturalComponentContext { Id = "logical-business", Name = "Business", Role = "Business", ProductionSymbolCount = 2 }
+            ],
+            ArchitecturalComponentMemberships =
+            [
+                new ArchitecturalComponentMembership
+                {
+                    CodeComponentId = "java-package:domain",
+                    ArchitecturalComponentId = "logical-domain",
+                    ClassificationSource = ArchitectureClassificationSource.Convention
+                },
+                new ArchitecturalComponentMembership
+                {
+                    CodeComponentId = "java-package:application",
+                    ArchitecturalComponentId = "logical-business",
+                    ClassificationSource = ArchitectureClassificationSource.Convention
+                },
+                new ArchitecturalComponentMembership
+                {
+                    CodeComponentId = "java-package:ambiguous",
+                    ArchitecturalComponentId = "logical-domain",
+                    ClassificationSource = ArchitectureClassificationSource.Convention
+                },
+                new ArchitecturalComponentMembership
+                {
+                    CodeComponentId = "java-package:ambiguous",
+                    ArchitecturalComponentId = "logical-business",
+                    ClassificationSource = ArchitectureClassificationSource.Convention
+                }
+            ]
+        };
+
+        var projection = UnifiedArchitectureGraphProjector.Project(context);
+        var domainNode = projection.Nodes.Should().ContainSingle(node => node.Id == "code:java-package:domain").Subject;
+        var businessNode = projection.Nodes.Should().ContainSingle(node => node.Id == "code:java-package:application").Subject;
+        var ambiguousNode = projection.Nodes.Should().ContainSingle(node => node.Id == "code:java-package:ambiguous").Subject;
+
+        domainNode.Name.Should().Be("sample.domain");
+        domainNode.ComponentKind.Should().Be("Package");
+        domainNode.ArchitecturalRole.Should().Be("Domain");
+        businessNode.ComponentKind.Should().Be("Package");
+        businessNode.ArchitecturalRole.Should().Be("Business");
+        ambiguousNode.ComponentKind.Should().Be("Package");
+        ambiguousNode.ArchitecturalRole.Should().BeNull();
+    }
+
     private static SemanticAnalysisRun CreateRun(string runId, string relationshipId) =>
         new()
         {

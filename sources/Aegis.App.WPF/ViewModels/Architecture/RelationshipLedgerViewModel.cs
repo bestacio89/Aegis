@@ -223,6 +223,7 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
 
     private static string GetNodeClassification(ArchitectureGraphNode node) =>
         node.ResourceKind
+        ?? node.ArchitecturalRole
         ?? node.ComponentKind
         ?? node.Kind.ToString();
 

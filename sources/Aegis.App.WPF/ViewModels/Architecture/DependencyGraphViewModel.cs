@@ -38,7 +38,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
     public string GroupingLabel => GraphProjection switch
     {
         "Architectural components" => "ARCHITECTURAL ROLES",
-        "Code containers" => "CONTAINER KINDS",
+        "Code containers" => "RESPONSIBILITY / CONTAINER KIND",
         _ => "ARCHITECTURE LAYERS"
     };
 
@@ -192,6 +192,23 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             var architecturalComponentsById = architecturalComponents
                 .GroupBy(component => component.Id, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var uniqueLogicalComponentsById = (_context?.ArchitecturalComponents ?? [])
+                .GroupBy(component => component.Id, StringComparer.Ordinal)
+                .Where(group => group.Count() == 1)
+                .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
+            var rolesByCodeContainerId = (_context?.ArchitecturalComponentMemberships ?? [])
+                .GroupBy(membership => membership.CodeComponentId, StringComparer.Ordinal)
+                .Where(group => group.Count() == 1)
+                .Select(group => group.Single())
+                .Where(membership =>
+                    membership.ClassificationSource != Aegis.Shared.Architecture.Enums.ArchitectureClassificationSource.Unclassified
+                    && !string.IsNullOrWhiteSpace(membership.ArchitecturalComponentId)
+                    && uniqueLogicalComponentsById.TryGetValue(membership.ArchitecturalComponentId!, out var logicalComponent)
+                    && !string.IsNullOrWhiteSpace(logicalComponent.Role))
+                .ToDictionary(
+                    membership => membership.CodeComponentId,
+                    membership => uniqueLogicalComponentsById[membership.ArchitecturalComponentId!].Role!,
+                    StringComparer.Ordinal);
 
             var projectionOptions = new List<string> { "Build modules" };
             if (codeContainers.Count > 0)
@@ -228,7 +245,8 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     .Select(component => new GraphNode(
                         component.Id,
                         component.QualifiedName,
-                        component.ComponentKind))
+                        rolesByCodeContainerId.GetValueOrDefault(component.Id)
+                            ?? (string.IsNullOrWhiteSpace(component.ComponentKind) ? "Unclassified" : component.ComponentKind)))
                     .ToArray(),
                 _ => buildModules
                     .Where(module => !string.IsNullOrWhiteSpace(module.Path))
@@ -258,8 +276,12 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
                     dependency.TargetComponentId,
                     dependency.SourceComponentName,
                     dependency.TargetComponentName,
-                    codeContainersById.GetValueOrDefault(dependency.SourceComponentId)?.ComponentKind ?? "Unclassified",
-                    codeContainersById.GetValueOrDefault(dependency.TargetComponentId)?.ComponentKind ?? "Unclassified",
+                    rolesByCodeContainerId.GetValueOrDefault(dependency.SourceComponentId)
+                        ?? codeContainersById.GetValueOrDefault(dependency.SourceComponentId)?.ComponentKind
+                        ?? "Unclassified",
+                    rolesByCodeContainerId.GetValueOrDefault(dependency.TargetComponentId)
+                        ?? codeContainersById.GetValueOrDefault(dependency.TargetComponentId)?.ComponentKind
+                        ?? "Unclassified",
                     dependency.DependencyType,
                     string.Join(", ", dependency.EvidenceFiles),
                     dependency.RelationshipCount)).ToArray(),

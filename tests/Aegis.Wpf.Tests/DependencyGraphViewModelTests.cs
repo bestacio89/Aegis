@@ -243,6 +243,65 @@ public sealed class DependencyGraphViewModelTests
         Assert.Equal(2, viewModel.FilteredDependencies);
     }
 
+
+    [Fact]
+    public void Update_uses_architectural_roles_for_code_container_nodes_and_relationship_endpoints()
+    {
+        var context = new ProjectArchitectureContext
+        {
+            ArchitectureComponents =
+            [
+                new ArchitectureComponentContext { Id = "package:domain", Name = "domain", QualifiedName = "sample.domain", ComponentKind = "Package", ProductionSymbolCount = 2 },
+                new ArchitectureComponentContext { Id = "package:application", Name = "application", QualifiedName = "sample.application", ComponentKind = "Package", ProductionSymbolCount = 2 },
+                new ArchitectureComponentContext { Id = "package:unknown", Name = "unknown", QualifiedName = "sample.unknown", ComponentKind = "Package", ProductionSymbolCount = 1 }
+            ],
+            ArchitecturalComponents =
+            [
+                new ArchitecturalComponentContext { Id = "logical-domain", Name = "Domain", Role = "Domain", ProductionSymbolCount = 2 },
+                new ArchitecturalComponentContext { Id = "logical-business", Name = "Business", Role = "Business", ProductionSymbolCount = 2 }
+            ],
+            ArchitecturalComponentMemberships =
+            [
+                new ArchitecturalComponentMembership { CodeComponentId = "package:domain", ArchitecturalComponentId = "logical-domain", ClassificationSource = Aegis.Shared.Architecture.Enums.ArchitectureClassificationSource.Convention },
+                new ArchitecturalComponentMembership { CodeComponentId = "package:application", ArchitecturalComponentId = "logical-business", ClassificationSource = Aegis.Shared.Architecture.Enums.ArchitectureClassificationSource.Convention }
+            ],
+            ArchitectureComponentDependencies =
+            [
+                new ArchitectureComponentDependencyContext
+                {
+                    SourceComponentId = "package:application",
+                    SourceComponentName = "sample.application",
+                    TargetComponentId = "package:domain",
+                    TargetComponentName = "sample.domain",
+                    RelationshipCount = 3
+                },
+                new ArchitectureComponentDependencyContext
+                {
+                    SourceComponentId = "package:unknown",
+                    SourceComponentName = "sample.unknown",
+                    TargetComponentId = "package:domain",
+                    TargetComponentName = "sample.domain",
+                    RelationshipCount = 1
+                }
+            ]
+        };
+
+        var viewModel = new DependencyGraphViewModel();
+        viewModel.Update(context);
+
+        viewModel.GraphNodes.Should().HaveCount(3);
+        viewModel.GraphNodes.Should().ContainSingle(node => node.Id == "package:domain" && node.Layer == "Domain");
+        viewModel.GraphNodes.Should().ContainSingle(node => node.Id == "package:application" && node.Layer == "Business");
+        viewModel.GraphNodes.Should().ContainSingle(node => node.Id == "package:unknown" && node.Layer == "Package");
+        viewModel.GraphEdges.Should().HaveCount(2);
+        viewModel.GraphEdges.Should().Contain(edge =>
+            edge.Source == "sample.application" && edge.Target == "sample.domain"
+            && edge.SourceLayer == "Business" && edge.TargetLayer == "Domain");
+        viewModel.GraphEdges.Should().Contain(edge =>
+            edge.Source == "sample.unknown" && edge.SourceLayer == "Package"
+            && edge.TargetLayer == "Domain");
+    }
+
     private static ArchitectureComponentContext Container(string id, string name) =>
         new()
         {

@@ -129,14 +129,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             ? "No architecture context available"
             : context.ProjectName;
 
-        var dependencies = context?.ProductionDependencies
-            .Where(dependency =>
-                !string.IsNullOrWhiteSpace(dependency.Source)
-                && !string.IsNullOrWhiteSpace(dependency.Target))
-            .OrderBy(dependency => dependency.SourceLayer, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(dependency => dependency.Source, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(dependency => dependency.Target, StringComparer.OrdinalIgnoreCase)
-            .ToArray() ?? [];
+        var dependencies = Array.Empty<ArchitectureDependencyContext>();
 
         SelectedGraphNode = null;
         _hasUserSelectedProjection = false;

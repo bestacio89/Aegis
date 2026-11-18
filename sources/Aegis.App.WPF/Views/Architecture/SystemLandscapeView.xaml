@@ -51,6 +51,8 @@
                                FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
                     <TextBlock Text="{Binding BasePackageLabel}" Foreground="{StaticResource Brush.TextMuted}"
                                FontSize="10" Margin="0,5,0,0" />
+                    <TextBlock Text="{Binding BasePackageLabel}" Foreground="{StaticResource Brush.TextMuted}"
+                               FontSize="10" Margin="0,5,0,0" />
                 </StackPanel>
             </Border>
 

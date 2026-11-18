@@ -276,6 +276,8 @@
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" TextWrapping="Wrap" />
                             <TextBlock Text="CONTRIBUTING LEAF EDGES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.ContributingLeafEdgeIdsSummary}" Foreground="{StaticResource Brush.TextPrimary}" FontSize="10" TextWrapping="Wrap" />
+                            <TextBlock Text="EVIDENCE FILES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.EvidenceFilesSummary}" Foreground="{StaticResource Brush.TextPrimary}" FontSize="10" TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
                             <TextBlock Text="SOURCE EVIDENCE REFERENCES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.EvidenceReferences, TargetNullValue='No exact provider references supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"

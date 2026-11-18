@@ -35,6 +35,7 @@ public sealed class ArchitectureGraphRollupTests
         edge.RelationshipKinds.Should().BeEquivalentTo(
             [ArchitectureRelationshipKind.MethodCall, ArchitectureRelationshipKind.TypeReference]);
         edge.Evidence.Should().HaveCount(2);
+        edge.EvidenceFiles.Should().BeEquivalentTo(["/repo/src/File1.java", "/repo/src/File2.java"]);
         edge.LeafEdgeIds.Should().BeEquivalentTo(["orders-billing-a", "orders-billing-b"]);
     }
 
@@ -184,6 +185,7 @@ public sealed class ArchitectureGraphRollupTests
             Domain = ArchitectureGraphEvidenceDomain.SemanticRelationship,
             OccurrenceIndex = occurrence,
             EvidenceId = $"relationship-{occurrence}",
-            ProviderId = "Java"
+            ProviderId = "Java",
+            FilePaths = [$"/repo/src/File{occurrence}.java"]
         };
 }

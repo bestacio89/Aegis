@@ -73,7 +73,7 @@
                       Foreground="{StaticResource Brush.TextPrimary}"
                       BorderBrush="{StaticResource Brush.Line}" />
             <Button Grid.Column="3" Content="Clear filters"
-                    Click="ClearFilters_Click" Padding="14,8" MinHeight="38"
+                    Command="{Binding ClearFiltersCommand}" Padding="14,8" MinHeight="38"
                     Background="{StaticResource Brush.PanelElevated}"
                     Foreground="{StaticResource Brush.TextPrimary}"
                     BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" />

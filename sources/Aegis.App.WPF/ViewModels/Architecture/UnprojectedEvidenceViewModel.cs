@@ -4,6 +4,7 @@ using System.Windows.Data;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace Aegis.Wpf.ViewModels.Architecture;
 
@@ -76,17 +77,19 @@ public sealed partial class UnprojectedEvidenceViewModel : ObservableObject
             : context.ProjectName;
 
         SelectedEvidence = null;
-        Evidence.Clear();
-
         var observations = context?.ArchitectureGraphProjection?.UnprojectedEvidence
             ?? [];
 
-        foreach (var evidence in observations
-                     .OrderBy(item => item.Evidence.Domain)
-                     .ThenBy(item => item.Evidence.OccurrenceIndex)
-                     .ThenBy(item => item.Reason))
+        using (_evidenceView.DeferRefresh())
         {
-            Evidence.Add(evidence);
+            Evidence.Clear();
+            foreach (var evidence in observations
+                         .OrderBy(item => item.Evidence.Domain)
+                         .ThenBy(item => item.Evidence.OccurrenceIndex)
+                         .ThenBy(item => item.Reason))
+            {
+                Evidence.Add(evidence);
+            }
         }
 
         TotalObservations = Evidence.Count;
@@ -114,6 +117,15 @@ public sealed partial class UnprojectedEvidenceViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedEvidenceGuidance));
         OnPropertyChanged(nameof(SelectedEvidenceReference));
         RefreshFilter();
+    }
+
+    [RelayCommand]
+    private void ClearFilters()
+    {
+        SearchText = string.Empty;
+        SelectedReason = "All";
+        SelectedDomain = "All";
+        SelectedEvidence = null;
     }
 
     private bool MatchesFilter(object item)

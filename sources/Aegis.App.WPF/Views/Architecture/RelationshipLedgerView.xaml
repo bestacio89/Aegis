@@ -174,7 +174,8 @@
                     AutoGenerateColumns="False" IsReadOnly="True"
                     CanUserAddRows="False" CanUserDeleteRows="False"
                     CanUserReorderColumns="False" CanUserResizeRows="False"
-                    CanUserSortColumns="True" SelectionMode="Single"
+                    CanUserSortColumns="True" CanUserResizeColumns="True"
+                    CanUserReorderColumns="True" SelectionMode="Single"
                     SelectionUnit="FullRow" HeadersVisibility="Column"
                     MinHeight="180"
                     EnableRowVirtualization="True" EnableColumnVirtualization="True"
@@ -187,16 +188,16 @@
                     ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}"
                     RowStyle="{StaticResource Grid.LedgerRow}">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Domain" Binding="{Binding GraphDomain}" Width="105" />
-                        <DataGridTextColumn Header="Level" Binding="{Binding GroupDepth}" Width="60" />
-                        <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
-                        <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="110" />
-                        <DataGridTextColumn Header="Direction / type" Binding="{Binding DependencyType}" Width="155" />
-                        <DataGridTextColumn Header="Relationships" Binding="{Binding RelationshipCount}" Width="90" />
-                        <DataGridTextColumn Header="Evidence" Binding="{Binding EvidenceOccurrenceCount}" Width="75" />
-                        <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" Width="90" />
-                        <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="110" />
-                        <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="*" />
+                        <DataGridTextColumn Header="Domain" Binding="{Binding GraphDomain}" Width="Auto" MinWidth="90" />
+                        <DataGridTextColumn Header="Level" Binding="{Binding GroupDepth}" Width="Auto" MinWidth="55" />
+                        <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="1.4*" MinWidth="140" />
+                        <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="1*" MinWidth="100" />
+                        <DataGridTextColumn Header="Direction / type" Binding="{Binding DependencyType}" Width="1.4*" MinWidth="130" />
+                        <DataGridTextColumn Header="Relationships" Binding="{Binding RelationshipCount}" Width="Auto" MinWidth="85" />
+                        <DataGridTextColumn Header="Evidence" Binding="{Binding EvidenceOccurrenceCount}" Width="Auto" MinWidth="70" />
+                        <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" Width="Auto" MinWidth="80" />
+                        <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="1*" MinWidth="100" />
+                        <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="1.4*" MinWidth="140" />
                     </DataGrid.Columns>
                     </DataGrid>
                     <Border Background="{StaticResource Brush.PanelElevated}" Padding="24"

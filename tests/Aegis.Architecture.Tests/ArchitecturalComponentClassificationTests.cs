@@ -140,7 +140,7 @@ public sealed class ArchitecturalComponentClassificationTests
             .Single(item => item.CodeComponentId == "domain");
         Assert.Equal("Domain", context.ArchitecturalComponents
             .Single(component => component.Id == domainMembership.ArchitecturalComponentId).Role);
-        Assert.StartsWith("convention:root:java-package:", domainMembership.ArchitecturalComponentId);
+        Assert.StartsWith("convention:sample:java-package:", domainMembership.ArchitecturalComponentId);
         Assert.Null(context.ArchitecturalComponentMemberships.Single(item => item.CodeComponentId == "ordinary")
             .ArchitecturalComponentId);
         Assert.Null(context.ArchitecturalComponentMemberships.Single(item => item.CodeComponentId == "conflict")

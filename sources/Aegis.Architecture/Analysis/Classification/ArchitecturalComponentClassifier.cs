@@ -479,7 +479,7 @@ public static class ArchitecturalComponentClassifier
             return JavaPackageInference.Unclassified;
 
         var hasDomainContext = ContainsAny(
-            segments, "domain", "entities", "aggregates", "valueobjects", "rules", "specifications");
+            segments, "domain", "aggregates", "valueobjects", "rules", "specifications", "events");
         var hasInfrastructureContext = ContainsAny(
             segments, "infrastructure", "persistence", "database", "repositories",
             "repository", "orm", "messaging", "clients", "client", "integrations", "integration");
@@ -495,8 +495,6 @@ public static class ArchitecturalComponentClassifier
         var hasServiceSignal = ContainsAny(
             segments, "services", "service", "processors", "processor",
             "workers", "worker", "jobs", "job");
-        var hasAdapterSignal = ContainsAny(segments, "adapters", "adapter");
-
         if (hasDomainContext && (hasInfrastructureContext || hasPresentationContext))
             return JavaPackageInference.Ambiguous;
 
@@ -521,9 +519,7 @@ public static class ArchitecturalComponentClassifier
         if (hasServiceSignal)
             return new JavaPackageInference("Services", false);
 
-        return hasAdapterSignal
-            ? JavaPackageInference.Unclassified
-            : JavaPackageInference.Unclassified;
+        return JavaPackageInference.Unclassified;
     }
 
     private static bool ContainsAny(IReadOnlySet<string> segments, params string[] candidates) =>

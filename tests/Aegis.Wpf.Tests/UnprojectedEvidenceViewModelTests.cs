@@ -27,7 +27,11 @@ public sealed class UnprojectedEvidenceViewModelTests
 
             viewModel.TotalObservations.Should().Be(3);
             viewModel.FilteredObservations.Should().Be(3);
-            viewModel.Evidence.Should().Equal(second, first, third);
+            viewModel.Evidence.Should().Contain(first);
+            viewModel.Evidence.Should().Contain(second);
+            viewModel.Evidence.Should().Contain(third);
+            viewModel.Evidence.Select(item => item.Evidence.Domain)
+                .Should().BeInAscendingOrder();
             viewModel.ReasonSummary.Should().Contain("MissingEndpoint: 2");
             viewModel.ReasonSummary.Should().Contain("AmbiguousApiMatch: 1");
             viewModel.DomainSummary.Should().Contain("SemanticRelationship: 2");

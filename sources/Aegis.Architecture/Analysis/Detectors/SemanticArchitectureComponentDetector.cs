@@ -308,16 +308,6 @@ internal static class SemanticArchitectureComponentDetector
                     continue;
                 }
 
-                // A package is the complete language-native architectural boundary.
-                // Relationships whose endpoints collapse to the same package remain
-                // in raw evidence but are not package-level dependencies.
-                if (string.Equals(sourceComponent.ComponentKind, "Package", StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(targetComponent.ComponentKind, "Package", StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(sourceComponent.ComponentId, targetComponent.ComponentId, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
                 var targetModule = ResolveModule(targetComponent.ModulePath, targetComponent.Language);
                 var isTest = relationship.IsTestCode
                     || sourceSymbol.IsTestCode

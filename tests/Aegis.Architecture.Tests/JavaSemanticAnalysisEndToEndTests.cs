@@ -153,11 +153,6 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                     .Single(component => component.Id == packageDependency.TargetComponentId).QualifiedName);
                 Assert.True(packageDependency.RelationshipCount > 0);
                 Assert.Empty(context.TestComponentDependencies);
-                Assert.DoesNotContain(context.ArchitectureComponentInternalDependencies, dependency =>
-                    dependency.IsInternal
-                    && context.ArchitectureComponents.Any(component =>
-                        component.Id == dependency.SourceComponentId
-                        && component.ComponentKind == "Package"));
 
                 var graphNodes = context.ArchitectureGraphProjection!.Nodes
                     .ToDictionary(node => node.Id, StringComparer.Ordinal);

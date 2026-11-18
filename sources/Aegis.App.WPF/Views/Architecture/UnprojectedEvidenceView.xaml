@@ -1,0 +1,158 @@
+<UserControl
+    x:Class="Aegis.Wpf.Views.Architecture.UnprojectedEvidenceView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{StaticResource Brush.Ink}"
+    Foreground="{StaticResource Brush.TextPrimary}"
+    FontFamily="{StaticResource Font.Body}">
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource Card.Structural}" Margin="0,0,0,10" Padding="16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="UNPROJECTED EVIDENCE" Style="{StaticResource Text.Eyebrow}"
+                               Foreground="{StaticResource Brush.AccentStructural}" />
+                    <TextBlock Text="{Binding ProjectName}" Style="{StaticResource Text.Title}"
+                               Margin="0,5,0,0" TextWrapping="Wrap" />
+                    <TextBlock Text="Inspect observations retained outside the unified graph. This view is diagnostic: it does not create edges or change projection eligibility."
+                               Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
+                               Margin="0,6,12,0" TextWrapping="Wrap" MaxWidth="1000" />
+                    <TextBlock Text="{Binding ReasonSummary}" Foreground="{StaticResource Brush.TextMuted}"
+                               FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding DomainSummary}" Foreground="{StaticResource Brush.TextMuted}"
+                               FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />
+                </StackPanel>
+                <Border Grid.Column="1" Background="{StaticResource Brush.PanelElevated}"
+                        BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                        CornerRadius="4" Padding="14,9" VerticalAlignment="Top">
+                    <StackPanel>
+                        <TextBlock Text="VISIBLE / TOTAL" Style="{StaticResource Text.Eyebrow}" />
+                        <TextBlock Text="{Binding FilteredObservations, StringFormat={}{0:N0}}"
+                                   Style="{StaticResource Text.KpiValue}" FontSize="22" />
+                        <TextBlock Text="{Binding TotalObservations, StringFormat='of {0:N0} observations'}"
+                                   Foreground="{StaticResource Brush.TextMuted}" FontSize="11" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="0,4,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" MinWidth="180" />
+                <ColumnDefinition Width="1.2*" MinWidth="150" />
+                <ColumnDefinition Width="1.2*" MinWidth="150" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox Grid.Column="0" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="Search evidence ID, provider, domain, occurrence, reason, or explanation"
+                     MinHeight="38" Padding="12,8" Margin="0,0,8,0"
+                     Background="{StaticResource Brush.PanelElevated}"
+                     Foreground="{StaticResource Brush.TextPrimary}"
+                     BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                     VerticalContentAlignment="Center" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding DomainFilters}"
+                      SelectedItem="{Binding SelectedDomain, Mode=TwoWay}"
+                      MinHeight="38" Margin="0,0,8,0" Padding="8,4"
+                      Background="{StaticResource Brush.PanelElevated}"
+                      Foreground="{StaticResource Brush.TextPrimary}"
+                      BorderBrush="{StaticResource Brush.Line}" />
+            <ComboBox Grid.Column="2" ItemsSource="{Binding ReasonFilters}"
+                      SelectedItem="{Binding SelectedReason, Mode=TwoWay}"
+                      MinHeight="38" Margin="0,0,8,0" Padding="8,4"
+                      Background="{StaticResource Brush.PanelElevated}"
+                      Foreground="{StaticResource Brush.TextPrimary}"
+                      BorderBrush="{StaticResource Brush.Line}" />
+            <Button Grid.Column="3" Content="Clear filters"
+                    Command="{x:Static NavigationCommands.Refresh}"
+                    Click="ClearFilters_Click" Padding="14,8" MinHeight="38"
+                    Background="{StaticResource Brush.PanelElevated}"
+                    Foreground="{StaticResource Brush.TextPrimary}"
+                    BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" />
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2.2*" MinWidth="0" />
+                <ColumnDefinition Width="10" />
+                <ColumnDefinition Width="1.1*" MinWidth="250" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="{StaticResource Brush.Panel}"
+                    BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                    CornerRadius="4" Padding="8">
+                <DataGrid ItemsSource="{Binding EvidenceView}"
+                          SelectedItem="{Binding SelectedEvidence, Mode=TwoWay}"
+                          AutoGenerateColumns="False" IsReadOnly="True"
+                          CanUserAddRows="False" CanUserDeleteRows="False"
+                          CanUserReorderColumns="True" CanUserResizeRows="False"
+                          CanUserResizeColumns="True" CanUserSortColumns="True"
+                          SelectionMode="Single" SelectionUnit="FullRow"
+                          HeadersVisibility="Column" MinHeight="180"
+                          EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.CanContentScroll="True"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                          Style="{StaticResource Grid.Ledger}"
+                          ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}"
+                          RowStyle="{StaticResource Grid.LedgerRow}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Domain" Binding="{Binding Evidence.Domain}" Width="1.1*" MinWidth="115" />
+                        <DataGridTextColumn Header="Occurrence" Binding="{Binding Evidence.OccurrenceIndex}" Width="90" MinWidth="75" />
+                        <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="1.3*" MinWidth="150" />
+                        <DataGridTextColumn Header="Evidence ID" Binding="{Binding Evidence.EvidenceId}" Width="1.5*" MinWidth="140" />
+                        <DataGridTextColumn Header="Provider" Binding="{Binding Evidence.ProviderId}" Width="1.2*" MinWidth="110" />
+                        <DataGridTextColumn Header="Explanation" Binding="{Binding Explanation}" Width="2.5*" MinWidth="220" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+
+            <Border Grid.Column="2" Background="{StaticResource Brush.Panel}"
+                    BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                    CornerRadius="4">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Padding="16,13" Background="{StaticResource Brush.PanelElevated}"
+                            BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,0,0,1">
+                        <StackPanel>
+                            <TextBlock Text="OBSERVATION DETAILS" Style="{StaticResource Text.Eyebrow}"
+                                       Foreground="{StaticResource Brush.AccentStructural}" />
+                            <TextBlock Text="{Binding SelectedEvidence.Reason, TargetNullValue='Select an observation'}"
+                                       FontSize="15" FontWeight="SemiBold" Margin="0,5,0,0"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding SelectedEvidenceReference}" Foreground="{StaticResource Brush.TextMuted}"
+                                       FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       FontFamily="{StaticResource Font.Data}" />
+                        </StackPanel>
+                    </Border>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="16,8,16,16">
+                            <TextBlock Text="EXPLANATION" Style="{StaticResource Text.Eyebrow}" Margin="0,8,0,4" />
+                            <TextBlock Text="{Binding SelectedEvidence.Explanation, TargetNullValue='No observation selected'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="DIAGNOSTIC GUIDANCE" Style="{StaticResource Text.Eyebrow}" Margin="0,16,0,4" />
+                            <TextBlock Text="{Binding SelectedEvidenceGuidance}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

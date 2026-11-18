@@ -86,16 +86,13 @@ public sealed partial class UnprojectedEvidenceViewModel : ObservableObject
         var observations = context?.ArchitectureGraphProjection?.UnprojectedEvidence
             ?? [];
 
-        using (_evidenceView.DeferRefresh())
+        Evidence.Clear();
+        foreach (var evidence in observations
+                     .OrderBy(item => item.Evidence.Domain)
+                     .ThenBy(item => item.Evidence.OccurrenceIndex)
+                     .ThenBy(item => item.Reason))
         {
-            Evidence.Clear();
-            foreach (var evidence in observations
-                         .OrderBy(item => item.Evidence.Domain)
-                         .ThenBy(item => item.Evidence.OccurrenceIndex)
-                         .ThenBy(item => item.Reason))
-            {
-                Evidence.Add(evidence);
-            }
+            Evidence.Add(evidence);
         }
 
         TotalObservations = Evidence.Count;

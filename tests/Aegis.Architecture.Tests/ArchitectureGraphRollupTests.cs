@@ -143,6 +143,44 @@ public sealed class ArchitectureGraphRollupTests
             .Should().Be("com.example");
     }
 
+    [Fact]
+    public void Resolve_uses_unique_spring_boot_application_annotation_package()
+    {
+        var context = new ProjectArchitectureContext
+        {
+            ArchitectureComponents =
+            [
+                Package("orders", "com.example.orders.web"),
+                Package("billing", "com.example.billing.api")
+            ],
+            SemanticAnalysisRuns =
+            [
+                new SemanticAnalysisRun
+                {
+                    RunId = "java-run",
+                    Language = "Java",
+                    Symbols =
+                    [
+                        new SemanticSymbol { Id = "application", Name = "Application", QualifiedName = "com.example.app.Application", ContainerName = "com.example.app" },
+                        new SemanticSymbol { Id = "annotation", Name = "SpringBootApplication", QualifiedName = "org.springframework.boot.autoconfigure.SpringBootApplication" }
+                    ],
+                    Relationships =
+                    [
+                        new SemanticRelationship
+                        {
+                            Id = "annotation-use",
+                            SourceSymbolId = "application",
+                            TargetSymbolId = "annotation",
+                            Kind = SemanticRelationshipKind.UsesAnnotation
+                        }
+                    ]
+                }
+            ]
+        };
+
+        ArchitecturePackageBaseResolver.Resolve(context).Should().Be("com.example.app");
+    }
+
     private static ArchitectureGraphProjection CreateProjection(
         IEnumerable<ArchitectureGraphNode> nodes,
         IEnumerable<ArchitectureGraphEdge> edges) =>

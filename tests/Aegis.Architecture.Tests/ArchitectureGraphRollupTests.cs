@@ -71,7 +71,8 @@ public sealed class ArchitectureGraphRollupTests
                 Package("java-persistence", "com.sample.orders.persistence", "/repo/java"),
                 Package("java-billing", "com.sample.billing.api", "/repo/java"),
                 Package("java-other-web", "org.vendor.sales.web", "/repo/java-other"),
-                Package("java-other-persistence", "org.vendor.sales.persistence", "/repo/java-other")
+                Package("java-other-persistence", "org.vendor.sales.persistence", "/repo/java-other"),
+                Package("java-other-billing", "org.vendor.billing.api", "/repo/java-other")
             ],
             [
                 Edge("orders-internal", "java-web", "java-persistence", "Production", 1, ArchitectureRelationshipKind.Calls, 0),
@@ -80,7 +81,7 @@ public sealed class ArchitectureGraphRollupTests
 
         var result = ArchitectureGraphRollup.Apply(projection, null, 1);
 
-        result.Nodes.Should().HaveCount(5);
+        result.Nodes.Should().HaveCount(6);
         result.Nodes.Should().ContainSingle(node => node.Name == "Api" && node.LeafComponentIds.Contains("csharp"));
         result.Nodes.Should().ContainSingle(node => node.Name == "src" && node.LeafComponentIds.Contains("typescript"));
         result.Nodes.Should().ContainSingle(node => node.Name == "orders"
@@ -88,7 +89,11 @@ public sealed class ArchitectureGraphRollupTests
             && node.LeafComponentIds.Contains("java-web")
             && node.LeafComponentIds.Contains("java-persistence"));
         result.Nodes.Should().ContainSingle(node => node.Name == "billing"
+            && node.ModulePath == "/repo/java"
             && node.LeafComponentIds.Contains("java-billing"));
+        result.Nodes.Should().ContainSingle(node => node.Name == "billing"
+            && node.ModulePath == "/repo/java-other"
+            && node.LeafComponentIds.Contains("java-other-billing"));
         result.Nodes.Should().ContainSingle(node => node.Name == "sales"
             && node.ModulePath == "/repo/java-other"
             && node.LeafComponentIds.Contains("java-other-web")

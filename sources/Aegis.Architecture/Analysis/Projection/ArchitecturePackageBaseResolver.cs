@@ -39,9 +39,9 @@ public static class ArchitecturePackageBaseResolver
             prefixLength++;
         }
 
-        return string.Join('.', packages[0].Take(prefixLength));
+        return string.Join(".", packages[0].Take(prefixLength));
     }
 
     private static string Normalize(string packageName) =>
-        string.Join('.', packageName.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        string.Join(".", packageName.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 }

@@ -60,7 +60,10 @@ public static class ArchitectureGraphRollup
                 continue;
             }
 
-            var relationshipCount = Math.Max(edge.RelationshipCount, 0);
+            if (edge.RelationshipCount < 0)
+                throw new InvalidOperationException($"Graph edge '{edge.Id}' has a negative relationship count.");
+
+            var relationshipCount = edge.RelationshipCount;
             if (string.Equals(sourceGroup, targetGroup, StringComparison.Ordinal))
             {
                 groupedNodes[sourceGroup].AddInternalRelationship(edge.Scope, relationshipCount);
@@ -78,7 +81,11 @@ public static class ArchitectureGraphRollup
             aggregate.RelationshipKinds.UnionWith(edge.RelationshipKinds);
             if (!string.IsNullOrWhiteSpace(edge.ProviderRelationshipKind))
                 aggregate.ProviderRelationshipKinds.Add(edge.ProviderRelationshipKind);
-            aggregate.Evidence.AddRange(edge.Evidence);
+            foreach (var evidence in edge.Evidence)
+            {
+                if (aggregate.TryAddEvidence(evidence))
+                    aggregate.Evidence.Add(evidence);
+            }
             aggregate.LeafEdgeIds.Add(edge.Id);
         }
 
@@ -131,7 +138,7 @@ public static class ArchitectureGraphRollup
         if (segments.Length == 0)
             return new NodeGrouping(LeafGroupKey(node), node.Name, 0);
 
-        var groupedName = string.Join('.', segments.Take(depth));
+        var groupedName = string.Join(".", segments.Take(depth));
         var groupKey = string.Join(
             "|",
             "package",
@@ -148,7 +155,7 @@ public static class ArchitectureGraphRollup
         "leaf|" + Escape(node.Id);
 
     private static string NormalizePackageName(string name) =>
-        string.Join('.', name.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        string.Join(".", name.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
     private static string Escape(string value) => Uri.EscapeDataString(value);
 
@@ -209,7 +216,11 @@ public static class ArchitectureGraphRollup
         public HashSet<ArchitectureRelationshipKind> RelationshipKinds { get; } = [];
         public HashSet<string> ProviderRelationshipKinds { get; } = new(StringComparer.Ordinal);
         public List<ArchitectureGraphEvidenceReference> Evidence { get; } = [];
+        private readonly HashSet<(ArchitectureGraphEvidenceDomain Domain, int OccurrenceIndex)> _evidenceOccurrences = [];
         public HashSet<string> LeafEdgeIds { get; } = new(StringComparer.Ordinal);
+
+        public bool TryAddEvidence(ArchitectureGraphEvidenceReference evidence) =>
+            _evidenceOccurrences.Add((evidence.Domain, evidence.OccurrenceIndex));
 
         public ArchitectureGraphRollupEdge Build() => new()
         {

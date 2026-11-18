@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using FluentAssertions;
 using Xunit;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Wpf.ViewModels.Architecture;

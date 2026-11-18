@@ -57,8 +57,16 @@ public sealed class ArchitectureGraphRollupTests
     {
         var projection = CreateProjection(
             [
-                Package("csharp", "Api", "/repo/csharp") with { ComponentKind = "Project", Language = "C#" },
-                Package("typescript", "src", "/repo/typescript") with { ComponentKind = "Module", Language = "TypeScript" },
+                new ArchitectureGraphNode
+                {
+                    Id = "csharp", Name = "Api", Kind = ArchitectureGraphNodeKind.CodeComponent,
+                    ComponentKind = "Project", Language = "C#", ModulePath = "/repo/csharp"
+                },
+                new ArchitectureGraphNode
+                {
+                    Id = "typescript", Name = "src", Kind = ArchitectureGraphNodeKind.CodeComponent,
+                    ComponentKind = "Module", Language = "TypeScript", ModulePath = "/repo/typescript"
+                },
                 Package("java-web", "com.sample.orders.web", "/repo/java"),
                 Package("java-persistence", "com.sample.orders.persistence", "/repo/java"),
                 Package("java-billing", "com.sample.billing.api", "/repo/java"),

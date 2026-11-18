@@ -1,4 +1,5 @@
 using Aegis.Architecture.Analysis;
+using Aegis.Architecture.Analysis.Projection;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -18,9 +19,19 @@ namespace Aegis.Wpf.ViewModels.Architecture;
 public sealed partial class RelationshipLedgerViewModel : ObservableObject
 {
     private ICollectionView _dependenciesView;
+    private readonly ArchitectureGraphViewOptions _graphOptions;
 
-    public RelationshipLedgerViewModel()
+    public RelationshipLedgerViewModel(ArchitectureGraphViewOptions? graphOptions = null)
     {
+        _graphOptions = graphOptions ?? new ArchitectureGraphViewOptions();
+        _graphOptions.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ArchitectureGraphViewOptions.Depth))
+            {
+                OnPropertyChanged(nameof(RollupDepth));
+                Update(_context);
+            }
+        };
         LayerFilters = ["All"];
         ScopeFilters = ["All", "Production", "Test"];
         _dependenciesView = CollectionViewSource.GetDefaultView(Dependencies);
@@ -34,6 +45,8 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
     public ICollectionView DependenciesView => _dependenciesView;
 
     public IReadOnlyList<string> LayerFilters { get; private set; }
+    public int RollupDepth { get => _graphOptions.Depth; set => _graphOptions.Depth = value; }
+    public string BasePackageLabel { get; private set; } = "Base package: not available";
 
     public IReadOnlyList<string> ScopeFilters { get; }
 
@@ -92,22 +105,24 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
             ? "No architecture context available"
             : context.ProjectName;
 
-        var projection = context?.ArchitectureGraphProjection;
-        var nodesById = projection?.Nodes
-            .GroupBy(node => node.Id, StringComparer.Ordinal)
-            .Where(group => group.Count() == 1)
-            .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal)
-            ?? new Dictionary<string, ArchitectureGraphNode>(StringComparer.Ordinal);
-
-        var dependencies = projection?.Edges
+        var projection = context?.ArchitectureGraphProjection ?? new ArchitectureGraphProjection([], [], []);
+        var rollup = ArchitectureGraphRollup.Apply(projection, null, _graphOptions.Depth);
+        BasePackageLabel = string.IsNullOrWhiteSpace(rollup.BasePackage) ? "Base package: package root" : $"Base package: {rollup.BasePackage}";
+        OnPropertyChanged(nameof(BasePackageLabel));
+        var nodesById = rollup.Nodes.ToDictionary(node => node.GroupKey, node => new ArchitectureGraphNode
+        {
+            Id = node.GroupKey, Name = node.Name, Kind = node.Kind, Language = node.Language,
+            ComponentKind = node.ComponentKind, ArchitecturalRole = node.ArchitecturalRole, ModulePath = node.ModulePath,
+            ResourceKind = node.ResourceKind, ResourceProvider = node.ResourceProvider, ResourceIdentity = node.ResourceIdentity,
+            IsTestScoped = node.IsTestScoped
+        }, StringComparer.Ordinal);
+        var dependencies = rollup.Edges
             .Select(edge => CreateRelationshipRecord(edge, nodesById))
-            .Where(record => record is not null)
-            .Cast<ArchitectureRelationshipRecordViewModel>()
+            .Where(record => record is not null).Cast<ArchitectureRelationshipRecordViewModel>()
             .OrderBy(record => record.GraphDomain, StringComparer.OrdinalIgnoreCase)
             .ThenBy(record => record.Source, StringComparer.OrdinalIgnoreCase)
             .ThenBy(record => record.Target, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(record => record.GraphEdgeId, StringComparer.Ordinal)
-            .ToArray() ?? [];
+            .ThenBy(record => record.GraphEdgeId, StringComparer.Ordinal).ToArray();
 
         SelectedDependency = null;
         Dependencies = new ObservableCollection<ArchitectureRelationshipRecordViewModel>(dependencies);
@@ -165,35 +180,19 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
     }
 
     private static ArchitectureRelationshipRecordViewModel? CreateRelationshipRecord(
-        ArchitectureGraphEdge edge,
+        ArchitectureGraphRollupEdge edge,
         IReadOnlyDictionary<string, ArchitectureGraphNode> nodesById)
     {
-        if (!nodesById.TryGetValue(edge.SourceNodeId, out var source)
-            || !nodesById.TryGetValue(edge.TargetNodeId, out var target))
-        {
+        if (!nodesById.TryGetValue(edge.SourceGroupKey, out var source) || !nodesById.TryGetValue(edge.TargetGroupKey, out var target))
             return null;
-        }
-
-        var relationshipKinds = edge.RelationshipKinds
-            .Select(kind => kind.ToString())
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(kind => kind, StringComparer.Ordinal)
-            .ToArray();
-
-        var classifiedRelationshipKinds = relationshipKinds
-            .Where(kind => !kind.Equals(nameof(ArchitectureRelationshipKind.Unknown), StringComparison.Ordinal))
-            .ToArray();
-        var dependencyType = classifiedRelationshipKinds.Length > 0
-            ? string.Join(", ", classifiedRelationshipKinds)
-            : !string.IsNullOrWhiteSpace(edge.ProviderRelationshipKind)
-                ? edge.ProviderRelationshipKind
-                : relationshipKinds.Length > 0
-                    ? string.Join(", ", relationshipKinds)
-                    : "Unclassified";
-
+        var kinds = edge.RelationshipKinds.Select(kind => kind.ToString()).Distinct(StringComparer.Ordinal).OrderBy(kind => kind, StringComparer.Ordinal).ToArray();
+        var classified = kinds.Where(kind => !kind.Equals(nameof(ArchitectureRelationshipKind.Unknown), StringComparison.Ordinal)).ToArray();
+        var providerKind = string.Join(", ", edge.ProviderRelationshipKinds);
+        var type = classified.Length > 0 ? string.Join(", ", classified)
+            : !string.IsNullOrWhiteSpace(providerKind) ? providerKind : kinds.Length > 0 ? string.Join(", ", kinds) : "Unclassified";
         return new ArchitectureRelationshipRecordViewModel
         {
-            GraphEdgeId = edge.Id,
+            GraphEdgeId = $"{edge.SourceGroupKey}->{edge.TargetGroupKey}:{edge.Domain}:{edge.Scope}",
             GraphDomain = edge.Domain.ToString(),
             RelationshipLevel = edge.Domain switch
             {
@@ -205,19 +204,13 @@ public sealed partial class RelationshipLedgerViewModel : ObservableObject
                 ArchitectureGraphEdgeDomain.Api => "HTTP / API",
                 _ => "Unknown graph domain"
             },
-            Source = source.Name,
-            SourceLayer = GetNodeClassification(source),
-            SourceProjectPath = source.ModulePath ?? string.Empty,
-            Target = target.Name,
-            TargetLayer = GetNodeClassification(target),
-            TargetProjectPath = target.ModulePath ?? string.Empty,
-            DependencyType = dependencyType,
-            ProviderRelationshipKind = edge.ProviderRelationshipKind,
-            Direction = $"{source.Name} → {target.Name}",
-            Scope = edge.Scope,
+            Source = source.Name, SourceLayer = GetNodeClassification(source), SourceProjectPath = source.ModulePath ?? string.Empty,
+            Target = target.Name, TargetLayer = GetNodeClassification(target), TargetProjectPath = target.ModulePath ?? string.Empty,
+            DependencyType = type, ProviderRelationshipKind = providerKind, Direction = $"{source.Name} → {target.Name}",
+            Scope = edge.Scope, RelationshipCount = edge.RelationshipCount, GroupDepth = 1,
             EvidenceOccurrenceCount = edge.Evidence.Count,
-            IsInternal = string.Equals(edge.SourceNodeId, edge.TargetNodeId, StringComparison.Ordinal),
-            EvidenceReferences = FormatGraphEvidenceReferences(edge.Evidence)
+            IsInternal = string.Equals(edge.SourceGroupKey, edge.TargetGroupKey, StringComparison.Ordinal),
+            EvidenceReferences = FormatGraphEvidenceReferences(edge.Evidence), ContributingLeafEdgeIds = edge.LeafEdgeIds
         };
     }
 

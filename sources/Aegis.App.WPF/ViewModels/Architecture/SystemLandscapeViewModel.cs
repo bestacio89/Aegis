@@ -1,3 +1,4 @@
+using Aegis.Architecture.Analysis.Projection;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -8,6 +9,23 @@ namespace Aegis.Wpf.ViewModels.Architecture;
 
 public sealed partial class SystemLandscapeViewModel : ObservableObject
 {
+    private readonly ArchitectureGraphViewOptions _graphOptions;
+    private ProjectArchitectureContext? _context;
+    public SystemLandscapeViewModel(ArchitectureGraphViewOptions? graphOptions = null)
+    {
+        _graphOptions = graphOptions ?? new ArchitectureGraphViewOptions();
+        _graphOptions.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ArchitectureGraphViewOptions.Depth))
+            {
+                OnPropertyChanged(nameof(RollupDepth));
+                Update(_context);
+            }
+        };
+    }
+    public int RollupDepth { get => _graphOptions.Depth; set => _graphOptions.Depth = value; }
+    public string BasePackageLabel { get; private set; } = "Base package: not available";
+
     [ObservableProperty] private string projectName = "No assessment loaded";
     [ObservableProperty] private int logicalRegionCount;
     [ObservableProperty] private int codeContainerCount;
@@ -28,6 +46,7 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
 
     public void Update(ProjectArchitectureContext? context)
     {
+        _context = context;
         Clear();
         ProjectName = string.IsNullOrWhiteSpace(context?.ProjectName) ? "No assessment loaded" : context.ProjectName;
         if (context is null)
@@ -40,6 +59,10 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
             CopyDeclaredIntegrations(context);
             return;
         }
+
+        var rollup = ArchitectureGraphRollup.Apply(projection, null, _graphOptions.Depth);
+        BasePackageLabel = string.IsNullOrWhiteSpace(rollup.BasePackage) ? "Base package: package root" : $"Base package: {rollup.BasePackage}";
+        OnPropertyChanged(nameof(BasePackageLabel));
 
         var nodeGroups = projection.Nodes.Where(node => !string.IsNullOrWhiteSpace(node.Id))
             .GroupBy(node => node.Id, StringComparer.Ordinal)
@@ -159,17 +182,26 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
                 "External resource", detail, node.IsTestScoped));
         }
 
-        foreach (var edge in projection.Edges.OrderBy(edge => edge.Domain)
-            .ThenBy(edge => edge.SourceNodeId, StringComparer.Ordinal)
-            .ThenBy(edge => edge.TargetNodeId, StringComparer.Ordinal)
-            .ThenBy(edge => edge.Id, StringComparer.Ordinal))
+        var rollupNodes = rollup.Nodes.ToDictionary(node => node.GroupKey, StringComparer.Ordinal);
+        foreach (var edge in rollup.Edges.OrderBy(edge => edge.Domain).ThenBy(edge => edge.SourceGroupKey, StringComparer.Ordinal)
+            .ThenBy(edge => edge.TargetGroupKey, StringComparer.Ordinal).ThenBy(edge => edge.Scope, StringComparer.Ordinal))
         {
-            if (!nodes.TryGetValue(edge.SourceNodeId, out var source) || !nodes.TryGetValue(edge.TargetNodeId, out var target))
+            if (!rollupNodes.TryGetValue(edge.SourceGroupKey, out var source) || !rollupNodes.TryGetValue(edge.TargetGroupKey, out var target))
             {
-                ProjectionDiagnostics.Add($"Graph edge '{edge.Id}' has a missing or ambiguous endpoint and is omitted from the interaction list.");
+                ProjectionDiagnostics.Add($"Rolled-up graph edge '{edge.SourceGroupKey}->{edge.TargetGroupKey}' has a missing endpoint and is omitted from the interaction list.");
                 continue;
             }
-            Relationships.Add(new SystemLandscapeRelationshipViewModel(edge, source.Name, target.Name));
+            var projectedEdge = new ArchitectureGraphEdge
+            {
+                Id = $"{edge.SourceGroupKey}->{edge.TargetGroupKey}:{edge.Domain}:{edge.Scope}",
+                SourceNodeId = edge.SourceGroupKey, TargetNodeId = edge.TargetGroupKey, Domain = edge.Domain, Scope = edge.Scope,
+                RelationshipCount = edge.RelationshipCount, ProviderRelationshipKind = string.Join(", ", edge.ProviderRelationshipKinds),
+                RelationshipKinds = edge.RelationshipKinds, Evidence = edge.Evidence
+            };
+            Relationships.Add(new SystemLandscapeRelationshipViewModel(projectedEdge, source.Name, target.Name)
+            {
+                ContributingLeafEdgeIds = edge.LeafEdgeIds
+            });
         }
 
         foreach (var item in projection.UnprojectedEvidence.OrderBy(item => item.Evidence.Domain)

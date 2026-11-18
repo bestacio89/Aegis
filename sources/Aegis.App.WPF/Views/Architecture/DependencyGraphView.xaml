@@ -102,8 +102,13 @@
                                    Style="{StaticResource Text.KpiValue}" FontSize="22" />
                         <TextBlock Text="{Binding TotalDependencies, StringFormat='of {0:N0} production relationships'}"
                                    Foreground="{StaticResource Brush.TextMuted}" FontSize="11" />
-                        <TextBlock Text="{Binding TestRelationshipCount, StringFormat='{}{0:N0} test-scope records excluded'}"
+                        <TextBlock Text="{Binding TestRelationshipCount, StringFormat='{}{0:N0} test-scope records included'}"
                                    Foreground="{StaticResource Brush.TextMuted}" FontSize="10" />
+                        <TextBlock Text="{Binding BasePackageLabel}" Foreground="{StaticResource Brush.TextMuted}" FontSize="10" Margin="0,6,0,0" />
+                        <TextBlock Text="PACKAGE DEPTH" Style="{StaticResource Text.Eyebrow}" Margin="0,8,0,3" />
+                        <ComboBox ItemsSource="{Binding DepthOptions}" SelectedItem="{Binding RollupDepth, Mode=TwoWay}"
+                                  MinWidth="72" Padding="6,3" Background="{StaticResource Brush.Panel}"
+                                  Foreground="{StaticResource Brush.TextPrimary}" BorderBrush="{StaticResource Brush.Line}" />
                     </StackPanel>
                 </Border>
             </Grid>

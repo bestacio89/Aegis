@@ -18,5 +18,6 @@ public sealed record SystemLandscapeRelationshipViewModel(
     public bool IsSelfLoop => string.Equals(EvidenceEdge.SourceNodeId, EvidenceEdge.TargetNodeId, StringComparison.Ordinal);
     public IReadOnlyList<ArchitectureGraphEvidenceReference> Evidence => EvidenceEdge.Evidence;
     public string Connection => $"{Source} → {Target}";
-    public string EvidenceSummary => $"{EvidenceOccurrenceCount:N0} evidence occurrence(s)";
+    public IReadOnlyList<string> ContributingLeafEdgeIds { get; init; } = Array.Empty<string>();
+    public string EvidenceSummary => $"{EvidenceEdge.RelationshipCount:N0} relationship(s) · {EvidenceOccurrenceCount:N0} evidence occurrence(s)";
 }

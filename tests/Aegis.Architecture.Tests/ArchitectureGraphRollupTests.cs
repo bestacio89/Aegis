@@ -159,11 +159,11 @@ public sealed class ArchitectureGraphRollupTests
         result.Nodes.Should().HaveCount(2);
         result.Nodes.Should().ContainSingle(node =>
             node.Language == "Java"
-            && node.Languages.SequenceEqual(["Java"])
+            && node.Languages.SequenceEqual(new[] { "Java" })
             && node.LeafComponentIds.Contains("java-package"));
         result.Nodes.Should().ContainSingle(node =>
             node.Language == "Python"
-            && node.Languages.SequenceEqual(["Python"])
+            && node.Languages.SequenceEqual(new[] { "Python" })
             && node.LeafComponentIds.Contains("python-module"));
     }
 

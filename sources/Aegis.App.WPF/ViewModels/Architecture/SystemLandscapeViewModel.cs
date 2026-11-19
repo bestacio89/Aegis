@@ -2,8 +2,10 @@ using Aegis.Architecture.Analysis.Projection;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Windows;
 
 namespace Aegis.Wpf.ViewModels.Architecture;
 
@@ -27,6 +29,7 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
     public string BasePackageLabel { get; private set; } = "Base package: not available";
 
     [ObservableProperty] private string projectName = "No assessment loaded";
+    [ObservableProperty] private SystemLandscapeTopologyNodeViewModel? selectedTopologyNode;
     [ObservableProperty] private int logicalRegionCount;
     [ObservableProperty] private int codeContainerCount;
     [ObservableProperty] private int buildModuleCount;
@@ -43,6 +46,9 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
     public ObservableCollection<ArchitectureGraphUnprojectedEvidence> UnprojectedEvidence { get; } = [];
     public ObservableCollection<ArchitectureIntegrationContext> DeclaredIntegrations { get; } = [];
     public ObservableCollection<string> ProjectionDiagnostics { get; } = [];
+    public ObservableCollection<SystemLandscapeTopologyNodeViewModel> TopologyNodes { get; } = [];
+    public ObservableCollection<SystemLandscapeTopologyEdgeViewModel> TopologyEdges { get; } = [];
+    public Size TopologyCanvasSize { get; private set; } = new(1, 1);
 
     public void Update(ProjectArchitectureContext? context)
     {
@@ -204,6 +210,8 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
             });
         }
 
+        BuildTopology(projection, rollup, nodes, builders, memberships, rollupNodes, cycles);
+
         foreach (var item in projection.UnprojectedEvidence.OrderBy(item => item.Evidence.Domain)
             .ThenBy(item => item.Evidence.OccurrenceIndex).ThenBy(item => item.Reason))
             UnprojectedEvidence.Add(item);
@@ -217,6 +225,207 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
         UnprojectedEvidenceCount = UnprojectedEvidence.Count;
     }
 
+    [RelayCommand]
+    private void SelectTopologyNode(SystemLandscapeTopologyNodeViewModel? node) => SelectedTopologyNode = node;
+
+    private void BuildTopology(
+        ArchitectureGraphProjection projection,
+        ArchitectureGraphRollupResult rollup,
+        IReadOnlyDictionary<string, ArchitectureGraphNode> sourceNodes,
+        IReadOnlyDictionary<string, RegionBuilder> regions,
+        IReadOnlyDictionary<string, ArchitecturalComponentMembership[]> memberships,
+        IReadOnlyDictionary<string, ArchitectureGraphRollupNode> rollupNodes,
+        IReadOnlySet<string> cyclicRegions)
+    {
+        var regionGroupByLeafId = rollup.Nodes
+            .Where(node => node.Kind == ArchitectureGraphNodeKind.LogicalComponent)
+            .SelectMany(node => node.LeafComponentIds.Select(leafId => (leafId, node.GroupKey)))
+            .GroupBy(item => item.leafId, StringComparer.Ordinal)
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single().GroupKey, StringComparer.Ordinal);
+
+        foreach (var region in rollup.Nodes
+            .Where(node => node.Kind == ArchitectureGraphNodeKind.LogicalComponent)
+            .OrderBy(node => node.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(node => node.GroupKey, StringComparer.Ordinal))
+        {
+            var leafId = region.LeafComponentIds.Count == 1 ? region.LeafComponentIds[0] : null;
+            var builder = leafId is not null && regions.TryGetValue(leafId, out var value) ? value : null;
+            string? parentRegionId = null;
+            if (builder?.ParentId is not null
+                && !cyclicRegions.Contains(builder.Id)
+                && !cyclicRegions.Contains(builder.ParentId))
+                regionGroupByLeafId.TryGetValue(builder.ParentId, out parentRegionId);
+
+            TopologyNodes.Add(new SystemLandscapeTopologyNodeViewModel
+            {
+                Id = region.GroupKey,
+                Name = region.Name,
+                Category = builder?.Role ?? "Logical region",
+                Detail = builder?.Description ?? string.Empty,
+                ParentRegionId = parentRegionId,
+                HierarchyDepth = builder is null ? 0 : GetRegionDepth(builder, regions),
+                IsRegion = true,
+                LeafComponentIds = region.LeafComponentIds
+            });
+        }
+
+        foreach (var group in rollup.Nodes.Where(node => node.Kind == ArchitectureGraphNodeKind.CodeComponent)
+            .OrderBy(node => node.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(node => node.GroupKey, StringComparer.Ordinal))
+        {
+            var validOwnerIds = new HashSet<string>(StringComparer.Ordinal);
+            var valid = group.LeafComponentIds.Count > 0
+                && group.LeafComponentIds.Distinct(StringComparer.Ordinal).Count() == group.LeafComponentIds.Count;
+            foreach (var leafId in group.LeafComponentIds)
+            {
+                if (!sourceNodes.ContainsKey(leafId))
+                {
+                    valid = false;
+                    break;
+                }
+
+                var records = memberships.GetValueOrDefault(leafId) ?? [];
+                if (records.Length != 1)
+                {
+                    valid = false;
+                    break;
+                }
+
+                var membership = records[0];
+                if (membership.ClassificationSource == ArchitectureClassificationSource.Unclassified
+                    || string.IsNullOrWhiteSpace(membership.ArchitecturalComponentId)
+                    || !double.IsFinite(membership.Confidence)
+                    || membership.Confidence is < 0 or > 1
+                    || !regions.ContainsKey(membership.ArchitecturalComponentId))
+                {
+                    valid = false;
+                    break;
+                }
+
+                validOwnerIds.Add(membership.ArchitecturalComponentId);
+            }
+
+            valid &= validOwnerIds.Count == 1;
+            var ownerId = valid ? validOwnerIds.Single() : null;
+            var ownerGroupId = ownerId is not null && regionGroupByLeafId.TryGetValue(ownerId, out var groupId)
+                ? groupId
+                : null;
+            var detail = string.Join(", ", group.Languages);
+            var node = new SystemLandscapeTopologyNodeViewModel
+            {
+                Id = group.GroupKey,
+                Name = group.Name,
+                Category = valid && ownerGroupId is not null ? group.ComponentKind ?? "Code container" : "Unclassified code container",
+                Detail = detail,
+                ParentRegionId = ownerGroupId,
+                IsUnclassified = !valid || ownerGroupId is null,
+                LeafComponentIds = group.LeafComponentIds
+            };
+            TopologyNodes.Add(node);
+
+            var leafIds = group.LeafComponentIds.ToHashSet(StringComparer.Ordinal);
+            var internalRelationships = projection.Edges
+                .Where(edge => leafIds.Contains(edge.SourceNodeId) && leafIds.Contains(edge.TargetNodeId))
+                .OrderBy(edge => edge.Id, StringComparer.Ordinal)
+                .Select(edge =>
+                {
+                    var sourceName = sourceNodes.TryGetValue(edge.SourceNodeId, out var sourceNode)
+                        ? sourceNode.Name : edge.SourceNodeId;
+                    var targetName = sourceNodes.TryGetValue(edge.TargetNodeId, out var targetNode)
+                        ? targetNode.Name : edge.TargetNodeId;
+                    return new SystemLandscapeRelationshipViewModel(edge, sourceName, targetName)
+                    {
+                        ContributingLeafEdgeIds = [edge.Id],
+                        IsInternalToGroup = true
+                    };
+                })
+                .ToArray();
+            if (internalRelationships.Length > 0)
+            {
+                node.InternalRelationships = internalRelationships;
+                foreach (var relationship in internalRelationships)
+                    Relationships.Add(relationship);
+            }
+        }
+
+        foreach (var group in rollup.Nodes.Where(node =>
+            node.Kind is ArchitectureGraphNodeKind.BuildModule or ArchitectureGraphNodeKind.ExternalResource)
+            .OrderBy(node => node.Kind)
+            .ThenBy(node => node.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(node => node.GroupKey, StringComparer.Ordinal))
+        {
+            TopologyNodes.Add(new SystemLandscapeTopologyNodeViewModel
+            {
+                Id = group.GroupKey,
+                Name = group.Name,
+                Category = group.Kind == ArchitectureGraphNodeKind.BuildModule ? "Build boundary" : "External resource",
+                Detail = string.Join(" · ", new[] { group.ResourceKind, group.ResourceProvider, group.ResourceIdentity, group.ModulePath }
+                    .Where(value => !string.IsNullOrWhiteSpace(value))),
+                LeafComponentIds = group.LeafComponentIds
+            });
+        }
+
+        foreach (var unresolved in rollup.UnresolvedEdges.OrderBy(edge => edge.Id, StringComparer.Ordinal))
+            ProjectionDiagnostics.Add($"Graph edge '{unresolved.Id}' has an unresolved roll-up endpoint and is not drawn.");
+
+        foreach (var edge in rollup.Edges
+            .OrderBy(item => item.Domain)
+            .ThenBy(item => item.SourceGroupKey, StringComparer.Ordinal)
+            .ThenBy(item => item.TargetGroupKey, StringComparer.Ordinal)
+            .ThenBy(item => item.Scope, StringComparer.Ordinal))
+        {
+            if (!rollupNodes.ContainsKey(edge.SourceGroupKey)
+                || !rollupNodes.ContainsKey(edge.TargetGroupKey))
+            {
+                ProjectionDiagnostics.Add($"Rolled-up topology edge '{edge.SourceGroupKey}->{edge.TargetGroupKey}' has a missing endpoint and is not drawn.");
+                continue;
+            }
+
+            TopologyEdges.Add(new SystemLandscapeTopologyEdgeViewModel
+            {
+                Id = $"{edge.SourceGroupKey}|{edge.TargetGroupKey}|{edge.Domain}|{edge.Scope}",
+                SourceNodeId = edge.SourceGroupKey,
+                TargetNodeId = edge.TargetGroupKey,
+                Domain = edge.Domain.ToString(),
+                Scope = edge.Scope,
+                RelationshipCount = edge.RelationshipCount,
+                LeafEdgeIds = edge.LeafEdgeIds,
+                Evidence = edge.Evidence
+            });
+        }
+
+        var ordered = TopologyNodes.OrderBy(node => node.IsRegion ? 0 : 1)
+            .ThenBy(node => node.HierarchyDepth)
+            .ThenBy(node => node.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(node => node.Id, StringComparer.Ordinal)
+            .ToArray();
+        TopologyNodes.Clear();
+        foreach (var node in ordered)
+            TopologyNodes.Add(node);
+
+        TopologyCanvasSize = SystemLandscapeTopologyLayout.Arrange(TopologyNodes, TopologyEdges);
+        OnPropertyChanged(nameof(TopologyCanvasSize));
+    }
+
+    private static int GetRegionDepth(
+        RegionBuilder region,
+        IReadOnlyDictionary<string, RegionBuilder> regions)
+    {
+        var depth = 0;
+        var visited = new HashSet<string>(StringComparer.Ordinal) { region.Id };
+        var current = region;
+        while (!string.IsNullOrWhiteSpace(current.ParentId)
+            && regions.TryGetValue(current.ParentId, out var parent)
+            && visited.Add(parent.Id))
+        {
+            depth++;
+            current = parent;
+        }
+
+        return depth;
+    }
+
     private void Clear()
     {
         RootRegions.Clear();
@@ -227,6 +436,11 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
         UnprojectedEvidence.Clear();
         DeclaredIntegrations.Clear();
         ProjectionDiagnostics.Clear();
+        SelectedTopologyNode = null;
+        TopologyNodes.Clear();
+        TopologyEdges.Clear();
+        TopologyCanvasSize = new Size(1, 1);
+        OnPropertyChanged(nameof(TopologyCanvasSize));
         LogicalRegionCount = CodeContainerCount = BuildModuleCount = ExternalResourceCount = 0;
         RelationshipCount = UnprojectedEvidenceCount = DeclaredIntegrationCount = 0;
     }

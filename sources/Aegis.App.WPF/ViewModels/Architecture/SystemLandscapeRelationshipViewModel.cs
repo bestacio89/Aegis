@@ -19,5 +19,7 @@ public sealed record SystemLandscapeRelationshipViewModel(
     public IReadOnlyList<ArchitectureGraphEvidenceReference> Evidence => EvidenceEdge.Evidence;
     public string Connection => $"{Source} → {Target}";
     public IReadOnlyList<string> ContributingLeafEdgeIds { get; init; } = Array.Empty<string>();
+    public bool IsInternalToGroup { get; init; }
+    public string DomainLabel => IsInternalToGroup ? $"{Domain} · Internal" : Domain;
     public string EvidenceSummary => $"{EvidenceEdge.RelationshipCount:N0} relationship(s) · {EvidenceOccurrenceCount:N0} evidence occurrence(s)";
 }

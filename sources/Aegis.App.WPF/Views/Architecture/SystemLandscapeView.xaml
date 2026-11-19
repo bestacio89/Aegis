@@ -51,8 +51,116 @@
                                FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
                     <TextBlock Text="{Binding BasePackageLabel}" Foreground="{StaticResource Brush.TextMuted}"
                                FontSize="10" Margin="0,5,0,0" />
-                    <TextBlock Text="{Binding BasePackageLabel}" Foreground="{StaticResource Brush.TextMuted}"
-                               FontSize="10" Margin="0,5,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card.Structural}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="SYSTEM TOPOLOGY" Style="{StaticResource Text.Eyebrow}"
+                               Foreground="{StaticResource Brush.AccentStructural}" />
+                    <TextBlock Text="Logical regions establish placement. Code boundaries are nested only when every contributing leaf has one consistent, valid owner."
+                               Foreground="{StaticResource Brush.TextMuted}" FontSize="11" Margin="0,4,0,8"
+                               TextWrapping="Wrap" />
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                  MaxHeight="720" CanContentScroll="False">
+                        <Canvas Width="{Binding TopologyCanvasSize.Width}"
+                                Height="{Binding TopologyCanvasSize.Height}"
+                                KeyboardNavigation.TabNavigation="Continue">
+                            <ItemsControl ItemsSource="{Binding TopologyEdges}" Width="{Binding TopologyCanvasSize.Width}" Height="{Binding TopologyCanvasSize.Height}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><Canvas /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="0" />
+                                        <Setter Property="Canvas.Top" Value="0" />
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Canvas IsHitTestVisible="False">
+                                            <Path Data="{Binding Route}" Stroke="{StaticResource Brush.TextMuted}"
+                                                  StrokeThickness="1.4" Opacity="0.55" />
+                                            <Path Data="{Binding ArrowHead}" Fill="{StaticResource Brush.TextMuted}"
+                                                  Stroke="{StaticResource Brush.TextMuted}" StrokeThickness="0.8"
+                                                  Opacity="0.75" />
+                                        </Canvas>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <ItemsControl ItemsSource="{Binding TopologyNodes}" Width="{Binding TopologyCanvasSize.Width}" Height="{Binding TopologyCanvasSize.Height}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><Canvas /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                                        <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Width="{Binding Width}" Height="{Binding Height}" Padding="8"
+                                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center"
+                                                Background="{StaticResource Brush.Panel}"
+                                                BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                                                Command="{Binding DataContext.SelectTopologyNodeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{Binding AutomationName}"
+                                                AutomationProperties.HelpText="{Binding AutomationHelpText}"
+                                                ToolTip="{Binding AutomationHelpText}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Category}" FontSize="9"
+                                                           Foreground="{StaticResource Brush.AccentStructural}" />
+                                                <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding Detail}" FontSize="9"
+                                                           Foreground="{StaticResource Brush.TextMuted}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Canvas>
+                    </ScrollViewer>
+                    <TextBlock Text="SELECTED ELEMENT" Style="{StaticResource Text.Eyebrow}" Margin="0,10,0,4" />
+                    <StackPanel Margin="0,8,0,0" DataContext="{Binding SelectedTopologyNode}">
+                        <TextBlock Text="{Binding AutomationName}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding AutomationHelpText}" FontSize="10"
+                                   Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap" />
+                        <ItemsControl ItemsSource="{Binding InternalRelationships}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Connection}" FontSize="10"
+                                               AutomationProperties.Name="{Binding EdgeId}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    <TextBlock Text="RELATIONSHIP INSPECTION" Style="{StaticResource Text.Eyebrow}"
+                               Margin="0,10,0,4" />
+                    <ListBox ItemsSource="{Binding Relationships}" MinHeight="80"
+                             AutomationProperties.Name="Directed architecture relationships">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="100" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding DomainLabel}" FontSize="10" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Connection}" FontSize="11"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Scope}" FontSize="10"
+                                               Foreground="{StaticResource Brush.TextMuted}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding EvidenceSummary}" FontSize="9"
+                                               Foreground="{StaticResource Brush.TextMuted}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock Text="Internal relationships remain attached to their package group and retain original leaf-edge IDs and evidence."
+                               FontSize="10" Foreground="{StaticResource Brush.TextMuted}" Margin="0,6,0,0"
+                               TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 

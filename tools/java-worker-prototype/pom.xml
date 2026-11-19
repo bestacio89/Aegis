@@ -52,6 +52,47 @@
           <archive><manifest><mainClass>org.aegis.worker.WorkerMain</mainClass></manifest></archive>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.8.1</version>
+        <executions>
+          <execution>
+            <id>package-private-worker-runtime</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+              <goal>build-classpath</goal>
+            </goals>
+            <configuration>
+              <includeScope>runtime</includeScope>
+              <outputDirectory>${project.build.directory}/runtime/lib</outputDirectory>
+              <outputFile>${project.build.directory}/runtime/classpath.txt</outputFile>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.cyclonedx</groupId>
+        <artifactId>cyclonedx-maven-plugin</artifactId>
+        <version>2.9.3</version>
+        <executions>
+          <execution>
+            <id>generate-runtime-sbom</id>
+            <phase>package</phase>
+            <goals>
+              <goal>makeBom</goal>
+            </goals>
+            <configuration>
+              <outputFormat>json</outputFormat>
+              <outputName>bom</outputName>
+              <schemaVersion>1.6</schemaVersion>
+              <includeTestScope>false</includeTestScope>
+              <includeBomSerialNumber>false</includeBomSerialNumber>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>

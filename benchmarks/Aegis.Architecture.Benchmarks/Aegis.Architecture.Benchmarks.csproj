@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Aegis.Architecture.Benchmarks</AssemblyName>
+    <RootNamespace>Aegis.Architecture.Benchmarks</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../sources/Aegis.Architecture/Aegis.Architecture.csproj" />
+  </ItemGroup>
+</Project>

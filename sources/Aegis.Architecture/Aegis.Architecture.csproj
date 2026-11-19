@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />
     <InternalsVisibleTo Include="Aegis.Architecture.Tests" />
+    <InternalsVisibleTo Include="Aegis.Architecture.Benchmarks" />
   </ItemGroup>
 
   <ItemGroup>

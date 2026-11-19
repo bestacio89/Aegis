@@ -13,7 +13,13 @@ public sealed record ArchitectureGraphRollupNode
     public IReadOnlyDictionary<string, int> InternalRelationshipCounts { get; init; } =
         new Dictionary<string, int>(StringComparer.Ordinal);
     public ArchitectureGraphNodeKind Kind { get; init; }
+    /// <summary>
+    /// The language family for mixed-language groups; otherwise the source language.
+    /// Java and Kotlin groups use <c>JVM</c>.
+    /// </summary>
     public string? Language { get; init; }
+    /// <summary>The sorted, distinct source languages represented by this group.</summary>
+    public IReadOnlyList<string> Languages { get; init; } = Array.Empty<string>();
     public string? ComponentKind { get; init; }
     public string? ArchitecturalRole { get; init; }
     public string? ModulePath { get; init; }

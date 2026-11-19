@@ -19,15 +19,25 @@ public static class ArchitectureGraphRollup
         var projection = context.ArchitectureGraphProjection ?? new ArchitectureGraphProjection([], [], []);
         var partitionBasePackages = projection.Nodes
             .Where(IsPackageNode)
-            .GroupBy(node => new PackagePartition(node.Language ?? string.Empty, node.ModulePath ?? string.Empty))
+            .GroupBy(node => new PackagePartition(GetLanguageFamily(node.Language), node.ModulePath ?? string.Empty))
             .ToDictionary(
                 group => group.Key,
                 group =>
                 {
-                    var applicationPackage = ArchitecturePackageBaseResolver.FindSpringBootApplicationPackage(
-                        context.SemanticAnalysisRuns,
-                        group.Key.Language,
-                        group.Key.ModulePath);
+                    var applicationPackages = group
+                        .Select(node => node.Language)
+                        .Where(language => !string.IsNullOrWhiteSpace(language))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Select(language => ArchitecturePackageBaseResolver.FindSpringBootApplicationPackage(
+                            context.SemanticAnalysisRuns,
+                            language!,
+                            group.Key.ModulePath))
+                        .Where(packageName => !string.IsNullOrWhiteSpace(packageName))
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray();
+                    var applicationPackage = applicationPackages.Length == 1
+                        ? applicationPackages[0]
+                        : null;
                     var packageNodes = group.ToArray();
                     var productionPackageNodes = packageNodes
                         .Where(node => !node.IsTestScoped)
@@ -64,7 +74,7 @@ public static class ArchitectureGraphRollup
             .Where(IsPackageNode)
             .ToArray();
         var resolvedBasePackagesByPartition = packageNodes
-            .GroupBy(node => new PackagePartition(node.Language ?? string.Empty, node.ModulePath ?? string.Empty))
+            .GroupBy(node => new PackagePartition(GetLanguageFamily(node.Language), node.ModulePath ?? string.Empty))
             .ToDictionary(
                 group => group.Key,
                 group =>
@@ -96,7 +106,7 @@ public static class ArchitectureGraphRollup
         {
             var nodeBasePackage = IsPackageNode(node)
                 && resolvedBasePackagesByPartition.TryGetValue(
-                    new PackagePartition(node.Language ?? string.Empty, node.ModulePath ?? string.Empty),
+                    new PackagePartition(GetLanguageFamily(node.Language), node.ModulePath ?? string.Empty),
                     out var partitionBasePackage)
                     ? partitionBasePackage
                     : string.Empty;
@@ -119,6 +129,7 @@ public static class ArchitectureGraphRollup
                 groupedNodes.Add(grouping.GroupKey, builder);
             }
 
+            builder.AddLanguage(node.Language);
             builder.LeafComponentIds.Add(node.Id);
             nodeGroupByLeafId[node.Id] = grouping.GroupKey;
         }
@@ -194,6 +205,12 @@ public static class ArchitectureGraphRollup
         && (string.Equals(node.ComponentKind, "Package", StringComparison.OrdinalIgnoreCase)
             || string.Equals(node.ComponentKind, "Module", StringComparison.OrdinalIgnoreCase));
 
+    private static string GetLanguageFamily(string? language) =>
+        string.Equals(language?.Trim(), "Java", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(language?.Trim(), "Kotlin", StringComparison.OrdinalIgnoreCase)
+            ? "JVM"
+            : language ?? string.Empty;
+
     private static NodeGrouping CreateNodeGroup(ArchitectureGraphNode node, string basePackage, int depth)
     {
         if (!IsPackageNode(node))
@@ -221,7 +238,7 @@ public static class ArchitectureGraphRollup
         var groupKey = string.Join(
             "|",
             "package",
-            Escape(node.Language ?? string.Empty),
+            Escape(GetLanguageFamily(node.Language)),
             Escape(node.ModulePath ?? string.Empty),
             Escape(basePackage),
             Escape(groupedName),
@@ -238,7 +255,7 @@ public static class ArchitectureGraphRollup
 
     private static string Escape(string value) => Uri.EscapeDataString(value);
 
-    private readonly record struct PackagePartition(string Language, string ModulePath);
+    private readonly record struct PackagePartition(string LanguageFamily, string ModulePath);
 
     private readonly record struct NodeGrouping(string GroupKey, string Name, int Depth);
 
@@ -275,20 +292,35 @@ public static class ArchitectureGraphRollup
         public string? ResourceKind { get; } = resourceKind;
         public bool IsTestScoped { get; } = isTestScoped;
         public List<string> LeafComponentIds { get; } = [];
+        private readonly HashSet<string> _languages = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _internalRelationshipCounts = new(StringComparer.Ordinal);
+
+        public void AddLanguage(string? language)
+        {
+            if (!string.IsNullOrWhiteSpace(language))
+                _languages.Add(language);
+        }
 
         public void AddInternalRelationship(string scope, int count)
         {
             _internalRelationshipCounts[scope] = checked(_internalRelationshipCounts.GetValueOrDefault(scope) + count);
         }
 
-        public ArchitectureGraphRollupNode Build() => new()
+        public ArchitectureGraphRollupNode Build()
         {
-            GroupKey = GroupKey,
-            Name = Name,
-            Depth = Depth,
-            Kind = Kind,
-            Language = Language,
+            var languages = _languages.OrderBy(language => language, StringComparer.Ordinal).ToArray();
+            var language = languages.Length > 1
+                ? GetLanguageFamily(Language)
+                : languages.FirstOrDefault() ?? Language;
+
+            return new ArchitectureGraphRollupNode
+            {
+                GroupKey = GroupKey,
+                Name = Name,
+                Depth = Depth,
+                Kind = Kind,
+                Language = language,
+                Languages = Array.AsReadOnly(languages),
             ComponentKind = ComponentKind,
             ArchitecturalRole = ArchitecturalRole,
             ModulePath = ModulePath,
@@ -297,9 +329,10 @@ public static class ArchitectureGraphRollup
             ResourceKind = ResourceKind,
             IsTestScoped = IsTestScoped,
             LeafComponentIds = Array.AsReadOnly(LeafComponentIds.OrderBy(id => id, StringComparer.Ordinal).ToArray()),
-            InternalRelationshipCounts = new System.Collections.ObjectModel.ReadOnlyDictionary<string, int>(
-                new Dictionary<string, int>(_internalRelationshipCounts, StringComparer.Ordinal))
-        };
+                InternalRelationshipCounts = new System.Collections.ObjectModel.ReadOnlyDictionary<string, int>(
+                    new Dictionary<string, int>(_internalRelationshipCounts, StringComparer.Ordinal))
+            };
+        }
     }
 
     private sealed class EdgeBuilder(EdgeGroupKey key, int groupDepth)

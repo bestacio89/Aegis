@@ -118,6 +118,56 @@ public sealed class ArchitectureGraphRollupTests
     }
 
     [Fact]
+    public void Apply_merges_java_and_kotlin_packages_within_the_same_module_and_counts_cross_language_edges_as_internal()
+    {
+        var projection = CreateProjection(
+            [
+                Package("java-web", "com.acme.orders.web", "/repo/orders") with { Language = "Java" },
+                Package("kotlin-persistence", "com.acme.orders.persistence", "/repo/orders") with { Language = "Kotlin" }
+            ],
+            [
+                Edge("java-kotlin-call", "java-web", "kotlin-persistence", "Production", 4, ArchitectureRelationshipKind.Calls, 0)
+            ]);
+
+        var result = ArchitectureGraphRollup.Apply(projection, "com.acme", 1);
+
+        var orders = result.Nodes.Should().ContainSingle(node => node.Name == "orders").Subject;
+        orders.ModulePath.Should().Be("/repo/orders");
+        orders.LeafComponentIds.Should().BeEquivalentTo(["java-web", "kotlin-persistence"]);
+        orders.Language.Should().Be("JVM");
+        orders.Languages.Should().Equal("Java", "Kotlin");
+        orders.InternalRelationshipCounts.Should().ContainKey("Production").WhoseValue.Should().Be(4);
+        result.Edges.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_keeps_java_and_python_packages_in_separate_language_families()
+    {
+        var projection = CreateProjection(
+            [
+                Package("java-package", "com.acme.orders.web", "/repo/shared") with { Language = "Java" },
+                Package("python-module", "com.acme.orders.web", "/repo/shared") with
+                {
+                    Language = "Python",
+                    ComponentKind = "Module"
+                }
+            ],
+            []);
+
+        var result = ArchitectureGraphRollup.Apply(projection, "com.acme", 1);
+
+        result.Nodes.Should().HaveCount(2);
+        result.Nodes.Should().ContainSingle(node =>
+            node.Language == "Java"
+            && node.Languages.SequenceEqual(["Java"])
+            && node.LeafComponentIds.Contains("java-package"));
+        result.Nodes.Should().ContainSingle(node =>
+            node.Language == "Python"
+            && node.Languages.SequenceEqual(["Python"])
+            && node.LeafComponentIds.Contains("python-module"));
+    }
+
+    [Fact]
     public void Apply_resolves_package_roots_independently_by_language_and_module()
     {
         var projection = CreateProjection(

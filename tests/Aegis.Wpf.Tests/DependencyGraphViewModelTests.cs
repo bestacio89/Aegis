@@ -203,7 +203,16 @@ public sealed class DependencyGraphViewModelTests
                 ledger.Dependencies.Select(edge => $"{edge.Source}->{edge.Target}").OrderBy(value => value, StringComparer.Ordinal));
             Assert.Equal(
                 expectedRelationships,
-                landscape.Relationships.Select(edge => $"{edge.Source}->{edge.Target}").OrderBy(value => value, StringComparer.Ordinal));
+                landscape.Relationships
+                    .Where(edge => !edge.IsInternalToGroup)
+                    .Select(edge => $"{edge.Source}->{edge.Target}")
+                    .OrderBy(value => value, StringComparer.Ordinal));
+            Assert.Equal(
+                new[] { "orders-internal", "sales-internal" },
+                landscape.Relationships
+                    .Where(edge => edge.IsInternalToGroup)
+                    .Select(edge => edge.EdgeId)
+                    .OrderBy(value => value, StringComparer.Ordinal));
             Assert.Equal(
                 new[] { "com.vendor.billing.api", "com.vendor.billing.api", "orders", "sales" },
                 graph.GraphNodes.Select(node => node.Name).OrderBy(value => value, StringComparer.Ordinal));
@@ -238,13 +247,18 @@ public sealed class DependencyGraphViewModelTests
 
             Assert.Single(graph.GraphEdges);
             Assert.Single(ledger.Dependencies);
-            Assert.Single(landscape.Relationships);
+            Assert.Single(landscape.Relationships.Where(edge => !edge.IsInternalToGroup));
+            Assert.Single(landscape.Relationships.Where(edge => edge.IsInternalToGroup));
 
             options.Depth = 2;
 
             Assert.Equal(2, graph.GraphEdges.Count);
             Assert.Equal(2, ledger.Dependencies.Count);
             Assert.Equal(2, landscape.Relationships.Count);
+            Assert.All(landscape.Relationships, edge => Assert.False(edge.IsInternalToGroup));
+            Assert.Equal(
+                graph.GraphEdges.Select(edge => $"{edge.Source}->{edge.Target}").OrderBy(value => value, StringComparer.Ordinal),
+                landscape.Relationships.Select(edge => $"{edge.Source}->{edge.Target}").OrderBy(value => value, StringComparer.Ordinal));
         });
     }
 

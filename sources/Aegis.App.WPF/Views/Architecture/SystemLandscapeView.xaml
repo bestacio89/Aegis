@@ -78,10 +78,10 @@
                                     <DataTemplate>
                                         <Canvas IsHitTestVisible="False">
                                             <Path Data="{Binding Route}" Stroke="{StaticResource Brush.TextMuted}"
-                                                  StrokeThickness="1.4" Opacity="0.55" />
+                                                  StrokeThickness="{Binding StrokeThickness}" Opacity="{Binding StrokeOpacity}" />
                                             <Path Data="{Binding ArrowHead}" Fill="{StaticResource Brush.TextMuted}"
                                                   Stroke="{StaticResource Brush.TextMuted}" StrokeThickness="0.8"
-                                                  Opacity="0.75" />
+                                                  Opacity="{Binding ArrowOpacity}" />
                                         </Canvas>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -99,12 +99,27 @@
                                         <Button Width="{Binding Width}" Height="{Binding Height}" Padding="8"
                                                 HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center"
                                                 Background="{StaticResource Brush.Panel}"
-                                                BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                                                Opacity="{Binding VisualOpacity}"
                                                 Command="{Binding DataContext.SelectTopologyNodeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
                                                 AutomationProperties.Name="{Binding AutomationName}"
                                                 AutomationProperties.HelpText="{Binding AutomationHelpText}"
                                                 ToolTip="{Binding AutomationHelpText}">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="BorderThickness" Value="1" />
+                                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.Line}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsRelated}" Value="True">
+                                                            <Setter Property="BorderThickness" Value="2" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                            <Setter Property="BorderThickness" Value="3" />
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.AccentStructural}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
                                             <StackPanel>
                                                 <TextBlock Text="{Binding Category}" FontSize="9"
                                                            Foreground="{StaticResource Brush.AccentStructural}" />
@@ -136,11 +151,42 @@
                     </StackPanel>
                     <TextBlock Text="RELATIONSHIP INSPECTION" Style="{StaticResource Text.Eyebrow}"
                                Margin="0,10,0,4" />
-                    <ListBox ItemsSource="{Binding Relationships}" MinHeight="80"
-                             AutomationProperties.Name="Directed architecture relationships">
+                    <Grid Margin="0,4,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,6,0">
+                            <TextBlock Text="DOMAIN" Style="{StaticResource Text.Eyebrow}" />
+                            <ComboBox ItemsSource="{Binding DomainOptions}" SelectedItem="{Binding SelectedDomain, UpdateSourceTrigger=PropertyChanged}"
+                                      AutomationProperties.Name="Filter relationships by domain"
+                                      AutomationProperties.HelpText="Shows relationships matching the selected evidence domain." />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                            <TextBlock Text="SCOPE" Style="{StaticResource Text.Eyebrow}" />
+                            <ComboBox ItemsSource="{Binding ScopeOptions}" SelectedItem="{Binding SelectedScope, UpdateSourceTrigger=PropertyChanged}"
+                                      AutomationProperties.Name="Filter relationships by scope"
+                                      AutomationProperties.HelpText="Shows relationships matching the selected scope." />
+                        </StackPanel>
+                        <Button Grid.Column="2" Content="Clear" Command="{Binding ClearInteractionCommand}"
+                                VerticalAlignment="Bottom" Margin="8,0,0,0" Padding="12,5"
+                                AutomationProperties.Name="Clear topology selection and filters"
+                                AutomationProperties.HelpText="Clears selected elements, selected relationships, and domain and scope filters." />
+                    </Grid>
+                    <TextBlock Text="{Binding SelectionStatus}" AutomationProperties.LiveSetting="Polite"
+                               AutomationProperties.Name="Topology selection status"
+                               Foreground="{StaticResource Brush.TextMuted}" FontSize="11"
+                               Margin="0,0,0,6" TextWrapping="Wrap" />
+                    <ListBox ItemsSource="{Binding VisibleRelationships}" SelectedItem="{Binding SelectedRelationship, Mode=TwoWay}"
+                             MinHeight="120" MaxHeight="260"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             KeyboardNavigation.TabNavigation="Once"
+                             AutomationProperties.Name="Directed architecture relationships"
+                             AutomationProperties.HelpText="Select a relationship to highlight its source, target, and topology connection.">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="2">
+                                <Grid Margin="2" ToolTip="{Binding EvidenceSummary}" AutomationProperties.Name="{Binding Connection}" AutomationProperties.HelpText="{Binding EvidenceSummary}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="100" />
                                         <ColumnDefinition Width="*" />
@@ -158,7 +204,7 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <TextBlock Text="Internal relationships remain attached to their package group and retain original leaf-edge IDs and evidence."
+                    <TextBlock Text="Filters change relationship emphasis and the inspection list; they never remove system elements or alter underlying evidence. Internal relationships remain attached to their owning code container."
                                FontSize="10" Foreground="{StaticResource Brush.TextMuted}" Margin="0,6,0,0"
                                TextWrapping="Wrap" />
                 </StackPanel>

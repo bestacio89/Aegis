@@ -30,6 +30,9 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
 
     [ObservableProperty] private string projectName = "No assessment loaded";
     [ObservableProperty] private SystemLandscapeTopologyNodeViewModel? selectedTopologyNode;
+    [ObservableProperty] private SystemLandscapeRelationshipViewModel? selectedRelationship;
+    [ObservableProperty] private string selectedDomain = "All";
+    [ObservableProperty] private string selectedScope = "All";
     [ObservableProperty] private int logicalRegionCount;
     [ObservableProperty] private int codeContainerCount;
     [ObservableProperty] private int buildModuleCount;
@@ -48,7 +51,37 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
     public ObservableCollection<string> ProjectionDiagnostics { get; } = [];
     public ObservableCollection<SystemLandscapeTopologyNodeViewModel> TopologyNodes { get; } = [];
     public ObservableCollection<SystemLandscapeTopologyEdgeViewModel> TopologyEdges { get; } = [];
+    public ObservableCollection<SystemLandscapeRelationshipViewModel> VisibleRelationships { get; } = [];
+    public IReadOnlyList<string> DomainOptions { get; private set; } = ["All"];
+    public IReadOnlyList<string> ScopeOptions { get; private set; } = ["All"];
+    public string SelectionStatus => SelectedRelationship is not null
+        ? string.Concat("Selected ", SelectedRelationship.Domain, " relationship: ", SelectedRelationship.Connection, " (", SelectedRelationship.Scope, ").")
+        : SelectedTopologyNode is not null
+            ? string.Concat("Selected ", SelectedTopologyNode.Category, ": ", SelectedTopologyNode.Name, ".")
+            : "No topology element or relationship is selected.";
+    public bool HasActiveInteractionFilter =>
+        !string.Equals(SelectedDomain, "All", StringComparison.Ordinal)
+        || !string.Equals(SelectedScope, "All", StringComparison.Ordinal);
     public Size TopologyCanvasSize { get; private set; } = new(1, 1);
+
+    partial void OnSelectedTopologyNodeChanged(SystemLandscapeTopologyNodeViewModel? value)
+    {
+        OnPropertyChanged(nameof(SelectionStatus));
+        RefreshInteractionState();
+    }
+
+    partial void OnSelectedRelationshipChanged(SystemLandscapeRelationshipViewModel? value)
+    {
+        if (value is not null)
+            SelectedTopologyNode = value.IsInternalToGroup
+                ? TopologyNodes.FirstOrDefault(node => node.InternalRelationships.Contains(value))
+                : null;
+        OnPropertyChanged(nameof(SelectionStatus));
+        RefreshInteractionState();
+    }
+
+    partial void OnSelectedDomainChanged(string value) => RefreshInteractionState();
+    partial void OnSelectedScopeChanged(string value) => RefreshInteractionState();
 
     public void Update(ProjectArchitectureContext? context)
     {
@@ -223,10 +256,122 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
         ExternalResourceCount = ExternalResources.Count;
         RelationshipCount = Relationships.Count;
         UnprojectedEvidenceCount = UnprojectedEvidence.Count;
+        RefreshInteractionOptions();
+        RefreshInteractionState();
     }
 
     [RelayCommand]
-    private void SelectTopologyNode(SystemLandscapeTopologyNodeViewModel? node) => SelectedTopologyNode = node;
+    private void SelectTopologyNode(SystemLandscapeTopologyNodeViewModel? node)
+    {
+        SelectedRelationship = null;
+        SelectedTopologyNode = ReferenceEquals(SelectedTopologyNode, node) ? null : node;
+    }
+
+    [RelayCommand]
+    private void SelectRelationship(SystemLandscapeRelationshipViewModel? relationship) =>
+        SelectedRelationship = ReferenceEquals(SelectedRelationship, relationship) ? null : relationship;
+
+    [RelayCommand]
+    private void ClearInteraction()
+    {
+        SelectedRelationship = null;
+        SelectedTopologyNode = null;
+        SelectedDomain = "All";
+        SelectedScope = "All";
+        RefreshInteractionState();
+    }
+
+    private void RefreshInteractionOptions()
+    {
+        DomainOptions = ["All", .. Relationships.Select(item => item.Domain)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal)];
+        ScopeOptions = ["All", .. Relationships.Select(item => item.Scope)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal)];
+        if (!DomainOptions.Contains(SelectedDomain, StringComparer.Ordinal))
+            SelectedDomain = "All";
+        if (!ScopeOptions.Contains(SelectedScope, StringComparer.Ordinal))
+            SelectedScope = "All";
+        OnPropertyChanged(nameof(DomainOptions));
+        OnPropertyChanged(nameof(ScopeOptions));
+        OnPropertyChanged(nameof(HasActiveInteractionFilter));
+    }
+
+    private void RefreshInteractionState()
+    {
+        var visible = Relationships
+            .Where(MatchesInteractionFilters)
+            .Where(relationship => SelectedTopologyNode is null
+                || RelationshipTouchesNode(relationship, SelectedTopologyNode))
+            .ToArray();
+        VisibleRelationships.Clear();
+        foreach (var relationship in visible)
+            VisibleRelationships.Add(relationship);
+
+        if (SelectedRelationship is not null
+            && !visible.Any(item => ReferenceEquals(item, SelectedRelationship)))
+            SelectedRelationship = null;
+
+        var hasSelection = SelectedRelationship is not null || SelectedTopologyNode is not null;
+        foreach (var edge in TopologyEdges)
+        {
+            var filterMatch = MatchesInteractionFilters(edge.Domain, edge.Scope);
+            var relationshipMatch = SelectedRelationship is not null
+                && RelationshipMatchesTopologyEdge(SelectedRelationship, edge);
+            var nodeMatch = SelectedTopologyNode is not null
+                && (string.Equals(edge.SourceNodeId, SelectedTopologyNode.Id, StringComparison.Ordinal)
+                    || string.Equals(edge.TargetNodeId, SelectedTopologyNode.Id, StringComparison.Ordinal));
+            edge.IsSelected = filterMatch && relationshipMatch;
+            edge.IsHighlighted = filterMatch && (relationshipMatch || nodeMatch);
+            edge.IsDimmed = !filterMatch || (hasSelection && !relationshipMatch && !nodeMatch);
+        }
+
+        foreach (var node in TopologyNodes)
+        {
+            var relationshipMatch = SelectedRelationship is not null
+                && (string.Equals(node.Id, SelectedRelationship.EvidenceEdge.SourceNodeId, StringComparison.Ordinal)
+                    || string.Equals(node.Id, SelectedRelationship.EvidenceEdge.TargetNodeId, StringComparison.Ordinal)
+                    || node.InternalRelationships.Contains(SelectedRelationship));
+            var nodeMatch = SelectedTopologyNode is not null && ReferenceEquals(node, SelectedTopologyNode);
+            node.IsSelected = nodeMatch;
+            node.IsRelated = relationshipMatch
+                || (SelectedTopologyNode is not null && TopologyEdges.Any(edge => edge.IsHighlighted
+                    && (edge.SourceNodeId == node.Id || edge.TargetNodeId == node.Id)));
+            node.IsDimmed = hasSelection && !nodeMatch && !node.IsRelated;
+        }
+
+        OnPropertyChanged(nameof(SelectionStatus));
+        OnPropertyChanged(nameof(HasActiveInteractionFilter));
+    }
+
+    private bool MatchesInteractionFilters(SystemLandscapeRelationshipViewModel relationship) =>
+        MatchesInteractionFilters(relationship.Domain, relationship.Scope);
+
+    private bool MatchesInteractionFilters(string domain, string scope) =>
+        (string.Equals(SelectedDomain, "All", StringComparison.Ordinal)
+            || string.Equals(domain, SelectedDomain, StringComparison.Ordinal))
+        && (string.Equals(SelectedScope, "All", StringComparison.Ordinal)
+            || string.Equals(scope, SelectedScope, StringComparison.Ordinal));
+
+    private static bool RelationshipTouchesNode(
+        SystemLandscapeRelationshipViewModel relationship,
+        SystemLandscapeTopologyNodeViewModel node) =>
+        node.InternalRelationships.Contains(relationship)
+        || node.LeafComponentIds.Contains(relationship.EvidenceEdge.SourceNodeId, StringComparer.Ordinal)
+        || node.LeafComponentIds.Contains(relationship.EvidenceEdge.TargetNodeId, StringComparer.Ordinal)
+        || string.Equals(node.Id, relationship.EvidenceEdge.SourceNodeId, StringComparison.Ordinal)
+        || string.Equals(node.Id, relationship.EvidenceEdge.TargetNodeId, StringComparison.Ordinal);
+
+    private static bool RelationshipMatchesTopologyEdge(
+        SystemLandscapeRelationshipViewModel relationship,
+        SystemLandscapeTopologyEdgeViewModel edge) =>
+        !relationship.IsInternalToGroup
+        && string.Equals(relationship.EvidenceEdge.SourceNodeId, edge.SourceNodeId, StringComparison.Ordinal)
+        && string.Equals(relationship.EvidenceEdge.TargetNodeId, edge.TargetNodeId, StringComparison.Ordinal)
+        && string.Equals(relationship.Domain, edge.Domain, StringComparison.Ordinal)
+        && string.Equals(relationship.Scope, edge.Scope, StringComparison.Ordinal)
+        && relationship.ContributingLeafEdgeIds.Any(edge.LeafEdgeIds.Contains);
 
     private void BuildTopology(
         ArchitectureGraphProjection projection,
@@ -433,14 +578,23 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
         BuildModules.Clear();
         ExternalResources.Clear();
         Relationships.Clear();
+        VisibleRelationships.Clear();
         UnprojectedEvidence.Clear();
         DeclaredIntegrations.Clear();
         ProjectionDiagnostics.Clear();
+        SelectedRelationship = null;
         SelectedTopologyNode = null;
+        SelectedDomain = "All";
+        SelectedScope = "All";
         TopologyNodes.Clear();
         TopologyEdges.Clear();
         TopologyCanvasSize = new Size(1, 1);
         OnPropertyChanged(nameof(TopologyCanvasSize));
+        DomainOptions = ScopeOptions = ["All"];
+        OnPropertyChanged(nameof(DomainOptions));
+        OnPropertyChanged(nameof(ScopeOptions));
+        OnPropertyChanged(nameof(SelectionStatus));
+        OnPropertyChanged(nameof(HasActiveInteractionFilter));
         LogicalRegionCount = CodeContainerCount = BuildModuleCount = ExternalResourceCount = 0;
         RelationshipCount = UnprojectedEvidenceCount = DeclaredIntegrationCount = 0;
     }

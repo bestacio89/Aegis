@@ -22,7 +22,7 @@ jobs:
 
       - name: run architecture benchmarks
         shell: pwsh
-        run: dotnet run --project benchmarks/Aegis.Architecture.Benchmarks/Aegis.Architecture.Benchmarks.csproj --configuration Release -- --artifacts ./BenchmarkDotNet.Artifacts
+        run: dotnet run --project benchmarks/Aegis.Architecture.Benchmarks/Aegis.Architecture.Benchmarks.csproj --configuration Release -- --filter "*" --artifacts ./BenchmarkDotNet.Artifacts
 
       - name: upload benchmark reports
         if: always()

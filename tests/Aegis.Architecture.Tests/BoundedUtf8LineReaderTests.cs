@@ -67,6 +67,28 @@ public sealed class BoundedUtf8LineReaderTests
         await action.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    [Fact]
+    public async Task SetMaximumLineBytes_applies_a_lower_negotiated_limit()
+    {
+        var reader = CreateReader("123456789\n", 16);
+        reader.SetMaximumLineBytes(8);
+
+        var action = () => reader.ReadLineAsync().AsTask();
+
+        await action.Should().ThrowAsync<InvalidDataException>()
+            .WithMessage("*exceeds the configured byte limit*");
+    }
+
+    [Fact]
+    public void SetMaximumLineBytes_rejects_a_limit_above_the_host_configuration()
+    {
+        var reader = CreateReader("frame\n", 8);
+
+        var action = () => reader.SetMaximumLineBytes(9);
+
+        action.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("maximumLineBytes");
+    }
+
     private static BoundedUtf8LineReader CreateReader(string content, int maximumBytes) =>
         new(new MemoryStream(Encoding.UTF8.GetBytes(content)), maximumBytes);
 

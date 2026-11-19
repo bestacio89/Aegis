@@ -10,7 +10,8 @@ internal sealed class BoundedUtf8LineReader
 {
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private readonly Stream _stream;
-    private readonly int _maximumLineBytes;
+    private readonly int _configuredMaximumLineBytes;
+    private int _maximumLineBytes;
     private readonly byte[] _buffer = new byte[4096];
     private int _bufferOffset;
     private int _bufferLength;
@@ -20,6 +21,16 @@ internal sealed class BoundedUtf8LineReader
         ArgumentNullException.ThrowIfNull(stream);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumLineBytes);
         _stream = stream;
+        _configuredMaximumLineBytes = maximumLineBytes;
+        _maximumLineBytes = maximumLineBytes;
+    }
+
+    public void SetMaximumLineBytes(int maximumLineBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumLineBytes);
+        if (maximumLineBytes > _configuredMaximumLineBytes)
+            throw new ArgumentOutOfRangeException(nameof(maximumLineBytes), maximumLineBytes, "A negotiated response limit cannot exceed the configured host limit.");
+
         _maximumLineBytes = maximumLineBytes;
     }
 

@@ -137,5 +137,11 @@ public sealed class JvmWorkerProtocolLimitsTests
         int maxFrameBytes,
         int maxResponseBytes,
         int maxConcurrentRequests) =>
-        JsonDocument.Parse($"""{{"protocolVersion":{protocolVersion},"maxFrameBytes":{maxFrameBytes},"maxResponseBytes":{maxResponseBytes},"maxConcurrentRequests":{maxConcurrentRequests}}}""");
+        JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            protocolVersion,
+            maxFrameBytes,
+            maxResponseBytes,
+            maxConcurrentRequests
+        }));
 }

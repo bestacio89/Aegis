@@ -16,6 +16,7 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
     public SystemLandscapeViewModel(ArchitectureGraphViewOptions? graphOptions = null)
     {
         _graphOptions = graphOptions ?? new ArchitectureGraphViewOptions();
+        InitializeEvidenceInteraction();
         _graphOptions.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ArchitectureGraphViewOptions.Depth))
@@ -64,6 +65,8 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
         || !string.Equals(SelectedScope, "All", StringComparison.Ordinal);
     public Size TopologyCanvasSize { get; private set; } = new(1, 1);
 
+    partial void InitializeEvidenceInteraction();
+
     partial void OnSelectedTopologyNodeChanged(SystemLandscapeTopologyNodeViewModel? value)
     {
         OnPropertyChanged(nameof(SelectionStatus));
@@ -77,6 +80,7 @@ public sealed partial class SystemLandscapeViewModel : ObservableObject
                 ? TopologyNodes.FirstOrDefault(node => node.InternalRelationships.Contains(value))
                 : null;
         OnPropertyChanged(nameof(SelectionStatus));
+        RefreshEvidenceItems(value);
         RefreshInteractionState();
     }
 

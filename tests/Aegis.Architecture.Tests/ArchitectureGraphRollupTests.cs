@@ -457,6 +457,33 @@ public sealed class ArchitectureGraphRollupTests
         result.Nodes.Single(node => node.Name == "orders").InternalRelationshipCounts["Production"].Should().Be(1);
     }
 
+    [Fact]
+    public void Apply_keeps_identical_packages_separate_across_modules_and_merges_source_sets_within_a_module()
+    {
+        var projection = CreateProjection(
+            [
+                Package("android-app-ui", "dev.johnoreilly.confetti.ui", "/repo/androidApp"),
+                Package("android-app-ui-test", "dev.johnoreilly.confetti.ui", "/repo/androidApp"),
+                Package("shared-ui", "dev.johnoreilly.confetti.ui", "/repo/shared"),
+                Package("shared-ui-test", "dev.johnoreilly.confetti.ui", "/repo/shared")
+            ],
+            []);
+
+        var result = ArchitectureGraphRollup.Apply(projection, "dev.johnoreilly.confetti", 1);
+
+        result.Nodes.Should().HaveCount(2);
+        var androidApp = result.Nodes.Should().ContainSingle(node =>
+            node.ModulePath == "/repo/androidApp"
+            && node.Name == "ui").Subject;
+        androidApp.LeafComponentIds.Should().BeEquivalentTo(["android-app-ui", "android-app-ui-test"]);
+
+        var shared = result.Nodes.Should().ContainSingle(node =>
+            node.ModulePath == "/repo/shared"
+            && node.Name == "ui").Subject;
+        shared.LeafComponentIds.Should().BeEquivalentTo(["shared-ui", "shared-ui-test"]);
+        androidApp.GroupKey.Should().NotBe(shared.GroupKey);
+    }
+
     private static SemanticAnalysisRun SpringBootRun(
         string runId,
         string projectPath,

@@ -221,14 +221,14 @@ public sealed class PolyglotEvidenceProjectionCorpusTests
         projection.Edges.Should().ContainSingle(edge =>
             edge.Domain == ArchitectureGraphEdgeDomain.Messaging
             && edge.Evidence.Any(evidence =>
-                evidence.Domain == ArchitectureGraphEvidenceDomain.MessageIntegration
+                evidence.Domain == ArchitectureGraphEvidenceDomain.Messaging
                 && evidence.OccurrenceIndex == 0
                 && evidence.EvidenceId == "orders-publish"));
 
         projection.Edges.Should().ContainSingle(edge =>
             edge.Domain == ArchitectureGraphEdgeDomain.Rpc
             && edge.Evidence.Any(evidence =>
-                evidence.Domain == ArchitectureGraphEvidenceDomain.RpcIntegration
+                evidence.Domain == ArchitectureGraphEvidenceDomain.Rpc
                 && evidence.OccurrenceIndex == 0
                 && evidence.EvidenceId == "orders-rpc-call"));
 

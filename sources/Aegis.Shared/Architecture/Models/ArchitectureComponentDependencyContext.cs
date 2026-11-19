@@ -52,7 +52,7 @@ public sealed class ArchitectureComponentDependencyContext
     /// </summary>
     public List<SemanticRelationshipReference> ContributingRelationships { get; init; } = [];
 
-    /// <summary>Relationships whose provider omitted an ID and therefore cannot be referenced exactly.</summary>
+    /// <summary>Relationships whose provider omitted an ID; their exact occurrence remains index-addressable.</summary>
     public int UnreferencedRelationshipCount { get; init; }
 
     public List<SemanticRelationshipKind> RelationshipKinds { get; init; } = [];

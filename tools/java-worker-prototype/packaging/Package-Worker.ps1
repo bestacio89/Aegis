@@ -37,22 +37,42 @@ if (Test-Path $outputRoot) {
 New-Item -ItemType Directory -Path $classesDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $librariesDirectory -Force | Out-Null
 
+$packagedRuntimeDirectory = Join-Path $targetDirectory "runtime"
+$packagedLibrariesDirectory = Join-Path $packagedRuntimeDirectory "lib"
+$packagedClasspathFile = Join-Path $packagedRuntimeDirectory "classpath.txt"
+$sbomFile = Join-Path $targetDirectory "bom.json"
+
 Push-Location $repositoryRoot
 try {
+    if (Test-Path -LiteralPath $packagedRuntimeDirectory) {
+        Remove-Item -LiteralPath $packagedRuntimeDirectory -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $sbomFile) {
+        Remove-Item -LiteralPath $sbomFile -Force
+    }
+
     & mvn --batch-mode --no-transfer-progress -f $pomPath package -DskipTests
-    if ($LASTEXITCODE -ne 0) { throw "The Java worker Maven verification failed with exit code $LASTEXITCODE." }
+    if ($LASTEXITCODE -ne 0) { throw "The Java worker Maven verification and packaging lifecycle failed with exit code $LASTEXITCODE." }
 
-    & mvn --batch-mode --no-transfer-progress -f $pomPath org.apache.maven.plugins:maven-dependency-plugin:3.8.1:copy-dependencies "-DincludeScope=runtime" "-DoutputDirectory=$librariesDirectory"
-    if ($LASTEXITCODE -ne 0) { throw "Copying Java worker runtime dependencies failed with exit code $LASTEXITCODE." }
+    if (-not (Test-Path -LiteralPath $packagedLibrariesDirectory)) {
+        throw "The Maven lifecycle did not produce the Java worker runtime dependency directory."
+    }
+    if (-not (Test-Path -LiteralPath $packagedClasspathFile)) {
+        throw "The Maven lifecycle did not produce the Java worker dependency classpath."
+    }
+    if (-not (Test-Path -LiteralPath $sbomFile)) {
+        throw "The Maven lifecycle did not produce the Java worker CycloneDX SBOM."
+    }
 
-    & mvn --batch-mode --no-transfer-progress -f $pomPath org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath "-Dmdep.includeScope=runtime" "-Dmdep.outputFile=$classpathFile"
-    if ($LASTEXITCODE -ne 0) { throw "Building the Java worker dependency classpath failed with exit code $LASTEXITCODE." }
-
-    & mvn --batch-mode --no-transfer-progress -f $pomPath org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeBom "-DoutputFormat=json"
-    if ($LASTEXITCODE -ne 0) { throw "Generating the Java worker SBOM failed with exit code $LASTEXITCODE." }
+    $packagedLibraries = @(Get-ChildItem -LiteralPath $packagedLibrariesDirectory -Filter "*.jar" -File)
+    if ($packagedLibraries.Count -eq 0) {
+        throw "The Maven lifecycle produced no Java worker runtime dependencies."
+    }
 
     Copy-Item -Path (Join-Path $targetDirectory "classes/*") -Destination $classesDirectory -Recurse -Force
-    Copy-Item -LiteralPath (Join-Path $targetDirectory "bom.json") -Destination (Join-Path $javaRoot "worker/sbom.cdx.json") -Force
+    Copy-Item -Path (Join-Path $packagedLibrariesDirectory "*.jar") -Destination $librariesDirectory -Force
+    Copy-Item -LiteralPath $packagedClasspathFile -Destination $classpathFile -Force
+    Copy-Item -LiteralPath $sbomFile -Destination (Join-Path $javaRoot "worker/sbom.cdx.json") -Force
 
     $requiredJdt = Join-Path $librariesDirectory "org.eclipse.jdt.core-3.47.0.jar"
     $requiredGson = Join-Path $librariesDirectory "gson-2.13.2.jar"

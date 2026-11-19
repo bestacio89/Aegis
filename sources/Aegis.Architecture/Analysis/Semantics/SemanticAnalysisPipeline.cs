@@ -1,5 +1,6 @@
 using Aegis.Architecture.Analysis.Classification;
 using Aegis.Architecture.Analysis.Detectors;
+using Aegis.Architecture.Analysis.Projection;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Microsoft.Extensions.Logging;
@@ -97,6 +98,7 @@ public sealed class SemanticAnalysisPipeline
         }
 
         RecordMissingLanguageAnalyzers(context);
+        MergeServerEndpointEvidence(context);
         ModuleRoleDetector.Analyze(context.Modules);
 
         var architectureMap = await ArchitectureMapConfigurationLoader.LoadAsync(
@@ -104,7 +106,29 @@ public sealed class SemanticAnalysisPipeline
             cancellationToken).ConfigureAwait(false);
 
         ProjectArchitectureComponents(context, architectureMap.Configuration);
+        MatchApiClientRequestsToServerEndpoints(context);
         context.ArchitectureClassificationDiagnostics.InsertRange(0, architectureMap.Diagnostics);
+    }
+
+
+    private static void MatchApiClientRequestsToServerEndpoints(ProjectArchitectureContext context)
+    {
+        var clientRequests = context.ApiClientRequestDiscoveryRegistry
+            ?? new ApiClientRequestDiscoveryRegistry(Array.Empty<ApiClientRequestEvidence>());
+        var serverEndpoints = context.ServerApiEndpointDiscoveryRegistry
+            ?? new ServerApiEndpointDiscoveryRegistry(Array.Empty<ApiEndpointEvidence>());
+        context.ApiClientRequestEndpointMatchRegistry =
+            new Aegis.Architecture.Analysis.Api.ApiClientRequestEndpointMatcher()
+                .Match(clientRequests, serverEndpoints);
+    }
+
+    private static void MergeServerEndpointEvidence(ProjectArchitectureContext context)
+    {
+        var evidence = (context.ServerApiEndpointDiscoveryRegistry?.Evidence
+                ?? Array.Empty<ApiEndpointEvidence>())
+            .Concat(context.SemanticAnalysisRuns.SelectMany(run => run.ServerApiEndpoints))
+            .ToArray();
+        context.ServerApiEndpointDiscoveryRegistry = new ServerApiEndpointDiscoveryRegistry(evidence);
     }
 
     private void RecordMissingLanguageAnalyzers(ProjectArchitectureContext context)
@@ -173,5 +197,6 @@ public sealed class SemanticAnalysisPipeline
         ArchitecturalComponentClassifier.Classify(context, configuration);
         ArchitecturalComponentDependencyProjector.Project(context);
         ArchitectureDependencyCycleAnalyzer.Analyze(context);
+        context.ArchitectureGraphProjection = UnifiedArchitectureGraphProjector.Project(context);
     }
 }

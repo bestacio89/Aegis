@@ -8,22 +8,17 @@
       Handles scanning orchestration, rule evaluation, and scoring.
     </Description>
 
-    <FrontendAnalyzerDirectory>
-      $(MSBuildProjectDirectory)\Evaluators\FrontEnd
-    </FrontendAnalyzerDirectory>
+    <FrontendAnalyzerDirectory>$(MSBuildProjectDirectory)/Evaluators/FrontEnd</FrontendAnalyzerDirectory>
 
-    <FrontendAnalyzerEntryPoint>
-      $(FrontendAnalyzerDirectory)\frontend-analyzer.mjs
-    </FrontendAnalyzerEntryPoint>
+    <FrontendAnalyzerEntryPoint>$(FrontendAnalyzerDirectory)/frontend-analyzer.mjs</FrontendAnalyzerEntryPoint>
 
-    <FrontendAnalyzerOutputDirectory>
-      $(OutDir)Evaluators\FrontEnd
-    </FrontendAnalyzerOutputDirectory>
+    <FrontendAnalyzerOutputDirectory>$(OutDir)Evaluators/FrontEnd</FrontendAnalyzerOutputDirectory>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Aegis.Shared\Aegis.Shared.csproj" />
     <InternalsVisibleTo Include="Aegis.Architecture.Tests" />
+    <InternalsVisibleTo Include="Aegis.Architecture.Benchmarks" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,14 +41,14 @@
   <Target
     Name="PrepareFrontendAnalyzer"
     BeforeTargets="Build"
-    Condition="Exists('$(FrontendAnalyzerDirectory)\package.json') and '$(DesignTimeBuild)' != 'true'">
+    Condition="Exists('$(FrontendAnalyzerDirectory)/package.json') and '$(DesignTimeBuild)' != 'true'">
 
     <Error
       Condition="!Exists('$(FrontendAnalyzerEntryPoint)')"
       Text="Frontend analyzer entry point is missing: $(FrontendAnalyzerEntryPoint)" />
 
     <Error
-      Condition="!Exists('$(FrontendAnalyzerDirectory)\package-lock.json')"
+      Condition="!Exists('$(FrontendAnalyzerDirectory)/package-lock.json')"
       Text="Frontend analyzer package-lock.json is missing. Run npm install in Evaluators\FrontEnd." />
 
     <Exec
@@ -61,11 +56,11 @@
       WorkingDirectory="$(FrontendAnalyzerDirectory)" />
 
     <Error
-      Condition="!Exists('$(FrontendAnalyzerDirectory)\node_modules\typescript\package.json')"
+      Condition="!Exists('$(FrontendAnalyzerDirectory)/node_modules/typescript/package.json')"
       Text="Frontend analyzer dependency 'typescript' is missing after npm ci." />
 
     <Error
-      Condition="!Exists('$(FrontendAnalyzerDirectory)\node_modules\@angular\compiler\package.json')"
+      Condition="!Exists('$(FrontendAnalyzerDirectory)/node_modules/@angular/compiler/package.json')"
       Text="Frontend analyzer dependency '@angular/compiler' is missing after npm ci." />
   </Target>
 
@@ -73,20 +68,21 @@
   <Target
     Name="CopyFrontendAnalyzerToOutput"
     AfterTargets="Build"
-    Condition="Exists('$(FrontendAnalyzerDirectory)\package.json')">
+    Condition="Exists('$(FrontendAnalyzerDirectory)/package.json')">
 
     <ItemGroup>
       <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerEntryPoint)" />
-      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\package.json" />
-      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\package-lock.json" />
-      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)\node_modules\**\*" />
+      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)/server-api-endpoint-analyzer.mjs" />
+      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)/package.json" />
+      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)/package-lock.json" />
+      <FrontendAnalyzerRuntimeFiles Include="$(FrontendAnalyzerDirectory)/node_modules/**/*" />
     </ItemGroup>
 
     <MakeDir Directories="$(FrontendAnalyzerOutputDirectory)" />
 
     <Copy
       SourceFiles="@(FrontendAnalyzerRuntimeFiles)"
-      DestinationFiles="@(FrontendAnalyzerRuntimeFiles->'$(FrontendAnalyzerOutputDirectory)\%(RecursiveDir)%(Filename)%(Extension)')"
+      DestinationFiles="@(FrontendAnalyzerRuntimeFiles->'$(FrontendAnalyzerOutputDirectory)/%(RecursiveDir)%(Filename)%(Extension)')"
       SkipUnchangedFiles="true" />
   </Target>
 

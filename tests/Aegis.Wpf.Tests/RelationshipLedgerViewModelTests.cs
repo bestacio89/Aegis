@@ -1,104 +1,288 @@
 using System;
-using System.Linq;
+using System.IO;
 using System.Threading;
-using Xunit;
+using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Wpf.ViewModels.Architecture;
+using Xunit;
 
 namespace Aegis.Wpf.Tests;
 
 public sealed class RelationshipLedgerViewModelTests
 {
     [Fact]
-    public void Update_PreservesLogicalProvenanceAndCodeContainerDrillDown()
+    public void Update_UsesUnifiedGraphAsTheOnlySourceOfDetectedRelationships()
     {
         RunOnStaThread(() =>
         {
-            var reference = new SemanticRelationshipReference
-            {
-                RunId = "run-42",
-                RelationshipId = "relationship-17"
-            };
-            var contribution = new ArchitectureComponentDependencyContext
-            {
-                SourceComponentId = "container-api",
-                SourceComponentName = "Example.Api",
-                TargetComponentId = "container-domain",
-                TargetComponentName = "Example.Domain",
-                RelationshipCount = 3,
-                ResolvedRelationshipCount = 2,
-                PartiallyResolvedRelationshipCount = 1,
-                ContributingRelationships = [reference],
-                UnreferencedRelationshipCount = 1
-            };
+            var sourcePath = Path.Combine(Path.GetTempPath(), "aegis", "api");
+            var targetPath = Path.Combine(Path.GetTempPath(), "aegis", "orders");
             var context = new ProjectArchitectureContext
             {
-                ArchitectureComponents =
+                ProjectName = "Ledger fixture",
+                Dependencies =
                 [
-                    new ArchitectureComponentContext
+                    new ArchitectureDependencyContext
                     {
-                        Id = "container-api",
-                        Name = "Api",
-                        QualifiedName = "Example.Api",
-                        ComponentKind = "Namespace",
-                        BuildModulePath = "src/Api"
-                    },
-                    new ArchitectureComponentContext
-                    {
-                        Id = "container-domain",
-                        Name = "Domain",
-                        QualifiedName = "Example.Domain",
-                        ComponentKind = "Namespace",
-                        BuildModulePath = "src/Domain"
+                        Source = "Legacy source",
+                        Target = "Legacy target",
+                        DependencyType = "LegacyDependency"
                     }
                 ],
-                ArchitecturalComponents =
-                [
-                    new ArchitecturalComponentContext
-                    {
-                        Id = "logical-api",
-                        Name = "API",
-                        Role = "Presentation"
-                    },
-                    new ArchitecturalComponentContext
-                    {
-                        Id = "logical-domain",
-                        Name = "Domain",
-                        Role = "Domain"
-                    }
-                ],
-                ArchitecturalComponentDependencies =
-                [
-                    new ArchitecturalComponentDependencyContext
-                    {
-                        SourceComponentId = "logical-api",
-                        SourceComponentName = "API",
-                        TargetComponentId = "logical-domain",
-                        TargetComponentName = "Domain",
-                        RelationshipCount = 3,
-                        ResolvedRelationshipCount = 2,
-                        PartiallyResolvedRelationshipCount = 1,
-                        UnreferencedRelationshipCount = 1,
-                        ContributingRelationships = [reference],
-                        ContributingCodeContainerDependencies = [contribution]
-                    }
-                ]
+                ArchitectureGraphProjection = new ArchitectureGraphProjection(
+                    [
+                        new ArchitectureGraphNode
+                        {
+                            Id = "module:api",
+                            Name = "Api",
+                            Kind = ArchitectureGraphNodeKind.BuildModule,
+                            ModulePath = sourcePath
+                        },
+                        new ArchitectureGraphNode
+                        {
+                            Id = "module:orders",
+                            Name = "Orders",
+                            Kind = ArchitectureGraphNodeKind.BuildModule,
+                            ModulePath = targetPath
+                        }
+                    ],
+                    [
+                        new ArchitectureGraphEdge
+                        {
+                            Id = "graph-edge-1",
+                            SourceNodeId = "module:api",
+                            TargetNodeId = "module:orders",
+                            Domain = ArchitectureGraphEdgeDomain.Build,
+                            Scope = "Production",
+                            ProviderRelationshipKind = "ProjectReference",
+                            RelationshipKinds = [ArchitectureRelationshipKind.BuildProjectReference],
+                            Evidence =
+                            [
+                                new ArchitectureGraphEvidenceReference
+                                {
+                                    Domain = ArchitectureGraphEvidenceDomain.BuildDependency,
+                                    OccurrenceIndex = 4,
+                                    EvidenceId = "build-evidence-4",
+                                    ProviderId = "ProjectReference"
+                                }
+                            ]
+                        }
+                    ],
+                    [])
             };
 
             var viewModel = new RelationshipLedgerViewModel();
             viewModel.Update(context);
 
-            var logical = Assert.Single(viewModel.Dependencies.Where(
-                record => record.RelationshipLevel == "Logical architecture"));
-
-            Assert.Equal(3, logical.RelationshipCount);
-            Assert.Equal(2, logical.ResolvedRelationshipCount);
-            Assert.Equal(1, logical.PartiallyResolvedRelationshipCount);
-            Assert.Equal(1, logical.UnreferencedRelationshipCount);
-            Assert.Contains("run-42:relationship-17", logical.EvidenceReferences);
-            Assert.Contains("Example.Api -> Example.Domain (3)", logical.CodeContainerContributions);
+            var relationship = Assert.Single(viewModel.Dependencies);
+            Assert.Contains("graph-edge-1", relationship.ContributingLeafEdgeIds);
+            Assert.Equal("Build", relationship.GraphDomain);
+            Assert.Equal("Api", relationship.Source);
+            Assert.Equal("Orders", relationship.Target);
+            Assert.Equal("Api → Orders", relationship.Direction);
+            Assert.Equal("BuildProjectReference", relationship.DependencyType);
+            Assert.Contains("BuildDependency[4]:build-evidence-4", relationship.EvidenceReferences);
+            Assert.Equal(1, viewModel.TotalDependencies);
+            Assert.DoesNotContain(viewModel.Dependencies, item => item.Source == "Legacy source");
         });
     }
+
+    [Fact]
+    public void Update_PresentsProviderKindWhenNormalizedRelationshipKindIsUnknown()
+    {
+        RunOnStaThread(() =>
+        {
+            var context = new ProjectArchitectureContext
+            {
+                ArchitectureGraphProjection = new ArchitectureGraphProjection(
+                    [
+                        new ArchitectureGraphNode
+                        {
+                            Id = "code:java-package:client",
+                            Name = "sample.application",
+                            Kind = ArchitectureGraphNodeKind.CodeComponent,
+                            Language = "Java",
+                            ComponentKind = "Package"
+                        },
+                        new ArchitectureGraphNode
+                        {
+                            Id = "code:java-package:domain",
+                            Name = "sample.domain",
+                            Kind = ArchitectureGraphNodeKind.CodeComponent,
+                            Language = "Java",
+                            ComponentKind = "Package"
+                        }
+                    ],
+                    [
+                        new ArchitectureGraphEdge
+                        {
+                            Id = "java-package-dependency",
+                            SourceNodeId = "code:java-package:client",
+                            TargetNodeId = "code:java-package:domain",
+                            Domain = ArchitectureGraphEdgeDomain.NativeSemantic,
+                            Scope = "Production",
+                            ProviderRelationshipKind = "DependsOn",
+                            RelationshipKinds = [ArchitectureRelationshipKind.Unknown],
+                            Evidence =
+                            [
+                                new ArchitectureGraphEvidenceReference
+                                {
+                                    Domain = ArchitectureGraphEvidenceDomain.SemanticRelationship,
+                                    OccurrenceIndex = 0,
+                                    EvidenceId = "run-1:relationship-1",
+                                    ProviderId = "relationship-1"
+                                }
+                            ]
+                        }
+                    ],
+                    [])
+            };
+
+            var viewModel = new RelationshipLedgerViewModel();
+            viewModel.Update(context);
+
+            var relationship = Assert.Single(viewModel.Dependencies);
+            Assert.Equal("DependsOn", relationship.DependencyType);
+            Assert.Equal("DependsOn", relationship.ProviderRelationshipKind);
+            Assert.Equal("Package", relationship.SourceLayer);
+            Assert.Equal("Package", relationship.TargetLayer);
+        });
+    }
+
+
+    [Fact]
+    public void Update_prefers_architectural_role_for_code_container_relationship_classification()
+    {
+        RunOnStaThread(() =>
+        {
+            var context = new ProjectArchitectureContext
+            {
+                ArchitectureGraphProjection = new ArchitectureGraphProjection(
+                    [
+                        new ArchitectureGraphNode
+                        {
+                            Id = "package:application",
+                            Name = "sample.application",
+                            Kind = ArchitectureGraphNodeKind.CodeComponent,
+                            ComponentKind = "Package",
+                            ArchitecturalRole = "Business"
+                        },
+                        new ArchitectureGraphNode
+                        {
+                            Id = "package:domain",
+                            Name = "sample.domain",
+                            Kind = ArchitectureGraphNodeKind.CodeComponent,
+                            ComponentKind = "Package",
+                            ArchitecturalRole = "Domain"
+                        }
+                    ],
+                    [
+                        new ArchitectureGraphEdge
+                        {
+                            Id = "package-edge",
+                            SourceNodeId = "package:application",
+                            TargetNodeId = "package:domain",
+                            Domain = ArchitectureGraphEdgeDomain.NativeSemantic,
+                            Scope = "Production",
+                            ProviderRelationshipKind = "Calls",
+                            RelationshipKinds = [ArchitectureRelationshipKind.Calls]
+                        }
+                    ],
+                    [])
+            };
+
+            var viewModel = new RelationshipLedgerViewModel();
+            viewModel.Update(context);
+
+            var relationship = Assert.Single(viewModel.Dependencies);
+            Assert.Equal("Business", relationship.SourceLayer);
+            Assert.Equal("Domain", relationship.TargetLayer);
+        });
+    }
+
+    [Fact]
+    public void Update_KeepsUserDeclaredIntegrationsSeparateFromGraphEdges()
+    {
+        RunOnStaThread(() =>
+        {
+            var declaration = new ArchitectureIntegrationContext
+            {
+                SourceModuleName = "Client",
+                SourceModulePath = Path.Combine(Path.GetTempPath(), "aegis", "client"),
+                TargetModuleName = "Server",
+                TargetModulePath = Path.Combine(Path.GetTempPath(), "aegis", "server"),
+                InteractionPattern = "RequestResponse",
+                Protocol = "HTTP",
+                EvidenceOrigin = "UserDefined",
+                Notes = "Declared by an architect."
+            };
+            var context = new ProjectArchitectureContext
+            {
+                ApplicationIntegrations = [declaration],
+                ArchitectureGraphProjection = new ArchitectureGraphProjection([], [], [])
+            };
+
+            var viewModel = new RelationshipLedgerViewModel();
+            viewModel.Update(context);
+
+            Assert.Empty(viewModel.Dependencies);
+            Assert.Same(declaration, Assert.Single(viewModel.ApplicationIntegrations));
+        });
+    }
+
+    [Fact]
+    public void Update_PreservesGraphScopeAndRelationshipDomainForFiltering()
+    {
+        RunOnStaThread(() =>
+        {
+            var context = new ProjectArchitectureContext
+            {
+                ArchitectureGraphProjection = new ArchitectureGraphProjection(
+                    [
+                        Node("module:production", "Production", ArchitectureGraphNodeKind.BuildModule),
+                        Node("resource:broker", "Broker", ArchitectureGraphNodeKind.ExternalResource, "MessageDestination")
+                    ],
+                    [
+                        new ArchitectureGraphEdge
+                        {
+                            Id = "test-message-edge",
+                            SourceNodeId = "module:production",
+                            TargetNodeId = "resource:broker",
+                            Domain = ArchitectureGraphEdgeDomain.Messaging,
+                            Scope = "Test",
+                            RelationshipKinds = [ArchitectureRelationshipKind.MessagePublish]
+                        }
+                    ],
+                    [])
+            };
+
+            var viewModel = new RelationshipLedgerViewModel();
+            viewModel.Update(context);
+
+            var relationship = Assert.Single(viewModel.Dependencies);
+            Assert.Equal("Messaging", relationship.GraphDomain);
+            Assert.Equal("Test", relationship.Scope);
+            Assert.Equal("MessagePublish", relationship.DependencyType);
+
+            viewModel.SelectedScope = "Production";
+
+            Assert.Equal(0, viewModel.FilteredDependencies);
+            Assert.Null(viewModel.SelectedDependency);
+        });
+    }
+
+    private static ArchitectureGraphNode Node(
+        string id,
+        string name,
+        ArchitectureGraphNodeKind kind,
+        string? resourceKind = null) =>
+        new()
+        {
+            Id = id,
+            Name = name,
+            Kind = kind,
+            ResourceKind = resourceKind
+        };
 
     private static void RunOnStaThread(Action action)
     {

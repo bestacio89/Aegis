@@ -122,6 +122,9 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         result.add("capabilities", JsonArray().apply {
             add("symbols")
             add("relationships")
+            add("server-api-endpoints")
+            add("api-client-requests")
+            add("message-integrations")
             add("compiler-diagnostics")
             add("jvm-interop")
             if (request.multiplatform) add("multiplatform")

@@ -6,6 +6,7 @@ on:
       - develop
     paths:
       - 'tools/java-worker-prototype/**'
+      - 'sources/Aegis.Architecture/Aegis.Architecture.csproj'
       - 'sources/Aegis.Architecture/Analysis/Detectors/**'
       - 'sources/Aegis.Architecture/Analysis/Semantics/**'
       - 'sources/Aegis.Shared/Architecture/Models/**'

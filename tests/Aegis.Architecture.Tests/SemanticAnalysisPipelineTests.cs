@@ -34,6 +34,182 @@ public sealed class SemanticAnalysisPipelineTests
             Assert.Equal(SemanticAnalysisStatus.Completed, run.Status));
     }
 
+
+    [Fact]
+    public async Task AnalyzeAsync_merges_language_native_endpoint_observations_into_the_shared_registry()
+    {
+        var nativeEndpoint = new ApiEndpointEvidence
+        {
+            EvidenceId = "java-endpoint-1",
+            Language = "Java",
+            Framework = "Spring MVC/WebFlux",
+            ProviderId = "eclipse-jdt-spring",
+            ModulePath = Path.Combine(Path.GetTempPath(), "java-module"),
+            SourceFile = Path.Combine(Path.GetTempPath(), "java-module", "OrdersController.java"),
+            StartLine = 12,
+            StartColumn = 4,
+            HandlerIdentity = "example.OrdersController#getOrder()",
+            HttpMethods = ["GET"],
+            RouteTemplate = "/api/orders/{id}",
+            ResolutionStatus = ApiEndpointResolutionStatus.Resolved,
+            RouteCompositionEvidence = ["@RequestMapping(\"/api/orders\")", "@GetMapping(\"/{id}\")"],
+            DeclarationEvidence = "public Order getOrder()"
+        };
+        var csharpEndpoint = new ApiEndpointEvidence
+        {
+            EvidenceId = "csharp-endpoint-1",
+            Language = "C#",
+            Framework = "ASP.NET Core",
+            ProviderId = "roslyn-aspnet",
+            ModulePath = Path.Combine(Path.GetTempPath(), "api-module"),
+            SourceFile = Path.Combine(Path.GetTempPath(), "api-module", "OrdersController.cs"),
+            HandlerIdentity = "OrdersController.Get",
+            HttpMethods = ["GET"],
+            RouteTemplate = "/api/orders",
+            ResolutionStatus = ApiEndpointResolutionStatus.Resolved
+        };
+        var executionOrder = new List<string>();
+        var pipeline = new SemanticAnalysisPipeline(
+            [new RecordingAnalyzer("Java", executionOrder, serverApiEndpoints: [nativeEndpoint])],
+            NullLogger<SemanticAnalysisPipeline>.Instance);
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "Polyglot",
+            RootPath = Path.GetTempPath(),
+            ServerApiEndpointDiscoveryRegistry = new ServerApiEndpointDiscoveryRegistry([csharpEndpoint])
+        };
+
+        await pipeline.AnalyzeAsync(context);
+
+        Assert.Equal(2, context.ServerApiEndpointDiscoveryRegistry!.Count);
+        Assert.Contains(csharpEndpoint, context.ServerApiEndpointDiscoveryRegistry.Evidence);
+        Assert.Contains(nativeEndpoint, context.ServerApiEndpointDiscoveryRegistry.Evidence);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_merges_native_client_requests_without_deduplicating_provider_occurrences()
+    {
+        var existingCSharpRequest = new ApiClientRequestEvidence
+        {
+            EvidenceId = "csharp-request-1",
+            Language = "C#",
+            ProviderId = "roslyn-httpclient",
+            ModulePath = Path.Combine(Path.GetTempPath(), "csharp-api"),
+            HttpMethod = "GET",
+            RequestUriExpression = "\"/api/orders\"",
+            ResolutionStatus = ApiClientRequestResolutionStatus.Resolved
+        };
+        var javaRequest = new ApiClientRequestEvidence
+        {
+            EvidenceId = "provider-local-request-id",
+            Language = "Java",
+            ProviderId = "eclipse-jdt-spring-client",
+            ModulePath = Path.Combine(Path.GetTempPath(), "java-api"),
+            HttpMethod = "GET",
+            RequestUriExpression = "\"/api/orders\"",
+            ResolutionStatus = ApiClientRequestResolutionStatus.Resolved
+        };
+        var kotlinRequest = new ApiClientRequestEvidence
+        {
+            EvidenceId = "provider-local-request-id",
+            Language = "Kotlin",
+            ProviderId = "kotlin-k2-spring-client",
+            ModulePath = Path.Combine(Path.GetTempPath(), "kotlin-api"),
+            HttpMethod = "GET",
+            RequestUriExpression = "ordersEndpoint",
+            ResolutionStatus = ApiClientRequestResolutionStatus.Dynamic
+        };
+        var executionOrder = new List<string>();
+        var pipeline = new SemanticAnalysisPipeline(
+        [
+            new RecordingAnalyzer("Kotlin", executionOrder, apiClientRequests: [kotlinRequest]),
+            new RecordingAnalyzer("Java", executionOrder, apiClientRequests: [javaRequest])
+        ],
+        NullLogger<SemanticAnalysisPipeline>.Instance);
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "Polyglot",
+            RootPath = Path.GetTempPath(),
+            ApiClientRequestDiscoveryRegistry =
+                new ApiClientRequestDiscoveryRegistry([existingCSharpRequest])
+        };
+
+        Assert.Single(context.ApiClientRequestDiscoveryRegistry!.Evidence);
+
+        await pipeline.AnalyzeAsync(context);
+
+        Assert.Equal(2, context.SemanticAnalysisRuns.Count);
+        Assert.Equal(2, context.SemanticAnalysisRuns.Sum(run => run.ApiClientRequests.Count));
+        var registry = context.ApiClientRequestDiscoveryRegistry!;
+        Assert.True(
+            registry.Count == 3,
+            $"Expected one pre-existing request plus two semantic requests; found {registry.Count}: "
+            + string.Join(" | ", registry.Evidence.Select(item => $"{item.Language}:{item.EvidenceId}:{item.ProviderId}")));
+        Assert.Equal(["C#", "Java", "Kotlin"], registry.Evidence.Select(item => item.Language));
+        Assert.Equal(2, registry.Evidence.Count(item => item.EvidenceId == "provider-local-request-id"));
+        Assert.Single(registry.ForStatus(ApiClientRequestResolutionStatus.Dynamic));
+        Assert.Contains(existingCSharpRequest, registry.Evidence);
+        Assert.Contains(javaRequest, registry.Evidence);
+        Assert.Contains(kotlinRequest, registry.Evidence);
+
+        await pipeline.AnalyzeAsync(context);
+
+        Assert.Equal(4, context.SemanticAnalysisRuns.Count);
+        Assert.Equal(5, context.ApiClientRequestDiscoveryRegistry!.Count);
+        Assert.Equal(
+            4,
+            context.ApiClientRequestDiscoveryRegistry.Evidence.Count(item =>
+                item.EvidenceId == "provider-local-request-id"));
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_projects_static_client_endpoint_candidates_into_the_context()
+    {
+        var request = new ApiClientRequestEvidence
+        {
+            EvidenceId = "client-request",
+            Language = "C#",
+            Framework = "System.Net.Http.HttpClient",
+            ProviderId = "roslyn-httpclient",
+            ModulePath = Path.Combine(Path.GetTempPath(), "orders-client"),
+            SourceFile = Path.Combine(Path.GetTempPath(), "orders-client", "OrdersClient.cs"),
+            CallerIdentity = "OrdersClient.GetOrder",
+            HttpMethod = "GET",
+            RequestUriExpression = "\"/api/orders/42\"",
+            ResolutionStatus = ApiClientRequestResolutionStatus.Resolved
+        };
+        var endpoint = new ApiEndpointEvidence
+        {
+            EvidenceId = "server-endpoint",
+            Language = "Java",
+            Framework = "Spring MVC/WebFlux",
+            ProviderId = "eclipse-jdt-spring",
+            ModulePath = Path.Combine(Path.GetTempPath(), "orders-server"),
+            SourceFile = Path.Combine(Path.GetTempPath(), "orders-server", "OrdersController.java"),
+            HandlerIdentity = "OrdersController#getOrder",
+            HttpMethods = ["GET"],
+            RouteTemplate = "/api/orders/{id}",
+            ResolutionStatus = ApiEndpointResolutionStatus.Resolved
+        };
+        var pipeline = new SemanticAnalysisPipeline(
+            [new RecordingAnalyzer("C#", [])],
+            NullLogger<SemanticAnalysisPipeline>.Instance);
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "Orders",
+            RootPath = Path.GetTempPath(),
+            ApiClientRequestDiscoveryRegistry = new ApiClientRequestDiscoveryRegistry([request]),
+            ServerApiEndpointDiscoveryRegistry = new ServerApiEndpointDiscoveryRegistry([endpoint])
+        };
+
+        await pipeline.AnalyzeAsync(context);
+
+        var match = Assert.Single(context.ApiClientRequestEndpointMatchRegistry!.Matches);
+        Assert.Equal(ApiClientRequestEndpointMatchStatus.UniqueCandidate, match.Status);
+        Assert.Equal(0, match.ClientRequestIndex);
+        Assert.Equal(0, Assert.Single(match.Candidates).EndpointIndex);
+    }
+
     [Fact]
     public async Task AnalyzeAsync_respects_explicit_execution_order_for_jvm_interoperability()
     {
@@ -196,7 +372,9 @@ public sealed class SemanticAnalysisPipelineTests
         string language,
         ICollection<string> executionOrder,
         bool shouldFail = false,
-        int executionOrderValue = 0) : ISemanticAnalysisProjectAnalyzer
+        int executionOrderValue = 0,
+        IReadOnlyList<ApiEndpointEvidence>? serverApiEndpoints = null,
+        IReadOnlyList<ApiClientRequestEvidence>? apiClientRequests = null) : ISemanticAnalysisProjectAnalyzer
     {
         public string Language => language;
         public int ExecutionOrder => executionOrderValue;
@@ -217,6 +395,8 @@ public sealed class SemanticAnalysisPipelineTests
                 Language = language,
                 EngineId = $"{language}-test-provider",
                 ProjectPath = context.RootPath,
+                ServerApiEndpoints = serverApiEndpoints?.ToList() ?? [],
+                ApiClientRequests = apiClientRequests?.ToList() ?? [],
                 Status = SemanticAnalysisStatus.Completed,
                 StartedAtUtc = DateTimeOffset.UtcNow,
                 CompletedAtUtc = DateTimeOffset.UtcNow

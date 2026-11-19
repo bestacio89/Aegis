@@ -588,6 +588,14 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             run = WithTargetMetadata(run, targetName, sourceSetNames);
 
         context.SemanticAnalysisRuns.Add(run);
+        if (run.MessageIntegrations.Count > 0)
+        {
+            var existingEvidence = context.MessageIntegrationEvidenceRegistry?.Evidence
+                ?? Array.Empty<MessageIntegrationEvidence>();
+            context.MessageIntegrationEvidenceRegistry =
+                new IntegrationEvidenceRegistry<MessageIntegrationEvidence>(
+                    existingEvidence.Concat(run.MessageIntegrations));
+        }
 
         _logger.LogInformation(
             "Kotlin {SourceSet} analysis for module {ModuleName} completed with status {Status}: {SymbolCount} symbols, {RelationshipCount} relationships, {DiagnosticCount} diagnostics.",
@@ -621,6 +629,9 @@ public sealed class KotlinSemanticAnalysisOrchestrator : ISemanticAnalysisProjec
             Capabilities = run.Capabilities,
             Symbols = run.Symbols,
             Relationships = run.Relationships,
+            ServerApiEndpoints = run.ServerApiEndpoints,
+            ApiClientRequests = run.ApiClientRequests,
+            MessageIntegrations = run.MessageIntegrations,
             Diagnostics = run.Diagnostics
         };
 

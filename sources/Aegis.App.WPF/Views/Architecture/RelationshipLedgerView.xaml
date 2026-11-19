@@ -26,7 +26,7 @@
                     <TextBlock Text="{Binding ProjectName}" Style="{StaticResource Text.Title}"
                                Margin="0,5,0,0" TextWrapping="Wrap" />
                     <TextBlock
-                        Text="Inspect the detector's individual dependency records, source evidence, direction, and layer classification. Each row remains an independent record."
+                        Text="Inspect detected relationships projected from the unified architecture graph. Unprojected observations are available in the dedicated diagnostic view."
                         Foreground="{StaticResource Brush.TextMuted}" FontSize="12"
                         Margin="0,6,12,0" TextWrapping="Wrap" MaxWidth="900" />
                 </StackPanel>
@@ -37,7 +37,7 @@
                         <TextBlock Text="VISIBLE / TOTAL" Style="{StaticResource Text.Eyebrow}" />
                         <TextBlock Text="{Binding FilteredDependencies, StringFormat={}{0:N0}}"
                                    Style="{StaticResource Text.KpiValue}" FontSize="22" />
-                        <TextBlock Text="{Binding TotalDependencies, StringFormat='of {0:N0} records'}"
+                        <TextBlock Text="{Binding TotalDependencies, StringFormat='of {0:N0} graph edges'}"
                                    Foreground="{StaticResource Brush.TextMuted}" FontSize="11" />
                     </StackPanel>
                 </Border>
@@ -83,7 +83,13 @@
                           SelectedItem="{Binding SelectedApplicationIntegration, Mode=TwoWay}"
                           AutoGenerateColumns="False" IsReadOnly="True"
                           CanUserAddRows="False" CanUserDeleteRows="False"
-                          HeadersVisibility="Column" Height="112" Margin="0,10,0,0"
+                          HeadersVisibility="Column" MinHeight="72" MaxHeight="180"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                          ScrollViewer.CanContentScroll="True"
+                          EnableRowVirtualization="True"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          Margin="0,10,0,0"
                           Style="{StaticResource Grid.Ledger}"
                           ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}"
                           RowStyle="{StaticResource Grid.LedgerRow}">
@@ -117,7 +123,7 @@
             </Grid.ColumnDefinitions>
             <TextBox
                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                ToolTip="Search source, target, layers, dependency type, or evidence file"
+                ToolTip="Search graph domain, endpoints, relationship kind, scope, or evidence reference"
                 MinHeight="38" Padding="12,8" Margin="0,0,10,0"
                 Background="{StaticResource Brush.PanelElevated}"
                 Foreground="{StaticResource Brush.TextPrimary}"
@@ -167,26 +173,31 @@
                     SelectedItem="{Binding SelectedDependency, Mode=TwoWay}"
                     AutoGenerateColumns="False" IsReadOnly="True"
                     CanUserAddRows="False" CanUserDeleteRows="False"
-                    CanUserReorderColumns="False" CanUserResizeRows="False"
-                    CanUserSortColumns="True" SelectionMode="Single"
+                    CanUserResizeRows="False"
+                    CanUserSortColumns="True" CanUserResizeColumns="True"
+                    CanUserReorderColumns="True" SelectionMode="Single"
                     SelectionUnit="FullRow" HeadersVisibility="Column"
+                    MinHeight="180"
                     EnableRowVirtualization="True" EnableColumnVirtualization="True"
                     VirtualizingPanel.IsVirtualizing="True"
                     VirtualizingPanel.VirtualizationMode="Recycling"
+                    ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                    ScrollViewer.VerticalScrollBarVisibility="Auto"
                     ScrollViewer.CanContentScroll="True"
                     Style="{StaticResource Grid.Ledger}"
                     ColumnHeaderStyle="{StaticResource Grid.LedgerHeader}"
                     RowStyle="{StaticResource Grid.LedgerRow}">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Level" Binding="{Binding RelationshipLevel}" Width="135" />
-                        <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
-                        <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="110" />
-                        <DataGridTextColumn Header="Direction / type" Binding="{Binding DependencyType}" Width="155" />
-                        <DataGridTextColumn Header="Relations" Binding="{Binding RelationshipCount}" Width="75" />
-                        <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" Width="90" />
-                        <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="110" />
-                        <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="*" />
-                        <DataGridTextColumn Header="Evidence file(s)" Binding="{Binding File}" Width="1.4*" />
+                        <DataGridTextColumn Header="Domain" Binding="{Binding GraphDomain}" Width="Auto" MinWidth="90" />
+                        <DataGridTextColumn Header="Level" Binding="{Binding GroupDepth}" Width="Auto" MinWidth="55" />
+                        <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="1.4*" MinWidth="140" />
+                        <DataGridTextColumn Header="Source layer" Binding="{Binding SourceLayer}" Width="1*" MinWidth="100" />
+                        <DataGridTextColumn Header="Direction / type" Binding="{Binding DependencyType}" Width="1.4*" MinWidth="130" />
+                        <DataGridTextColumn Header="Relationships" Binding="{Binding RelationshipCount}" Width="Auto" MinWidth="85" />
+                        <DataGridTextColumn Header="Evidence" Binding="{Binding EvidenceOccurrenceCount}" Width="Auto" MinWidth="70" />
+                        <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" Width="Auto" MinWidth="80" />
+                        <DataGridTextColumn Header="Target layer" Binding="{Binding TargetLayer}" Width="1*" MinWidth="100" />
+                        <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="1.4*" MinWidth="140" />
                     </DataGrid.Columns>
                     </DataGrid>
                     <Border Background="{StaticResource Brush.PanelElevated}" Padding="24"
@@ -239,8 +250,15 @@
                     </Border>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="16,4,16,16">
-                            <TextBlock Text="RELATIONSHIP COUNT" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
-                            <TextBlock Text="{Binding SelectedDependency.RelationshipCount, TargetNullValue='Not supplied'}"
+                            <TextBlock Text="GRAPH EDGE" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.GraphEdgeId, TargetNullValue='Not supplied'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
+                                       TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
+                            <TextBlock Text="GRAPH DOMAIN" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.GraphDomain, TargetNullValue='Not supplied'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
+                            <TextBlock Text="EVIDENCE OCCURRENCES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.EvidenceOccurrenceCount, TargetNullValue='Not supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
                             <TextBlock Text="SOURCE LAYER" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.SourceLayer, TargetNullValue='Not classified'}"
@@ -262,27 +280,19 @@
                             <TextBlock Text="{Binding SelectedDependency.TargetProjectPath, TargetNullValue='Not supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
                                        TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
-                            <TextBlock Text="RESOLUTION COUNTS" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
-                            <TextBlock Text="{Binding SelectedDependency.ResolvedRelationshipCount, StringFormat='Resolved: {0:N0}'}"
-                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
-                            <TextBlock Text="{Binding SelectedDependency.PartiallyResolvedRelationshipCount, StringFormat='Partially resolved: {0:N0}'}"
-                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
-                            <TextBlock Text="{Binding SelectedDependency.UnreferencedRelationshipCount, StringFormat='Unreferenced: {0:N0}'}"
-                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" />
-                            <TextBlock Text="DISCOVERY EVIDENCE FILES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
-                            <TextBlock Text="{Binding SelectedDependency.File, TargetNullValue='No source file supplied'}"
-                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12"
-                                       TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
-                            <TextBlock Text="SEMANTIC SOURCE REFERENCES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="PROVIDER RELATIONSHIP KIND" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.ProviderRelationshipKind, TargetNullValue='Not supplied'}"
+                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="12" TextWrapping="Wrap" />
+                            <TextBlock Text="CONTRIBUTING LEAF EDGES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.ContributingLeafEdgeIdsSummary}" Foreground="{StaticResource Brush.TextPrimary}" FontSize="10" TextWrapping="Wrap" />
+                            <TextBlock Text="EVIDENCE FILES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
+                            <TextBlock Text="{Binding SelectedDependency.EvidenceFilesSummary}" Foreground="{StaticResource Brush.TextPrimary}" FontSize="10" TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
+                            <TextBlock Text="SOURCE EVIDENCE REFERENCES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
                             <TextBlock Text="{Binding SelectedDependency.EvidenceReferences, TargetNullValue='No exact provider references supplied'}"
                                        Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
                                        TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
-                            <TextBlock Text="CONTRIBUTING CODE CONTAINER EDGES" Style="{StaticResource Text.Eyebrow}" Margin="0,12,0,4" />
-                            <TextBlock Text="{Binding SelectedDependency.CodeContainerContributions, TargetNullValue='No lower-level contribution data supplied'}"
-                                       Foreground="{StaticResource Brush.TextPrimary}" FontSize="11"
-                                       TextWrapping="Wrap" FontFamily="{StaticResource Font.Data}" />
                             <TextBlock
-                                Text="Build-module dependencies and compiler-resolved component relationships are shown as distinct evidence levels. Semantic projections aggregate repeated relationships but retain exact run-scoped relationship references, resolution counts, and source files where supplied."
+                                Text="This row represents a directed edge from the unified graph projection. Evidence references identify exact source-registry occurrences; an edge is not a claim of runtime reachability or successful delivery."
                                 Foreground="{StaticResource Brush.TextMuted}" FontSize="11"
                                 TextWrapping="Wrap" Margin="0,16,0,0" />
                         </StackPanel>

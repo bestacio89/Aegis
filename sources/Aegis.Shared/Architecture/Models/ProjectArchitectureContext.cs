@@ -274,6 +274,67 @@ public sealed class ProjectArchitectureContext
     public List<SemanticAnalysisRun> SemanticAnalysisRuns { get; set; } = [];
 
     /// <summary>
+    /// Snapshot-scoped, lossless index of relationship observations from the
+    /// current semantic runs. Rebuilt by semantic relationship projection and
+    /// excluded from serialization because the source records remain in
+    /// <see cref="SemanticAnalysisRuns"/>.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public SemanticRelationshipEvidenceRegistry? RelationshipEvidenceRegistry { get; set; }
+
+    /// <summary>
+    /// Snapshot-scoped index of every semantic declaration occurrence. Rebuilt
+    /// from <see cref="SemanticAnalysisRuns"/> and excluded from serialization;
+    /// it preserves ambiguity and does not apply resolution eligibility policy.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public SemanticSymbolIndex? SemanticSymbolIndex { get; set; }
+
+    /// <summary>
+    /// Snapshot-scoped normalized view of native semantic relationship evidence.
+    /// Derived from the relationship registry and symbol index; excluded from
+    /// serialization because provider-native runs remain the source of truth.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public SemanticRelationshipNormalizationRegistry? SemanticRelationshipNormalizationRegistry { get; set; }
+
+    /// <summary>Lossless server endpoint observations discovered for this project.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ServerApiEndpointDiscoveryRegistry? ServerApiEndpointDiscoveryRegistry { get; set; }
+
+    /// <summary>Lossless outbound HTTP request observations; separate from server endpoint declarations.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ApiClientRequestDiscoveryRegistry? ApiClientRequestDiscoveryRegistry { get; set; }
+
+    /// <summary>
+    /// Derived static correlations between outbound requests and server endpoint candidates.
+    /// These are not proof of runtime invocation or delivery.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ApiClientRequestEndpointMatchRegistry? ApiClientRequestEndpointMatchRegistry { get; set; }
+
+    /// <summary>Source-level message publish/consume observations; not proof of delivery.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IntegrationEvidenceRegistry<MessageIntegrationEvidence>? MessageIntegrationEvidenceRegistry { get; set; }
+
+    /// <summary>Source-level RPC call/endpoint observations; not proof of invocation.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IntegrationEvidenceRegistry<RpcIntegrationEvidence>? RpcIntegrationEvidenceRegistry { get; set; }
+
+    /// <summary>Source-level data access and mapping observations; not proof of runtime I/O.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IntegrationEvidenceRegistry<DataAccessEvidence>? DataAccessEvidenceRegistry { get; set; }
+
+    /// <summary>Cross-domain occurrence index over native integration evidence; source registries remain authoritative.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IntegrationEvidenceCatalog? IntegrationEvidenceCatalog { get; set; }
+
+    /// <summary>Derived unified graph over existing architecture and integration evidence.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ArchitectureGraphProjection? ArchitectureGraphProjection { get; set; }
+
+
+    /// <summary>
     /// Production-to-production relationships used to describe the deployed
     /// architecture. Test-project relationships are intentionally excluded.
     /// </summary>

@@ -42,6 +42,15 @@ public sealed class SemanticAnalysisRun
 
     public List<SemanticRelationship> Relationships { get; init; } = [];
 
+    /// <summary>Server HTTP endpoint declarations discovered by language-native semantic providers.</summary>
+    public List<ApiEndpointEvidence> ServerApiEndpoints { get; init; } = [];
+
+    /// <summary>Outbound HTTP client request declarations discovered by language-native semantic providers.</summary>
+    public List<ApiClientRequestEvidence> ApiClientRequests { get; init; } = [];
+
+    /// <summary>Source-level message integration observations discovered by language-native semantic providers.</summary>
+    public List<MessageIntegrationEvidence> MessageIntegrations { get; init; } = [];
+
     public List<AnalysisDiagnostic> Diagnostics { get; init; } = [];
 
     public bool IsComplete => Status == SemanticAnalysisStatus.Completed;

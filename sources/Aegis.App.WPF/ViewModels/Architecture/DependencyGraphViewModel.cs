@@ -1,3 +1,4 @@
+using Aegis.Architecture.Analysis.Projection;
 using Aegis.Shared.Architecture.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -20,16 +21,30 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
     private const double GraphRowSpacing = 104;
 
     private ProjectArchitectureContext? _context;
+    private readonly ArchitectureGraphViewOptions _graphOptions;
     private IReadOnlyList<GraphRelation> _activeRelations = [];
     private IReadOnlyList<GraphNode> _activeNodes = [];
     private bool _refreshingProjection;
     private bool _hasUserSelectedProjection;
 
-    public DependencyGraphViewModel()
+    public DependencyGraphViewModel(ArchitectureGraphViewOptions? graphOptions = null)
     {
+        _graphOptions = graphOptions ?? new ArchitectureGraphViewOptions();
+        _graphOptions.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ArchitectureGraphViewOptions.Depth))
+            {
+                OnPropertyChanged(nameof(RollupDepth));
+                RefreshProjection();
+            }
+        };
         LayerFilters = ["All"];
         GraphProjectionOptions = ["Build modules"];
     }
+
+    public int RollupDepth { get => _graphOptions.Depth; set => _graphOptions.Depth = value; }
+    public IReadOnlyList<int> DepthOptions { get; } = Enumerable.Range(1, 8).ToArray();
+    public string BasePackageLabel { get; private set; } = "Base package: not available";
 
     public ObservableCollection<ArchitectureDependencyContext> Dependencies { get; private set; } = new();
 
@@ -38,7 +53,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
     public string GroupingLabel => GraphProjection switch
     {
         "Architectural components" => "ARCHITECTURAL ROLES",
-        "Code containers" => "CONTAINER KINDS",
+        "Code containers" => "RESPONSIBILITY / CONTAINER KIND",
         _ => "ARCHITECTURE LAYERS"
     };
 
@@ -114,14 +129,7 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             ? "No architecture context available"
             : context.ProjectName;
 
-        var dependencies = context?.ProductionDependencies
-            .Where(dependency =>
-                !string.IsNullOrWhiteSpace(dependency.Source)
-                && !string.IsNullOrWhiteSpace(dependency.Target))
-            .OrderBy(dependency => dependency.SourceLayer, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(dependency => dependency.Source, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(dependency => dependency.Target, StringComparer.OrdinalIgnoreCase)
-            .ToArray() ?? [];
+        var dependencies = Array.Empty<ArchitectureDependencyContext>();
 
         SelectedGraphNode = null;
         _hasUserSelectedProjection = false;
@@ -133,191 +141,86 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
     private void RefreshProjection()
     {
-        if (_refreshingProjection)
-            return;
-
+        if (_refreshingProjection) return;
         _refreshingProjection = true;
         try
         {
-            var buildDependencies = _context?.ProductionDependencies
-                .Where(dependency =>
-                    !string.IsNullOrWhiteSpace(dependency.Source)
-                    && !string.IsNullOrWhiteSpace(dependency.Target))
-                .ToArray() ?? [];
+            var projection = _context?.ArchitectureGraphProjection ?? new ArchitectureGraphProjection([], [], []);
+            var rollup = _context is null
+                ? ArchitectureGraphRollup.Apply(projection, null, _graphOptions.Depth)
+                : ArchitectureGraphRollup.Apply(_context, null, _graphOptions.Depth);
+            BasePackageLabel = rollup.BasePackageLabel;
+            OnPropertyChanged(nameof(BasePackageLabel));
 
-            var codeContainerDependencies = (_context?.ProductionComponentDependencies ?? [])
-                .Concat((_context?.ArchitectureComponentInternalDependencies ?? [])
-                    .Where(dependency => string.Equals(dependency.Scope, "Production", StringComparison.OrdinalIgnoreCase)))
-                .Where(dependency =>
-                    !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
-                    && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
-                .ToArray();
+            var logicalNodes = rollup.Nodes.Where(node => node.Kind == Aegis.Shared.Architecture.Enums.ArchitectureGraphNodeKind.LogicalComponent).ToArray();
+            var codeNodes = rollup.Nodes.Where(node => node.Kind == Aegis.Shared.Architecture.Enums.ArchitectureGraphNodeKind.CodeComponent).ToArray();
+            var moduleNodes = rollup.Nodes.Where(node => node.Kind == Aegis.Shared.Architecture.Enums.ArchitectureGraphNodeKind.BuildModule).ToArray();
+            var productionContainers = _context?.ProductionComponents ?? [];
+            var classifiedIds = (_context?.ArchitecturalComponentMemberships ?? [])
+                .Where(item => item.ClassificationSource != Aegis.Shared.Architecture.Enums.ArchitectureClassificationSource.Unclassified && !string.IsNullOrWhiteSpace(item.ArchitecturalComponentId))
+                .Select(item => item.CodeComponentId).ToHashSet(StringComparer.Ordinal);
+            var classified = productionContainers.Count(item => classifiedIds.Contains(item.Id));
+            var unclassified = Math.Max(0, productionContainers.Count - classified);
+            var diagnostics = _context?.ArchitectureClassificationDiagnostics.Count(item => item.AffectsCoverage) ?? 0;
+            ClassificationCoverageSummary = $"Classification coverage: {classified:N0}/{productionContainers.Count:N0} production code containers classified; {unclassified:N0} unclassified; {diagnostics:N0} coverage diagnostics.";
 
-            var architecturalDependencies = _context?.ProductionArchitecturalComponentDependencies
-                .Where(dependency =>
-                    !string.IsNullOrWhiteSpace(dependency.SourceComponentId)
-                    && !string.IsNullOrWhiteSpace(dependency.TargetComponentId))
-                .ToArray() ?? [];
-
-            var buildModules = _context?.ProductionModules ?? [];
-            var codeContainers = _context?.ProductionComponents ?? [];
-            var classifiedCodeContainerIds = (_context?.ArchitecturalComponentMemberships ?? [])
-                .Where(membership =>
-                    !string.IsNullOrWhiteSpace(membership.ArchitecturalComponentId)
-                    && !string.Equals(membership.ClassificationSource.ToString(), "Unclassified", StringComparison.OrdinalIgnoreCase))
-                .Select(membership => membership.CodeComponentId)
-                .ToHashSet(StringComparer.Ordinal);
-            var classifiedCodeContainerCount = codeContainers.Count(container =>
-                classifiedCodeContainerIds.Contains(container.Id));
-            var unclassifiedCodeContainerCount = Math.Max(0, codeContainers.Count - classifiedCodeContainerCount);
-            var coverageDiagnosticCount = _context?.ArchitectureClassificationDiagnostics
-                .Count(diagnostic => diagnostic.AffectsCoverage) ?? 0;
-            ClassificationCoverageSummary =
-                $"Classification coverage: {classifiedCodeContainerCount:N0}/{codeContainers.Count:N0} production code containers classified; "
-                + $"{unclassifiedCodeContainerCount:N0} unclassified; {coverageDiagnosticCount:N0} coverage diagnostics.";
-
-            var architecturalComponents = _context?.ArchitecturalComponents
-                .Where(component => component.ProductionSymbolCount > 0)
-                .ToArray() ?? [];
-            var codeContainersById = codeContainers
-                .GroupBy(component => component.Id, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-            var architecturalComponentsById = architecturalComponents
-                .GroupBy(component => component.Id, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-
-            var projectionOptions = new List<string> { "Build modules" };
-            if (codeContainers.Count > 0)
-                projectionOptions.Add("Code containers");
-            if (architecturalComponents.Length > 0)
-                projectionOptions.Add("Architectural components");
-            GraphProjectionOptions = projectionOptions;
-
-            // A single-module repository can still have meaningful code-container
-            // and logical architecture graphs. Prefer the most informative
-            // available semantic projection without conflating its identity model.
-            var preferredProjection = architecturalComponents.Length > 0
-                ? "Architectural components"
-                : codeContainers.Count > 0
-                    ? "Code containers"
-                    : "Build modules";
-
+            var options = new List<string> { "Build modules" };
+            if (codeNodes.Length > 0) options.Add("Code containers");
+            if (logicalNodes.Length > 0) options.Add("Architectural components");
+            GraphProjectionOptions = options;
+            var preferred = codeNodes.Length > 0 ? "Code containers" : logicalNodes.Length > 0 ? "Architectural components" : "Build modules";
             if (!GraphProjectionOptions.Contains(GraphProjection, StringComparer.OrdinalIgnoreCase)
-                || (!_hasUserSelectedProjection
-                    && !string.Equals(GraphProjection, preferredProjection, StringComparison.OrdinalIgnoreCase)))
-            {
-                GraphProjection = preferredProjection;
-            }
+                || (!_hasUserSelectedProjection && !string.Equals(GraphProjection, preferred, StringComparison.OrdinalIgnoreCase)))
+                GraphProjection = preferred;
 
             _activeNodes = GraphProjection switch
             {
-                "Architectural components" => architecturalComponents
-                    .Select(component => new GraphNode(
-                        component.Id,
-                        component.Name,
-                        string.IsNullOrWhiteSpace(component.Role) ? "Unclassified" : component.Role))
-                    .ToArray(),
-                "Code containers" => codeContainers
-                    .Select(component => new GraphNode(
-                        component.Id,
-                        component.QualifiedName,
-                        component.ComponentKind))
-                    .ToArray(),
-                _ => buildModules
-                    .Where(module => !string.IsNullOrWhiteSpace(module.Path))
-                    .Select(module => new GraphNode(
-                        Path.GetFullPath(module.Path),
-                        module.Name,
-                        string.IsNullOrWhiteSpace(module.Type) ? module.ProjectKind : module.Type))
-                    .ToArray()
+                "Architectural components" => logicalNodes.Select(node => new GraphNode(node.GroupKey, node.Name, node.ArchitecturalRole ?? node.ComponentKind ?? "Unclassified")).ToArray(),
+                "Code containers" => codeNodes.Select(node => new GraphNode(node.GroupKey, node.Name, node.ArchitecturalRole ?? node.ComponentKind ?? "Unclassified")).ToArray(),
+                _ => moduleNodes.Select(node => new GraphNode(node.GroupKey, node.Name, node.ComponentKind ?? "Build module")).ToArray()
             };
 
-            _activeRelations = GraphProjection switch
+            var nodesByGroup = rollup.Nodes.ToDictionary(node => node.GroupKey, StringComparer.Ordinal);
+            _activeRelations = rollup.Edges.Select(edge =>
             {
-                "Architectural components" => architecturalDependencies.Select(dependency => new GraphRelation(
-                    dependency.SourceComponentId,
-                    dependency.TargetComponentId,
-                    dependency.SourceComponentName,
-                    dependency.TargetComponentName,
-                    architecturalComponentsById.GetValueOrDefault(dependency.SourceComponentId)?.Role ?? "Unclassified",
-                    architecturalComponentsById.GetValueOrDefault(dependency.TargetComponentId)?.Role ?? "Unclassified",
-                    dependency.RelationshipKinds.Count > 0
-                        ? string.Join(", ", dependency.RelationshipKinds.Select(kind => kind.ToString()).Distinct(StringComparer.OrdinalIgnoreCase))
-                        : "Semantic dependency",
-                    string.Join(", ", dependency.EvidenceFiles),
-                    dependency.RelationshipCount)).ToArray(),
-                "Code containers" => codeContainerDependencies.Select(dependency => new GraphRelation(
-                    dependency.SourceComponentId,
-                    dependency.TargetComponentId,
-                    dependency.SourceComponentName,
-                    dependency.TargetComponentName,
-                    codeContainersById.GetValueOrDefault(dependency.SourceComponentId)?.ComponentKind ?? "Unclassified",
-                    codeContainersById.GetValueOrDefault(dependency.TargetComponentId)?.ComponentKind ?? "Unclassified",
-                    dependency.DependencyType,
-                    string.Join(", ", dependency.EvidenceFiles),
-                    dependency.RelationshipCount)).ToArray(),
-                _ => buildDependencies.Select(dependency => new GraphRelation(
-                    string.IsNullOrWhiteSpace(dependency.SourceProjectPath) ? dependency.Source : dependency.SourceProjectPath,
-                    string.IsNullOrWhiteSpace(dependency.TargetProjectPath) ? dependency.Target : dependency.TargetProjectPath,
-                    dependency.Source,
-                    dependency.Target,
-                    dependency.SourceLayer,
-                    dependency.TargetLayer,
-                    dependency.DependencyType,
-                    dependency.File,
-                    1)).ToArray()
-            };
+                var source = nodesByGroup[edge.SourceGroupKey];
+                var target = nodesByGroup[edge.TargetGroupKey];
+                var knownKinds = edge.RelationshipKinds.Where(kind => kind != Aegis.Shared.Architecture.Enums.ArchitectureRelationshipKind.Unknown).Select(kind => kind.ToString()).ToArray();
+                var type = knownKinds.Length > 0 ? string.Join(", ", knownKinds) : string.Join(", ", edge.ProviderRelationshipKinds);
+                var evidence = string.Join(", ", edge.Evidence.Select(item => $"{item.Domain}[{item.OccurrenceIndex}]"));
+                return new GraphRelation(
+                    $"{edge.SourceGroupKey}->{edge.TargetGroupKey}:{edge.Domain}:{edge.Scope}",
+                    edge.Domain.ToString(),
+                    edge.Scope,
+                    edge.SourceGroupKey,
+                    edge.TargetGroupKey,
+                    source.Name,
+                    target.Name,
+                    source.ArchitecturalRole ?? source.ComponentKind ?? source.ResourceKind ?? source.Kind.ToString(),
+                    target.ArchitecturalRole ?? target.ComponentKind ?? target.ResourceKind ?? target.Kind.ToString(),
+                    string.IsNullOrWhiteSpace(type) ? "Unclassified" : type,
+                    evidence,
+                    edge.RelationshipCount);
+            }).ToArray();
 
-            TestRelationshipCount = GraphProjection switch
-            {
-                "Architectural components" => _context?.TestArchitecturalComponentDependencies.Sum(dependency => dependency.RelationshipCount) ?? 0,
-                "Code containers" => (_context?.TestComponentDependencies.Sum(dependency => dependency.RelationshipCount) ?? 0)
-                    + (_context?.ArchitectureComponentInternalDependencies
-                        .Where(dependency => string.Equals(dependency.Scope, "Test", StringComparison.OrdinalIgnoreCase))
-                        .Sum(dependency => dependency.RelationshipCount) ?? 0),
-                _ => _context?.TestDependencies.Count ?? 0
-            };
-
+            TestRelationshipCount = rollup.Edges.Where(edge => string.Equals(edge.Scope, "Test", StringComparison.OrdinalIgnoreCase)).Sum(edge => edge.RelationshipCount);
             OnPropertyChanged(nameof(ProjectionDescription));
             OnPropertyChanged(nameof(ClassificationCoverageSummary));
             OnPropertyChanged(nameof(NodeCountLabel));
-            LayerFilters = ["All", .. _activeRelations
-                .SelectMany(relation => new[] { relation.SourceLayer, relation.TargetLayer })
-                .Concat(_activeNodes.Select(node => node.Group))
-                .Where(layer => !string.IsNullOrWhiteSpace(layer))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(layer => layer, StringComparer.OrdinalIgnoreCase)];
-
-            if (!LayerFilters.Contains(SelectedLayer, StringComparer.OrdinalIgnoreCase))
-                SelectedLayer = "All";
-
             OnPropertyChanged(nameof(GraphProjectionOptions));
+            LayerFilters = ["All", .. _activeRelations.SelectMany(item => new[] { item.SourceLayer, item.TargetLayer })
+                .Concat(_activeNodes.Select(item => item.Group)).Where(item => !string.IsNullOrWhiteSpace(item))
+                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(item => item, StringComparer.OrdinalIgnoreCase)];
+            if (!LayerFilters.Contains(SelectedLayer, StringComparer.OrdinalIgnoreCase)) SelectedLayer = "All";
             OnPropertyChanged(nameof(LayerFilters));
             OnPropertyChanged(nameof(GroupingLabel));
-
-            TotalDependencies = _activeRelations.Sum(relation => relation.RelationshipCount);
-            ComponentCount = _activeNodes.Count > 0
-                ? _activeNodes.Count
-                : _activeRelations
-                    .SelectMany(relation => new[] { relation.SourceId, relation.TargetId })
-                    .Distinct(StringComparer.Ordinal)
-                    .Count();
-            LayerCount = _activeNodes.Count > 0
-                ? _activeNodes.Select(node => node.Group)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Count()
-                : _activeRelations
-                    .SelectMany(relation => new[] { relation.SourceLayer, relation.TargetLayer })
-                    .Where(layer => !string.IsNullOrWhiteSpace(layer))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Count();
-
+            TotalDependencies = _activeRelations.Sum(item => item.RelationshipCount);
+            ComponentCount = _activeNodes.Count > 0 ? _activeNodes.Count : _activeRelations.SelectMany(item => new[] { item.SourceId, item.TargetId }).Distinct(StringComparer.Ordinal).Count();
+            LayerCount = _activeNodes.Count > 0 ? _activeNodes.Select(item => item.Group).Distinct(StringComparer.OrdinalIgnoreCase).Count()
+                : _activeRelations.SelectMany(item => new[] { item.SourceLayer, item.TargetLayer }).Where(item => !string.IsNullOrWhiteSpace(item)).Distinct(StringComparer.OrdinalIgnoreCase).Count();
             RefreshFilter();
         }
-        finally
-        {
-            _refreshingProjection = false;
-        }
+        finally { _refreshingProjection = false; }
     }
 
     [RelayCommand]
@@ -477,23 +380,36 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
             }
         }
 
-        foreach (var group in dependencies.GroupBy(
-            dependency => (Source: dependency.SourceId, Target: dependency.TargetId),
-            DependencyPairComparer.Instance)
-            .OrderBy(group => group.Key.Source, StringComparer.Ordinal)
-            .ThenBy(group => group.Key.Target, StringComparer.Ordinal))
-        {
-            if (!nodeById.TryGetValue(group.Key.Source, out var source)
-                || !nodeById.TryGetValue(group.Key.Target, out var target))
-            {
-                continue;
-            }
+        var pairCounts = dependencies
+            .GroupBy(dependency => (Source: dependency.SourceId, Target: dependency.TargetId), DependencyPairComparer.Instance)
+            .ToDictionary(group => group.Key, group => group.Count(), DependencyPairComparer.Instance);
+        var pairIndexes = new Dictionary<(string Source, string Target), int>(DependencyPairComparer.Instance);
 
-            var (left, top, lineGeometry, arrowGeometry) = CreateEdgeGeometry(source, target);
+        foreach (var dependency in dependencies
+            .OrderBy(item => item.SourceId, StringComparer.Ordinal)
+            .ThenBy(item => item.TargetId, StringComparer.Ordinal)
+            .ThenBy(item => item.Domain, StringComparer.Ordinal)
+            .ThenBy(item => item.Scope, StringComparer.Ordinal)
+            .ThenBy(item => item.GraphEdgeId, StringComparer.Ordinal))
+        {
+            if (!nodeById.TryGetValue(dependency.SourceId, out var source)
+                || !nodeById.TryGetValue(dependency.TargetId, out var target))
+                continue;
+
+            var pair = (Source: dependency.SourceId, Target: dependency.TargetId);
+            var laneIndex = pairIndexes.GetValueOrDefault(pair);
+            pairIndexes[pair] = laneIndex + 1;
+            var laneCount = pairCounts[pair];
+            var laneOffset = (laneIndex - (laneCount - 1) / 2d) * 14;
+            var (left, top, lineGeometry, arrowGeometry) = CreateEdgeGeometry(source, target, laneOffset);
             GraphEdges.Add(new ArchitectureGraphEdgeViewModel(
+                dependency.GraphEdgeId,
+                dependency.Domain,
+                dependency.Scope,
+                dependency.DependencyType,
                 source.Name,
                 target.Name,
-                group.Sum(dependency => dependency.RelationshipCount),
+                dependency.RelationshipCount,
                 left,
                 top,
                 lineGeometry,
@@ -559,15 +475,16 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
 
     private static (double Left, double Top, Geometry Line, Geometry Arrow) CreateEdgeGeometry(
         ArchitectureGraphNodeViewModel source,
-        ArchitectureGraphNodeViewModel target)
+        ArchitectureGraphNodeViewModel target,
+        double laneOffset)
     {
         var start = new Point(
             source.Left + ArchitectureGraphNodeViewModel.NodeWidth,
-            source.Top + ArchitectureGraphNodeViewModel.NodeHeight / 2);
+            source.Top + ArchitectureGraphNodeViewModel.NodeHeight / 2 + laneOffset);
 
         var end = new Point(
             target.Left,
-            target.Top + ArchitectureGraphNodeViewModel.NodeHeight / 2);
+            target.Top + ArchitectureGraphNodeViewModel.NodeHeight / 2 + laneOffset);
 
         Point controlOne;
         Point controlTwo;
@@ -627,6 +544,9 @@ public sealed partial class DependencyGraphViewModel : ObservableObject
     private sealed record GraphNode(string Id, string Name, string Group);
 
     private sealed record GraphRelation(
+        string GraphEdgeId,
+        string Domain,
+        string Scope,
         string SourceId,
         string TargetId,
         string Source,

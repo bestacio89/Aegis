@@ -115,6 +115,70 @@ public sealed class JavaProjectDependencyGraphTests
         }
     }
 
+    [Fact]
+    public void Preserves_dotnet_project_references_and_maven_module_edges_in_one_repository()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"aegis-polyglot-build-graph-{Guid.NewGuid():N}");
+        var dotnetDomain = Path.Combine(root, "dotnet", "Domain");
+        var dotnetApplication = Path.Combine(root, "dotnet", "Application");
+        var javaApi = Path.Combine(root, "java", "api");
+        var javaService = Path.Combine(root, "java", "service");
+
+        Directory.CreateDirectory(dotnetDomain);
+        Directory.CreateDirectory(dotnetApplication);
+        Directory.CreateDirectory(Path.Combine(javaApi, "src", "main", "java", "sample"));
+        Directory.CreateDirectory(Path.Combine(javaService, "src", "main", "java", "sample"));
+
+        try
+        {
+            Write(dotnetDomain, "Domain.csproj", """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                </Project>
+                """);
+            Write(dotnetApplication, "Application.csproj", """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                  <ItemGroup><ProjectReference Include="../Domain/Domain.csproj" /></ItemGroup>
+                </Project>
+                """);
+            Write(dotnetDomain, "Order.cs", "namespace Sample.Domain; public sealed class Order {}");
+            Write(dotnetApplication, "OrderService.cs", "namespace Sample.Application; public sealed class OrderService {}");
+
+            Write(root, "java/pom.xml", """
+                <project xmlns="http://maven.apache.org/POM/4.0.0">
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>sample</groupId><artifactId>root</artifactId><version>1.0.0</version>
+                  <packaging>pom</packaging>
+                  <modules><module>api</module><module>service</module></modules>
+                </project>
+                """);
+            Write(javaApi, "pom.xml", ModulePom("api", ""));
+            Write(javaService, "pom.xml", ModulePom("service", """
+                  <dependencies>
+                    <dependency><groupId>sample</groupId><artifactId>api</artifactId><version>1.0.0</version></dependency>
+                  </dependencies>
+                """));
+            Write(Path.Combine(javaApi, "src", "main", "java", "sample"), "Api.java", "package sample; public class Api {}");
+            Write(Path.Combine(javaService, "src", "main", "java", "sample"), "Service.java", "package sample; public class Service {}");
+
+            var context = ProjectArchitectureContextDetector.Detect(root);
+
+            Assert.Contains(context.Dependencies, dependency =>
+                dependency.DependencyType == "ProjectReference"
+                && Path.GetFullPath(dependency.SourceProjectPath) == Path.GetFullPath(dotnetApplication)
+                && Path.GetFullPath(dependency.TargetProjectPath) == Path.GetFullPath(dotnetDomain));
+            Assert.Contains(context.Dependencies, dependency =>
+                dependency.DependencyType == "MavenProjectDependency"
+                && Path.GetFullPath(dependency.SourceProjectPath) == Path.GetFullPath(javaService)
+                && Path.GetFullPath(dependency.TargetProjectPath) == Path.GetFullPath(javaApi));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string ModulePom(string artifact, string dependencies) => $$"""
         <project xmlns="http://maven.apache.org/POM/4.0.0">
           <modelVersion>4.0.0</modelVersion>

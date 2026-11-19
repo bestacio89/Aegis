@@ -215,6 +215,9 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
             Capabilities = DeserializeArray<string>(result, "capabilities"),
             Symbols = DeserializeArray<SemanticSymbol>(result, "symbols"),
             Relationships = DeserializeArray<SemanticRelationship>(result, "relationships"),
+            ServerApiEndpoints = DeserializeArray<ApiEndpointEvidence>(result, "serverApiEndpoints"),
+            ApiClientRequests = DeserializeArray<ApiClientRequestEvidence>(result, "apiClientRequests"),
+            MessageIntegrations = DeserializeArray<MessageIntegrationEvidence>(result, "messageIntegrations"),
             Diagnostics = DeserializeArray<AnalysisDiagnostic>(result, "diagnostics")
         };
 

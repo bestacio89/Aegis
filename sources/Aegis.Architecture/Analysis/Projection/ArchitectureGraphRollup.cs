@@ -28,8 +28,16 @@ public static class ArchitectureGraphRollup
                         context.SemanticAnalysisRuns,
                         group.Key.Language,
                         group.Key.ModulePath);
+                    var packageNodes = group.ToArray();
+                    var productionPackageNodes = packageNodes
+                        .Where(node => !node.IsTestScoped)
+                        .ToArray();
+                    var basePackageNodes = productionPackageNodes.Length > 0
+                        ? productionPackageNodes
+                        : packageNodes;
+
                     return ArchitecturePackageBaseResolver.Resolve(
-                        group.Select(node => node.Name),
+                        basePackageNodes.Select(node => node.Name),
                         policyOverride,
                         applicationPackage);
                 });

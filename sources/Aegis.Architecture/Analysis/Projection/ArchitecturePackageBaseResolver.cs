@@ -16,11 +16,18 @@ public static class ArchitecturePackageBaseResolver
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var packageNames = context.ArchitectureComponents
+        var packageComponents = context.ArchitectureComponents
             .Where(component =>
                 string.Equals(component.ComponentKind, "Package", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(component.ComponentKind, "Module", StringComparison.OrdinalIgnoreCase))
-            .Select(component => component.QualifiedName);
+            .ToArray();
+        var productionPackageComponents = packageComponents
+            .Where(component => component.ProductionSymbolCount > 0)
+            .ToArray();
+        var basePackageComponents = productionPackageComponents.Length > 0
+            ? productionPackageComponents
+            : packageComponents;
+        var packageNames = basePackageComponents.Select(component => component.QualifiedName);
 
         var applicationPackage = FindSpringBootApplicationPackage(context.SemanticAnalysisRuns);
         return Resolve(packageNames, policyOverride, applicationPackage);

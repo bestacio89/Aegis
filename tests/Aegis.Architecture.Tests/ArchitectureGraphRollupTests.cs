@@ -168,6 +168,98 @@ public sealed class ArchitectureGraphRollupTests
     }
 
     [Fact]
+    public void Apply_resolves_partition_base_from_production_packages_and_preserves_test_packages()
+    {
+        var projection = CreateProjection(
+            [
+                Package("orders-web", "com.acme.orders.web"),
+                Package("orders-persistence", "com.acme.orders.persistence"),
+                Package("billing-api", "com.acme.billing.api"),
+                Package("test-fixture", "org.tests.fixture") with { IsTestScoped = true }
+            ],
+            []);
+
+        var result = ArchitectureGraphRollup.Apply(
+            new ProjectArchitectureContext { ArchitectureGraphProjection = projection },
+            null,
+            1);
+
+        result.BasePackage.Should().Be("com.acme");
+        result.Nodes.Should().ContainSingle(node => node.Name == "orders")
+            .Which.LeafComponentIds.Should().BeEquivalentTo(["orders-web", "orders-persistence"]);
+        result.Nodes.Should().ContainSingle(node => node.Name == "billing")
+            .Which.LeafComponentIds.Should().Contain("billing-api");
+        result.Nodes.Should().ContainSingle(node =>
+            node.Name == "org.tests.fixture"
+            && node.LeafComponentIds.Contains("test-fixture"));
+        result.Nodes.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void Apply_falls_back_to_test_packages_when_partition_has_no_production_packages()
+    {
+        var projection = CreateProjection(
+            [
+                Package("test-web", "org.tests.orders.web") with { IsTestScoped = true },
+                Package("test-persistence", "org.tests.orders.persistence") with { IsTestScoped = true },
+                Package("test-billing", "org.tests.billing.api") with { IsTestScoped = true }
+            ],
+            []);
+
+        var result = ArchitectureGraphRollup.Apply(
+            new ProjectArchitectureContext { ArchitectureGraphProjection = projection },
+            null,
+            1);
+
+        result.BasePackage.Should().Be("org.tests");
+        result.Nodes.Should().ContainSingle(node => node.Name == "orders")
+            .Which.LeafComponentIds.Should().BeEquivalentTo(["test-web", "test-persistence"]);
+        result.Nodes.Should().ContainSingle(node => node.Name == "billing")
+            .Which.LeafComponentIds.Should().Contain("test-billing");
+    }
+
+    [Fact]
+    public void Resolve_context_excludes_test_only_packages_when_production_packages_exist()
+    {
+        var context = new ProjectArchitectureContext
+        {
+            ArchitectureComponents =
+            [
+                new ArchitectureComponentContext
+                {
+                    Id = "production-web",
+                    QualifiedName = "com.acme.orders.web",
+                    ComponentKind = "Package",
+                    ProductionSymbolCount = 4
+                },
+                new ArchitectureComponentContext
+                {
+                    Id = "production-persistence",
+                    QualifiedName = "com.acme.orders.persistence",
+                    ComponentKind = "Package",
+                    ProductionSymbolCount = 2
+                },
+                new ArchitectureComponentContext
+                {
+                    Id = "production-billing",
+                    QualifiedName = "com.acme.billing.api",
+                    ComponentKind = "Package",
+                    ProductionSymbolCount = 1
+                },
+                new ArchitectureComponentContext
+                {
+                    Id = "test-fixture",
+                    QualifiedName = "org.tests.fixture",
+                    ComponentKind = "Package",
+                    TestSymbolCount = 3
+                }
+            ]
+        };
+
+        ArchitecturePackageBaseResolver.Resolve(context).Should().Be("com.acme");
+    }
+
+    [Fact]
     public void Apply_keeps_production_and_test_relationships_in_separate_aggregates()
     {
         var projection = CreateProjection(

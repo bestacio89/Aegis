@@ -1,3 +1,4 @@
+using System.IO;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Wpf.ViewModels.Architecture;

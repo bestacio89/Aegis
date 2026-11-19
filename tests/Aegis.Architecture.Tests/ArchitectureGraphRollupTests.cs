@@ -484,6 +484,54 @@ public sealed class ArchitectureGraphRollupTests
         androidApp.GroupKey.Should().NotBe(shared.GroupKey);
     }
 
+    [Fact]
+    public void Apply_keeps_default_package_as_a_leaf_without_throwing()
+    {
+        var projection = CreateProjection(
+            [
+                Package("default-package", "<default>", "/repo/default"),
+                Package("named-package", "dev.johnoreilly.confetti.ui", "/repo/default")
+            ],
+            []);
+
+        var result = ArchitectureGraphRollup.Apply(projection, "dev.johnoreilly.confetti", 1);
+
+        result.Nodes.Should().ContainSingle(node =>
+            node.Name == "<default>"
+            && node.ModulePath == "/repo/default"
+            && node.LeafComponentIds.Contains("default-package"));
+        result.Nodes.Should().ContainSingle(node =>
+            node.Name == "ui"
+            && node.LeafComponentIds.Contains("named-package"));
+        result.Nodes.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Apply_handles_doubled_package_prefix_deterministically_without_hiding_other_packages()
+    {
+        var projection = CreateProjection(
+            [
+                Package("doubled-prefix", "dev.johnoreilly.confetti.dev.johnoreilly.confetti.ui"),
+                Package("shared-package", "dev.johnoreilly.confetti.shared"),
+                Package("billing-package", "dev.johnoreilly.confetti.billing.api")
+            ],
+            []);
+
+        // Removing the explicit base leaves "dev.johnoreilly.confetti.ui"; depth 1 therefore yields "dev".
+        var result = ArchitectureGraphRollup.Apply(projection, "dev.johnoreilly.confetti", 1);
+
+        result.Nodes.Should().HaveCount(3);
+        result.Nodes.Should().ContainSingle(node =>
+            node.Name == "dev"
+            && node.LeafComponentIds.Contains("doubled-prefix"));
+        result.Nodes.Should().ContainSingle(node =>
+            node.Name == "shared"
+            && node.LeafComponentIds.Contains("shared-package"));
+        result.Nodes.Should().ContainSingle(node =>
+            node.Name == "billing"
+            && node.LeafComponentIds.Contains("billing-package"));
+    }
+
     private static SemanticAnalysisRun SpringBootRun(
         string runId,
         string projectPath,

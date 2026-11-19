@@ -18,6 +18,7 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
     private readonly ILogger _logger;
     private Process? _process;
     private JvmWorkerLaunchOptions? _activeOptions;
+    private BoundedUtf8LineReader? _responseReader;
     private bool _disposed;
 
     public JvmWorkerProcess(ILogger logger)
@@ -64,6 +65,7 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
 
             _process = process;
             _activeOptions = options;
+            _responseReader = new BoundedUtf8LineReader(process.StandardOutput.BaseStream, options.MaxResponseBytes);
             process.BeginErrorReadLine();
 
             using var startupTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -115,11 +117,14 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
     {
         var process = _process;
         var options = _activeOptions;
+        if (process is null)
+        {
+            _responseReader = null;
+            return;
+        }
+
         _process = null;
         _activeOptions = null;
-
-        if (process is null)
-            return;
 
         try
         {
@@ -175,11 +180,12 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
         }
         finally
         {
+            _responseReader = null;
             process.Dispose();
         }
     }
 
-    private static async Task<JsonElement> SendFrameAsync(
+    private async Task<JsonElement> SendFrameAsync(
         Process process,
         JvmWorkerLaunchOptions options,
         string operation,
@@ -200,12 +206,11 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
         await process.StandardInput.WriteLineAsync(frame.AsMemory(), cancellationToken).ConfigureAwait(false);
         await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
 
-        var responseLine = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+        var responseReader = _responseReader
+            ?? throw new InvalidOperationException($"{options.WorkerName} response channel is unavailable.");
+        var responseLine = await responseReader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
         if (responseLine is null)
             throw new EndOfStreamException($"{options.WorkerName} closed stdout before returning a response.");
-
-        if (Encoding.UTF8.GetByteCount(responseLine) > options.MaxResponseBytes)
-            throw new InvalidDataException($"{options.WorkerName} response exceeds the configured response limit.");
 
         using var document = JsonDocument.Parse(responseLine);
         var response = document.RootElement;

@@ -104,22 +104,31 @@ public sealed class ThemeContrastTests
             theme["Spacing.4"].Should().Be(new Thickness(4));
             theme["Spacing.8"].Should().Be(new Thickness(8));
 
-            theme["Text.Caption"].Should().BeOfType<Style>()
-                .Which.Setters
+            var captionStyle = theme["Text.Caption"].Should().BeOfType<Style>().Which;
+            var captionFontSizeSetters = captionStyle.Setters
                 .OfType<Setter>()
-                .Should()
-                .ContainSingle(setter => setter.Property == TextBlock.FontSizeProperty
-                    && setter.Value is double size
-                    && size >= 12);
+                .Where(setter => setter.Property == TextBlock.FontSizeProperty)
+                .ToArray();
+
+            captionFontSizeSetters.Should().ContainSingle();
+            captionFontSizeSetters[0].Value.Should().BeOfType<double>()
+                .Which.Should().BeGreaterThanOrEqualTo(12);
 
             foreach (var styleKey in new[] { "Text.Eyebrow", "Grid.LedgerHeader" })
             {
                 var style = theme[styleKey].Should().BeOfType<Style>().Which;
-                style.Setters
+                var fontSizeSetters = style.Setters
                     .OfType<Setter>()
                     .Where(setter => setter.Property == TextBlock.FontSizeProperty)
-                    .Should()
-                    .OnlyContain(setter => setter.Value is double size && size >= 12);
+                    .ToArray();
+
+                fontSizeSetters.Should().NotBeEmpty();
+
+                foreach (var setter in fontSizeSetters)
+                {
+                    setter.Value.Should().BeOfType<double>()
+                        .Which.Should().BeGreaterThanOrEqualTo(12);
+                }
             }
         });
     }

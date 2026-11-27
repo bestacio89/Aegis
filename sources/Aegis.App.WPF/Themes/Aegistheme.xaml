@@ -157,7 +157,7 @@
         <Setter Property="Background" Value="{StaticResource Brush.PanelElevated}"/>
         <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}"/>
         <Setter Property="FontFamily" Value="{StaticResource Font.Body}"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="12"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Padding" Value="10,8"/>
         <Setter Property="BorderBrush" Value="{StaticResource Brush.Line}"/>

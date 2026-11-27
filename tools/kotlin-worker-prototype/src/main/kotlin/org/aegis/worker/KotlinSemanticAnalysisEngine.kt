@@ -320,6 +320,18 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
 
         require(sourceFiles.isNotEmpty()) { "The Kotlin source manifest contains no Kotlin source files." }
 
+        var aggregateSourceBytes = 0L
+        sourceFiles.forEach { sourceFile ->
+            val fileBytes = Files.size(sourceFile)
+            require(fileBytes <= MAX_SOURCE_FILE_BYTES) {
+                "A Kotlin source file exceeds the $MAX_SOURCE_FILE_BYTES-byte per-file limit: $sourceFile"
+            }
+            require(fileBytes <= MAX_AGGREGATE_SOURCE_BYTES - aggregateSourceBytes) {
+                "The Kotlin source inputs exceed the $MAX_AGGREGATE_SOURCE_BYTES-byte aggregate limit."
+            }
+            aggregateSourceBytes += fileBytes
+        }
+
         val standardLibraryCandidate = Path.of(request.kotlinStandardLibraryPath).toAbsolutePath().normalize()
         require(
             Files.isRegularFile(standardLibraryCandidate, LinkOption.NOFOLLOW_LINKS)
@@ -421,6 +433,8 @@ class KotlinSemanticAnalysisEngine : KotlinWorkerOperationHandler {
         private const val MAX_SOURCE_ROOTS = 1_024
         private const val MAX_REFERENCED_ROOTS = 2_048
         private const val MAX_CLASSPATH_ENTRIES = 8_192
+        private const val MAX_SOURCE_FILE_BYTES = 16L * 1024 * 1024
+        private const val MAX_AGGREGATE_SOURCE_BYTES = 512L * 1024 * 1024
         private const val OUTPUT_PATH_PROPERTY = "aegis.kotlin.semantic.output"
         private const val PROJECT_PATH_PROPERTY = "aegis.kotlin.semantic.project"
         private const val TEST_SCOPE_PROPERTY = "aegis.kotlin.semantic.test"

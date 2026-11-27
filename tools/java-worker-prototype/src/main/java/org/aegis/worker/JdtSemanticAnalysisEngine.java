@@ -62,6 +62,14 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         List<Path> sourceFiles = readSourceFiles(payload);
         List<Path> classpath = readPaths(payload, "classpathEntries", false);
 
+        requireCount(sourceFiles.size(), 50_000, "source files");
+        requireCount(sourceRoots.size(), 1_024, "source roots");
+        requireCount(referencedSourceRoots.size(), 2_048, "referenced source roots");
+        requireCount(classpath.size(), 8_192, "classpath entries");
+        requireCount(readPaths(payload, "testSourceRoots", true).size(), 1_024, "test source roots");
+        requireCount(readPaths(payload, "generatedSourceRoots", true).size(), 2_048, "generated source roots");
+        validateSourceBytes(sourceFiles);
+
         if (sourceRoots.isEmpty()) {
             throw new IllegalArgumentException("At least one module-owned source root is required.");
         }
@@ -178,19 +186,44 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         if (!payload.has("sourceManifestPath")) return readPaths(payload, "sourceFiles", false);
         Path manifest = Path.of(payload.get("sourceManifestPath").getAsString()).toRealPath();
         Path temporaryDirectory = Path.of(System.getProperty("java.io.tmpdir")).toRealPath();
-        if (!manifest.startsWith(temporaryDirectory) || !Files.isRegularFile(manifest)
-            || Files.size(manifest) > 32L * 1024 * 1024) {
-            throw new IllegalArgumentException("The source manifest must be a regular file inside the system temporary directory and no larger than 32 MiB.");
+        if (!manifest.startsWith(temporaryDirectory)
+            || !Files.isRegularFile(manifest, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+            || Files.isSymbolicLink(manifest)
+            || Files.size(manifest) < 1
+            || Files.size(manifest) > 16L * 1024 * 1024) {
+            throw new IllegalArgumentException("The source manifest must be a non-symbolic regular file inside the system temporary directory and no larger than 16 MiB.");
         }
         var element = com.google.gson.JsonParser.parseString(Files.readString(manifest));
         if (!element.isJsonArray()) throw new IllegalArgumentException("The source manifest must contain a JSON array of paths.");
         List<Path> paths = new ArrayList<>();
+        if (element.getAsJsonArray().size() > 50_000)
+            throw new IllegalArgumentException("The source manifest exceeds the 50,000-file limit.");
         for (var value : element.getAsJsonArray()) {
             if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString())
                 throw new IllegalArgumentException("Every source manifest entry must be a path string.");
             paths.add(Path.of(value.getAsString()).toAbsolutePath().normalize());
         }
         return List.copyOf(paths);
+    }
+
+    private static void requireCount(int count, int maximum, String description) {
+        if (count > maximum)
+            throw new IllegalArgumentException("The request exceeds the " + maximum + " " + description + " limit.");
+    }
+
+    private static void validateSourceBytes(List<Path> sourceFiles) throws IOException {
+        long aggregateBytes = 0;
+        for (Path sourceFile : sourceFiles) {
+            if (!Files.isRegularFile(sourceFile, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(sourceFile))
+                throw new IllegalArgumentException("A source file is missing or is a symbolic link: " + sourceFile);
+            long fileBytes = Files.size(sourceFile);
+            if (fileBytes > 16L * 1024 * 1024)
+                throw new IllegalArgumentException("A source file exceeds the 16 MiB per-file limit: " + sourceFile);
+            if (fileBytes > 512L * 1024 * 1024 - aggregateBytes)
+                throw new IllegalArgumentException("The source inputs exceed the 512 MiB aggregate byte limit.");
+            aggregateBytes += fileBytes;
+        }
     }
 
     private static List<Path> readPaths(JsonObject payload, String name, boolean directories) {

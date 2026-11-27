@@ -24,9 +24,11 @@ public sealed class KotlinWorkerConfigurationTests
 
         try
         {
+            var sourceFile = Path.Combine(artifactRoot.FullName, "Service.kt");
+            await File.WriteAllTextAsync(sourceFile, "class Service");
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 client.AnalyzeAsync(
-                    CreateRequest(),
+                    CreateRequest(sourceFile),
                     CreateCompilerConfiguration(),
                     artifactRoot.FullName).AsTask());
         }
@@ -46,9 +48,11 @@ public sealed class KotlinWorkerConfigurationTests
 
         try
         {
+            var sourceFile = Path.Combine(artifactRoot.FullName, "Service.kt");
+            await File.WriteAllTextAsync(sourceFile, "class Service");
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 client.AnalyzeAsync(
-                    CreateRequest(),
+                    CreateRequest(sourceFile),
                     CreateCompilerConfiguration(),
                     artifactRoot.FullName).AsTask());
         }
@@ -63,14 +67,14 @@ public sealed class KotlinWorkerConfigurationTests
             new FixedOptionsMonitor<KotlinWorkerOptions>(options),
             NullLogger<KotlinWorkerClient>.Instance);
 
-    private static SemanticAnalysisRequest CreateRequest() =>
+    private static SemanticAnalysisRequest CreateRequest(string sourceFile) =>
         new()
         {
             Language = "Kotlin",
             ProjectPath = Path.GetTempPath(),
             WorkspaceRoot = Path.GetTempPath(),
-            SourceFiles = ["Service.kt"],
-            SourceRoots = ["src/main/kotlin"]
+            SourceFiles = [sourceFile],
+            SourceRoots = [Path.GetTempPath()]
         };
 
     private static KotlinCompilerConfiguration CreateCompilerConfiguration() =>

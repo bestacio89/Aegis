@@ -82,13 +82,20 @@ public sealed class ThemeContrastTests
         });
     }
 
-    private static ResourceDictionary LoadTheme() =>
-        new()
+    private static ResourceDictionary LoadTheme()
+    {
+        _ = Application.Current ?? new Application
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown
+        };
+
+        return new ResourceDictionary
         {
             Source = new Uri(
-                "/Aegis.Wpf;component/Themes/Aegistheme.xaml",
-                UriKind.Relative)
+                "pack://application:,,,/Aegis.Wpf;component/Themes/Aegistheme.xaml",
+                UriKind.Absolute)
         };
+    }
 
     private static Color GetColor(ResourceDictionary dictionary, string key) =>
         dictionary[key] is SolidColorBrush brush

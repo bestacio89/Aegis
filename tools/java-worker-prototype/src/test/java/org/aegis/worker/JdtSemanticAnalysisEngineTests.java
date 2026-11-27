@@ -766,6 +766,62 @@ final class JdtSemanticAnalysisEngineTests {
         assertEquals(0, result.getAsJsonArray("relationships").size());
     }
 
+    @Test
+    void rejects_source_files_over_the_per_file_budget() throws Exception {
+        Path project = Files.createDirectories(workspace.resolve("oversized-project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("src/main/java"));
+        Path source = sourceRoot.resolve("Oversized.java");
+        try (var output = Files.newOutputStream(source)) {
+            output.write(new byte[16 * 1024 * 1024 + 1]);
+        }
+        JsonObject payload = new JsonObject();
+        payload.addProperty("projectPath", project.toString());
+        payload.add("sourceRoots", paths(sourceRoot));
+        payload.add("sourceFiles", paths(source));
+        payload.add("classpathEntries", new JsonArray());
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+            () -> new JdtSemanticAnalysisEngine().analyze(payload));
+        assertTrue(exception.getMessage().contains("16 MiB per-file limit"));
+    }
+
+    @Test
+    void rejects_source_manifests_over_the_16_mib_boundary() throws Exception {
+        Path project = Files.createDirectories(workspace.resolve("manifest-project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("src/main/java"));
+        Path manifest = workspace.resolve("oversized-source-manifest.json");
+        try (var output = Files.newOutputStream(manifest)) {
+            output.write('[');
+            output.write(new byte[16 * 1024 * 1024]);
+        }
+        JsonObject payload = new JsonObject();
+        payload.addProperty("projectPath", project.toString());
+        payload.add("sourceRoots", paths(sourceRoot));
+        payload.addProperty("sourceManifestPath", manifest.toString());
+        payload.add("classpathEntries", new JsonArray());
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+            () -> new JdtSemanticAnalysisEngine().analyze(payload));
+        assertTrue(exception.getMessage().contains("16 MiB"));
+    }
+
+    @Test
+    void rejects_source_manifests_with_more_than_50000_entries() throws Exception {
+        Path project = Files.createDirectories(workspace.resolve("manifest-count-project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("src/main/java"));
+        Path manifest = workspace.resolve("too-many-sources.json");
+        String entries = java.util.stream.IntStream.range(0, 50_001)
+            .mapToObj(index -> "\"missing-" + index + ".java\"")
+            .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        Files.writeString(manifest, entries);
+        JsonObject payload = new JsonObject();
+        payload.addProperty("projectPath", project.toString());
+        payload.add("sourceRoots", paths(sourceRoot));
+        payload.addProperty("sourceManifestPath", manifest.toString());
+        payload.add("classpathEntries", new JsonArray());
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+            () -> new JdtSemanticAnalysisEngine().analyze(payload));
+        assertTrue(exception.getMessage().contains("50,000-file limit"));
+    }
+
     private static void deleteRecursively(Path directory) throws IOException {
         try (var paths = Files.walk(directory)) {
             paths.sorted(Comparator.reverseOrder()).forEach(path -> {

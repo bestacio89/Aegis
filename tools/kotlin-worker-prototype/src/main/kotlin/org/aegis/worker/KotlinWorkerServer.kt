@@ -9,6 +9,7 @@ import com.google.gson.stream.JsonToken
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.io.OutputStreamWriter
 import java.io.StringReader
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction

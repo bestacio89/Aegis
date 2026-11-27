@@ -180,7 +180,7 @@
 
                     <TextBlock
                         Text="ARCHITECTURE INTELLIGENCE"
-                       
+
                         Margin="1,5,0,0"
                         Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
                 </StackPanel>
@@ -197,7 +197,7 @@
 
                     <TextBlock
                         Text="CURRENT PROJECT"
-                       
+
                         FontWeight="SemiBold"
                         Margin="0,0,0,6"
                         Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
@@ -207,14 +207,14 @@
                         TextWrapping="Wrap"
                         TextTrimming="CharacterEllipsis"
                         ToolTip="{Binding RepositoryPath}"
-                       
+
                         Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
                     <TextBlock
                         Text="{Binding SelectedWorkspace,
                             StringFormat='Workspace: {0}'}"
                         Margin="0,12,0,0"
-                       
+
                         Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
                 </StackPanel>
 
@@ -225,7 +225,7 @@
                     <TextBlock
                         Text="WORKSPACES"
                         Margin="12,0,0,10"
-                       
+
                         FontWeight="SemiBold"
                         Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
@@ -285,8 +285,7 @@
                         <TextBlock
                             Text="Assess, understand, and improve your system."
                             Margin="0,4,0,0"
-                            FontSize="12" Foreground="{StaticResource Brush.TextMuted}"
-                            />
+                            FontSize="12" Foreground="{StaticResource Brush.TextMuted}" />
 
                     </StackPanel>
 
@@ -295,8 +294,7 @@
                         Text="AEGIS"
                         VerticalAlignment="Center"
                         FontSize="12"
-                        FontWeight="SemiBold" Foreground="{StaticResource Brush.TextMuted}"
-                        />
+                        FontWeight="SemiBold" Foreground="{StaticResource Brush.TextMuted}" />
 
                 </Grid>
             </Border>
@@ -354,7 +352,7 @@
 
                             <TextBlock
                                 Text="ASSESSMENT SOURCE"
-                               
+
                                 FontWeight="SemiBold"
                                 Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
@@ -434,17 +432,16 @@
 
                         <TextBlock
                             Text="Workspace:"
-                           
+
                             Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
                         <TextBlock
                             Text="{Binding SelectedWorkspace}"
-                            Margin="6,0,18,0" Style="{StaticResource Text.Caption}"
-                            />
+                            Margin="6,0,18,0" Style="{StaticResource Text.Caption}" />
 
                         <TextBlock
                             Text="Analysis progress:"
-                           
+
                             Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
                         <ProgressBar
@@ -459,13 +456,13 @@
                         <TextBlock
                             Text="{Binding AnalysisProgress,
                                 StringFormat={}{0:F0}%}"
-                           
+
                             VerticalAlignment="Center" Style="{StaticResource Text.Caption}" />
 
                         <TextBlock
                             Text="{Binding AnalysisStage}"
                             Margin="10,0,0,0"
-                           
+
                             MaxWidth="380"
                             TextTrimming="CharacterEllipsis"
                             VerticalAlignment="Center"
@@ -476,7 +473,7 @@
                     <TextBlock
                         Grid.Column="1"
                         Text="Architecture Intelligence Platform"
-                       
+
                         VerticalAlignment="Center"
                         Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 

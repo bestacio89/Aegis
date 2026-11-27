@@ -122,8 +122,7 @@
                             FontSize="22" />
                         <TextBlock
                             Text="{Binding TotalFindings, StringFormat='of {0:N0} findings'}"
-                            Foreground="{StaticResource Brush.TextMuted}" Style="{StaticResource Text.Caption}"
-                            />
+                            Foreground="{StaticResource Brush.TextMuted}" Style="{StaticResource Text.Caption}" />
                     </StackPanel>
                 </Border>
             </Grid>
@@ -259,8 +258,7 @@
                                         <TextBlock
                                             Text="{Binding Severity}"
                                             Foreground="{StaticResource Brush.Ink}"
-                                            FontWeight="SemiBold" Style="{StaticResource Text.Caption}"
-                                            />
+                                            FontWeight="SemiBold" Style="{StaticResource Text.Caption}" />
                                     </Border>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>

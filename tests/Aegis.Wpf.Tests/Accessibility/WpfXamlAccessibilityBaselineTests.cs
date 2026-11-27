@@ -68,7 +68,7 @@ public sealed class WpfXamlAccessibilityBaselineTests
     }
 
     [Fact]
-    public void FocusVisualSuppression_IsLimitedToTheTwoKnownStylesAwaitingW1()
+    public void FocusVisualSuppression_IsLimitedToTheTwoKnownStylesAwaitingW2()
     {
         var files = Directory.GetFiles(
             Path.Combine(AppContext.BaseDirectory, "ApplicationXaml"),

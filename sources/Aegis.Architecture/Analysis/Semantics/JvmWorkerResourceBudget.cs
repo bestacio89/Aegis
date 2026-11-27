@@ -16,12 +16,12 @@ internal static class JvmWorkerResourceBudget
     internal const long MaximumSourceFileBytes = 16L * 1024 * 1024;
     internal const long MaximumAggregateSourceBytes = 512L * 1024 * 1024;
 
-    internal static readonly string[] JvmArguments =
+    internal static IReadOnlyList<string> JvmArguments { get; } = Array.AsReadOnly(
     [
         "-Xms64m", "-Xmx1024m", "-XX:MaxMetaspaceSize=384m",
         "-XX:MaxDirectMemorySize=128m", "-XX:ActiveProcessorCount=2",
         "-XX:+ExitOnOutOfMemoryError"
-    ];
+    ]);
 
     internal static void ValidateRequest(SemanticAnalysisRequest request, string workerName)
     {

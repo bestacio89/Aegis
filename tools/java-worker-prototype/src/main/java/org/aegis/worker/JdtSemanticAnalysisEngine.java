@@ -68,7 +68,6 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
         requireCount(classpath.size(), 8_192, "classpath entries");
         requireCount(readPaths(payload, "testSourceRoots", true).size(), 1_024, "test source roots");
         requireCount(readPaths(payload, "generatedSourceRoots", true).size(), 2_048, "generated source roots");
-        validateSourceBytes(sourceFiles);
 
         if (sourceRoots.isEmpty()) {
             throw new IllegalArgumentException("At least one module-owned source root is required.");
@@ -103,6 +102,7 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
                 throw new IllegalArgumentException("A source file is outside the declared source roots: " + source);
             }
         }
+        validateSourceBytes(sourceFiles);
         for (Path entry : classpath) {
             if (!Files.exists(entry) || !(Files.isDirectory(entry) || Files.isRegularFile(entry))) {
                 throw new IllegalArgumentException("A classpath entry does not exist: " + entry);

@@ -6,13 +6,14 @@ import com.google.gson.JsonObject
 
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
 
 class KotlinSemanticAnalysisEngineTests {
     @Test
-    fun \`rejects source files over the per-file byte budget\`(@org.junit.jupiter.api.io.TempDir temporaryDirectory: Path) {
+    fun `rejects source files over the per-file byte budget`(@org.junit.jupiter.api.io.TempDir temporaryDirectory: Path) {
         val project = Files.createDirectories(temporaryDirectory.resolve("project"))
         val sourceRoot = Files.createDirectories(project.resolve("src/main/kotlin"))
         val sourceFile = sourceRoot.resolve("Oversized.kt")
@@ -49,7 +50,7 @@ class KotlinSemanticAnalysisEngineTests {
     }
 
     @Test
-    fun \`rejects source manifests over the 16 mib byte budget\`(@org.junit.jupiter.api.io.TempDir temporaryDirectory: Path) {
+    fun `rejects source manifests over the 16 mib byte budget`(@org.junit.jupiter.api.io.TempDir temporaryDirectory: Path) {
         val project = Files.createDirectories(temporaryDirectory.resolve("project"))
         val sourceRoot = Files.createDirectories(project.resolve("src/main/kotlin"))
         val artifactRoot = Files.createDirectories(temporaryDirectory.resolve("artifacts"))

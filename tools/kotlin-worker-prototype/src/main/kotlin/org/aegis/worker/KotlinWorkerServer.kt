@@ -253,24 +253,58 @@ class KotlinWorkerServer(
         gson: Gson,
         response: KotlinWorkerResponse
     ) {
-        val json = gson.toJson(response)
-        val bytes = json.toByteArray(StandardCharsets.UTF_8)
-        val boundedBytes = if (bytes.size <= maxResponseBytes) {
-            bytes
-        } else {
-            gson.toJson(
+        val buffer = BoundedResponseBuffer(maxResponseBytes)
+        try {
+            serializeResponse(gson, response, buffer)
+        } catch (_: ResponseLimitExceededException) {
+            buffer.reset()
+            serializeResponse(
+                gson,
                 KotlinWorkerResponse.failure(
                     response.requestId,
                     "RESPONSE_TOO_LARGE",
                     "The analysis response exceeds the configured byte limit."
-                )
-            ).toByteArray(StandardCharsets.UTF_8)
+                ),
+                buffer
+            )
         }
 
-        output.write(boundedBytes)
+        buffer.writeTo(output)
         output.write(NEW_LINE)
         output.flush()
     }
+
+    private fun serializeResponse(
+        gson: Gson,
+        response: KotlinWorkerResponse,
+        buffer: BoundedResponseBuffer
+    ) {
+        try {
+            val writer = OutputStreamWriter(buffer, StandardCharsets.UTF_8)
+            gson.toJson(response, writer)
+            writer.flush()
+        } catch (exception: com.google.gson.JsonIOException) {
+            val cause = exception.cause
+            if (cause is java.io.IOException) throw cause
+            throw exception
+        }
+    }
+
+    private class BoundedResponseBuffer(private val maximumBytes: Int) : ByteArrayOutputStream(
+        minOf(maximumBytes, 8_192)
+    ) {
+        override fun write(value: Int) {
+            if (count >= maximumBytes) throw ResponseLimitExceededException()
+            super.write(value)
+        }
+
+        override fun write(bytes: ByteArray, offset: Int, length: Int) {
+            if (length > maximumBytes - count) throw ResponseLimitExceededException()
+            super.write(bytes, offset, length)
+        }
+    }
+
+    private class ResponseLimitExceededException : RuntimeException()
 
     private data class Frame(
         val bytes: ByteArray,

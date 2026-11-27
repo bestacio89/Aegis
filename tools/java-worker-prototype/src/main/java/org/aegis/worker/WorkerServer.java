@@ -279,19 +279,63 @@ public final class WorkerServer {
         }
 
         private synchronized void write(WorkerResponse response) throws IOException {
-            byte[] frame = (GSON.toJson(response) + "\n").getBytes(StandardCharsets.UTF_8);
-            if (frame.length > maxResponseBytes) {
-                response = WorkerResponse.failure(
+            var buffer = new BoundedResponseBuffer(maxResponseBytes);
+            try {
+                serialize(response, buffer);
+            } catch (ResponseLimitExceededException exception) {
+                buffer.reset();
+                WorkerResponse boundedFailure = WorkerResponse.failure(
                     response.requestId(),
                     "RESPONSE_TOO_LARGE",
                     "The analysis result exceeded the configured response byte limit.");
-                frame = (GSON.toJson(response) + "\n").getBytes(StandardCharsets.UTF_8);
+                serialize(boundedFailure, buffer);
             }
-            if (frame.length > maxResponseBytes) {
-                throw new IOException("The bounded worker error response exceeds its configured response limit.");
-            }
-            output.write(frame);
+
+            buffer.writeTo(output);
+            output.write('\n');
             output.flush();
+        }
+
+        private static void serialize(WorkerResponse response, BoundedResponseBuffer buffer) throws IOException {
+            try {
+                var writer = new java.io.OutputStreamWriter(buffer, StandardCharsets.UTF_8);
+                GSON.toJson(response, writer);
+                writer.flush();
+            } catch (com.google.gson.JsonIOException exception) {
+                if (exception.getCause() instanceof IOException ioException) {
+                    throw ioException;
+                }
+                throw exception;
+            }
+        }
+
+        private static final class BoundedResponseBuffer extends ByteArrayOutputStream {
+            private final int maximumBytes;
+
+            private BoundedResponseBuffer(int maximumBytes) {
+                super(Math.min(maximumBytes, 8192));
+                this.maximumBytes = maximumBytes;
+            }
+
+            @Override
+            public synchronized void write(int value) {
+                if (count >= maximumBytes) {
+                    throw new ResponseLimitExceededException();
+                }
+                super.write(value);
+            }
+
+            @Override
+            public synchronized void write(byte[] bytes, int offset, int length) {
+                if (length > maximumBytes - count) {
+                    throw new ResponseLimitExceededException();
+                }
+                super.write(bytes, offset, length);
+            }
+        }
+
+        private static final class ResponseLimitExceededException extends RuntimeException {
+            private static final long serialVersionUID = 1L;
         }
     }
 }

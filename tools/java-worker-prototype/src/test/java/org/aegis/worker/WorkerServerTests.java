@@ -176,6 +176,72 @@ final class WorkerServerTests {
             analysisResponse.getAsJsonObject("error").get("code").getAsString());
     }
 
+
+    @Test
+    void oversized_multibyte_response_is_rejected_by_utf8_byte_count_without_partial_json() throws Exception {
+        WorkerOperationHandler largeResultHandler = new WorkerOperationHandler() {
+            @Override
+            public boolean isAvailable() { return true; }
+
+            @Override
+            public JsonObject analyze(JsonObject payload) {
+                var result = new JsonObject();
+                result.addProperty("large", "é".repeat(1024));
+                return result;
+            }
+        };
+
+        var workerInput = new PipedInputStream();
+        var requestWriter = new PipedOutputStream(workerInput);
+        var responseInput = new PipedInputStream();
+        var workerOutput = new PipedOutputStream(responseInput);
+        var serverTask = CompletableFuture.runAsync(() -> {
+            try {
+                new WorkerServer(largeResultHandler, 4096, 2, 512).serve(workerInput, workerOutput);
+            } catch (IOException exception) {
+                throw new IllegalStateException("The worker protocol server failed.", exception);
+            }
+        });
+
+        try (var writer = new BufferedWriter(new OutputStreamWriter(requestWriter, StandardCharsets.UTF_8));
+             var reader = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8))) {
+            var handshakeRequest = new JsonObject();
+            handshakeRequest.addProperty("protocolVersion", 1);
+            handshakeRequest.addProperty("requestId", "handshake-1");
+            handshakeRequest.addProperty("operation", "handshake");
+            writer.write(GSON.toJson(handshakeRequest));
+            writer.newLine();
+            writer.flush();
+            assertEquals("ok", GSON.fromJson(reader.readLine(), JsonObject.class).get("status").getAsString());
+
+            var analysisRequest = new JsonObject();
+            analysisRequest.addProperty("protocolVersion", 1);
+            analysisRequest.addProperty("requestId", "analysis-1");
+            analysisRequest.addProperty("operation", "analyze");
+            writer.write(GSON.toJson(analysisRequest));
+            writer.newLine();
+            writer.flush();
+
+            String responseLine = reader.readLine();
+            assertTrue(responseLine.getBytes(StandardCharsets.UTF_8).length <= 512);
+            JsonObject response = GSON.fromJson(responseLine, JsonObject.class);
+            assertEquals("analysis-1", response.get("requestId").getAsString());
+            assertEquals("RESPONSE_TOO_LARGE", response.getAsJsonObject("error").get("code").getAsString());
+
+            var shutdownRequest = new JsonObject();
+            shutdownRequest.addProperty("protocolVersion", 1);
+            shutdownRequest.addProperty("requestId", "shutdown-1");
+            shutdownRequest.addProperty("operation", "shutdown");
+            writer.write(GSON.toJson(shutdownRequest));
+            writer.newLine();
+            writer.flush();
+            assertEquals("ok", GSON.fromJson(reader.readLine(), JsonObject.class).get("status").getAsString());
+        }
+
+        serverTask.get(5, TimeUnit.SECONDS);
+        workerOutput.close();
+    }
+
     private static List<JsonObject> execute(String input, int maxFrameBytes) throws Exception {
         WorkerOperationHandler unavailableHandler = new WorkerOperationHandler() {
             @Override

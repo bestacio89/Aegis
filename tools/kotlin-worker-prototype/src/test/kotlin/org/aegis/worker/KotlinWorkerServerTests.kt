@@ -70,6 +70,39 @@ class KotlinWorkerServerTests {
         assertEquals("ok", responses[3].get("status").asString)
     }
 
+
+    @Test
+    fun `oversized multibyte response is bounded by UTF8 bytes and keeps the stream synchronized`() {
+        val handler = object : KotlinWorkerOperationHandler {
+            override fun isAvailable(): Boolean = true
+
+            override fun analyze(payload: JsonObject): JsonObject =
+                JsonObject().apply { addProperty("value", "é".repeat(1_024)) }
+        }
+        val input = frames(
+            request("handshake", "handshake"),
+            request("analysis", "analyze", JsonObject()),
+            request("shutdown", "shutdown")
+        )
+        val output = ByteArrayOutputStream()
+
+        KotlinWorkerServer(handler, maxFrameBytes = 4_096, maxResponseBytes = 512)
+            .serve(ByteArrayInputStream(input), output)
+
+        val responseLines = output.toString(StandardCharsets.UTF_8)
+            .lineSequence()
+            .filter(String::isNotBlank)
+            .toList()
+        assertEquals(3, responseLines.size)
+        assertTrue(responseLines[1].toByteArray(StandardCharsets.UTF_8).size <= 512)
+        val responses = responseLines.map { JsonParser.parseString(it).asJsonObject }
+        assertEquals(
+            "RESPONSE_TOO_LARGE",
+            responses[1].getAsJsonObject("error").get("code").asString
+        )
+        assertEquals("ok", responses[2].get("status").asString)
+    }
+
     private fun request(
         requestId: String,
         operation: String,

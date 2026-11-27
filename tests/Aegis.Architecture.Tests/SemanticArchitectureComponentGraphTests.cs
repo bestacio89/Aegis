@@ -71,12 +71,23 @@ public sealed class SemanticArchitectureComponentGraphTests
                 Assert.Equal(SemanticAnalysisStatus.PartiallyCompleted, run.Status));
             Assert.Equal(2, context.ProductionComponents.Count);
             var edge = Assert.Single(context.ProductionComponentDependencies);
-            Assert.Equal(1, edge.RelationshipCount);
-            var relationshipReference = Assert.Single(edge.ContributingRelationships);
-            Assert.Contains(context.SemanticAnalysisRuns, run =>
-                run.RunId == relationshipReference.RunId
-                && run.Relationships.Any(relationship =>
-                    relationship.Id == relationshipReference.RelationshipId));
+            Assert.Equal(2, edge.RelationshipCount);
+            var relationshipReferences = edge.ContributingRelationships;
+            Assert.Equal(2, relationshipReferences.Count);
+            Assert.All(relationshipReferences, relationshipReference =>
+            {
+                Assert.InRange(relationshipReference.RunIndex, 0, context.SemanticAnalysisRuns.Count - 1);
+                var run = context.SemanticAnalysisRuns[relationshipReference.RunIndex];
+                Assert.Equal(run.RunId, relationshipReference.RunId);
+                Assert.InRange(relationshipReference.RelationshipIndex, 0, run.Relationships.Count - 1);
+                Assert.Equal(
+                    relationshipReference.RelationshipId,
+                    run.Relationships[relationshipReference.RelationshipIndex].Id);
+                Assert.Equal("application-uses-domain", relationshipReference.RelationshipId);
+            });
+            Assert.Equal(
+                2,
+                relationshipReferences.Select(reference => reference.RunIndex).Distinct().Count());
             Assert.Equal(0, edge.UnreferencedRelationshipCount);
             Assert.Contains(applicationFile, edge.EvidenceFiles);
             Assert.Equal(
@@ -302,6 +313,18 @@ public sealed class SemanticArchitectureComponentGraphTests
                         },
                         new SemanticSymbol
                         {
+                            Id = "explicit-owner-symbol",
+                            Name = "OwnerService",
+                            QualifiedName = "sample.first.OwnerService",
+                            ContainerName = "sample.first",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = appPath,
+                            OwningProjectPath = secondLibraryPath,
+                            Origin = SemanticSymbolOrigin.External
+                        },
+                        new SemanticSymbol
+                        {
                             Id = "test-support-external-symbol",
                             Name = "TestSupport",
                             QualifiedName = "sample.test.Support",
@@ -319,6 +342,14 @@ public sealed class SemanticArchitectureComponentGraphTests
                             Id = "app-uses-library",
                             SourceSymbolId = "app-service",
                             TargetSymbolId = "shared-library-symbol",
+                            Kind = SemanticRelationshipKind.Calls,
+                            ResolutionStatus = SemanticResolutionStatus.Resolved
+                        },
+                        new SemanticRelationship
+                        {
+                            Id = "app-uses-explicit-owner",
+                            SourceSymbolId = "app-service",
+                            TargetSymbolId = "explicit-owner-symbol",
                             Kind = SemanticRelationshipKind.Calls,
                             ResolutionStatus = SemanticResolutionStatus.Resolved
                         },
@@ -390,6 +421,18 @@ public sealed class SemanticArchitectureComponentGraphTests
                     [
                         new SemanticSymbol
                         {
+                            Id = "explicit-owner-symbol",
+                            Name = "OwnerService",
+                            QualifiedName = "sample.first.OwnerService",
+                            ContainerName = "sample.first",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = firstLibraryPath,
+                            FilePath = Path.Combine(firstLibraryPath, "OwnerService.kt"),
+                            Origin = SemanticSymbolOrigin.Source
+                        },
+                        new SemanticSymbol
+                        {
                             Id = "shared-library-symbol",
                             Name = "LibraryService",
                             QualifiedName = "sample.first.LibraryService",
@@ -459,6 +502,18 @@ public sealed class SemanticArchitectureComponentGraphTests
                     [
                         new SemanticSymbol
                         {
+                            Id = "explicit-owner-symbol",
+                            Name = "OwnerService",
+                            QualifiedName = "sample.second.OwnerService",
+                            ContainerName = "sample.second",
+                            ContainerKind = "Package",
+                            Language = "Kotlin",
+                            ProjectPath = secondLibraryPath,
+                            FilePath = Path.Combine(secondLibraryPath, "OwnerService.kt"),
+                            Origin = SemanticSymbolOrigin.Source
+                        },
+                        new SemanticSymbol
+                        {
                             Id = "shared-library-symbol",
                             Name = "LibraryService",
                             QualifiedName = "sample.second.LibraryService",
@@ -481,6 +536,9 @@ public sealed class SemanticArchitectureComponentGraphTests
             .Single(component => component.Id == edge.SourceComponentId).BuildModuleName);
         Assert.Equal("second-library", context.ProductionComponents
             .Single(component => component.Id == edge.TargetComponentId).BuildModuleName);
+        Assert.Equal(2, edge.RelationshipCount);
+        Assert.Contains(edge.ContributingRelationships, reference =>
+            reference.RelationshipId == "app-uses-explicit-owner");
         var testEdge = Assert.Single(context.TestComponentDependencies);
         Assert.Equal("test-support", context.TestComponents
             .Single(component => component.Id == testEdge.TargetComponentId).BuildModuleName);
@@ -913,7 +971,7 @@ public sealed class SemanticArchitectureComponentGraphTests
     }
 
     [Fact]
-    public void Counts_relationships_without_provider_ids_and_exposes_the_traceability_gap()
+    public void Indexes_relationships_without_provider_ids_for_exact_traceability()
     {
         var projectPath = Path.Combine(Path.GetTempPath(), $"aegis-unreferenced-graph-{Guid.NewGuid():N}");
         var context = new ProjectArchitectureContext
@@ -975,7 +1033,11 @@ public sealed class SemanticArchitectureComponentGraphTests
 
         var edge = Assert.Single(context.ProductionComponentDependencies);
         Assert.Equal(1, edge.RelationshipCount);
-        Assert.Empty(edge.ContributingRelationships);
+        var relationshipReference = Assert.Single(edge.ContributingRelationships);
+        Assert.Equal("java-run", relationshipReference.RunId);
+        Assert.Equal(string.Empty, relationshipReference.RelationshipId);
+        Assert.Equal(0, relationshipReference.RunIndex);
+        Assert.Equal(0, relationshipReference.RelationshipIndex);
         Assert.Equal(1, edge.UnreferencedRelationshipCount);
     }
 
@@ -1085,6 +1147,123 @@ public sealed class SemanticArchitectureComponentGraphTests
             .Single(component => component.Id == edge.SourceComponentId).BuildModuleName);
         Assert.Equal("Domain", context.ProductionComponents
             .Single(component => component.Id == edge.TargetComponentId).BuildModuleName);
+    }
+
+    [Fact]
+    public void Preserves_java_and_csharp_component_graphs_when_symbol_ids_overlap()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"aegis-polyglot-identity-{Guid.NewGuid():N}");
+        var javaApplicationFile = Path.Combine(root, "java", "src", "Application.java");
+        var javaDomainFile = Path.Combine(root, "java", "src", "Order.java");
+        var csharpApplicationFile = Path.Combine(root, "dotnet", "Application.cs");
+        var csharpDomainFile = Path.Combine(root, "dotnet", "Order.cs");
+
+        var context = new ProjectArchitectureContext
+        {
+            ProjectName = "polyglot",
+            RootPath = root,
+            Language = "Multi-Language",
+            Modules =
+            [
+                new ProjectModuleContext
+                {
+                    Name = "polyglot",
+                    Path = root,
+                    Languages = ["Java", "C#"]
+                }
+            ],
+            SemanticAnalysisRuns =
+            [
+                CreateRun("java-run", "Java", "eclipse-jdt", javaApplicationFile, javaDomainFile,
+                    "sample.application.Application", "sample.domain.Order"),
+                CreateRun("csharp-run", "C#", "roslyn-test-provider", csharpApplicationFile, csharpDomainFile,
+                    "Sample.Application.Application", "Sample.Domain.Order")
+            ]
+        };
+
+        SemanticArchitectureComponentDetector.Analyze(context);
+
+        Assert.Equal(3, context.ProductionComponents.Count);
+        Assert.Single(context.ProductionComponentDependencies);
+        Assert.Single(context.ArchitectureComponentInternalDependencies);
+
+        var javaEdge = Assert.Single(context.ProductionComponentDependencies);
+        var javaSource = context.ProductionComponents.Single(component => component.Id == javaEdge.SourceComponentId);
+        var javaTarget = context.ProductionComponents.Single(component => component.Id == javaEdge.TargetComponentId);
+
+        Assert.Equal("Java", javaSource.Language);
+        Assert.Equal("Java", javaTarget.Language);
+        Assert.Equal(1, javaEdge.RelationshipCount);
+        Assert.Single(javaEdge.ContributingRelationships);
+
+        var csharpInternalEdge = Assert.Single(context.ArchitectureComponentInternalDependencies);
+        var csharpComponent = Assert.Single(context.ProductionComponents, component =>
+            component.Id == csharpInternalEdge.SourceComponentId);
+
+        Assert.Equal("C#", csharpComponent.Language);
+        Assert.Equal(csharpComponent.Id, csharpInternalEdge.TargetComponentId);
+        Assert.Equal(1, csharpInternalEdge.RelationshipCount);
+        Assert.Single(csharpInternalEdge.ContributingRelationships);
+
+        SemanticAnalysisRun CreateRun(
+            string runId,
+            string language,
+            string engineId,
+            string applicationFile,
+            string domainFile,
+            string applicationQualifiedName,
+            string domainQualifiedName)
+        {
+            var applicationContainer = applicationQualifiedName[..applicationQualifiedName.LastIndexOf('.')];
+            var domainContainer = domainQualifiedName[..domainQualifiedName.LastIndexOf('.')];
+
+            return new SemanticAnalysisRun
+            {
+                RunId = runId,
+                Language = language,
+                EngineId = engineId,
+                ProjectPath = root,
+                Status = SemanticAnalysisStatus.Completed,
+                Symbols =
+                [
+                    new SemanticSymbol
+                    {
+                        Id = "application-symbol",
+                        Name = "Application",
+                        QualifiedName = applicationQualifiedName,
+                        ContainerName = applicationContainer,
+                        ContainerKind = language == "Java" ? "Package" : "Namespace",
+                        Language = language,
+                        ProjectPath = root,
+                        FilePath = applicationFile,
+                        Origin = SemanticSymbolOrigin.Source
+                    },
+                    new SemanticSymbol
+                    {
+                        Id = "domain-symbol",
+                        Name = "Order",
+                        QualifiedName = domainQualifiedName,
+                        ContainerName = domainContainer,
+                        ContainerKind = language == "Java" ? "Package" : "Namespace",
+                        Language = language,
+                        ProjectPath = root,
+                        FilePath = domainFile,
+                        Origin = SemanticSymbolOrigin.Source
+                    }
+                ],
+                Relationships =
+                [
+                    new SemanticRelationship
+                    {
+                        Id = $"{runId}-application-uses-domain",
+                        SourceSymbolId = "application-symbol",
+                        TargetSymbolId = "domain-symbol",
+                        Kind = SemanticRelationshipKind.References,
+                        ResolutionStatus = SemanticResolutionStatus.Resolved
+                    }
+                ]
+            };
+        }
     }
 
     private sealed class PartialPackageGraphAdapter(string applicationFile, string domainFile)

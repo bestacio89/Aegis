@@ -116,6 +116,124 @@ public sealed class SemanticAnalysisContractTests
         Assert.Equal(18, Assert.Single(relationship.Provenance).StartLine);
     }
 
+
+    [Fact]
+    public void Source_symbol_identity_uses_the_analysis_project_as_its_owner()
+    {
+        var run = new SemanticAnalysisRun
+        {
+            Language = "Kotlin",
+            ProjectPath = Path.Combine(Path.GetTempPath(), "aegis", "module")
+        };
+        var symbol = new SemanticSymbol
+        {
+            Id = "opaque-symbol-id",
+            Language = "Kotlin",
+            ProjectPath = run.ProjectPath,
+            Origin = SemanticSymbolOrigin.Source
+        };
+
+        Assert.True(SemanticSymbolIdentity.TryCreate(run, symbol, out var identity));
+        Assert.NotNull(identity);
+        Assert.Equal(Path.GetFullPath(run.ProjectPath), identity.OwnerProjectPath);
+        Assert.Equal("Kotlin", identity.Language);
+        Assert.Equal("opaque-symbol-id", identity.SymbolId);
+    }
+
+    [Fact]
+    public void External_symbol_identity_requires_explicit_declaration_ownership()
+    {
+        var run = new SemanticAnalysisRun
+        {
+            Language = "Kotlin",
+            ProjectPath = Path.Combine(Path.GetTempPath(), "aegis", "consumer")
+        };
+        var externalSymbol = new SemanticSymbol
+        {
+            Id = "external-symbol-id",
+            Language = "Kotlin",
+            ProjectPath = run.ProjectPath,
+            Origin = SemanticSymbolOrigin.External
+        };
+
+        Assert.False(SemanticSymbolIdentity.TryCreate(run, externalSymbol, out var identity));
+        Assert.Null(identity);
+    }
+
+    [Fact]
+    public void External_symbol_identity_uses_explicit_owner_not_consumer_context()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "aegis-identity");
+        var run = new SemanticAnalysisRun
+        {
+            Language = "Kotlin",
+            ProjectPath = Path.Combine(root, "consumer")
+        };
+        var ownerPath = Path.Combine(root, "library");
+        var externalSymbol = new SemanticSymbol
+        {
+            Id = "external-symbol-id",
+            Language = "Kotlin",
+            ProjectPath = run.ProjectPath,
+            OwningProjectPath = ownerPath,
+            Origin = SemanticSymbolOrigin.External
+        };
+
+        Assert.True(SemanticSymbolIdentity.TryCreate(run, externalSymbol, out var identity));
+        Assert.NotNull(identity);
+        Assert.Equal(Path.GetFullPath(ownerPath), identity.OwnerProjectPath);
+        Assert.NotEqual(Path.GetFullPath(run.ProjectPath), identity.OwnerProjectPath);
+    }
+
+    [Fact]
+    public void Canonical_symbol_identity_normalizes_relative_analysis_paths()
+    {
+        var identity = SemanticSymbolIdentity.Create("Kotlin", Path.Combine("relative", "library"), "symbol");
+
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine("relative", "library")),
+            identity.OwnerProjectPath);
+    }
+
+    [Fact]
+    public void External_symbol_identity_rejects_relative_owner_paths()
+    {
+        var run = new SemanticAnalysisRun
+        {
+            Language = "Kotlin",
+            ProjectPath = Path.GetFullPath(Path.Combine("workspace", "consumer"))
+        };
+        var externalSymbol = new SemanticSymbol
+        {
+            Id = "external-symbol-id",
+            Language = "Kotlin",
+            OwningProjectPath = Path.Combine("relative", "library"),
+            Origin = SemanticSymbolOrigin.External
+        };
+
+        Assert.False(SemanticSymbolIdentity.TryCreate(run, externalSymbol, out var identity));
+        Assert.Null(identity);
+    }
+
+    [Fact]
+    public void Semantic_symbol_identity_comparison_is_language_and_platform_path_aware()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "aegis-identity", "library");
+        var first = SemanticSymbolIdentity.Create("Kotlin", path, "symbol");
+        var samePath = SemanticSymbolIdentity.Create("kotlin", path, "symbol");
+        var caseVariantPath = SemanticSymbolIdentity.Create("kotlin", path.ToUpperInvariant(), "symbol");
+
+        Assert.True(SemanticSymbolIdentity.Comparer.Equals(first, samePath));
+        Assert.Equal(first, samePath);
+        Assert.Equal(first.GetHashCode(), samePath.GetHashCode());
+        Assert.Equal(
+            OperatingSystem.IsWindows(),
+            SemanticSymbolIdentity.Comparer.Equals(first, caseVariantPath));
+        Assert.Equal(
+            SemanticSymbolIdentity.Comparer.GetHashCode(first),
+            SemanticSymbolIdentity.Comparer.GetHashCode(samePath));
+    }
+
     [Fact]
     public void Project_context_starts_without_claiming_semantic_analysis_completed()
     {

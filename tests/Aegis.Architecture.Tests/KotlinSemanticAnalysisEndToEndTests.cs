@@ -43,6 +43,118 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
             }
             """);
 
+        var javaSourceRoot = Path.Combine(workspace.FullName, "src", "main", "java");
+        var springAnnotationDirectory = Path.Combine(
+            javaSourceRoot,
+            "org",
+            "springframework",
+            "web",
+            "bind",
+            "annotation");
+        var requestMethodFile = Path.Combine(springAnnotationDirectory, "RequestMethod.java");
+        var requestMappingFile = Path.Combine(springAnnotationDirectory, "RequestMapping.java");
+        var getMappingFile = Path.Combine(springAnnotationDirectory, "GetMapping.java");
+        var controllerFile = Path.Combine(sourceRoot, "sample", "application", "OrdersController.kt");
+        var ktorStubRoot = Path.Combine(workspace.FullName, "compiler-stubs");
+        var ktorClientFile = Path.Combine(ktorStubRoot, "io", "ktor", "client", "HttpClient.kt");
+        var ktorRequestsFile = Path.Combine(ktorStubRoot, "io", "ktor", "client", "request", "Requests.kt");
+        var apiGatewayFile = Path.Combine(sourceRoot, "sample", "application", "KotlinApiGateway.kt");
+        Directory.CreateDirectory(springAnnotationDirectory);
+        Directory.CreateDirectory(Path.GetDirectoryName(ktorClientFile)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(ktorRequestsFile)!);
+        await File.WriteAllTextAsync(
+            requestMethodFile,
+            """
+            package org.springframework.web.bind.annotation;
+
+            public enum RequestMethod {
+                GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+            }
+            """);
+        await File.WriteAllTextAsync(
+            requestMappingFile,
+            """
+            package org.springframework.web.bind.annotation;
+
+            import java.lang.annotation.ElementType;
+            import java.lang.annotation.Retention;
+            import java.lang.annotation.RetentionPolicy;
+            import java.lang.annotation.Target;
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @Target({ElementType.TYPE, ElementType.METHOD})
+            public @interface RequestMapping {
+                String[] value() default {};
+                String[] path() default {};
+                RequestMethod[] method() default {};
+            }
+            """);
+        await File.WriteAllTextAsync(
+            getMappingFile,
+            """
+            package org.springframework.web.bind.annotation;
+
+            import java.lang.annotation.ElementType;
+            import java.lang.annotation.Retention;
+            import java.lang.annotation.RetentionPolicy;
+            import java.lang.annotation.Target;
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @Target(ElementType.METHOD)
+            public @interface GetMapping {
+                String[] value() default {};
+                String[] path() default {};
+            }
+            """);
+        await File.WriteAllTextAsync(
+            ktorClientFile,
+            """
+            package io.ktor.client
+
+            class HttpClient
+            """);
+        await File.WriteAllTextAsync(
+            ktorRequestsFile,
+            """
+            package io.ktor.client.request
+
+            import io.ktor.client.HttpClient
+
+            suspend fun HttpClient.get(urlString: String): String = urlString
+            """);
+        var ktorStubJar = Path.Combine(workspace.FullName, "ktor-client-stubs.jar");
+        await KotlinCompilerFixture.CompileToJarAsync(
+            packageDirectory,
+            [ktorClientFile, ktorRequestsFile],
+            ktorStubJar);
+        await File.WriteAllTextAsync(
+            apiGatewayFile,
+            """
+            package sample.application
+
+            import io.ktor.client.HttpClient
+            import io.ktor.client.request.get
+
+            class KotlinApiGateway(private val client: HttpClient) {
+                suspend fun fetch(orderId: String): String = client.get("/api/orders/$orderId")
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            controllerFile,
+            """
+            package sample.application
+
+            import org.springframework.web.bind.annotation.GetMapping
+            import org.springframework.web.bind.annotation.RequestMapping
+
+            @RequestMapping("/api/orders")
+            class OrdersController {
+                @GetMapping("/{id}")
+                fun getOrder(id: String): String = id
+            }
+            """);
+
         var services = new ServiceCollection();
         services.AddLogging();
         services.Configure<KotlinWorkerOptions>(_ => { });
@@ -66,9 +178,11 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
                 WorkspaceRoot = workspace.FullName,
                 ModuleName = "worker-probe",
                 BuildSystem = "Gradle",
-                SourceFiles = [sourceFile, domainFile],
+                SourceFiles = [sourceFile, domainFile, controllerFile, apiGatewayFile],
                 SourceRoots = [sourceRoot],
-                RequestedCapabilities = ["symbols", "relationships", "compiler-diagnostics", "jvm-interop"],
+                ReferencedSourceRoots = [javaSourceRoot],
+                ClasspathEntries = [ktorStubJar],
+                RequestedCapabilities = ["symbols", "relationships", "server-api-endpoints", "api-client-requests", "compiler-diagnostics", "jvm-interop"],
                 ProviderOptions = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["kotlin.compilerVersion"] = "2.4.21",
@@ -88,6 +202,23 @@ public sealed class KotlinSemanticAnalysisEndToEndTests
             Assert.Contains(run.Symbols, symbol =>
                 symbol.QualifiedName == "sample.application.WorkerProbe"
                 && symbol.Language == "Kotlin");
+            var endpoint = Assert.Single(run.ServerApiEndpoints);
+            Assert.Equal("Kotlin", endpoint.Language);
+            Assert.Equal("Spring MVC/WebFlux", endpoint.Framework);
+            Assert.Equal("/api/orders/{id}", endpoint.RouteTemplate);
+            Assert.Equal(new[] { "GET" }, endpoint.HttpMethods);
+            Assert.Equal(workspace.FullName, endpoint.ModulePath);
+            Assert.Contains("api-client-requests", run.Capabilities);
+            var clientRequest = Assert.Single(run.ApiClientRequests);
+            Assert.Equal("Kotlin", clientRequest.Language);
+            Assert.Equal("Ktor Client", clientRequest.Framework);
+            Assert.Equal("GET", clientRequest.HttpMethod);
+            Assert.True(
+                clientRequest.RequestUriExpression?.Contains("orderId", StringComparison.Ordinal) == true,
+                $"Expected the Ktor URI evidence to retain the orderId interpolation, received: '{clientRequest.RequestUriExpression}'.");
+            Assert.Equal(ApiClientRequestResolutionStatus.PartiallyResolved, clientRequest.ResolutionStatus);
+            Assert.Equal(workspace.FullName, clientRequest.ModulePath);
+            Assert.Contains("KotlinApiGateway.fetch", clientRequest.CallerIdentity);
             var domainSymbolIds = run.Symbols
                 .Where(symbol => symbol.ContainerName == "sample.domain")
                 .Select(symbol => symbol.Id)

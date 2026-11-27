@@ -97,6 +97,65 @@ public static class ArchitecturalComponentClassifier
                 continue;
             }
 
+            if (IsJavaPackage(codeComponent))
+            {
+                var packageInference = InferJavaPackageResponsibility(codeComponent);
+                if (packageInference.IsAmbiguous)
+                {
+                    diagnostics.Add(new ArchitectureClassificationDiagnostic
+                    {
+                        Code = "ArchitectureClassificationConflictingConventions",
+                        Severity = "Warning",
+                        Message = $"Java package '{codeComponent.QualifiedName}' contains conflicting responsibility signals.",
+                        CodeComponentId = codeComponent.Id,
+                        Language = codeComponent.Language,
+                        ModulePath = codeComponent.BuildModulePath,
+                        AffectsCoverage = true
+                    });
+
+                    context.ArchitecturalComponentMemberships.Add(CreateUnclassifiedMembership(
+                        codeComponent,
+                        "Conflicting Java package responsibility signals require an explicit architecture mapping."));
+                    continue;
+                }
+
+                if (packageInference.Role is not null)
+                {
+                    var componentId = CreateJavaPackageConventionComponentId(codeComponent, context.RootPath);
+                    AddMembership(
+                        context,
+                        componentMembers,
+                        componentMetadata,
+                        codeComponent,
+                        componentId,
+                        codeComponent.QualifiedName,
+                        packageInference.Role,
+                        null,
+                        ArchitectureClassificationSource.Convention,
+                        ConventionConfidence,
+                        $"java-package-responsibility:{packageInference.Role.ToLowerInvariant()}",
+                        codeComponent.QualifiedName,
+                        $"Java package '{codeComponent.QualifiedName}' was classified as {packageInference.Role} from exact package segments.");
+                    continue;
+                }
+
+                context.ArchitecturalComponentMemberships.Add(CreateUnclassifiedMembership(
+                    codeComponent,
+                    "No reliable responsibility convention was found in the Java package identity."));
+
+                diagnostics.Add(new ArchitectureClassificationDiagnostic
+                {
+                    Code = "ArchitectureCodeContainerUnclassified",
+                    Severity = "Information",
+                    Message = $"Java package '{codeComponent.QualifiedName}' has no reliable responsibility classification.",
+                    CodeComponentId = codeComponent.Id,
+                    Language = codeComponent.Language,
+                    ModulePath = codeComponent.BuildModulePath,
+                    AffectsCoverage = true
+                });
+                continue;
+            }
+
             var inference = InferConvention(codeComponent, context);
             if (inference.Ambiguous)
             {
@@ -403,6 +462,125 @@ public static class ArchitecturalComponentClassifier
         }
     }
 
+    private static bool IsJavaPackage(ArchitectureComponentContext component) =>
+        component.Language.Equals("Java", StringComparison.OrdinalIgnoreCase)
+        && component.ComponentKind.Equals("Package", StringComparison.OrdinalIgnoreCase);
+
+    private static JavaPackageInference InferJavaPackageResponsibility(
+        ArchitectureComponentContext component)
+    {
+        var segments = component.QualifiedName
+            .Split('.', StringSplitOptions.RemoveEmptyEntries)
+            .Select(segment => segment.Trim().ToLowerInvariant())
+            .Where(segment => segment.Length > 0)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (segments.Count == 0)
+            return JavaPackageInference.Unclassified;
+
+        var hasDomainContext = ContainsAny(
+            segments, "domain", "aggregates", "valueobjects", "rules", "specifications", "events");
+        var hasInfrastructureContext = ContainsAny(
+            segments, "infrastructure", "persistence", "database", "repositories",
+            "repository", "orm", "messaging", "clients", "client", "integrations", "integration");
+        var hasContractsSignal = ContainsAny(
+            segments, "contracts", "contract", "dto", "dtos", "requests", "request",
+            "responses", "response", "commands", "command", "queries", "query");
+        var hasApiClientContext = ContainsAny(segments, "clients", "client");
+        var hasPresentationContext = ContainsAny(
+            segments, "presentation", "rest", "graphql", "controllers",
+            "controller", "frontend", "ui", "views", "view", "endpoints", "endpoint")
+            || (segments.Contains("api") && !hasContractsSignal && !hasApiClientContext);
+        var hasBusinessSignal = ContainsAny(
+            segments, "business", "application", "usecases", "usecase",
+            "handlers", "handler", "workflows", "workflow");
+        var hasServiceSignal = ContainsAny(
+            segments, "services", "service", "processors", "processor",
+            "workers", "worker", "jobs", "job");
+        if (hasDomainContext
+            && (hasInfrastructureContext || hasPresentationContext || hasBusinessSignal))
+        {
+            return JavaPackageInference.Ambiguous;
+        }
+
+        if (hasInfrastructureContext && hasPresentationContext)
+            return JavaPackageInference.Ambiguous;
+
+        if (hasInfrastructureContext)
+            return new JavaPackageInference("Infrastructure", false);
+
+        if (hasPresentationContext)
+            return new JavaPackageInference("Presentation", false);
+
+        if (hasDomainContext)
+            return new JavaPackageInference("Domain", false);
+
+        if (hasContractsSignal)
+            return new JavaPackageInference("Contracts", false);
+
+        if (hasBusinessSignal)
+            return new JavaPackageInference("Business", false);
+
+        if (hasServiceSignal)
+            return new JavaPackageInference("Services", false);
+
+        return JavaPackageInference.Unclassified;
+    }
+
+    private static bool ContainsAny(IReadOnlySet<string> segments, params string[] candidates) =>
+        candidates.Any(segments.Contains);
+
+    private static string CreateJavaPackageConventionComponentId(
+        ArchitectureComponentContext component,
+        string projectRoot)
+    {
+        var moduleIdentity = ResolveModuleIdentity(component, projectRoot);
+        var normalizedModulePath = moduleIdentity.Replace('\\', '/');
+        var normalizedModuleIdentity = Uri.EscapeDataString(
+            OperatingSystem.IsWindows()
+                ? normalizedModulePath.ToLowerInvariant()
+                : normalizedModulePath);
+        var packageIdentity = Uri.EscapeDataString(component.QualifiedName);
+
+        return $"convention:{normalizedModuleIdentity}:java-package:{packageIdentity}";
+    }
+
+    private static string ResolveModuleIdentity(
+        ArchitectureComponentContext component,
+        string projectRoot)
+    {
+        var moduleIdentity = component.BuildModuleName;
+
+        if (!string.IsNullOrWhiteSpace(component.BuildModulePath)
+            && !string.IsNullOrWhiteSpace(projectRoot))
+        {
+            try
+            {
+                var rootPath = Path.GetFullPath(projectRoot);
+                var modulePath = Path.GetFullPath(component.BuildModulePath, rootPath);
+                var relativePath = Path.GetRelativePath(rootPath, modulePath);
+                var parentPrefix = $"..{Path.DirectorySeparatorChar}";
+
+                if (!relativePath.Equals(".", StringComparison.Ordinal)
+                    && !relativePath.Equals("..", StringComparison.Ordinal)
+                    && !relativePath.StartsWith(parentPrefix, PathComparison))
+                {
+                    moduleIdentity = relativePath;
+                }
+            }
+            catch (ArgumentException)
+            {
+                // Fall back to the stable discovered module name.
+            }
+            catch (NotSupportedException)
+            {
+                // Fall back to the stable discovered module name.
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(moduleIdentity) ? "root" : moduleIdentity;
+    }
+
     private static ConventionInference InferConvention(
         ArchitectureComponentContext component,
         ProjectArchitectureContext context)
@@ -509,40 +687,10 @@ public static class ArchitecturalComponentClassifier
         string projectRoot,
         string role)
     {
-        var moduleIdentity = component.BuildModuleName;
-
-        if (!string.IsNullOrWhiteSpace(component.BuildModulePath)
-            && !string.IsNullOrWhiteSpace(projectRoot))
-        {
-            try
-            {
-                var rootPath = Path.GetFullPath(projectRoot);
-                var modulePath = Path.GetFullPath(component.BuildModulePath, rootPath);
-                var relativePath = Path.GetRelativePath(rootPath, modulePath);
-                var parentPrefix = $"..{Path.DirectorySeparatorChar}";
-
-                if (!relativePath.Equals(".", StringComparison.Ordinal)
-                    && !relativePath.Equals("..", StringComparison.Ordinal)
-                    && !relativePath.StartsWith(parentPrefix, PathComparison))
-                {
-                    moduleIdentity = relativePath;
-                }
-            }
-            catch (ArgumentException)
-            {
-                // Fall back to the stable discovered module name.
-            }
-            catch (NotSupportedException)
-            {
-                // Fall back to the stable discovered module name.
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(moduleIdentity))
-            moduleIdentity = "root";
-
         var normalizedModuleIdentity = Uri.EscapeDataString(
-            moduleIdentity.Replace('\\', '/').ToLowerInvariant());
+            ResolveModuleIdentity(component, projectRoot)
+                .Replace('\\', '/')
+                .ToLowerInvariant());
 
         return $"convention:{normalizedModuleIdentity}:{role}";
     }
@@ -574,4 +722,11 @@ public static class ArchitecturalComponentClassifier
     }
 
     private sealed record ConventionInference(string? Role, bool Ambiguous);
+
+    private sealed record JavaPackageInference(string? Role, bool IsAmbiguous)
+    {
+        public static JavaPackageInference Unclassified { get; } = new(null, false);
+
+        public static JavaPackageInference Ambiguous { get; } = new(null, true);
+    }
 }

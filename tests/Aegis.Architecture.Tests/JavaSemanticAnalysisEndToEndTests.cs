@@ -35,8 +35,10 @@ public sealed class JavaSemanticAnalysisEndToEndTests
         var sourceRoot = Path.Combine(workspace, "src", "main", "java");
         var domainRoot = Path.Combine(sourceRoot, "sample", "domain");
         var applicationRoot = Path.Combine(sourceRoot, "sample", "application");
+        var isolatedPackageRoot = Path.Combine(applicationRoot, "internal");
         Directory.CreateDirectory(domainRoot);
         Directory.CreateDirectory(applicationRoot);
+        Directory.CreateDirectory(isolatedPackageRoot);
 
         await File.WriteAllTextAsync(
             Path.Combine(domainRoot, "Order.java"),
@@ -55,6 +57,10 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                 Order findById(String id);
             }
             """);
+        await File.WriteAllTextAsync(
+            Path.Combine(isolatedPackageRoot, "package-info.java"),
+            "package sample.application.internal;");
+
         await File.WriteAllTextAsync(
             Path.Combine(applicationRoot, "OrderService.java"),
             """
@@ -130,12 +136,33 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                 Assert.Equal("eclipse-jdt", run.EngineId);
                 Assert.Equal("3.47.0", run.EngineVersion);
                 Assert.Equal(SemanticAnalysisStatus.Completed, run.Status);
-                Assert.Equal(3, run.AnalyzedFileCount);
+                Assert.Equal(4, run.AnalyzedFileCount);
                 Assert.NotEmpty(run.Symbols);
                 Assert.NotEmpty(run.Relationships);
                 Assert.DoesNotContain(run.Diagnostics, diagnostic => diagnostic.AffectsCoverage);
 
-                Assert.Equal(2, context.ArchitectureComponents.Count);
+                Assert.Equal(3, context.ArchitectureComponents.Count);
+                Assert.Contains(context.ArchitectureComponents, component =>
+                    component.QualifiedName == "sample.application.internal"
+                    && component.ComponentKind == "Package"
+                    && component.ProductionSymbolCount == 1);
+
+                var applicationMembership = context.ArchitecturalComponentMemberships
+                    .Single(membership => membership.CodeComponentId == context.ArchitectureComponents
+                        .Single(component => component.QualifiedName == "sample.application").Id);
+                var domainMembership = context.ArchitecturalComponentMemberships
+                    .Single(membership => membership.CodeComponentId == context.ArchitectureComponents
+                        .Single(component => component.QualifiedName == "sample.domain").Id);
+                Assert.Equal("Business", context.ArchitecturalComponents
+                    .Single(component => component.Id == applicationMembership.ArchitecturalComponentId).Role);
+                Assert.Equal("Domain", context.ArchitecturalComponents
+                    .Single(component => component.Id == domainMembership.ArchitecturalComponentId).Role);
+                Assert.NotEqual(applicationMembership.ArchitecturalComponentId, domainMembership.ArchitecturalComponentId);
+                var internalPackageMembership = context.ArchitecturalComponentMemberships
+                    .Single(membership => membership.CodeComponentId == context.ArchitectureComponents
+                        .Single(component => component.QualifiedName == "sample.application.internal").Id);
+                Assert.Equal("Business", context.ArchitecturalComponents
+                    .Single(component => component.Id == internalPackageMembership.ArchitecturalComponentId).Role);
                 var packageDependency = Assert.Single(context.ProductionComponentDependencies);
                 Assert.Equal("sample.application", context.ArchitectureComponents
                     .Single(component => component.Id == packageDependency.SourceComponentId).QualifiedName);
@@ -143,6 +170,37 @@ public sealed class JavaSemanticAnalysisEndToEndTests
                     .Single(component => component.Id == packageDependency.TargetComponentId).QualifiedName);
                 Assert.True(packageDependency.RelationshipCount > 0);
                 Assert.Empty(context.TestComponentDependencies);
+
+                var graphNodes = context.ArchitectureGraphProjection!.Nodes
+                    .ToDictionary(node => node.Id, StringComparer.Ordinal);
+                var applicationPackageNode = Assert.Single(
+                    graphNodes.Values,
+                    node => node.Kind == ArchitectureGraphNodeKind.CodeComponent
+                        && node.Name == "sample.application"
+                        && node.ComponentKind == "Package");
+                var domainPackageNode = Assert.Single(
+                    graphNodes.Values,
+                    node => node.Kind == ArchitectureGraphNodeKind.CodeComponent
+                        && node.Name == "sample.domain"
+                        && node.ComponentKind == "Package");
+                var semanticGraphEdge = Assert.Single(
+                    context.ArchitectureGraphProjection.Edges,
+                    edge => edge.Domain == ArchitectureGraphEdgeDomain.NativeSemantic
+                        && edge.SourceNodeId == applicationPackageNode.Id
+                        && edge.TargetNodeId == domainPackageNode.Id);
+                Assert.Equal("sample.application", graphNodes[semanticGraphEdge.SourceNodeId].Name);
+                Assert.Equal("sample.domain", graphNodes[semanticGraphEdge.TargetNodeId].Name);
+                Assert.Equal("Package", graphNodes[semanticGraphEdge.SourceNodeId].ComponentKind);
+                Assert.Equal("Package", graphNodes[semanticGraphEdge.TargetNodeId].ComponentKind);
+                Assert.NotEmpty(semanticGraphEdge.Evidence);
+                Assert.False(string.IsNullOrWhiteSpace(semanticGraphEdge.ProviderRelationshipKind));
+                Assert.NotEqual("SemanticComponentDependency", semanticGraphEdge.ProviderRelationshipKind);
+                Assert.DoesNotContain(
+                    context.ArchitectureGraphProjection.Edges,
+                    edge => edge.Domain == ArchitectureGraphEdgeDomain.NativeSemantic
+                        && edge.SourceNodeId == edge.TargetNodeId
+                        && graphNodes[edge.SourceNodeId].Kind == ArchitectureGraphNodeKind.CodeComponent
+                        && graphNodes[edge.SourceNodeId].ComponentKind == "Package");
             }
         }
         finally

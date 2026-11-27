@@ -28,7 +28,18 @@ public sealed class SemanticSymbol
 
     public string Language { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Analysis-context project path retained for provider compatibility. It does
+    /// not establish declaration ownership for external symbols.
+    /// </summary>
     public string ProjectPath { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Owning workspace project for this declaration, populated only when the
+    /// provider can identify the declaration owner. Never copy the consumer run
+    /// path here for an external symbol.
+    /// </summary>
+    public string? OwningProjectPath { get; init; }
 
     public string? FilePath { get; init; }
 

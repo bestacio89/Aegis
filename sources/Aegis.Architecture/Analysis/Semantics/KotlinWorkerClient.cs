@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
@@ -15,8 +14,6 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
 {
     private const int ProtocolVersion = 1;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-
     private readonly IOptionsMonitor<KotlinWorkerOptions> _options;
     private readonly ILogger<KotlinWorkerClient> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -51,6 +48,7 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            JvmWorkerResourceBudget.ValidateRequest(request, "Kotlin");
             var options = _options.CurrentValue;
             if (!options.IsConfigured)
                 throw new InvalidOperationException(
@@ -74,12 +72,10 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
 
             try
             {
-                var sourceManifest = JsonSerializer.Serialize(request.SourceFiles, JsonOptions);
-                await File.WriteAllTextAsync(
-                    sourceManifestPath,
-                    sourceManifest,
-                    Utf8NoBom,
-                    timeout.Token).ConfigureAwait(false);
+                var sourceManifest = JsonSerializer.SerializeToUtf8Bytes(request.SourceFiles, JsonOptions);
+                JvmWorkerResourceBudget.ValidateManifestBytes(sourceManifest.Length, "Kotlin");
+                await File.WriteAllBytesAsync(sourceManifestPath, sourceManifest, timeout.Token)
+                    .ConfigureAwait(false);
 
                 await _workerProcess.StartAsync(launchOptions, timeout.Token).ConfigureAwait(false);
                 var startedAt = DateTimeOffset.UtcNow;
@@ -157,22 +153,10 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
         }
     }
 
-    private static bool IsValidHeapSize(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value) || value.Length < 2)
-            return false;
-
-        var suffix = char.ToLowerInvariant(value[^1]);
-        return suffix is 'k' or 'm' or 'g'
-            && long.TryParse(value.AsSpan(0, value.Length - 1), out var size)
-            && size > 0;
-    }
-
     private static JvmWorkerLaunchOptions CreateLaunchOptions(KotlinWorkerOptions options)
     {
-        if (!IsValidHeapSize(options.MaxHeapSize))
-            throw new InvalidOperationException(
-                "The Kotlin worker maximum heap size must be a positive integer followed by K, M or G.");
+        if (!string.Equals(options.MaxHeapSize, "1024m", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The Kotlin worker maximum heap is fixed at 1024m by the shared JVM resource budget.");
 
         if (options.RequestTimeout <= TimeSpan.Zero)
             throw new InvalidOperationException("The Kotlin worker request timeout must be positive.");
@@ -180,7 +164,7 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
         return new JvmWorkerLaunchOptions(
             options.JavaExecutablePath,
             AppContext.BaseDirectory,
-            ["-Xms64m", $"-Xmx{options.MaxHeapSize}", "-jar", options.WorkerJarPath],
+            [.. JvmWorkerResourceBudget.JvmArguments, "-jar", options.WorkerJarPath],
             ProtocolVersion,
             options.StartupTimeout,
             options.MaxFrameBytes,
@@ -215,6 +199,9 @@ public sealed class KotlinWorkerClient : IKotlinWorkerClient, IAsyncDisposable
             Capabilities = DeserializeArray<string>(result, "capabilities"),
             Symbols = DeserializeArray<SemanticSymbol>(result, "symbols"),
             Relationships = DeserializeArray<SemanticRelationship>(result, "relationships"),
+            ServerApiEndpoints = DeserializeArray<ApiEndpointEvidence>(result, "serverApiEndpoints"),
+            ApiClientRequests = DeserializeArray<ApiClientRequestEvidence>(result, "apiClientRequests"),
+            MessageIntegrations = DeserializeArray<MessageIntegrationEvidence>(result, "messageIntegrations"),
             Diagnostics = DeserializeArray<AnalysisDiagnostic>(result, "diagnostics")
         };
 

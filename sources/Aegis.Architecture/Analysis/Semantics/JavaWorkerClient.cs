@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using Aegis.Shared.Architecture.Enums;
 using Aegis.Shared.Architecture.Models;
@@ -46,6 +45,7 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            JvmWorkerResourceBudget.ValidateRequest(request, "Java");
             var options = _options.CurrentValue;
             if (!options.IsConfigured)
                 throw new InvalidOperationException(
@@ -62,8 +62,9 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
                 var sourceManifestPath = Path.Combine(Path.GetTempPath(), $"aegis-java-sources-{Guid.NewGuid():N}.json");
                 try
                 {
-                    var sourceManifest = JsonSerializer.Serialize(request.SourceFiles, JsonOptions);
-                    await File.WriteAllTextAsync(sourceManifestPath, sourceManifest, Encoding.UTF8, timeout.Token)
+                    var sourceManifest = JsonSerializer.SerializeToUtf8Bytes(request.SourceFiles, JsonOptions);
+                    JvmWorkerResourceBudget.ValidateManifestBytes(sourceManifest.Length, "Java");
+                    await File.WriteAllBytesAsync(sourceManifestPath, sourceManifest, timeout.Token)
                         .ConfigureAwait(false);
 
                     var payload = new
@@ -126,7 +127,7 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
         return new JvmWorkerLaunchOptions(
             options.JavaExecutablePath,
             AppContext.BaseDirectory,
-            ["-cp", classpath, "org.aegis.worker.WorkerMain"],
+            [.. JvmWorkerResourceBudget.JvmArguments, "-cp", classpath, "org.aegis.worker.WorkerMain"],
             ProtocolVersion,
             options.StartupTimeout,
             options.MaxFrameBytes,
@@ -151,9 +152,12 @@ public sealed class JavaWorkerClient : IJavaWorkerClient, IAsyncDisposable
             CompletedAtUtc = DateTimeOffset.UtcNow,
             AnalyzedFileCount = result.GetProperty("analyzedFileCount").GetInt32(),
             SkippedFileCount = result.GetProperty("skippedFileCount").GetInt32(),
-            Capabilities = ["symbols", "relationships", "compiler-diagnostics"],
+            Capabilities = ["symbols", "relationships", "server-api-endpoints", "api-client-requests", "message-integrations", "compiler-diagnostics"],
             Symbols = DeserializeArray<SemanticSymbol>(result, "symbols"),
             Relationships = DeserializeArray<SemanticRelationship>(result, "relationships"),
+            ServerApiEndpoints = DeserializeArray<ApiEndpointEvidence>(result, "serverApiEndpoints"),
+            ApiClientRequests = DeserializeArray<ApiClientRequestEvidence>(result, "apiClientRequests"),
+            MessageIntegrations = DeserializeArray<MessageIntegrationEvidence>(result, "messageIntegrations"),
             Diagnostics = DeserializeArray<AnalysisDiagnostic>(result, "diagnostics")
         };
     }

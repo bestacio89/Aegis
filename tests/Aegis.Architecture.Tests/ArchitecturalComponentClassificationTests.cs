@@ -127,7 +127,7 @@ public sealed class ArchitecturalComponentClassificationTests
     }
 
     [Fact]
-    public void Convention_inference_is_conservative_and_preserves_unclassified_containers()
+    public void Java_package_convention_inference_classifies_known_roles_and_preserves_ambiguous_containers()
     {
         var context = CreateContext(
             CodeComponent("domain", "sample.domain", "Java"),
@@ -136,11 +136,14 @@ public sealed class ArchitecturalComponentClassificationTests
 
         ArchitecturalComponentClassifier.Classify(context);
 
-        Assert.Equal("convention:sample:domain",
-            context.ArchitecturalComponentMemberships.Single(item => item.CodeComponentId == "domain")
-                .ArchitecturalComponentId);
-        Assert.Null(context.ArchitecturalComponentMemberships.Single(item => item.CodeComponentId == "ordinary")
-            .ArchitecturalComponentId);
+        var domainMembership = context.ArchitecturalComponentMemberships
+            .Single(item => item.CodeComponentId == "domain");
+        Assert.Equal("Domain", context.ArchitecturalComponents
+            .Single(component => component.Id == domainMembership.ArchitecturalComponentId).Role);
+        Assert.StartsWith("convention:sample:java-package:", domainMembership.ArchitecturalComponentId);
+        Assert.Equal("Services", context.ArchitecturalComponents
+            .Single(component => component.Id == context.ArchitecturalComponentMemberships
+                .Single(item => item.CodeComponentId == "ordinary").ArchitecturalComponentId).Role);
         Assert.Null(context.ArchitecturalComponentMemberships.Single(item => item.CodeComponentId == "conflict")
             .ArchitecturalComponentId);
         Assert.Contains(context.ArchitectureClassificationDiagnostics,
@@ -188,6 +191,160 @@ public sealed class ArchitecturalComponentClassificationTests
             .Select(membership => membership.ArchitecturalComponentId)
             .Distinct(StringComparer.Ordinal)
             .Count());
+    }
+
+
+    [Fact]
+    public void Java_package_taxonomy_classifies_responsibilities_without_merging_package_identities()
+    {
+        var context = CreateContext(
+            CodeComponent("domain-entities", "com.acme.domain.entities", "Java"),
+            CodeComponent("contract-dto", "com.acme.orders.contracts.dto", "Java"),
+            CodeComponent("application-handlers", "com.acme.orders.application.handlers", "Java"),
+            CodeComponent("application-services", "com.acme.orders.application.services", "Java"),
+            CodeComponent("technical-services", "com.acme.orders.services", "Java"),
+            CodeComponent("persistence", "com.acme.orders.infrastructure.persistence", "Java"),
+            CodeComponent("presentation", "com.acme.orders.presentation.api", "Java"));
+
+        ArchitecturalComponentClassifier.Classify(context);
+
+        var expectedRoles = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["domain-entities"] = "Domain",
+            ["contract-dto"] = "Contracts",
+            ["application-handlers"] = "Business",
+            ["application-services"] = "Business",
+            ["technical-services"] = "Services",
+            ["persistence"] = "Infrastructure",
+            ["presentation"] = "Presentation"
+        };
+
+        foreach (var expected in expectedRoles)
+        {
+            var membership = context.ArchitecturalComponentMemberships
+                .Single(item => item.CodeComponentId == expected.Key);
+            Assert.NotNull(membership.ArchitecturalComponentId);
+            Assert.Equal(expected.Value, context.ArchitecturalComponents
+                .Single(component => component.Id == membership.ArchitecturalComponentId).Role);
+        }
+
+        Assert.Equal(expectedRoles.Count, context.ArchitecturalComponents.Count);
+        Assert.All(context.ArchitecturalComponents, component => Assert.Equal(1, component.CodeContainerCount));
+        Assert.Equal(expectedRoles.Count, context.ArchitecturalComponents
+            .Select(component => component.Id)
+            .Distinct(StringComparer.Ordinal)
+            .Count());
+    }
+
+    [Fact]
+    public void Java_package_responsibility_uses_context_and_leaves_ambiguous_entities_unclassified()
+    {
+        var context = CreateContext(
+            CodeComponent("domain-services", "com.acme.domain.services", "Java"),
+            CodeComponent("infra-services", "com.acme.infrastructure.services", "Java"),
+            CodeComponent("domain-entities", "com.acme.domain.entities", "Java"),
+            CodeComponent("infra-entities", "com.acme.infrastructure.persistence.entities", "Java"),
+            CodeComponent("application-commands", "com.acme.application.commands", "Java"),
+            CodeComponent("application-handlers", "com.acme.application.handlers", "Java"),
+            CodeComponent("bare-entities", "com.acme.entities", "Java"),
+            CodeComponent("bare-adapters", "com.acme.adapters", "Java"),
+            CodeComponent("conflicting", "com.acme.domain.infrastructure", "Java"));
+
+        ArchitecturalComponentClassifier.Classify(context);
+
+        Assert.Equal("Domain", GetRole(context, "domain-services"));
+        Assert.Equal("Infrastructure", GetRole(context, "infra-services"));
+        Assert.Equal("Domain", GetRole(context, "domain-entities"));
+        Assert.Equal("Infrastructure", GetRole(context, "infra-entities"));
+        Assert.Equal("Contracts", GetRole(context, "application-commands"));
+        Assert.Equal("Business", GetRole(context, "application-handlers"));
+
+        Assert.Null(GetMembership(context, "bare-entities").ArchitecturalComponentId);
+        Assert.Null(GetMembership(context, "bare-adapters").ArchitecturalComponentId);
+        Assert.Null(GetMembership(context, "conflicting").ArchitecturalComponentId);
+    }
+
+    [Fact]
+    public void Java_package_classification_resolves_api_contracts_and_directional_adapters()
+    {
+        var context = CreateContext(
+            CodeComponent("api-contracts", "com.acme.api.contracts", "Java"),
+            CodeComponent("api-clients", "com.acme.api.clients", "Java"),
+            CodeComponent("api-controllers", "com.acme.api.controllers", "Java"),
+            CodeComponent("database-adapters", "com.acme.database.adapters", "Java"),
+            CodeComponent("presentation-adapters", "com.acme.presentation.adapters", "Java"),
+            CodeComponent("unqualified-adapters", "com.acme.adapters", "Java"));
+
+        ArchitecturalComponentClassifier.Classify(context);
+
+        Assert.Equal("Contracts", GetRole(context, "api-contracts"));
+        Assert.Equal("Infrastructure", GetRole(context, "api-clients"));
+        Assert.Equal("Presentation", GetRole(context, "api-controllers"));
+        Assert.Equal("Infrastructure", GetRole(context, "database-adapters"));
+        Assert.Equal("Presentation", GetRole(context, "presentation-adapters"));
+        Assert.Null(GetMembership(context, "unqualified-adapters").ArchitecturalComponentId);
+    }
+
+    [Fact]
+    public void Java_package_identity_remains_case_sensitive_when_classifying_same_role()
+    {
+        var context = CreateContext(
+            CodeComponent("lower", "com.acme.domain", "Java"),
+            CodeComponent("upper", "com.acme.Domain", "Java"));
+
+        ArchitecturalComponentClassifier.Classify(context);
+
+        Assert.Equal("Domain", GetRole(context, "lower"));
+        Assert.Equal("Domain", GetRole(context, "upper"));
+        Assert.NotEqual(
+            GetMembership(context, "lower").ArchitecturalComponentId,
+            GetMembership(context, "upper").ArchitecturalComponentId);
+    }
+
+    [Fact]
+    public void Java_package_classification_ignores_build_module_names_and_scopes_identity_to_module()
+    {
+        var first = new ArchitectureComponentContext
+        {
+            Id = "first",
+            Name = "orders",
+            QualifiedName = "com.acme.orders",
+            Language = "Java",
+            ComponentKind = "Package",
+            BuildModuleName = "domain",
+            BuildModulePath = "/workspace/modules/first",
+            ProductionSymbolCount = 3
+        };
+        var second = new ArchitectureComponentContext
+        {
+            Id = "second",
+            Name = "orders",
+            QualifiedName = "com.acme.orders",
+            Language = "Java",
+            ComponentKind = "Package",
+            BuildModuleName = "domain",
+            BuildModulePath = "/workspace/modules/second",
+            ProductionSymbolCount = 3
+        };
+        var context = CreateContext(first, second);
+
+        ArchitecturalComponentClassifier.Classify(context);
+
+        Assert.All(context.ArchitecturalComponentMemberships,
+            membership => Assert.Null(membership.ArchitecturalComponentId));
+        Assert.Empty(context.ArchitecturalComponents);
+    }
+
+    private static ArchitecturalComponentMembership GetMembership(
+        ProjectArchitectureContext context,
+        string codeComponentId) =>
+        context.ArchitecturalComponentMemberships.Single(item => item.CodeComponentId == codeComponentId);
+
+    private static string? GetRole(ProjectArchitectureContext context, string codeComponentId)
+    {
+        var membership = GetMembership(context, codeComponentId);
+        return context.ArchitecturalComponents
+            .SingleOrDefault(component => component.Id == membership.ArchitecturalComponentId)?.Role;
     }
 
     [Fact]

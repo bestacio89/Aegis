@@ -1,6 +1,10 @@
 ﻿using System.Text.Json;
 
+using Aegis.Architecture.Analysis.Api;
 using Aegis.Architecture.Analysis.Detectors;
+using Aegis.Architecture.Analysis.Integrations.Messaging;
+using Aegis.Architecture.Analysis.Integrations.Rpc;
+using Aegis.Architecture.Analysis.Integrations.Data;
 using Aegis.Shared.Architecture.Models;
 using Aegis.Shared.Architecture.Models.Policies.Architecture;
 
@@ -71,6 +75,16 @@ public static class ProjectArchitectureContextDetector
         FrameworkDetector.Analyze(
             ctx,
             files);
+
+        DiscoverServerApiEndpoints(ctx, files);
+        DiscoverApiClientRequests(ctx, files);
+        DiscoverMessageIntegrations(ctx, files);
+        DiscoverRpcIntegrations(ctx, files);
+        DiscoverDataAccessIntegrations(ctx, files);
+        ctx.IntegrationEvidenceCatalog = new IntegrationEvidenceCatalog(
+            ctx.MessageIntegrationEvidenceRegistry,
+            ctx.RpcIntegrationEvidenceRegistry,
+            ctx.DataAccessEvidenceRegistry);
 
         // Framework discovery enriches module-owned evidence (notably Java
         // Maven/Gradle frameworks). Recompute roles only after that evidence
@@ -273,6 +287,207 @@ public static class ProjectArchitectureContextDetector
         }
 
         return files;
+    }
+
+    private static void DiscoverServerApiEndpoints(
+        ProjectArchitectureContext context,
+        IReadOnlyCollection<string> files)
+    {
+        var evidence = new List<ApiEndpointEvidence>();
+        var csharpProvider = new Aegis.Architecture.Analysis.Api.CSharpAspNetEndpointProvider();
+        var typeScriptProvider = new Aegis.Architecture.Analysis.Api.TypeScriptServerApiEndpointProvider();
+
+        foreach (var module in context.Modules.Where(module =>
+                     !string.IsNullOrWhiteSpace(module.Path)))
+        {
+            var modulePath = Path.GetFullPath(module.Path);
+            var moduleFiles = files.Where(file =>
+            {
+                var relative = Path.GetRelativePath(modulePath, Path.GetFullPath(file));
+                return !Path.IsPathRooted(relative)
+                    && relative != ".."
+                    && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+            }).ToArray();
+
+            if (module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase))
+            {
+                var csharpFiles = moduleFiles.Where(file =>
+                    string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase));
+                evidence.AddRange(csharpProvider.Discover(csharpFiles, modulePath));
+            }
+
+            if (module.Languages.Any(language =>
+                    language.Equals("TypeScript", StringComparison.OrdinalIgnoreCase)
+                    || language.Equals("JavaScript", StringComparison.OrdinalIgnoreCase)))
+            {
+                var scriptFiles = moduleFiles.Where(file =>
+                    Path.GetExtension(file).ToLowerInvariant() is
+                        ".ts" or ".tsx" or ".mts" or ".cts" or ".js" or ".jsx" or ".mjs" or ".cjs");
+                evidence.AddRange(typeScriptProvider.Discover(
+                    modulePath,
+                    scriptFiles,
+                    context.DiscoveryDiagnostics));
+            }
+        }
+
+        context.ServerApiEndpointDiscoveryRegistry =
+            new ServerApiEndpointDiscoveryRegistry(evidence);
+    }
+
+
+    private static void DiscoverApiClientRequests(
+        ProjectArchitectureContext context,
+        IReadOnlyCollection<string> files)
+    {
+        var evidence = new List<ApiClientRequestEvidence>();
+        var csharpProvider = new CSharpHttpClientRequestProvider();
+        var typeScriptProvider = new Aegis.Architecture.Analysis.Api.TypeScriptApiClientRequestProvider();
+
+        foreach (var module in context.Modules.Where(module =>
+                     !string.IsNullOrWhiteSpace(module.Path)
+                     && module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase)))
+        {
+            var modulePath = Path.GetFullPath(module.Path);
+            var moduleFiles = files.Where(file =>
+            {
+                var relative = Path.GetRelativePath(modulePath, Path.GetFullPath(file));
+                return !Path.IsPathRooted(relative)
+                    && relative != ".."
+                    && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+            });
+
+            var csharpFiles = moduleFiles.Where(file =>
+                string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase));
+            evidence.AddRange(csharpProvider.Discover(csharpFiles, modulePath));
+        }
+
+        foreach (var module in context.Modules.Where(module =>
+                     !string.IsNullOrWhiteSpace(module.Path)
+                     && module.Languages.Any(language =>
+                         language.Equals("TypeScript", StringComparison.OrdinalIgnoreCase)
+                         || language.Equals("JavaScript", StringComparison.OrdinalIgnoreCase))))
+        {
+            var modulePath = Path.GetFullPath(module.Path);
+            var scriptFiles = files.Where(file =>
+            {
+                var relative = Path.GetRelativePath(modulePath, Path.GetFullPath(file));
+                return !Path.IsPathRooted(relative)
+                    && relative != ".."
+                    && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
+                    && Path.GetExtension(file).ToLowerInvariant() is
+                        ".ts" or ".tsx" or ".mts" or ".cts" or ".js" or ".jsx" or ".mjs" or ".cjs";
+            });
+            evidence.AddRange(typeScriptProvider.Discover(
+                modulePath,
+                scriptFiles,
+                context.DiscoveryDiagnostics));
+        }
+
+        context.ApiClientRequestDiscoveryRegistry =
+            new ApiClientRequestDiscoveryRegistry(evidence);
+    }
+
+    private static void DiscoverMessageIntegrations(
+        ProjectArchitectureContext context,
+        IReadOnlyCollection<string> files)
+    {
+        var evidence = new List<MessageIntegrationEvidence>();
+        var provider = new CSharpMassTransitMessageProvider();
+
+        foreach (var module in context.Modules.Where(module =>
+                     !string.IsNullOrWhiteSpace(module.Path)
+                     && module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase)))
+        {
+            var modulePath = Path.GetFullPath(module.Path);
+            var moduleFiles = files.Where(file =>
+            {
+                var relative = Path.GetRelativePath(modulePath, Path.GetFullPath(file));
+                return !Path.IsPathRooted(relative)
+                    && relative != ".."
+                    && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+            });
+            var csharpFiles = moduleFiles.Where(file =>
+                string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase));
+            evidence.AddRange(provider.Discover(csharpFiles, modulePath));
+        }
+
+        context.MessageIntegrationEvidenceRegistry =
+            new IntegrationEvidenceRegistry<MessageIntegrationEvidence>(evidence);
+    }
+
+    private static void DiscoverRpcIntegrations(
+        ProjectArchitectureContext context,
+        IReadOnlyCollection<string> files)
+    {
+        var evidence = new List<RpcIntegrationEvidence>();
+        var provider = new ProtobufRpcContractProvider();
+
+        foreach (var module in context.Modules.Where(module =>
+                     !string.IsNullOrWhiteSpace(module.Path)))
+        {
+            var modulePath = Path.GetFullPath(module.Path);
+            var moduleFiles = files.Where(file =>
+            {
+                var relative = Path.GetRelativePath(modulePath, Path.GetFullPath(file));
+                return !Path.IsPathRooted(relative)
+                    && relative != ".."
+                    && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+            });
+
+            var ownedFiles = moduleFiles.ToArray();
+            var moduleContracts = provider.Discover(
+                ownedFiles.Where(file =>
+                    string.Equals(Path.GetExtension(file), ".proto", StringComparison.OrdinalIgnoreCase)),
+                modulePath);
+            evidence.AddRange(moduleContracts);
+
+            if (module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase))
+            {
+                var grpcClientProvider = new CSharpGrpcClientCallProvider();
+                evidence.AddRange(grpcClientProvider.Discover(
+                    ownedFiles.Where(file =>
+                        string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase)),
+                    modulePath,
+                    moduleContracts));
+            }
+        }
+
+        context.RpcIntegrationEvidenceRegistry =
+            new IntegrationEvidenceRegistry<RpcIntegrationEvidence>(evidence);
+    }
+
+    private static void DiscoverDataAccessIntegrations(
+        ProjectArchitectureContext context,
+        IReadOnlyCollection<string> files)
+    {
+        var evidence = new List<DataAccessEvidence>();
+        var csharpProvider = new CSharpEntityFrameworkDataAccessProvider();
+
+        foreach (var module in context.Modules.Where(module =>
+                     !string.IsNullOrWhiteSpace(module.Path)
+                     && module.Languages.Contains("C#", StringComparer.OrdinalIgnoreCase)))
+        {
+            var modulePath = Path.GetFullPath(module.Path);
+            var moduleFiles = files.Where(file =>
+            {
+                var relative = Path.GetRelativePath(modulePath, Path.GetFullPath(file));
+                return !Path.IsPathRooted(relative)
+                    && relative != ".."
+                    && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+            });
+            var csharpFiles = moduleFiles.Where(file =>
+                string.Equals(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase));
+            evidence.AddRange(csharpProvider.Discover(csharpFiles, modulePath));
+        }
+
+        context.DataAccessEvidenceRegistry =
+            new IntegrationEvidenceRegistry<DataAccessEvidence>(evidence);
     }
 
     private static void LoadApplicationIntegrations(ProjectArchitectureContext context)

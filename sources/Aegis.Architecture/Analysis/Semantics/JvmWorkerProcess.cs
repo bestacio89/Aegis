@@ -17,7 +17,9 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
 
     private readonly ILogger _logger;
     private Process? _process;
+    private JvmWorkerLaunchOptions? _requestedOptions;
     private JvmWorkerLaunchOptions? _activeOptions;
+    private BoundedUtf8LineReader? _responseReader;
     private bool _disposed;
 
     public JvmWorkerProcess(ILogger logger)
@@ -31,10 +33,17 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ValidateOptions(options);
 
-        if (_process is { HasExited: false })
-            return;
+        if (_process is { HasExited: false } && _requestedOptions is not null)
+        {
+            if (HasSameLaunchConfiguration(_requestedOptions, options))
+                return;
 
-        await StopAsync().ConfigureAwait(false);
+            await StopAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            await StopAsync().ConfigureAwait(false);
+        }
 
         var startInfo = new ProcessStartInfo
         {
@@ -64,6 +73,7 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
 
             _process = process;
             _activeOptions = options;
+            _responseReader = new BoundedUtf8LineReader(process.StandardOutput.BaseStream, options.MaxResponseBytes);
             process.BeginErrorReadLine();
 
             using var startupTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -71,19 +81,26 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
 
             var handshake = await SendFrameAsync(process, options, "handshake", null, startupTimeout.Token)
                 .ConfigureAwait(false);
+            var negotiatedLimits = JvmWorkerProtocolLimits.Negotiate(
+                handshake,
+                options.ProtocolVersion,
+                options.MaxFrameBytes,
+                options.MaxResponseBytes);
 
-            if (!handshake.TryGetProperty("protocolVersion", out var version)
-                || version.ValueKind != JsonValueKind.Number
-                || version.GetInt32() != options.ProtocolVersion)
+            _activeOptions = options with
             {
-                throw new InvalidDataException(
-                    $"{options.WorkerName} returned an incompatible protocol handshake.");
-            }
+                MaxFrameBytes = negotiatedLimits.MaxFrameBytes,
+                MaxResponseBytes = negotiatedLimits.MaxResponseBytes
+            };
+            _responseReader.SetMaximumLineBytes(negotiatedLimits.MaxResponseBytes);
+            _requestedOptions = options with { Arguments = options.Arguments.ToArray() };
 
             _logger.LogInformation(
-                "Started {WorkerName} using protocol {ProtocolVersion}.",
+                "Started {WorkerName} using protocol {ProtocolVersion} with frame limit {MaxFrameBytes} and response limit {MaxResponseBytes}.",
                 options.WorkerName,
-                options.ProtocolVersion);
+                options.ProtocolVersion,
+                negotiatedLimits.MaxFrameBytes,
+                negotiatedLimits.MaxResponseBytes);
         }
         catch
         {
@@ -106,8 +123,10 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
 
         var process = _process
             ?? throw new InvalidOperationException($"{options.WorkerName} process is not running.");
+        var activeOptions = _activeOptions
+            ?? throw new InvalidOperationException($"{options.WorkerName} protocol has not been negotiated.");
 
-        return await SendFrameAsync(process, options, operation, payload, cancellationToken)
+        return await SendFrameAsync(process, activeOptions, operation, payload, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -115,11 +134,17 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
     {
         var process = _process;
         var options = _activeOptions;
-        _process = null;
-        _activeOptions = null;
-
         if (process is null)
+        {
+            _requestedOptions = null;
+            _activeOptions = null;
+            _responseReader = null;
             return;
+        }
+
+        _process = null;
+        _requestedOptions = null;
+        _activeOptions = null;
 
         try
         {
@@ -175,11 +200,12 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
         }
         finally
         {
+            _responseReader = null;
             process.Dispose();
         }
     }
 
-    private static async Task<JsonElement> SendFrameAsync(
+    private async Task<JsonElement> SendFrameAsync(
         Process process,
         JvmWorkerLaunchOptions options,
         string operation,
@@ -200,21 +226,22 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
         await process.StandardInput.WriteLineAsync(frame.AsMemory(), cancellationToken).ConfigureAwait(false);
         await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
 
-        var responseLine = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+        var responseReader = _responseReader
+            ?? throw new InvalidOperationException($"{options.WorkerName} response channel is unavailable.");
+        var responseLine = await responseReader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
         if (responseLine is null)
             throw new EndOfStreamException($"{options.WorkerName} closed stdout before returning a response.");
-
-        if (Encoding.UTF8.GetByteCount(responseLine) > options.MaxResponseBytes)
-            throw new InvalidDataException($"{options.WorkerName} response exceeds the configured response limit.");
 
         using var document = JsonDocument.Parse(responseLine);
         var response = document.RootElement;
 
         if (!response.TryGetProperty("requestId", out var responseId)
+            || responseId.ValueKind != JsonValueKind.String
             || !string.Equals(responseId.GetString(), requestId, StringComparison.Ordinal))
             throw new InvalidDataException($"{options.WorkerName} response correlation identifier is invalid.");
 
         if (!response.TryGetProperty("status", out var status)
+            || status.ValueKind != JsonValueKind.String
             || !string.Equals(status.GetString(), "ok", StringComparison.Ordinal))
         {
             var hasError = response.TryGetProperty("error", out var error);
@@ -233,6 +260,16 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
         return result.Clone();
     }
 
+    internal static bool HasSameLaunchConfiguration(JvmWorkerLaunchOptions left, JvmWorkerLaunchOptions right) =>
+        string.Equals(left.ExecutablePath, right.ExecutablePath, StringComparison.Ordinal)
+        && string.Equals(left.WorkingDirectory, right.WorkingDirectory, StringComparison.Ordinal)
+        && left.Arguments.SequenceEqual(right.Arguments, StringComparer.Ordinal)
+        && left.ProtocolVersion == right.ProtocolVersion
+        && left.StartupTimeout == right.StartupTimeout
+        && left.MaxFrameBytes == right.MaxFrameBytes
+        && left.MaxResponseBytes == right.MaxResponseBytes
+        && string.Equals(left.WorkerName, right.WorkerName, StringComparison.Ordinal);
+
     private static void ValidateOptions(JvmWorkerLaunchOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -245,10 +282,10 @@ internal sealed class JvmWorkerProcess : IAsyncDisposable
             throw new ArgumentOutOfRangeException(nameof(options), "Protocol version must be positive.");
         if (options.StartupTimeout <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(options), "Startup timeout must be positive.");
-        if (options.MaxFrameBytes <= 0)
-            throw new ArgumentOutOfRangeException(nameof(options), "Maximum frame size must be positive.");
-        if (options.MaxResponseBytes <= 0)
-            throw new ArgumentOutOfRangeException(nameof(options), "Maximum response size must be positive.");
+        if (options.MaxFrameBytes < JvmWorkerProtocolLimits.MinimumFrameBytes)
+            throw new ArgumentOutOfRangeException(nameof(options), "Maximum frame size must be at least 256 bytes.");
+        if (options.MaxResponseBytes < JvmWorkerProtocolLimits.MinimumFrameBytes)
+            throw new ArgumentOutOfRangeException(nameof(options), "Maximum response size must be at least 256 bytes.");
     }
 
     public async ValueTask DisposeAsync()

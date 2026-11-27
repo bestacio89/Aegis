@@ -28,7 +28,7 @@ The response uses the numeric values of the shared Aegis contracts for symbol ki
 
     mvn --batch-mode --no-transfer-progress -f tools/java-worker-prototype/pom.xml verify
 
-The worker is backed by Eclipse JDT Core 3.47.0. The protocol and process supervisor remain separate concerns; this module does not claim to provide an OS sandbox or enforce host-level CPU/memory limits.
+The worker is backed by Eclipse JDT Core 3.47.0. The protocol and process supervisor remain separate concerns. The supervised JVM uses fixed ceilings of 64 MiB initial heap, 1 GiB maximum heap, 384 MiB metaspace, 128 MiB direct memory, and two active processors, with exit on out-of-memory. These are JVM process constraints, not an OS-level sandbox or a guarantee of total process memory/CPU isolation. The host and worker enforce an input budget of 50,000 source files, a 16 MiB UTF-8 manifest, 1,024 source roots, 2,048 referenced source roots, 8,192 classpath entries, 16 MiB per source file, and 512 MiB aggregate source bytes. Over-budget requests are rejected; inputs are never silently truncated.
 
 ## WPF and CLI deployment package
 

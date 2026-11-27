@@ -20,4 +20,11 @@
   <ItemGroup>
     <ProjectReference Include="../../sources/Aegis.App.WPF/Aegis.Wpf.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="../../sources/Aegis.App.WPF/**/*.xaml">
+      <Link>ApplicationXaml/%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

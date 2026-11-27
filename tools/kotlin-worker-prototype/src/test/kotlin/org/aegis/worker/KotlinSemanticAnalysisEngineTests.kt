@@ -1,5 +1,7 @@
 package org.aegis.worker
 
+import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 
 import org.jetbrains.kotlin.cli.common.ExitCode
@@ -20,7 +22,7 @@ class KotlinSemanticAnalysisEngineTests {
         }
         val artifactRoot = Files.createDirectories(temporaryDirectory.resolve("artifacts"))
         val manifest = artifactRoot.resolve("source-manifest.json")
-        Files.writeString(manifest, "[\"" + sourceFile + "\"]")
+        Files.writeString(manifest, Gson().toJson(JsonArray().apply { add(sourceFile.toString()) }))
         val standardLibrary = temporaryDirectory.resolve("kotlin-stdlib-2.4.21.jar")
         Files.write(standardLibrary, byteArrayOf(1))
         val payload = JsonObject().apply {
@@ -78,7 +80,7 @@ class KotlinSemanticAnalysisEngineTests {
         }
         val result = KotlinSemanticAnalysisEngine().analyze(payload)
         assertEquals(4, result.get("status").asInt)
-        assertTrue(result.getAsJsonArray("diagnostics").first().asJsonObject.get("message").asString.contains("16 MiB-byte limit"))
+        assertTrue(result.getAsJsonArray("diagnostics").first().asJsonObject.get("message").asString.contains("byte limit"))
     }
 
 

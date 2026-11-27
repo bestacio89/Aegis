@@ -184,14 +184,19 @@ public final class JdtSemanticAnalysisEngine implements WorkerOperationHandler {
 
     private static List<Path> readSourceFiles(JsonObject payload) throws IOException {
         if (!payload.has("sourceManifestPath")) return readPaths(payload, "sourceFiles", false);
-        Path manifest = Path.of(payload.get("sourceManifestPath").getAsString()).toRealPath();
+        Path manifestCandidate = Path.of(payload.get("sourceManifestPath").getAsString())
+            .toAbsolutePath().normalize();
         Path temporaryDirectory = Path.of(System.getProperty("java.io.tmpdir")).toRealPath();
-        if (!manifest.startsWith(temporaryDirectory)
-            || !Files.isRegularFile(manifest, java.nio.file.LinkOption.NOFOLLOW_LINKS)
-            || Files.isSymbolicLink(manifest)
-            || Files.size(manifest) < 1
-            || Files.size(manifest) > 16L * 1024 * 1024) {
+        if (!manifestCandidate.startsWith(temporaryDirectory)
+            || !Files.isRegularFile(manifestCandidate, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+            || Files.isSymbolicLink(manifestCandidate)
+            || Files.size(manifestCandidate) < 1
+            || Files.size(manifestCandidate) > 16L * 1024 * 1024) {
             throw new IllegalArgumentException("The source manifest must be a non-symbolic regular file inside the system temporary directory and no larger than 16 MiB.");
+        }
+        Path manifest = manifestCandidate.toRealPath();
+        if (!manifest.startsWith(temporaryDirectory)) {
+            throw new IllegalArgumentException("The resolved source manifest is outside the system temporary directory.");
         }
         var element = com.google.gson.JsonParser.parseString(Files.readString(manifest));
         if (!element.isJsonArray()) throw new IllegalArgumentException("The source manifest must contain a JSON array of paths.");

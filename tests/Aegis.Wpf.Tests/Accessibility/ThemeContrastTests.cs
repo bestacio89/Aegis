@@ -15,7 +15,7 @@ public sealed class ThemeContrastTests
     ];
 
     [Fact]
-    public void TextAndNonCriticalStatusTokens_MeetWcagAaForNormalText()
+    public void TextAndStatusTokens_MeetWcagAaForNormalText()
     {
         RunOnSta(() =>
         {
@@ -24,6 +24,8 @@ public sealed class ThemeContrastTests
             {
                 "Brush.TextPrimary",
                 "Brush.TextMuted",
+                "Brush.TextDisabled",
+                "Brush.StatusCritical",
                 "Brush.StatusBlocker",
                 "Brush.StatusWarning",
                 "Brush.StatusCompliant"
@@ -44,24 +46,33 @@ public sealed class ThemeContrastTests
     }
 
     [Fact]
-    public void CriticalStatusOnElevatedPanel_RemainsAnExplicitKnownContrastGap()
+    public void ControlBoundaryAndFocusTokens_MeetNonTextContrast()
     {
         RunOnSta(() =>
         {
             var theme = LoadTheme();
-            var ratio = ContrastRatio(
-                GetColor(theme, "Brush.StatusCritical"),
-                GetColor(theme, "Brush.PanelElevated"));
+            var foregroundKeys = new[]
+            {
+                "Brush.ControlBorder",
+                "Brush.FocusRing"
+            };
 
-            ratio.Should().BeLessThan(
-                4.5,
-                "W0 records the existing critical-status contrast gap for correction in a later production checkpoint");
-            ratio.Should().BeApproximately(4.29, 0.02);
+            foreach (var foregroundKey in foregroundKeys)
+            {
+                foreach (var surfaceKey in SurfaceKeys)
+                {
+                    var ratio = ContrastRatio(GetColor(theme, foregroundKey), GetColor(theme, surfaceKey));
+
+                    ratio.Should().BeGreaterThanOrEqualTo(
+                        3.0,
+                        $"{foregroundKey} must remain distinguishable on {surfaceKey}");
+                }
+            }
         });
     }
 
     [Fact]
-    public void LineToken_IsDecorativeAndMustNotBeUsedAsTheOnlyControlBoundary()
+    public void LineToken_RemainsDecorativeAndDistinctFromControlBoundary()
     {
         RunOnSta(() =>
         {
@@ -72,13 +83,43 @@ public sealed class ThemeContrastTests
                 var ratio = ContrastRatio(GetColor(theme, "Brush.Line"), GetColor(theme, surfaceKey));
                 ratio.Should().BeLessThan(
                     3.0,
-                    "the existing line token is suitable for decorative separators, not sole control boundaries");
+                    "the line token remains suitable for decorative separators, not sole control boundaries");
             }
 
-            theme.Contains("Brush.ControlBorder").Should().BeFalse(
-                "a dedicated control-boundary token is a tracked accessibility gap");
-            theme.Contains("Brush.FocusRing").Should().BeFalse(
-                "a dedicated focus token is a tracked accessibility gap");
+            theme.Contains("Brush.ControlBorder").Should().BeTrue();
+            theme.Contains("Brush.FocusRing").Should().BeTrue();
+        });
+    }
+
+    [Fact]
+    public void LayoutAndTypographyTokens_MeetTheApprovedFoundation()
+    {
+        RunOnSta(() =>
+        {
+            var theme = LoadTheme();
+
+            theme["Layout.FocusRingThickness"].Should().Be(2.0);
+            theme["Layout.ControlMinHeight"].Should().Be(32.0);
+            theme["Spacing.4"].Should().Be(new Thickness(4));
+            theme["Spacing.8"].Should().Be(new Thickness(8));
+
+            theme["Text.Caption"].Should().BeOfType<Style>()
+                .Which.Setters
+                .OfType<Setter>()
+                .Should()
+                .ContainSingle(setter => setter.Property == TextBlock.FontSizeProperty
+                    && setter.Value is double size
+                    && size >= 12);
+
+            foreach (var styleKey in new[] { "Text.Eyebrow", "Grid.LedgerHeader" })
+            {
+                var style = theme[styleKey].Should().BeOfType<Style>().Subject;
+                style.Setters
+                    .OfType<Setter>()
+                    .Where(setter => setter.Property == TextBlock.FontSizeProperty)
+                    .Should()
+                    .OnlyContain(setter => setter.Value is double size && size >= 12);
+            }
         });
     }
 

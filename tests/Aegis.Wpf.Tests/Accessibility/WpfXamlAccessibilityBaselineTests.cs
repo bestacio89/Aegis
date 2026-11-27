@@ -59,10 +59,10 @@ public sealed class WpfXamlAccessibilityBaselineTests
                 .SelectMany(element => element.Attributes())
                 .Count(attribute => attribute.Name.LocalName.StartsWith("AutomationProperties.", StringComparison.Ordinal)));
 
-        hardCodedColors.Should().BeLessThanOrEqualTo(10, "new hard-coded colors belong in the theme token dictionary");
+        hardCodedColors.Should().Be(0, "all application colors must be defined by the shared theme token dictionary");
         smallFontDeclarations.Should().BeLessThanOrEqualTo(
-            108,
-            "108 is the verified W0 baseline; new small typography declarations must not spread before W1 establishes its type scale");
+            89,
+            "W1 establishes a minimum 12-DIP type scale for the 19 declarations in its approved production scope");
         fixedLargeDimensions.Should().BeLessThanOrEqualTo(96, "fixed large dimensions must not spread while responsive layout is addressed");
         automationMetadata.Should().BeGreaterThanOrEqualTo(23, "existing SystemLandscape automation metadata must not be removed");
     }
@@ -92,7 +92,7 @@ public sealed class WpfXamlAccessibilityBaselineTests
                 "ArchitectureSectionItem",
                 "ArchitectureViewItem"
             },
-            "W0 records the two known focus-style suppressions; W1 must replace them with visible focus treatment");
+            "W0 records the two known focus-style suppressions; W2 must replace them with visible focus treatment");
     }
 
     private sealed record XamlDocument(string Path, XDocument Document)

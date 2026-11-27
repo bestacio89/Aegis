@@ -85,7 +85,9 @@ public sealed class ThemeContrastTests
     private static ResourceDictionary LoadTheme() =>
         new()
         {
-            Source = new Uri("/Aegis.Wpf;component/Themes/Aegistheme.xaml", UriKind.Relative)
+            Source = new Uri(
+                "pack://application:,,,/Aegis.Wpf;component/Themes/Aegistheme.xaml",
+                UriKind.Absolute)
         };
 
     private static Color GetColor(ResourceDictionary dictionary, string key) =>

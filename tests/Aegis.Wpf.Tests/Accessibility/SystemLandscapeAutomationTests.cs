@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.Windows.Media;
 using Aegis.Wpf.ViewModels.Architecture;
 using Aegis.Wpf.Views.Architecture;
 using FluentAssertions;
@@ -20,65 +21,67 @@ public sealed class SystemLandscapeAutomationTests
                 ShutdownMode = ShutdownMode.OnExplicitShutdown
             };
 
-            application.Resources.MergedDictionaries.Add(
-                new ResourceDictionary
-                {
-                    Source = new Uri("/Aegis.Wpf;component/Themes/Aegistheme.xaml", UriKind.Relative)
-                });
+            application.Resources.MergedDictionaries.Add(LoadTheme());
+
+            var viewModel = new SystemLandscapeViewModel();
+            viewModel.TopologyNodes.Add(new SystemLandscapeTopologyNodeViewModel
+            {
+                Id = "w0-test-node",
+                Name = "Payments",
+                Category = "Logical region",
+                Detail = "Representative topology node used to exercise the node template."
+            });
 
             var view = new SystemLandscapeView
             {
-                DataContext = new SystemLandscapeViewModel()
+                DataContext = viewModel
             };
 
             view.Measure(new Size(1280, 900));
             view.Arrange(new Rect(0, 0, 1280, 900));
             view.UpdateLayout();
 
-            var rootPeer = UIElementAutomationPeer.CreatePeerForElement(view);
-            rootPeer.Should().NotBeNull("the view must expose a WPF automation peer");
-
-            var interactivePeers = GetDescendants(rootPeer!)
-                .Where(peer => peer.GetAutomationControlType() is
-                    AutomationControlType.Button
-                    or AutomationControlType.ComboBox
-                    or AutomationControlType.List)
+            var interactiveControls = GetVisualDescendants(view)
+                .OfType<Control>()
+                .Where(control => control is Button or ComboBox or ListBox)
                 .ToArray();
 
-            interactivePeers.Should().NotBeEmpty("the representative view must expose its interactive controls");
+            interactiveControls.Should().NotBeEmpty(
+                "the view must realize its authored buttons, filters, lists, and representative topology node");
 
-            foreach (var peer in interactivePeers)
+            foreach (var control in interactiveControls)
             {
-                peer.GetName().Should().NotBeNullOrWhiteSpace(
-                    $"the {peer.GetAutomationControlType()} control must expose an accessible name");
+                var peer = UIElementAutomationPeer.CreatePeerForElement(control);
+                peer.Should().NotBeNull(
+                    $"the {control.GetType().Name} control must expose a WPF automation peer");
+
+                peer!.GetName().Should().NotBeNullOrWhiteSpace(
+                    $"the authored {control.GetType().Name} control must expose an accessible name");
             }
         });
     }
 
-    private static IEnumerable<AutomationPeer> GetDescendants(AutomationPeer root)
+    private static ResourceDictionary LoadTheme() =>
+        new()
+        {
+            Source = new Uri(
+                "pack://application:,,,/Aegis.Wpf;component/Themes/Aegistheme.xaml",
+                UriKind.Absolute)
+        };
+
+    private static IEnumerable<DependencyObject> GetVisualDescendants(DependencyObject root)
     {
-        var visited = new HashSet<AutomationPeer>(ReferenceEqualityComparer.Instance);
-        var pending = new Stack<AutomationPeer>();
+        var pending = new Stack<DependencyObject>();
         pending.Push(root);
 
-        while (pending.TryPop(out var peer))
+        while (pending.TryPop(out var current))
         {
-            if (!visited.Add(peer))
-            {
-                continue;
-            }
+            yield return current;
 
-            yield return peer;
-
-            var children = peer.GetChildren();
-            if (children is null)
+            var childCount = VisualTreeHelper.GetChildrenCount(current);
+            for (var index = childCount - 1; index >= 0; index--)
             {
-                continue;
-            }
-
-            foreach (var child in children)
-            {
-                pending.Push(child);
+                pending.Push(VisualTreeHelper.GetChild(current, index));
             }
         }
     }

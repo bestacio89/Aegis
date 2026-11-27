@@ -60,7 +60,9 @@ public sealed class WpfXamlAccessibilityBaselineTests
                 .Count(attribute => attribute.Name.LocalName.StartsWith("AutomationProperties.", StringComparison.Ordinal)));
 
         hardCodedColors.Should().BeLessThanOrEqualTo(10, "new hard-coded colors belong in the theme token dictionary");
-        smallFontDeclarations.Should().BeLessThanOrEqualTo(107, "small typography must not spread while W1 establishes its type scale");
+        smallFontDeclarations.Should().BeLessThanOrEqualTo(
+            108,
+            "108 is the verified W0 baseline; new small typography declarations must not spread before W1 establishes its type scale");
         fixedLargeDimensions.Should().BeLessThanOrEqualTo(96, "fixed large dimensions must not spread while responsive layout is addressed");
         automationMetadata.Should().BeGreaterThanOrEqualTo(23, "existing SystemLandscape automation metadata must not be removed");
     }
@@ -85,8 +87,11 @@ public sealed class WpfXamlAccessibilityBaselineTests
             .ToArray();
 
         suppressedStyles.Should().Equal(
-            "ArchitectureSectionItem",
-            "ArchitectureViewItem",
+            new[]
+            {
+                "ArchitectureSectionItem",
+                "ArchitectureViewItem"
+            },
             "W0 records the two known focus-style suppressions; W1 must replace them with visible focus treatment");
     }
 

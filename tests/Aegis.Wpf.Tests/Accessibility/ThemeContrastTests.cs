@@ -113,7 +113,7 @@ public sealed class ThemeContrastTests
 
             foreach (var styleKey in new[] { "Text.Eyebrow", "Grid.LedgerHeader" })
             {
-                var style = theme[styleKey].Should().BeOfType<Style>().Subject;
+                var style = theme[styleKey].Should().BeOfType<Style>().Which;
                 style.Setters
                     .OfType<Setter>()
                     .Where(setter => setter.Property == TextBlock.FontSizeProperty)

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using FluentAssertions;
@@ -51,7 +52,7 @@ public sealed class WpfXamlAccessibilityBaselineTests
                         && ((string?)element.Attribute("Property") is "Width" or "Height")
                             ? [(string?)element.Attribute("Value") ?? string.Empty]
                             : []))
-                .Count(value => Regex.IsMatch(value, @"^\\d{3,4}(?:\\.0+)?$", RegexOptions.CultureInvariant)));
+                .Count(value => Regex.IsMatch(value, @"^\d{3,4}(?:\.0+)?$", RegexOptions.CultureInvariant)));
 
         var automationMetadata = documents.Sum(document =>
             document.Document.Descendants()

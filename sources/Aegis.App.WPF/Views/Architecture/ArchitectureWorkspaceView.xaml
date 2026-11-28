@@ -82,47 +82,10 @@
             </Setter>
         </Style>
 
-        <Style x:Key="ArchitectureViewItem" TargetType="{x:Type ListBoxItem}">
-            <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="Margin" Value="0,0,6,0" />
-            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type ListBoxItem}">
-                        <Border
-                            x:Name="ViewSurface"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="Transparent"
-                            BorderThickness="1"
-                            CornerRadius="5"
-                            Padding="{TemplateBinding Padding}">
-                            <ContentPresenter VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ViewSurface" Property="Background"
-                                        Value="{StaticResource Brush.PanelElevated}" />
-                                <Setter TargetName="ViewSurface" Property="BorderBrush"
-                                        Value="{StaticResource Brush.Line}" />
-                                <Setter Property="Foreground" Value="{StaticResource Brush.AccentStructural}" />
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ViewSurface" Property="Background"
-                                        Value="{StaticResource Brush.PanelElevated}" />
-                                <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
     </UserControl.Resources>
 
     <Grid Margin="24">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -148,125 +111,146 @@
                     MaxWidth="900" />
             </StackPanel>
 
-            <Border
-                Grid.Column="1"
-                VerticalAlignment="Center"
-                Background="{StaticResource Brush.Panel}"
-                BorderBrush="{StaticResource Brush.Line}"
-                BorderThickness="1"
-                CornerRadius="6"
-                Padding="12,8">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock
-                        Text="{Binding SelectedSection.Name}"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource Brush.TextPrimary}" />
-                    <TextBlock
-                        Text=" / "
-                        Margin="5,0"
-                        Foreground="{StaticResource Brush.TextMuted}" />
-                    <TextBlock
-                        Text="{Binding SelectedTab.Name}"
-                        Foreground="{StaticResource Brush.TextMuted}" />
-                </StackPanel>
-            </Border>
+
         </Grid>
 
-        <ListBox
-            Grid.Row="1"
-            ItemsSource="{Binding Sections}"
-            SelectedItem="{Binding SelectedSection, Mode=TwoWay}"
-            ItemContainerStyle="{StaticResource ArchitectureSectionItem}"
-            Background="Transparent"
-            BorderThickness="0"
-            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-            ScrollViewer.VerticalScrollBarVisibility="Disabled"
-            Padding="0"
-            Margin="0,0,0,8">
-            <ListBox.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <WrapPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-            <ListBox.ItemTemplate>
-                <DataTemplate DataType="{x:Type archivm:ArchitectureWorkspaceSection}">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock
-                            Text="{Binding Glyph}"
-                            FontSize="17"
-                            Margin="0,0,10,0"
-                            VerticalAlignment="Center" />
-                        <StackPanel>
-                            <TextBlock
-                                Text="{Binding Name}"
-                                FontSize="12"
-                                FontWeight="SemiBold" />
-                            <TextBlock
-                                Text="{Binding Tabs.Count, StringFormat={}{0} views}"
-                                FontSize="10"
-                                Margin="0,2,0,0"
-                                Foreground="{StaticResource Brush.TextMuted}" />
-                        </StackPanel>
-                    </StackPanel>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
-
-        <Border
-            Grid.Row="2"
-            Background="{StaticResource Brush.Panel}"
-            BorderBrush="{StaticResource Brush.Line}"
-            BorderThickness="1"
-            CornerRadius="7"
-            Padding="8"
-            Margin="0,0,0,14">
-            <Border.Style>
-                <Style TargetType="{x:Type Border}">
-                    <Setter Property="Visibility" Value="Visible" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding SectionViewCount}" Value="1">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding SelectedSection}" Value="{x:Null}">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
+        <Grid Grid.Row="1" Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
             <ListBox
-                ItemsSource="{Binding SelectedSection.Tabs}"
-                SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
-                ItemContainerStyle="{StaticResource ArchitectureViewItem}"
+                Grid.Column="0"
+                ItemsSource="{Binding Sections}"
+                SelectedItem="{Binding SelectedSection, Mode=TwoWay}"
+                ItemContainerStyle="{StaticResource ArchitectureSectionItem}"
                 Background="Transparent"
                 BorderThickness="0"
                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                Padding="0">
+                Padding="0"
+                Margin="0,0,8,0">
                 <ListBox.ItemsPanel>
                     <ItemsPanelTemplate>
                         <WrapPanel Orientation="Horizontal" />
                     </ItemsPanelTemplate>
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
-                    <DataTemplate>
+                    <DataTemplate DataType="{x:Type archivm:ArchitectureWorkspaceSection}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock
                                 Text="{Binding Glyph}"
-                                FontSize="13"
-                                Margin="0,0,8,0" />
-                            <TextBlock
-                                Text="{Binding Name}"
-                                FontSize="11"
-                                FontWeight="SemiBold" />
+                                FontSize="17"
+                                Margin="0,0,10,0"
+                                VerticalAlignment="Center" />
+                            <StackPanel>
+                                <TextBlock
+                                    Text="{Binding Name}"
+                                    FontSize="12"
+                                    FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="{Binding Tabs.Count, StringFormat={}{0} views}"
+                                    FontSize="10"
+                                    Margin="0,2,0,0"
+                                    Foreground="{StaticResource Brush.TextMuted}" />
+                            </StackPanel>
                         </StackPanel>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
-        </Border>
+
+            <StackPanel
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Margin="12,0,0,8">
+                <StackPanel.Style>
+                    <Style TargetType="{x:Type StackPanel}">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding SectionViewCount}" Value="1">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding SelectedSection}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+
+                <Label
+                    Content="View"
+                    Target="{Binding ElementName=ArchitectureViewSelector}"
+                    Padding="0"
+                    Margin="0,0,0,4"
+                    Foreground="{StaticResource Brush.TextMuted}"
+                    FontWeight="SemiBold"
+                    FontSize="12" />
+
+                <ComboBox
+                    x:Name="ArchitectureViewSelector"
+                    ItemsSource="{Binding SelectedSection.Tabs}"
+                    SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
+                    MinWidth="250"
+                    MinHeight="40"
+                    Padding="10,6"
+                    Background="{StaticResource Brush.PanelElevated}"
+                    Foreground="{StaticResource Brush.TextPrimary}"
+                    BorderBrush="{StaticResource Brush.ControlBorder}"
+                    BorderThickness="1"
+                    VerticalContentAlignment="Center"
+                    IsEditable="False"
+                    IsTextSearchEnabled="True"
+                    AutomationProperties.Name="Architecture view"
+                    AutomationProperties.HelpText="Choose a view within the selected architecture section.">
+                    <ComboBox.Resources>
+                        <SolidColorBrush
+                            x:Key="{x:Static SystemColors.WindowBrushKey}"
+                            Color="{StaticResource Color.PanelElevated}" />
+                        <SolidColorBrush
+                            x:Key="{x:Static SystemColors.WindowTextBrushKey}"
+                            Color="{StaticResource Color.TextPrimary}" />
+                    </ComboBox.Resources>
+                    <ComboBox.ItemContainerStyle>
+                        <Style TargetType="{x:Type ComboBoxItem}">
+                            <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+                            <Setter Property="Background" Value="{StaticResource Brush.PanelElevated}" />
+                            <Setter Property="Padding" Value="10,8" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="MinHeight" Value="36" />
+                            <Style.Triggers>
+                                <Trigger Property="IsHighlighted" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource Brush.SelectionHighlight}" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource Brush.SelectionSelected}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Foreground" Value="{StaticResource Brush.TextDisabled}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ComboBox.ItemContainerStyle>
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock
+                                    Text="{Binding Glyph}"
+                                    Margin="0,0,9,0"
+                                    FontSize="14" />
+                                <TextBlock
+                                    Text="{Binding Name}"
+                                    FontSize="12"
+                                    FontWeight="SemiBold" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+        </Grid>
 
         <Border
-            Grid.Row="3"
+            Grid.Row="2"
             Background="{StaticResource Brush.Panel}"
             BorderBrush="{StaticResource Brush.Line}"
             BorderThickness="1"

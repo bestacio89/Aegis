@@ -68,7 +68,7 @@ public sealed class WpfXamlAccessibilityBaselineTests
     }
 
     [Fact]
-    public void FocusVisualSuppression_IsLimitedToTheTwoKnownStylesAwaitingW2()
+    public void FocusVisualSuppression_IsLimitedToTheRemainingKnownStyleAwaitingW2()
     {
         var files = Directory.GetFiles(
             Path.Combine(AppContext.BaseDirectory, "ApplicationXaml"),
@@ -89,10 +89,9 @@ public sealed class WpfXamlAccessibilityBaselineTests
         suppressedStyles.Should().Equal(
             new[]
             {
-                "ArchitectureSectionItem",
-                "ArchitectureViewItem"
+                "ArchitectureSectionItem"
             },
-            "W0 records the two known focus-style suppressions; W2 must replace them with visible focus treatment");
+            "the secondary view selector no longer uses a custom ListBoxItem template; W2 must provide visible focus treatment for the remaining section navigation style");
     }
 
     private sealed record XamlDocument(string Path, XDocument Document)

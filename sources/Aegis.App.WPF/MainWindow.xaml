@@ -73,10 +73,11 @@
                                 <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="NavigationSurface" Property="Opacity" Value="0.8" />
+                                <Setter TargetName="NavigationSurface" Property="Background"
+                                        Value="{StaticResource Brush.SelectionHighlight}" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.45" />
+                                <Setter Property="Foreground" Value="{StaticResource Brush.TextDisabled}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -128,7 +129,7 @@
             <Setter Property="MinHeight" Value="36" />
             <Setter Property="Background" Value="{StaticResource Brush.PanelElevated}" />
             <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Brush.Line}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.ControlBorder}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -160,8 +161,8 @@
 
         <Border
             Grid.Column="0"
-            Background="#111923"
-            BorderBrush="#293443"
+            Background="{StaticResource Brush.Panel}"
+            BorderBrush="{StaticResource Brush.ControlBorder}"
             BorderThickness="0,0,1,0">
 
             <DockPanel LastChildFill="True">
@@ -179,9 +180,9 @@
 
                     <TextBlock
                         Text="ARCHITECTURE INTELLIGENCE"
-                        FontSize="9"
+
                         Margin="1,5,0,0"
-                        Opacity="0.65" />
+                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
                 </StackPanel>
 
                 <!-- Shared project context -->
@@ -196,25 +197,25 @@
 
                     <TextBlock
                         Text="CURRENT PROJECT"
-                        FontSize="10"
+
                         FontWeight="SemiBold"
                         Margin="0,0,0,6"
-                        Opacity="0.65" />
+                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
                     <TextBlock
                         Text="{Binding RepositoryPath}"
                         TextWrapping="Wrap"
                         TextTrimming="CharacterEllipsis"
                         ToolTip="{Binding RepositoryPath}"
-                        FontSize="11"
-                        Opacity="0.8" />
+
+                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
                     <TextBlock
                         Text="{Binding SelectedWorkspace,
                             StringFormat='Workspace: {0}'}"
                         Margin="0,12,0,0"
-                        FontSize="11"
-                        Opacity="0.65" />
+
+                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
                 </StackPanel>
 
                 <!-- Primary navigation -->
@@ -224,9 +225,9 @@
                     <TextBlock
                         Text="WORKSPACES"
                         Margin="12,0,0,10"
-                        FontSize="10"
+
                         FontWeight="SemiBold"
-                        Opacity="0.6" />
+                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
                     <Button
                         Content="Architecture"
@@ -265,7 +266,7 @@
             <Border
                 Grid.Row="0"
                 Padding="26,16"
-                BorderBrush="#293443"
+                BorderBrush="{StaticResource Brush.ControlBorder}"
                 BorderThickness="0,0,0,1">
 
                 <Grid>
@@ -284,8 +285,7 @@
                         <TextBlock
                             Text="Assess, understand, and improve your system."
                             Margin="0,4,0,0"
-                            FontSize="12"
-                            Opacity="0.65" />
+                            FontSize="12" Foreground="{StaticResource Brush.TextMuted}" />
 
                     </StackPanel>
 
@@ -294,8 +294,7 @@
                         Text="AEGIS"
                         VerticalAlignment="Center"
                         FontSize="12"
-                        FontWeight="SemiBold"
-                        Opacity="0.45" />
+                        FontWeight="SemiBold" Foreground="{StaticResource Brush.TextMuted}" />
 
                 </Grid>
             </Border>
@@ -316,7 +315,7 @@
                 <Border
                     Grid.Row="0"
                     Padding="24,14"
-                    BorderBrush="#293443"
+                    BorderBrush="{StaticResource Brush.ControlBorder}"
                     BorderThickness="0,0,0,1">
 
                     <Border.Style>
@@ -353,9 +352,9 @@
 
                             <TextBlock
                                 Text="ASSESSMENT SOURCE"
-                                FontSize="10"
+
                                 FontWeight="SemiBold"
-                                Opacity="0.65" />
+                                Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
                             <TextBlock
                                 Text="{Binding RepositoryPath,
@@ -419,8 +418,8 @@
             <Border
                 Grid.Row="2"
                 Padding="20,9"
-                Background="#111923"
-                BorderBrush="#293443"
+                Background="{StaticResource Brush.Panel}"
+                BorderBrush="{StaticResource Brush.ControlBorder}"
                 BorderThickness="0,1,0,0">
 
                 <Grid>
@@ -433,18 +432,17 @@
 
                         <TextBlock
                             Text="Workspace:"
-                            FontSize="11"
-                            Opacity="0.65" />
+
+                            Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
                         <TextBlock
                             Text="{Binding SelectedWorkspace}"
-                            Margin="6,0,18,0"
-                            FontSize="11" />
+                            Margin="6,0,18,0" Style="{StaticResource Text.Caption}" />
 
                         <TextBlock
                             Text="Analysis progress:"
-                            FontSize="11"
-                            Opacity="0.65" />
+
+                            Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
                         <ProgressBar
                             Width="140"
@@ -458,26 +456,26 @@
                         <TextBlock
                             Text="{Binding AnalysisProgress,
                                 StringFormat={}{0:F0}%}"
-                            FontSize="11"
-                            VerticalAlignment="Center" />
+
+                            VerticalAlignment="Center" Style="{StaticResource Text.Caption}" />
 
                         <TextBlock
                             Text="{Binding AnalysisStage}"
                             Margin="10,0,0,0"
-                            FontSize="11"
+
                             MaxWidth="380"
                             TextTrimming="CharacterEllipsis"
                             VerticalAlignment="Center"
-                            Foreground="{StaticResource Brush.TextMuted}" />
+                            Foreground="{StaticResource Brush.TextMuted}" Style="{StaticResource Text.Caption}" />
 
                     </StackPanel>
 
                     <TextBlock
                         Grid.Column="1"
                         Text="Architecture Intelligence Platform"
-                        FontSize="10"
+
                         VerticalAlignment="Center"
-                        Opacity="0.5" />
+                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.TextMuted}" />
 
                 </Grid>
             </Border>
